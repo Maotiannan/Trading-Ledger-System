@@ -1,0 +1,179 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export type UserRole = 'ADMIN' | 'USER';
+export type ReceiptStatus = 'SR_Received' | 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED';
+export type DetailStatus = 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+}
+
+export interface Order {
+  id: string;
+  orderNo: string;
+  amount: number;
+  orderBalance: number;
+}
+
+export interface Invoice {
+  id: string;
+  invNo: string;
+  invAmount: number;
+  invBalance: number;
+  orders: Order[];
+  createdAt: string;
+}
+
+export interface Receipt {
+  id: string;
+  receiptNo: string | null;
+  date: string | null;
+  tel: string | null;
+  usd: number;
+  invNo: string | null;
+  orderNo: string | null;
+  payer: string | null;
+  status: ReceiptStatus;
+  imageUrl: string | null;
+  isDeposit: boolean;
+  isMerged: boolean;
+  note: string | null;
+  createdAt: string;
+  creator: { id: string; name: string | null; email: string };
+  order?: Order | null;
+}
+
+export interface DetailItem {
+  id: string;
+  mark: string | null;
+  orderNo: string | null;
+  amount: number;
+  receiptId: string | null;
+  receipt?: Receipt | null;
+}
+
+export interface Detail {
+  id: string;
+  date: string | null;
+  status: DetailStatus;
+  imageUrl: string | null;
+  totalAmount: number;
+  createdAt: string;
+  creator: { id: string; name: string | null; email: string };
+  items: DetailItem[];
+  swift?: Swift | null;
+}
+
+export interface Swift {
+  id: string;
+  detailId: string;
+  amount: number;
+  date: string | null;
+  senderName: string | null;
+  senderAddress: string | null;
+  receiverName: string | null;
+  receiverAccount: string | null;
+  imageUrl: string | null;
+  hasError: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface DeletionRequest {
+  id: string;
+  targetType: 'RECEIPT' | 'DETAIL' | 'SWIFT';
+  targetId: string;
+  reason: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedBy: string;
+  approvedBy: string | null;
+  createdAt: string;
+  requester: { id: string; name: string | null; email: string };
+  approver?: { id: string; name: string | null; email: string } | null;
+}
+
+interface AppState {
+  // 用户状态
+  user: User | null;
+  setUser: (user: User | null) => void;
+  
+  // 当前视图
+  currentView: 'dashboard' | 'invoices' | 'receipts' | 'details' | 'swifts' | 'deletions' | 'users';
+  setCurrentView: (view: AppState['currentView']) => void;
+  
+  // 数据
+  invoices: Invoice[];
+  setInvoices: (invoices: Invoice[]) => void;
+  
+  receipts: Receipt[];
+  setReceipts: (receipts: Receipt[]) => void;
+  
+  details: Detail[];
+  setDetails: (details: Detail[]) => void;
+  
+  swifts: Swift[];
+  setSwifts: (swifts: Swift[]) => void;
+  
+  deletionRequests: DeletionRequest[];
+  setDeletionRequests: (requests: DeletionRequest[]) => void;
+  
+  users: User[];
+  setUsers: (users: User[]) => void;
+  
+  // 加载状态
+  loading: boolean;
+  setLoading: (loading: boolean) => void;
+  
+  // Toast消息
+  toastMessage: { type: 'success' | 'error' | 'info'; message: string } | null;
+  setToastMessage: (message: { type: 'success' | 'error' | 'info'; message: string } | null) => void;
+}
+
+export const useStore = create<AppState>()(
+  persist(
+    (set) => ({
+      // 用户状态
+      user: null,
+      setUser: (user) => set({ user }),
+      
+      // 当前视图
+      currentView: 'dashboard',
+      setCurrentView: (currentView) => set({ currentView }),
+      
+      // 数据
+      invoices: [],
+      setInvoices: (invoices) => set({ invoices }),
+      
+      receipts: [],
+      setReceipts: (receipts) => set({ receipts }),
+      
+      details: [],
+      setDetails: (details) => set({ details }),
+      
+      swifts: [],
+      setSwifts: (swifts) => set({ swifts }),
+      
+      deletionRequests: [],
+      setDeletionRequests: (deletionRequests) => set({ deletionRequests }),
+      
+      users: [],
+      setUsers: (users) => set({ users }),
+      
+      // 加载状态
+      loading: false,
+      setLoading: (loading) => set({ loading }),
+      
+      // Toast消息
+      toastMessage: null,
+      setToastMessage: (toastMessage) => set({ toastMessage }),
+    }),
+    {
+      name: 'receipt-system-storage',
+      partialize: (state) => ({ user: state.user }),
+    }
+  )
+);

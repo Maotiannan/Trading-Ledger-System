@@ -1,0 +1,292 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 用户角色枚举
+enum UserRole {
+  ADMIN
+  USER
+}
+
+// 收据状态枚举
+enum ReceiptStatus {
+  SR_Received    // 已收到收据
+  Waiting_SWIFT  // 等待SWIFT
+  Bank_Transfer  // 银行已转账
+  RECEIVED       // 已签收
+}
+
+// 付款明细状态枚举
+enum DetailStatus {
+  Waiting_SWIFT  // 等待SWIFT
+  Bank_Transfer  // 银行已转账
+  RECEIVED       // 已签收
+  ERROR          // 金额不一致错误
+}
+
+// 删除申请状态枚举
+enum DeletionStatus {
+  PENDING   // 待审批
+  APPROVED  // 已批准
+  REJECTED  // 已拒绝
+}
+
+// 删除目标类型枚举
+enum DeletionTargetType {
+  RECEIPT
+  DETAIL
+  SWIFT
+}
+
+// ==================== 用户表 ====================
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String?
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关联
+  invoices          Invoice[]
+  receipts          Receipt[]
+  receiptHistories  ReceiptHistory[]
+  details           Detail[]
+  detailHistories   DetailHistory[]
+  swifts            Swift[]
+  deletionRequests  DeletionRequest[]
+  deletionApprovals DeletionRequest[] @relation("ApprovedBy")
+}
+
+// ==================== 账单表 (Invoice) ====================
+model Invoice {
+  id        String   @id @default(cuid())
+  invNo     String   @unique // INV NO 账单号
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联
+  orders  Order[]
+  creator User @relation(fields: [createdBy], references: [id])
+
+  @@index([invNo])
+}
+
+// ==================== 订单表 (Order) ====================
+model Order {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  orderNo       String   // ORDER 客户单号
+  tokens        String   @default("[]") // 分词结果，JSON格式存储数组
+  amount        Float    // AMOUNT 单个ORDER总金额
+  orderBalance  Float    @default(0) // ORDER BALANCE 未付金额
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 关联
+  invoice         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  receipts        Receipt[]        @relation("ReceiptOrder")
+  mergedReceipts  Receipt[]        @relation("MergedTo")
+  balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
+  balanceTransfersTo   BalanceTransfer[] @relation("TransferTo")
+
+  @@index([invoiceId])
+  @@index([orderNo])
+}
+
+// ==================== 收据表 (Receipt) ====================
+model Receipt {
+  id           String         @id @default(cuid())
+  receiptNo    String?        // 收据号 NO.
+  date         DateTime?      // 时间
+  tel          String?        // 电话 Tel
+  usd          Float          // 付款金额 USD
+  invNo        String?        // 账单号 (L**MH开头)
+  orderNo      String?        // 客户单号 ORDER
+  payer        String?        // 付款人 recu de M./Mme
+  status       ReceiptStatus  @default(SR_Received)
+  imageUrl     String?        // 图片路径
+  imageName    String?        // 图片原始名称
+  isDeposit    Boolean        @default(false) // 是否为定金
+  isMerged     Boolean        @default(false) // 是否已合并到正式账单
+  mergedToId   String?        // 合并到的订单ID
+  note         String?        // 备注
+  createdBy    String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // 关联
+  creator          User             @relation(fields: [createdBy], references: [id])
+  histories        ReceiptHistory[]
+  detailItems      DetailItem[]
+  mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id])
+  order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
+  orderId          String?
+
+  @@index([orderNo])
+  @@index([invNo])
+  @@index([status])
+  @@index([createdBy])
+}
+
+// ==================== 收据历史版本表 ====================
+model ReceiptHistory {
+  id           String   @id @default(cuid())
+  receiptId    String
+  receiptNo    String?
+  date         DateTime?
+  tel          String?
+  usd          Float
+  invNo        String?
+  orderNo      String?
+  payer        String?
+  imageUrl     String?
+  imageName    String?
+  status       ReceiptStatus
+  note         String?  // 变更备注
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  // 关联
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  creator User    @relation(fields: [createdBy], references: [id])
+
+  @@index([receiptId])
+}
+
+// ==================== 付款明细表 (Detail) ====================
+model Detail {
+  id           String        @id @default(cuid())
+  date         DateTime?     // 明细创建时间
+  status       DetailStatus  @default(Waiting_SWIFT)
+  imageUrl     String?       // 图片路径
+  imageName    String?       // 图片原始名称
+  totalAmount  Float         @default(0) // 总金额
+  createdBy    String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // 关联
+  creator    User           @relation(fields: [createdBy], references: [id])
+  items      DetailItem[]
+  histories  DetailHistory[]
+  swift      Swift?
+
+  @@index([status])
+  @@index([createdBy])
+}
+
+// ==================== 付款明细行项目表 ====================
+model DetailItem {
+  id         String   @id @default(cuid())
+  detailId   String
+  mark       String?  // 唛头
+  orderNo    String?  // 单号
+  amount     Float    // 金额
+  receiptId  String?  // 关联的Receipt
+  note       String?  // 备注
+  createdAt  DateTime @default(now())
+
+  // 关联
+  detail  Detail   @relation(fields: [detailId], references: [id], onDelete: Cascade)
+  receipt Receipt? @relation(fields: [receiptId], references: [id])
+
+  @@index([detailId])
+  @@index([orderNo])
+  @@index([receiptId])
+}
+
+// ==================== 付款明细历史版本表 ====================
+model DetailHistory {
+  id         String   @id @default(cuid())
+  detailId   String
+  date       DateTime?
+  items      String   // JSON格式存储DetailItem数组
+  imageUrl   String?
+  imageName  String?
+  status     DetailStatus
+  note       String?  // 变更备注
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  // 关联
+  detail  Detail @relation(fields: [detailId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [createdBy], references: [id])
+
+  @@index([detailId])
+}
+
+// ==================== SWIFT水单表 ====================
+model Swift {
+  id             String   @id @default(cuid())
+  detailId       String   @unique // 一张SWIFT对应一张DETAIL
+  amount         Float    // 汇款金额
+  date           DateTime? // 汇款日期
+  senderName     String?  // 汇款人姓名
+  senderAddress  String?  // 汇款人地址
+  receiverName   String?  // 收款人姓名
+  receiverAccount String? // 收款人账号
+  imageUrl       String?  // 图片路径
+  imageName      String?  // 图片原始名称
+  hasError       Boolean  @default(false) // 是否有错误(金额不一致)
+  errorMessage   String?  // 错误信息
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // 关联
+  detail  Detail @relation(fields: [detailId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [createdBy], references: [id])
+
+  @@index([detailId])
+}
+
+// ==================== 删除申请表 ====================
+model DeletionRequest {
+  id           String           @id @default(cuid())
+  targetType   DeletionTargetType // 删除目标类型
+  targetId     String           // 目标ID
+  reason       String?          // 删除原因
+  status       DeletionStatus   @default(PENDING)
+  requestedBy  String
+  approvedBy   String?
+  approvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // 关联
+  requester User  @relation(fields: [requestedBy], references: [id])
+  approver  User? @relation("ApprovedBy", fields: [approvedBy], references: [id])
+
+  @@index([targetType])
+  @@index([targetId])
+  @@index([status])
+}
+
+// ==================== 余额转移记录表 ====================
+model BalanceTransfer {
+  id              String   @id @default(cuid())
+  fromOrderId     String
+  toOrderId       String
+  amount          Float    // 转移金额
+  note            String?  // 转移备注
+  createdBy       String
+  createdAt       DateTime @default(now())
+
+  // 关联
+  fromOrder Order @relation("TransferFrom", fields: [fromOrderId], references: [id])
+  toOrder   Order @relation("TransferTo", fields: [toOrderId], references: [id])
+
+  @@index([fromOrderId])
+  @@index([toOrderId])
+}

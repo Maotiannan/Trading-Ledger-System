@@ -36,7 +36,7 @@
 
 ### 测试 & 质量
 - [x] 添加单元测试（Jest + React Testing Library） ✅ 2026-02-26
-- [ ] E2E 测试（Playwright）
+- [x] E2E 测试（Playwright） ✅ 2026-02-26
 
 ### 功能增强
 - [ ] **报表导出**：Excel / PDF（使用 `exceljs` 或 `pdf-lib`）

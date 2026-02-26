@@ -489,6 +489,9 @@ npm test
 
 # 监听模式
 npm run test:watch
+
+# 运行 E2E 测试（Playwright）
+npm run test:e2e
 ```
 
 ---
@@ -536,6 +539,7 @@ src/
 - 🤖 OCR 调用增强：统一超时、指数退避重试、usage 费用日志、失败自动 fallback
 - ⬆️ 依赖升级：`next-auth` 升级到 `v5 beta`（`^5.0.0-beta.30`）
 - ✅ 新增 Jest + React Testing Library 基础测试框架与示例测试
+- ✅ 新增 Playwright E2E 配置与登录页冒烟测试
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

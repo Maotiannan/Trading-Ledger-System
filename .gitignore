@@ -54,6 +54,8 @@ server.log
 /upload/
 /upload/**
 /download/tmp/
+/test-results/
+/playwright-report/
 
 # runtime artifacts
 *.sqlite

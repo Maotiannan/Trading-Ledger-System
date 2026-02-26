@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.DS_Store
+*.log
+dev.log
+server.log
+upload
+download
+.env

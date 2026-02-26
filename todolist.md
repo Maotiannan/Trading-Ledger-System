@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > **收汇管理系统** 后续开发 & 优化计划
-> 当前版本：**v1.0.2**
+> 当前版本：**v1.0.3**
 > 最后更新：2026-02-26
 
 ## P0（紧急 · 1 周内必须完成）
@@ -23,7 +23,7 @@
   - 已提交 PostgreSQL 初始迁移（`prisma/migrations`）
 
 ### 核心修复
-- [ ] 切换 Prisma + PostgreSQL 并更新 `docker-compose.yml` 和 `Caddyfile`
+- [x] 切换 Prisma + PostgreSQL 并更新 `docker-compose.yml` 和 `Caddyfile` ✅ 2026-02-26
 
 ## P1（2 周内完成）
 

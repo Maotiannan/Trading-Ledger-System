@@ -427,6 +427,24 @@ bun run dev
 
 访问 http://localhost:3000 查看应用。
 
+### Docker 部署（Postgres + App + Caddy）
+
+```bash
+# 1) 准备环境变量
+cp .env.example .env
+
+# 2) 修改 .env 中的密钥（至少修改 SESSION_SECRET / POSTGRES_PASSWORD）
+
+# 3) 一键构建并启动
+docker compose up -d --build
+
+# 4) 查看状态
+docker compose ps
+docker compose logs -f app
+```
+
+服务默认通过 Caddy 暴露在 `80/443` 端口。
+
 ### 必要环境变量
 
 ```bash
@@ -491,6 +509,11 @@ src/
 ---
 
 ## 更新日志
+
+### v1.0.3 (2026-02-26)
+- 🐳 新增 `Dockerfile` + `docker-compose.yml`（Postgres + App + Caddy）
+- 🌐 `Caddyfile` 更新为容器内反向代理 `app:3000`
+- 🚀 应用容器启动时自动执行 `prisma migrate deploy`
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

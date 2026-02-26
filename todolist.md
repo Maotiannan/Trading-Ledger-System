@@ -35,7 +35,7 @@
 ## P2（后续迭代）
 
 ### 测试 & 质量
-- [ ] 添加单元测试（Jest + React Testing Library）
+- [x] 添加单元测试（Jest + React Testing Library） ✅ 2026-02-26
 - [ ] E2E 测试（Playwright）
 
 ### 功能增强

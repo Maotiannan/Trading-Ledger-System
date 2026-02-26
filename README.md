@@ -481,6 +481,16 @@ OCR_OUTPUT_COST_PER_1K=0
 - 开发环境使用：`bun run db:migrate`。
 - 生产环境发布使用：`bun run db:deploy`。
 
+### 测试
+
+```bash
+# 运行单元测试（Jest + RTL）
+npm test
+
+# 监听模式
+npm run test:watch
+```
+
 ---
 
 ## 开发说明
@@ -525,6 +535,7 @@ src/
 - 🔎 匹配算法升级：`Order.tokens + Levenshtein + token 相似度` 评分选优，替换纯 `includes`
 - 🤖 OCR 调用增强：统一超时、指数退避重试、usage 费用日志、失败自动 fallback
 - ⬆️ 依赖升级：`next-auth` 升级到 `v5 beta`（`^5.0.0-beta.30`）
+- ✅ 新增 Jest + React Testing Library 基础测试框架与示例测试
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

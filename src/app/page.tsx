@@ -171,6 +171,7 @@ function Sidebar() {
 // 仪表盘
 function Dashboard() {
   const { invoices, receipts, details, swifts, deletionRequests } = useStore();
+  const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   
   const stats = [
     { label: '账单总数', value: invoices.length, color: 'text-blue-600' },
@@ -180,9 +181,59 @@ function Dashboard() {
     { label: '待审批删除', value: deletionRequests.filter(d => d.status === 'PENDING').length, color: 'text-red-600' },
   ];
 
+  const handleExport = async (format: 'excel' | 'pdf') => {
+    try {
+      setExporting(format);
+      const response = await fetch(`/api/report?format=${format}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        alert(error.error || '导出失败');
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ext = format === 'excel' ? 'xlsx' : 'pdf';
+      a.href = url;
+      a.download = `trading-ledger-report-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('导出失败，请稍后重试');
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">仪表盘</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">仪表盘</h2>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleExport('excel')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'excel' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            导出 Excel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleExport('pdf')}
+            disabled={exporting !== null}
+          >
+            {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            导出 PDF
+          </Button>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {stats.map((stat) => (
           <Card key={stat.label}>

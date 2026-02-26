@@ -500,6 +500,12 @@ npm run test:e2e
 - 页面入口：仪表盘右上角“导出 Excel / 导出 PDF”按钮
 - 导出内容：Summary（统计）、Invoices、Receipts（Excel）；Summary + Recent Receipts（PDF）
 
+### 多语言（next-intl）
+
+- 已接入 `next-intl`，支持 `中文 / English` 双语切换。
+- 页面入口：侧栏语言切换按钮（会写入 `NEXT_LOCALE` cookie）。
+- 已国际化模块：登录页、侧栏、仪表盘（含导出相关文案）。
+
 ---
 
 ## 开发说明
@@ -547,6 +553,7 @@ src/
 - ✅ 新增 Jest + React Testing Library 基础测试框架与示例测试
 - ✅ 新增 Playwright E2E 配置与登录页冒烟测试
 - 📊 新增报表导出（Excel/PDF）接口与前端下载入口
+- 🌐 启用 next-intl 中英双语（登录/侧栏/仪表盘）
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

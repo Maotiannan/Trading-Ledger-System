@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store';
+import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,6 +38,7 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
 
 // 登录组件
 function LoginPage() {
+  const t = useTranslations('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,10 +59,10 @@ function LoginPage() {
       if (result.success && result.data) {
         setUser(result.data);
       } else {
-        setError(result.error || '登录失败');
+        setError(result.error || t('loginFailed'));
       }
     } catch {
-      setError('网络错误');
+      setError(t('networkError'));
     } finally {
       setLoading(false);
     }
@@ -70,13 +72,13 @@ function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">收汇管理系统</CardTitle>
-          <CardDescription>请登录以继续</CardDescription>
+          <CardTitle className="text-2xl">{t('title')}</CardTitle>
+          <CardDescription>{t('subtitle')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">邮箱</Label>
+              <Label htmlFor="email">{t('email')}</Label>
               <Input
                 id="email"
                 type="email"
@@ -87,7 +89,7 @@ function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">密码</Label>
+              <Label htmlFor="password">{t('password')}</Label>
               <Input
                 id="password"
                 type="password"
@@ -100,7 +102,7 @@ function LoginPage() {
             {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <LogIn className="h-4 w-4 mr-2" />}
-              登录
+              {t('submit')}
             </Button>
           </form>
         </CardContent>
@@ -111,7 +113,11 @@ function LoginPage() {
 
 // 侧边导航栏
 function Sidebar() {
+  const t = useTranslations('sidebar');
+  const tCommon = useTranslations('common');
+  const locale = useLocale();
   const { user, currentView, setCurrentView, setUser } = useStore();
+  const [switchingLocale, setSwitchingLocale] = useState(false);
 
   const handleLogout = async () => {
     await apiCall('auth', {
@@ -122,25 +128,52 @@ function Sidebar() {
   };
 
   const menuItems = [
-    { id: 'dashboard' as const, label: '仪表盘', icon: LayoutDashboard },
-    { id: 'invoices' as const, label: '账单管理', icon: FileText, adminOnly: true },
-    { id: 'receipts' as const, label: '收据管理', icon: Receipt },
-    { id: 'details' as const, label: '付款明细', icon: FileSpreadsheet },
-    { id: 'swifts' as const, label: 'SWIFT水单', icon: Building2 },
-    { id: 'deletions' as const, label: '删除审批', icon: Trash2, adminOnly: true },
-    { id: 'users' as const, label: '用户管理', icon: Users, adminOnly: true },
+    { id: 'dashboard' as const, label: t('dashboard'), icon: LayoutDashboard },
+    { id: 'invoices' as const, label: t('invoices'), icon: FileText, adminOnly: true },
+    { id: 'receipts' as const, label: t('receipts'), icon: Receipt },
+    { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
+    { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
+    { id: 'deletions' as const, label: t('deletions'), icon: Trash2, adminOnly: true },
+    { id: 'users' as const, label: t('users'), icon: Users, adminOnly: true },
   ];
+
+  const switchLocale = async (nextLocale: 'zh' | 'en') => {
+    if (nextLocale === locale) return;
+    try {
+      setSwitchingLocale(true);
+      await fetch('/api/locale', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locale: nextLocale }),
+      });
+      window.location.reload();
+    } finally {
+      setSwitchingLocale(false);
+    }
+  };
 
   return (
     <div className="w-64 bg-white dark:bg-gray-800 border-r h-screen flex flex-col">
       <div className="p-4 border-b">
-        <h1 className="text-xl font-bold">收汇管理系统</h1>
+        <h1 className="text-xl font-bold">{tCommon('appName')}</h1>
         <p className="text-sm text-gray-500 mt-1">
           {user?.name || user?.email} 
           <Badge variant={user?.role === 'ADMIN' ? 'default' : 'secondary'} className="ml-2">
-            {user?.role === 'ADMIN' ? '管理员' : '用户'}
+            {user?.role === 'ADMIN' ? tCommon('admin') : tCommon('user')}
           </Badge>
         </p>
+      </div>
+      <div className="px-4 py-2 border-b">
+        <p className="text-xs text-gray-500 mb-2">{t('language')}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="sm" variant={locale === 'zh' ? 'default' : 'outline'} onClick={() => switchLocale('zh')} disabled={switchingLocale}>
+            中文
+          </Button>
+          <Button size="sm" variant={locale === 'en' ? 'default' : 'outline'} onClick={() => switchLocale('en')} disabled={switchingLocale}>
+            English
+          </Button>
+        </div>
       </div>
       <nav className="flex-1 p-2">
         {menuItems.map((item) => {
@@ -161,7 +194,7 @@ function Sidebar() {
       <div className="p-4 border-t">
         <Button variant="outline" className="w-full" onClick={handleLogout}>
           <LogOut className="h-4 w-4 mr-2" />
-          退出登录
+          {tCommon('logout')}
         </Button>
       </div>
     </div>
@@ -170,15 +203,16 @@ function Sidebar() {
 
 // 仪表盘
 function Dashboard() {
+  const t = useTranslations('dashboard');
   const { invoices, receipts, details, swifts, deletionRequests } = useStore();
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   
   const stats = [
-    { label: '账单总数', value: invoices.length, color: 'text-blue-600' },
-    { label: '待处理收据', value: receipts.filter(r => r.status === 'SR_Received').length, color: 'text-yellow-600' },
-    { label: '等待SWIFT', value: details.filter(d => d.status === 'Waiting_SWIFT').length, color: 'text-orange-600' },
-    { label: '银行转账中', value: details.filter(d => d.status === 'Bank_Transfer').length, color: 'text-purple-600' },
-    { label: '待审批删除', value: deletionRequests.filter(d => d.status === 'PENDING').length, color: 'text-red-600' },
+    { label: t('invoiceCount'), value: invoices.length, color: 'text-blue-600' },
+    { label: t('pendingReceipts'), value: receipts.filter(r => r.status === 'SR_Received').length, color: 'text-yellow-600' },
+    { label: t('waitingSwift'), value: details.filter(d => d.status === 'Waiting_SWIFT').length, color: 'text-orange-600' },
+    { label: t('bankTransfer'), value: details.filter(d => d.status === 'Bank_Transfer').length, color: 'text-purple-600' },
+    { label: t('pendingDeletion'), value: deletionRequests.filter(d => d.status === 'PENDING').length, color: 'text-red-600' },
   ];
 
   const handleExport = async (format: 'excel' | 'pdf') => {
@@ -190,7 +224,7 @@ function Dashboard() {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        alert(error.error || '导出失败');
+        alert(error.error || t('exportFailed'));
         return;
       }
 
@@ -205,7 +239,7 @@ function Dashboard() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch {
-      alert('导出失败，请稍后重试');
+      alert(t('exportFailedRetry'));
     } finally {
       setExporting(null);
     }
@@ -214,7 +248,7 @@ function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">仪表盘</h2>
+        <h2 className="text-2xl font-bold">{t('title')}</h2>
         <div className="flex gap-2">
           <Button
             variant="outline"
@@ -222,7 +256,7 @@ function Dashboard() {
             disabled={exporting !== null}
           >
             {exporting === 'excel' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            导出 Excel
+            {t('exportExcel')}
           </Button>
           <Button
             variant="outline"
@@ -230,7 +264,7 @@ function Dashboard() {
             disabled={exporting !== null}
           >
             {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            导出 PDF
+            {t('exportPdf')}
           </Button>
         </div>
       </div>
@@ -250,40 +284,40 @@ function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>最近收据</CardTitle>
+            <CardTitle>{t('recentReceipts')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-64">
               {receipts.slice(0, 5).map((receipt) => (
                 <div key={receipt.id} className="flex justify-between items-center py-2 border-b">
                   <div>
-                    <p className="font-medium">{receipt.orderNo || receipt.receiptNo || '未命名'}</p>
+                    <p className="font-medium">{receipt.orderNo || receipt.receiptNo || t('unnamed')}</p>
                     <p className="text-sm text-gray-500">${receipt.usd.toFixed(2)}</p>
                   </div>
                   <Badge>{receipt.status}</Badge>
                 </div>
               ))}
-              {receipts.length === 0 && <p className="text-gray-500 text-center py-4">暂无数据</p>}
+              {receipts.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>最近付款明细</CardTitle>
+            <CardTitle>{t('recentDetails')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-64">
               {details.slice(0, 5).map((detail) => (
                 <div key={detail.id} className="flex justify-between items-center py-2 border-b">
                   <div>
-                    <p className="font-medium">{detail.items.length} 笔明细</p>
-                    <p className="text-sm text-gray-500">总计: ${detail.totalAmount.toFixed(2)}</p>
+                    <p className="font-medium">{t('detailItems', { count: detail.items.length })}</p>
+                    <p className="text-sm text-gray-500">{t('total', { value: detail.totalAmount.toFixed(2) })}</p>
                   </div>
                   <Badge variant={detail.status === 'ERROR' ? 'destructive' : 'default'}>{detail.status}</Badge>
                 </div>
               ))}
-              {details.length === 0 && <p className="text-gray-500 text-center py-4">暂无数据</p>}
+              {details.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
         </Card>

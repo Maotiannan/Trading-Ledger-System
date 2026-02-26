@@ -1,0 +1,48 @@
+{
+  "common": {
+    "appName": "Trading Ledger System",
+    "admin": "Admin",
+    "user": "User",
+    "logout": "Log Out",
+    "cancel": "Cancel",
+    "networkError": "Network error",
+    "loading": "Processing..."
+  },
+  "login": {
+    "title": "Trading Ledger System",
+    "subtitle": "Please sign in to continue",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign In",
+    "loginFailed": "Login failed",
+    "networkError": "Network error"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "invoices": "Invoices",
+    "receipts": "Receipts",
+    "details": "Payment Details",
+    "swifts": "SWIFT",
+    "deletions": "Deletion Approval",
+    "users": "Users",
+    "language": "Language"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "exportExcel": "Export Excel",
+    "exportPdf": "Export PDF",
+    "exportFailed": "Export failed",
+    "exportFailedRetry": "Export failed, please try again later",
+    "invoiceCount": "Invoice Count",
+    "pendingReceipts": "Pending Receipts",
+    "waitingSwift": "Waiting SWIFT",
+    "bankTransfer": "Bank Transfer",
+    "pendingDeletion": "Pending Deletions",
+    "recentReceipts": "Recent Receipts",
+    "recentDetails": "Recent Payment Details",
+    "unnamed": "Unnamed",
+    "empty": "No data",
+    "detailItems": "{count} items",
+    "total": "Total: ${value}"
+  }
+}

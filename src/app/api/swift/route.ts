@@ -3,25 +3,8 @@ import { db } from '@/lib/db';
 import { ReceiptStatus, DetailStatus } from '@prisma/client';
 import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 import { getCurrentUser } from '@/lib/request-auth';
-
-// 保存图片
-async function saveImage(file: File): Promise<{ path: string; name: string }> {
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  
-  const uploadDir = path.join(process.cwd(), 'upload', 'images');
-  await mkdir(uploadDir, { recursive: true });
-  
-  const fileName = `${Date.now()}_${file.name}`;
-  const filePath = path.join(uploadDir, fileName);
-  
-  await writeFile(filePath, buffer);
-  
-  return { path: `/upload/images/${fileName}`, name: file.name };
-}
+import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 
 // 获取SWIFT列表
 export async function GET(request: NextRequest) {
@@ -79,7 +62,7 @@ export async function POST(request: NextRequest) {
         const ocrResult = await recognizeSwift(base64);
 
         // 保存图片临时路径
-        const imagePath = await saveImage(file);
+        const imagePath = await saveUploadedImage(file);
 
         return NextResponse.json({ 
           success: true, 
@@ -90,6 +73,9 @@ export async function POST(request: NextRequest) {
         });
       } catch (ocrError) {
         console.error('OCR recognition error:', ocrError);
+        if (ocrError instanceof UploadValidationError) {
+          return NextResponse.json({ success: false, error: ocrError.message }, { status: 400 });
+        }
         return NextResponse.json({ 
           success: false, 
           error: 'AI识别失败，请检查图片是否清晰' 

@@ -524,6 +524,7 @@ src/
 - 🛡️ 新增 `withAuth` + `withRole` 鉴权封装并接入核心 API 路由
 - 🔎 匹配算法升级：`Order.tokens + Levenshtein + token 相似度` 评分选优，替换纯 `includes`
 - 🤖 OCR 调用增强：统一超时、指数退避重试、usage 费用日志、失败自动 fallback
+- ⬆️ 依赖升级：`next-auth` 升级到 `v5 beta`（`^5.0.0-beta.30`）
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

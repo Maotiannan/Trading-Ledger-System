@@ -5,17 +5,7 @@ import { recognizeReceipt } from '@/lib/ocr';
 import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-
-// 获取当前用户
-async function getCurrentUser(request: NextRequest) {
-  const userId = request.headers.get('x-user-id');
-  if (!userId) return null;
-  
-  return db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true }
-  });
-}
+import { getCurrentUser } from '@/lib/request-auth';
 
 // 保存图片
 async function saveImage(file: File): Promise<{ path: string; name: string }> {

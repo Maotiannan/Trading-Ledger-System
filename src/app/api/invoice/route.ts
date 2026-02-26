@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import { updateOrderBalance } from '@/lib/matching';
-
-// 获取当前用户
-async function getCurrentUser(request: NextRequest) {
-  const userId = request.headers.get('x-user-id');
-  if (!userId) return null;
-  
-  return db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true }
-  });
-}
+import { getCurrentUser } from '@/lib/request-auth';
 
 // 获取账单列表
 export async function GET(request: NextRequest) {

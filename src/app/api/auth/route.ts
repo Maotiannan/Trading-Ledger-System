@@ -2,17 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword, validateUser } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
-
-// 获取当前用户
-async function getCurrentUser(request: NextRequest) {
-  const userId = request.headers.get('x-user-id');
-  if (!userId) return null;
-  
-  return db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true }
-  });
-}
+import { getCurrentUser } from '@/lib/request-auth';
+import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
 
 // 登录
 export async function POST(request: NextRequest) {
@@ -31,7 +22,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '邮箱或密码错误' }, { status: 401 });
       }
 
-      return NextResponse.json({ success: true, data: user });
+      const response = NextResponse.json({ success: true, data: user });
+      const token = createSessionToken(user.id);
+      setSessionCookie(response, token);
+      return response;
+    }
+
+    if (action === 'logout') {
+      const response = NextResponse.json({ success: true, message: '已退出登录' });
+      clearSessionCookie(response);
+      return response;
     }
 
     // 获取当前用户

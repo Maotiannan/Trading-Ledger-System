@@ -2,17 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { DeletionStatus, ReceiptStatus, DetailStatus } from '@prisma/client';
 import { UserRole } from '@prisma/client';
-
-// 获取当前用户
-async function getCurrentUser(request: NextRequest) {
-  const userId = request.headers.get('x-user-id');
-  if (!userId) return null;
-  
-  return db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true }
-  });
-}
+import { getCurrentUser } from '@/lib/request-auth';
 
 // 获取删除申请列表
 export async function GET(request: NextRequest) {

@@ -423,9 +423,20 @@ bun run dev
 
 访问 http://localhost:3000 查看应用。
 
-默认管理员账号：
-- 邮箱: admin@example.com
-- 密码: admin123
+### 必要环境变量
+
+```bash
+# 生产环境必须设置（至少32位）
+SESSION_SECRET=replace-with-a-long-random-secret
+
+# 本地初始化管理员（默认关闭）
+ENABLE_INIT_ROUTE=false
+INIT_ADMIN_TOKEN=replace-init-token
+INIT_ADMIN_EMAIL=admin@example.com
+INIT_ADMIN_PASSWORD=replace-strong-password
+```
+
+> 安全说明：不再提供默认管理员弱口令；`/api/init` 默认禁用。
 
 ---
 
@@ -462,6 +473,11 @@ src/
 ---
 
 ## 更新日志
+
+### v1.0.2 (2026-02-26)
+- 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）
+- 🔐 前端移除 `localStorage userId` 透传逻辑
+- 🔐 `/api/init` 改为默认禁用，启用时需初始化令牌 + 环境变量
 
 ### v1.0.1 (2026-02-24)
 - 🔐 **安全加固**：密码存储从不安全的 SHA-256 升级为 bcrypt（12 rounds）

@@ -5,17 +5,7 @@ import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
-
-// 获取当前用户
-async function getCurrentUser(request: NextRequest) {
-  const userId = request.headers.get('x-user-id');
-  if (!userId) return null;
-  
-  return db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true, role: true }
-  });
-}
+import { getCurrentUser } from '@/lib/request-auth';
 
 // 保存图片
 async function saveImage(file: File): Promise<{ path: string; name: string }> {
@@ -192,6 +182,10 @@ export async function POST(request: NextRequest) {
 
     if (action === 'delete') {
       // 删除SWIFT（需要审批）
+      if (currentUser.role !== 'ADMIN') {
+        return NextResponse.json({ success: false, error: '只有管理员可以删除SWIFT' }, { status: 403 });
+      }
+
       const swiftId = formData.get('swiftId') as string;
       
       if (!swiftId) {

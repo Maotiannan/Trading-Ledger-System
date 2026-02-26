@@ -21,15 +21,14 @@ import {
 
 // API调用辅助函数
 async function apiCall(endpoint: string, options: RequestInit = {}) {
-  const userId = localStorage.getItem('userId');
   const headers = {
     'Content-Type': 'application/json',
-    'x-user-id': userId || '',
     ...options.headers,
   };
 
   const response = await fetch(`/api/${endpoint}`, {
     ...options,
+    credentials: 'include',
     headers,
   });
 
@@ -56,7 +55,6 @@ function LoginPage() {
       });
 
       if (result.success && result.data) {
-        localStorage.setItem('userId', result.data.id);
         setUser(result.data);
       } else {
         setError(result.error || '登录失败');
@@ -115,8 +113,11 @@ function LoginPage() {
 function Sidebar() {
   const { user, currentView, setCurrentView, setUser } = useStore();
 
-  const handleLogout = () => {
-    localStorage.removeItem('userId');
+  const handleLogout = async () => {
+    await apiCall('auth', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'logout' }),
+    });
     setUser(null);
   };
 
@@ -948,14 +949,10 @@ function ReceiptManager() {
     formData.append('file', file);
     formData.append('action', 'recognize');
 
-    const userId = localStorage.getItem('userId') || '';
-
     try {
       const result = await fetch('/api/receipt', {
         method: 'POST',
-        headers: {
-          'x-user-id': userId,
-        },
+        credentials: 'include',
         body: formData,
       }).then(r => r.json());
 
@@ -982,14 +979,10 @@ function ReceiptManager() {
     formData.append('imagePath', imagePreview || '');
     formData.append('imageName', selectedFile.name);
 
-    const userId = localStorage.getItem('userId') || '';
-
     try {
       const result = await fetch('/api/receipt', {
         method: 'POST',
-        headers: {
-          'x-user-id': userId,
-        },
+        credentials: 'include',
         body: formData,
       }).then(r => r.json());
 
@@ -1013,14 +1006,12 @@ function ReceiptManager() {
   const handleMarkReceived = async (receiptId: string) => {
     if (!confirm('确定要标记此收据为已签收吗？')) return;
     
-    const userId = localStorage.getItem('userId') || '';
-    
     try {
       const result = await fetch('/api/receipt', {
         method: 'POST',
+        credentials: 'include',
         headers: { 
           'Content-Type': 'application/json',
-          'x-user-id': userId 
         },
         body: JSON.stringify({ action: 'mark-received', receiptId }),
       }).then(r => r.json());
@@ -1365,12 +1356,10 @@ function DetailManager() {
     formData.append('file', file);
     formData.append('action', 'recognize');
 
-    const userId = localStorage.getItem('userId') || '';
-
     try {
       const result = await fetch('/api/detail', {
         method: 'POST',
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
         body: formData,
       }).then(r => r.json());
 
@@ -1404,12 +1393,10 @@ function DetailManager() {
     formData.append('imagePath', savedImagePath?.path || '');
     formData.append('imageName', savedImagePath?.name || selectedFile.name);
 
-    const userId = localStorage.getItem('userId') || '';
-
     try {
       const result = await fetch('/api/detail', {
         method: 'POST',
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
         body: formData,
       }).then(r => r.json());
 
@@ -1715,12 +1702,10 @@ function SwiftManager() {
     formData.append('file', file);
     formData.append('action', 'recognize');
 
-    const userId = localStorage.getItem('userId') || '';
-
     try {
       const result = await fetch('/api/swift', {
         method: 'POST',
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
         body: formData,
       }).then(r => r.json());
 
@@ -1751,12 +1736,10 @@ function SwiftManager() {
     formData.append('imagePath', imagePreview || '');
     formData.append('imageName', selectedFile.name);
 
-    const userId = localStorage.getItem('userId') || '';
-
     try {
       const result = await fetch('/api/swift', {
         method: 'POST',
-        headers: { 'x-user-id': userId },
+        credentials: 'include',
         body: formData,
       }).then(r => r.json());
 
@@ -2195,27 +2178,19 @@ export default function HomePage() {
   // 检查登录状态
   useEffect(() => {
     const checkAuth = async () => {
-      const userId = localStorage.getItem('userId');
-      if (userId) {
-        const result = await apiCall('auth', {
-          method: 'POST',
-          body: JSON.stringify({ action: 'me' }),
-        });
-        if (result.success && result.data) {
-          setUser(result.data);
-        } else {
-          localStorage.removeItem('userId');
-        }
+      const result = await apiCall('auth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'me' }),
+      });
+      if (result.success && result.data) {
+        setUser(result.data);
+      } else {
+        setUser(null);
       }
       setInitialized(true);
     };
     checkAuth();
   }, [setUser]);
-
-  // 初始化默认管理员
-  useEffect(() => {
-    fetch('/api/init', { method: 'POST' });
-  }, []);
 
   if (!initialized) {
     return (

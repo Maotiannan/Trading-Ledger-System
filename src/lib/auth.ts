@@ -42,21 +42,27 @@ export async function migratePassword(userId: string, newPassword: string): Prom
 
 // 创建默认管理员账户
 export async function createDefaultAdmin() {
+  const adminEmail = process.env.INIT_ADMIN_EMAIL;
+  const adminPassword = process.env.INIT_ADMIN_PASSWORD;
+  if (!adminEmail || !adminPassword) {
+    return;
+  }
+
   const existingAdmin = await db.user.findUnique({
-    where: { email: 'admin@example.com' }
+    where: { email: adminEmail }
   });
 
   if (!existingAdmin) {
-    const hashedPassword = await hashPassword('admin123');
+    const hashedPassword = await hashPassword(adminPassword);
     await db.user.create({
       data: {
-        email: 'admin@example.com',
+        email: adminEmail,
         password: hashedPassword,
         name: 'Admin',
         role: UserRole.ADMIN,
       }
     });
-    console.log('Default admin created: admin@example.com / admin123');
+    console.log(`Default admin created: ${adminEmail}`);
   }
 }
 

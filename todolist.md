@@ -1,8 +1,8 @@
 # Trading-Ledger-System TODO List
 
 > **收汇管理系统** 后续开发 & 优化计划
-> 当前版本：**v1.0.1**
-> 最后更新：2026-02-24
+> 当前版本：**v1.0.2**
+> 最后更新：2026-02-26
 
 ## P0（紧急 · 1 周内必须完成）
 
@@ -10,8 +10,12 @@
 - [x] **密码明文存储修复**：User.password 使用 `bcrypt` 加密 ✅ 2026-02-24
   - 使用 bcrypt（12 rounds）替换不安全的 SHA-256
   - 支持旧密码自动迁移（登录时自动升级）
+- [x] **会话鉴权重构**：移除 `x-user-id` 伪造风险，改为服务端签名 Cookie ✅ 2026-02-26
+  - 新增 `SESSION_SECRET` 会话签名校验
+  - 前后端移除 `localStorage userId + x-user-id` 透传
+  - `/api/init` 改为默认禁用，需显式开关 + 初始化令牌
 - [ ] **文件上传安全重构**：
-  - 改用私有目录（`/uploads/` 而非 `public/`）
+  - 保持公开目录访问，但上传敏感文件禁止入 Git（完善 `.gitignore` + 流程约束）
   - 添加文件类型、大小、路径白名单限制
   - 使用 `sharp` 压缩 + 病毒扫描（可选）
 - [ ] **数据库生产化**：SQLite → PostgreSQL（Neon / Supabase / Railway 均可）

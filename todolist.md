@@ -18,7 +18,9 @@
   - 保持公开目录访问，但上传敏感文件禁止入 Git（完善 `.gitignore` + `.env.example`）
   - 已完成文件类型、大小、文件名白名单/清洗限制（统一上传封装）
   - 使用 `sharp` 压缩 + 病毒扫描（可选，后续按需接入）
-- [ ] **数据库生产化**：SQLite → PostgreSQL（Neon / Supabase / Railway 均可）
+- [x] **数据库生产化**：SQLite → PostgreSQL（Neon / Supabase / Railway 均可） ✅ 2026-02-26
+  - Prisma 数据源已切换为 PostgreSQL
+  - 已提交 PostgreSQL 初始迁移（`prisma/migrations`）
 
 ### 核心修复
 - [ ] 切换 Prisma + PostgreSQL 并更新 `docker-compose.yml` 和 `Caddyfile`

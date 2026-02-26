@@ -6,7 +6,7 @@
 
 - **前端**: Next.js 16 + React + TypeScript + Tailwind CSS + shadcn/ui
 - **后端**: Next.js API Routes + Prisma ORM
-- **数据库**: SQLite
+- **数据库**: PostgreSQL + Prisma Migrate
 - **状态管理**: Zustand
 - **AI能力**: VLM图像识别（收据OCR）
 
@@ -414,8 +414,12 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 # 安装依赖
 bun install
 
-# 初始化数据库
-bun run db:push
+# 配置环境变量（参考 .env.example）
+# 初始化数据库结构（开发）
+bun run db:migrate
+
+# 生成 Prisma Client
+bun run db:generate
 
 # 启动开发服务器
 bun run dev
@@ -444,6 +448,13 @@ INIT_ADMIN_PASSWORD=replace-strong-password
 - 服务端统一校验上传文件：仅允许 `JPG/PNG/WEBP/HEIC`，最大 `10MB`，并对文件名做安全清洗。
 - 严禁将敏感数据提交到仓库：`.env`、上传原图、运行时日志、本地数据库文件均已在 `.gitignore` 排除。
 - 请基于 `.env.example` 创建本地 `.env`，不要提交真实密钥。
+
+### 数据库迁移说明（PostgreSQL）
+
+- 当前 Prisma 数据源已切换为 PostgreSQL（`prisma/schema.prisma`）。
+- 初始迁移文件已提交：`prisma/migrations/20260226193500_init_postgres/migration.sql`。
+- 开发环境使用：`bun run db:migrate`。
+- 生产环境发布使用：`bun run db:deploy`。
 
 ---
 

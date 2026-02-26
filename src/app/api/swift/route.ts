@@ -9,7 +9,41 @@ import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 // 获取SWIFT列表
 export const GET = withAuth(async (request: NextRequest) => {
   try {
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search') || '';
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
+    const minAmount = searchParams.get('minAmount');
+    const maxAmount = searchParams.get('maxAmount');
+    const hasError = searchParams.get('hasError');
+
+    const where: Record<string, unknown> = {};
+    if (search) {
+      where.OR = [
+        { senderName: { contains: search } },
+        { senderAddress: { contains: search } },
+        { receiverName: { contains: search } },
+        { receiverAccount: { contains: search } }
+      ];
+    }
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
+      };
+    }
+    if (minAmount || maxAmount) {
+      where.amount = {
+        ...(minAmount ? { gte: Number(minAmount) } : {}),
+        ...(maxAmount ? { lte: Number(maxAmount) } : {})
+      };
+    }
+    if (hasError === 'true' || hasError === 'false') {
+      where.hasError = hasError === 'true';
+    }
+
     const swifts = await db.swift.findMany({
+      where,
       include: {
         detail: {
           include: {

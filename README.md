@@ -506,6 +506,16 @@ npm run test:e2e
 - 页面入口：侧栏语言切换按钮（会写入 `NEXT_LOCALE` cookie）。
 - 已国际化模块：登录页、侧栏、仪表盘（含导出相关文案）。
 
+### 高级搜索与过滤
+
+- 收据管理：支持 `搜索词 + 状态 + 日期区间 + 金额区间`。
+- 付款明细：支持 `搜索词 + 状态 + 日期区间 + 总金额区间`。
+- SWIFT 管理：支持 `搜索词 + 异常状态 + 日期区间 + 金额区间`。
+- API 查询参数：
+  - `/api/receipt`: `search,status,dateFrom,dateTo,minUsd,maxUsd`
+  - `/api/detail`: `search,status,dateFrom,dateTo,minAmount,maxAmount`
+  - `/api/swift`: `search,hasError,dateFrom,dateTo,minAmount,maxAmount`
+
 ---
 
 ## 开发说明
@@ -554,6 +564,7 @@ src/
 - ✅ 新增 Playwright E2E 配置与登录页冒烟测试
 - 📊 新增报表导出（Excel/PDF）接口与前端下载入口
 - 🌐 启用 next-intl 中英双语（登录/侧栏/仪表盘）
+- 🔍 新增高级搜索与过滤（收据/明细/SWIFT）
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

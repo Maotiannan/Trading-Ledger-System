@@ -996,6 +996,12 @@ function ReceiptManager() {
   
   // 图片查看对话框
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [minUsd, setMinUsd] = useState('');
+  const [maxUsd, setMaxUsd] = useState('');
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
@@ -1005,16 +1011,28 @@ function ReceiptManager() {
 
   const loadReceipts = useCallback(async () => {
     setLoading(true);
-    const result = await apiCall('receipt');
+    const params = new URLSearchParams();
+    if (search.trim()) params.set('search', search.trim());
+    if (statusFilter) params.set('status', statusFilter);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    if (minUsd) params.set('minUsd', minUsd);
+    if (maxUsd) params.set('maxUsd', maxUsd);
+    const query = params.toString();
+    const result = await apiCall(`receipt${query ? `?${query}` : ''}`);
     if (result.success) {
       setReceipts(result.data);
     }
     setLoading(false);
-  }, [setReceipts, setLoading]);
+  }, [setReceipts, setLoading, search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
 
   useEffect(() => {
     loadReceipts();
   }, [loadReceipts]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1153,6 +1171,38 @@ function ReceiptManager() {
           上传收据
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Input placeholder="搜索收据号/单号/付款人" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">全部状态</option>
+            <option value="SR_Received">SR_Received</option>
+            <option value="Waiting_SWIFT">Waiting_SWIFT</option>
+            <option value="Bank_Transfer">Bank_Transfer</option>
+            <option value="RECEIVED">RECEIVED</option>
+          </select>
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="number" placeholder="最小金额" value={minUsd} onChange={(e) => setMinUsd(e.target.value)} />
+          <Input type="number" placeholder="最大金额" value={maxUsd} onChange={(e) => setMaxUsd(e.target.value)} />
+          <div className="md:col-span-3 lg:col-span-6 flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('');
+                setDateFrom('');
+                setDateTo('');
+                setMinUsd('');
+                setMaxUsd('');
+              }}
+            >
+              重置筛选
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="p-0">
@@ -1403,13 +1453,27 @@ function DetailManager() {
   
   // 图片查看对话框
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
 
   const loadDetails = useCallback(async () => {
-    const result = await apiCall('detail');
+    const params = new URLSearchParams();
+    if (search.trim()) params.set('search', search.trim());
+    if (statusFilter) params.set('status', statusFilter);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    if (minAmount) params.set('minAmount', minAmount);
+    if (maxAmount) params.set('maxAmount', maxAmount);
+    const query = params.toString();
+    const result = await apiCall(`detail${query ? `?${query}` : ''}`);
     if (result.success) {
       setDetails(result.data);
     }
-  }, [setDetails]);
+  }, [setDetails, search, statusFilter, dateFrom, dateTo, minAmount, maxAmount]);
 
   useEffect(() => {
     loadDetails();
@@ -1532,6 +1596,38 @@ function DetailManager() {
           上传付款明细
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Input placeholder="搜索唛头/单号" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="">全部状态</option>
+            <option value="Waiting_SWIFT">Waiting_SWIFT</option>
+            <option value="Bank_Transfer">Bank_Transfer</option>
+            <option value="RECEIVED">RECEIVED</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="number" placeholder="最小总金额" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+          <Input type="number" placeholder="最大总金额" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+          <div className="md:col-span-3 lg:col-span-6 flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('');
+                setDateFrom('');
+                setDateTo('');
+                setMinAmount('');
+                setMaxAmount('');
+              }}
+            >
+              重置筛选
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         {details.map((detail) => (
@@ -1757,13 +1853,27 @@ function SwiftManager() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedDetailId, setSelectedDetailId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [hasErrorFilter, setHasErrorFilter] = useState('');
 
   const loadSwifts = useCallback(async () => {
-    const result = await apiCall('swift');
+    const params = new URLSearchParams();
+    if (search.trim()) params.set('search', search.trim());
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    if (minAmount) params.set('minAmount', minAmount);
+    if (maxAmount) params.set('maxAmount', maxAmount);
+    if (hasErrorFilter) params.set('hasError', hasErrorFilter);
+    const query = params.toString();
+    const result = await apiCall(`swift${query ? `?${query}` : ''}`);
     if (result.success) {
       setSwifts(result.data);
     }
-  }, [setSwifts]);
+  }, [setSwifts, search, dateFrom, dateTo, minAmount, maxAmount, hasErrorFilter]);
 
   useEffect(() => {
     loadSwifts();
@@ -1875,6 +1985,36 @@ function SwiftManager() {
           上传SWIFT
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Input placeholder="搜索汇款人/收款人/账号" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="border rounded-md px-3 py-2 text-sm" value={hasErrorFilter} onChange={(e) => setHasErrorFilter(e.target.value)}>
+            <option value="">全部状态</option>
+            <option value="true">仅异常</option>
+            <option value="false">仅正常</option>
+          </select>
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="number" placeholder="最小金额" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+          <Input type="number" placeholder="最大金额" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+          <div className="md:col-span-3 lg:col-span-6 flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearch('');
+                setDateFrom('');
+                setDateTo('');
+                setMinAmount('');
+                setMaxAmount('');
+                setHasErrorFilter('');
+              }}
+            >
+              重置筛选
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4">
         {swifts.map((swift) => (

@@ -13,10 +13,32 @@ export const GET = withAuth(async (request: NextRequest) => {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as DetailStatus | null;
     const search = searchParams.get('search') || '';
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
+    const minAmount = searchParams.get('minAmount');
+    const maxAmount = searchParams.get('maxAmount');
 
     const where: Record<string, unknown> = {};
     
     if (status) where.status = status;
+    if (search) {
+      where.OR = [
+        { items: { some: { orderNo: { contains: search } } } },
+        { items: { some: { mark: { contains: search } } } }
+      ];
+    }
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
+      };
+    }
+    if (minAmount || maxAmount) {
+      where.totalAmount = {
+        ...(minAmount ? { gte: Number(minAmount) } : {}),
+        ...(maxAmount ? { lte: Number(maxAmount) } : {})
+      };
+    }
 
     const details = await db.detail.findMany({
       where,

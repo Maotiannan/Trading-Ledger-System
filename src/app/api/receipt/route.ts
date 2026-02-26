@@ -13,6 +13,10 @@ export const GET = withAuth(async (request: NextRequest) => {
     const status = searchParams.get('status') as ReceiptStatus | null;
     const search = searchParams.get('search') || '';
     const orderId = searchParams.get('orderId');
+    const dateFrom = searchParams.get('dateFrom');
+    const dateTo = searchParams.get('dateTo');
+    const minUsd = searchParams.get('minUsd');
+    const maxUsd = searchParams.get('maxUsd');
 
     const where: Record<string, unknown> = {};
     
@@ -26,6 +30,18 @@ export const GET = withAuth(async (request: NextRequest) => {
       ];
     }
     if (orderId) where.orderId = orderId;
+    if (dateFrom || dateTo) {
+      where.createdAt = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
+      };
+    }
+    if (minUsd || maxUsd) {
+      where.usd = {
+        ...(minUsd ? { gte: Number(minUsd) } : {}),
+        ...(maxUsd ? { lte: Number(maxUsd) } : {})
+      };
+    }
 
     const receipts = await db.receipt.findMany({
       where,

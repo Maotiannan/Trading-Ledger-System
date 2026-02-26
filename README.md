@@ -514,6 +514,7 @@ src/
 - 🐳 新增 `Dockerfile` + `docker-compose.yml`（Postgres + App + Caddy）
 - 🌐 `Caddyfile` 更新为容器内反向代理 `app:3000`
 - 🚀 应用容器启动时自动执行 `prisma migrate deploy`
+- 🛡️ 新增 `withAuth` + `withRole` 鉴权封装并接入核心 API 路由
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

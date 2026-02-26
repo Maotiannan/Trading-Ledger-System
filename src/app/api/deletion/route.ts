@@ -2,16 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { DeletionStatus, ReceiptStatus, DetailStatus } from '@prisma/client';
 import { UserRole } from '@prisma/client';
-import { getCurrentUser } from '@/lib/request-auth';
+import { withAuth } from '@/lib/route-auth';
 
 // 获取删除申请列表
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (_request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     // 只有管理员可以查看所有删除申请
     if (currentUser.role !== UserRole.ADMIN) {
       // 普通用户只能看自己的申请
@@ -39,16 +34,11 @@ export async function GET(request: NextRequest) {
     console.error('Get deletion requests error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});
 
 // 创建/审批删除申请
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { action, targetType, targetId, reason, requestId } = body;
 
@@ -254,4 +244,4 @@ export async function POST(request: NextRequest) {
     console.error('Deletion API error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});

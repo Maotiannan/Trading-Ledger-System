@@ -2,16 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import { updateOrderBalance } from '@/lib/matching';
-import { getCurrentUser } from '@/lib/request-auth';
+import { withAuth, withRole } from '@/lib/route-auth';
 
 // 获取账单列表
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
 
@@ -82,20 +77,11 @@ export async function GET(request: NextRequest) {
     console.error('Get invoices error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});
 
 // 创建账单
-export async function POST(request: NextRequest) {
+export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
-    if (currentUser.role !== UserRole.ADMIN) {
-      return NextResponse.json({ success: false, error: '只有管理员可以创建账单' }, { status: 403 });
-    }
-
     const body = await request.json();
     const { invNo, orders } = body;
 
@@ -266,20 +252,11 @@ export async function POST(request: NextRequest) {
     console.error('Create invoice error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+}, '只有管理员可以创建账单');
 
 // 删除账单
-export async function DELETE(request: NextRequest) {
+export const DELETE = withRole(UserRole.ADMIN, async (request: NextRequest) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
-    if (currentUser.role !== UserRole.ADMIN) {
-      return NextResponse.json({ success: false, error: '只有管理员可以删除账单' }, { status: 403 });
-    }
-
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -302,7 +279,7 @@ export async function DELETE(request: NextRequest) {
     console.error('Delete invoice error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+}, '只有管理员可以删除账单');
 
 // 重新匹配所有订单
 async function rematchAllOrders() {
@@ -404,17 +381,8 @@ async function rematchAllOrders() {
 }
 
 // 更新订单
-export async function PUT(request: NextRequest) {
+export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
-    if (currentUser.role !== UserRole.ADMIN) {
-      return NextResponse.json({ success: false, error: '只有管理员可以修改订单' }, { status: 403 });
-    }
-
     const body = await request.json();
     const { action, orderId, orderNo, amount, invoiceId } = body;
 
@@ -670,4 +638,4 @@ export async function PUT(request: NextRequest) {
     console.error('Update order error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+}, '只有管理员可以修改订单');

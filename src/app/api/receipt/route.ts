@@ -3,17 +3,12 @@ import { db } from '@/lib/db';
 import { ReceiptStatus } from '@prisma/client';
 import { recognizeReceipt } from '@/lib/ocr';
 import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
-import { getCurrentUser } from '@/lib/request-auth';
+import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 
 // 获取收据列表
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as ReceiptStatus | null;
     const search = searchParams.get('search') || '';
@@ -50,7 +45,7 @@ export async function GET(request: NextRequest) {
     console.error('Get receipts error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});
 
 // 解析请求体（支持JSON和FormData）
 async function parseRequestBody(request: NextRequest): Promise<{ action: string; data: Record<string, unknown>; file?: File }> {
@@ -127,13 +122,8 @@ async function parseRequestBody(request: NextRequest): Promise<{ action: string;
 }
 
 // 上传并识别收据
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const { action, data, file } = await parseRequestBody(request);
     const receiptId = data.receiptId as string | undefined;
 
@@ -408,4 +398,4 @@ export async function POST(request: NextRequest) {
     console.error('Receipt API error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});

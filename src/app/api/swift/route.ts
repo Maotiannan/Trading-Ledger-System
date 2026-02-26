@@ -3,17 +3,12 @@ import { db } from '@/lib/db';
 import { ReceiptStatus, DetailStatus } from '@prisma/client';
 import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
-import { getCurrentUser } from '@/lib/request-auth';
+import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 
 // 获取SWIFT列表
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const swifts = await db.swift.findMany({
       include: {
         detail: {
@@ -31,16 +26,11 @@ export async function GET(request: NextRequest) {
     console.error('Get swifts error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});
 
 // 上传并识别SWIFT
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const action = formData.get('action') as string;
@@ -220,4 +210,4 @@ export async function POST(request: NextRequest) {
     console.error('Swift API error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});

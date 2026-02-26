@@ -4,17 +4,12 @@ import { ReceiptStatus, DetailStatus } from '@prisma/client';
 import { recognizeDetail } from '@/lib/ocr';
 import { findMatchingReceipt, ensureSystemPoolInvoice, updateOrderBalance, findOrCreateOrder } from '@/lib/matching';
 import { tokenizeOrder, checkTokenMatch } from '@/lib/tokenizer';
-import { getCurrentUser } from '@/lib/request-auth';
+import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 
 // 获取付款明细列表
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request: NextRequest) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as DetailStatus | null;
     const search = searchParams.get('search') || '';
@@ -46,16 +41,11 @@ export async function GET(request: NextRequest) {
     console.error('Get details error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});
 
 // 上传并识别付款明细
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
-    }
-
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const action = formData.get('action') as string;
@@ -331,4 +321,4 @@ export async function POST(request: NextRequest) {
     console.error('Detail API error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}
+});

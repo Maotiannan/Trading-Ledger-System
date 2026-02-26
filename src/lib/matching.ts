@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { ReceiptStatus, UserRole } from '@prisma/client';
+import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
 
 // 确保DEPOSIT_POOL发票池存在
 export async function ensureDepositPoolInvoice(userId: string): Promise<string> {
@@ -47,6 +48,7 @@ export async function createOrder(orderNo: string, userId: string): Promise<stri
     data: {
       invoiceId,
       orderNo,
+      tokens: serializeOrderTokens(orderNo),
       amount: 0, // 初始金额为0，会随着收据累加
       orderBalance: 0
     }
@@ -58,18 +60,27 @@ export async function createOrder(orderNo: string, userId: string): Promise<stri
 // 查找或创建Order
 export async function findOrCreateOrder(orderNo: string, userId: string): Promise<string> {
   const normalizedOrderNo = orderNo.toLowerCase().trim();
+  if (!normalizedOrderNo) {
+    return createOrder(orderNo, userId);
+  }
 
   // 查找所有订单
   const orders = await db.order.findMany({
-    orderBy: { createdAt: 'asc' }
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, orderNo: true, tokens: true }
   });
 
-  // 查找匹配的订单
+  // 查找匹配分数最高的订单
+  let bestMatch: { id: string; score: number } | null = null;
   for (const order of orders) {
-    if (order.orderNo.toLowerCase().includes(normalizedOrderNo) ||
-        normalizedOrderNo.includes(order.orderNo.toLowerCase())) {
-      return order.id;
+    const score = calculateOrderSimilarity(orderNo, order.orderNo, parseOrderTokens(order.tokens));
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = { id: order.id, score };
     }
+  }
+
+  if (bestMatch && bestMatch.score >= 0.72) {
+    return bestMatch.id;
   }
 
   // 没找到，创建新的
@@ -86,25 +97,46 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
 } | null> {
   if (!orderNo) return null;
 
-  const normalizedOrderNo = orderNo.toLowerCase().trim();
-
   // 查找所有订单，按创建时间排序
   const orders = await db.order.findMany({
     orderBy: { createdAt: 'asc' },
-    include: { invoice: true }
+    select: {
+      id: true,
+      orderNo: true,
+      amount: true,
+      orderBalance: true,
+      tokens: true,
+    }
   });
 
-  // 查找第一个匹配的订单（ORDER名包含识别的ORDER）
+  let bestMatch: {
+    id: string;
+    orderNo: string;
+    amount: number;
+    orderBalance: number;
+    score: number;
+  } | null = null;
+
   for (const order of orders) {
-    if (order.orderNo.toLowerCase().includes(normalizedOrderNo) ||
-        normalizedOrderNo.includes(order.orderNo.toLowerCase())) {
-      return {
-        orderId: order.id,
+    const score = calculateOrderSimilarity(orderNo, order.orderNo, parseOrderTokens(order.tokens));
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = {
+        id: order.id,
         orderNo: order.orderNo,
         amount: order.amount,
         orderBalance: order.orderBalance,
+        score,
       };
     }
+  }
+
+  if (bestMatch && bestMatch.score >= 0.58) {
+    return {
+      orderId: bestMatch.id,
+      orderNo: bestMatch.orderNo,
+      amount: bestMatch.amount,
+      orderBalance: bestMatch.orderBalance,
+    };
   }
 
   return null;
@@ -210,7 +242,32 @@ export async function findMatchingReceipt(
 ): Promise<string | null> {
   if (!orderNo) return null;
 
-  const normalizedOrderNo = orderNo.toLowerCase();
+  const normalizedOrderNo = orderNo.toLowerCase().trim();
+  if (!normalizedOrderNo) return null;
+
+  const selectFields = {
+    id: true,
+    orderNo: true,
+    createdAt: true,
+  } as const;
+
+  const chooseBest = (
+    candidates: Array<{ id: string; orderNo: string | null }>,
+    threshold: number
+  ): string | null => {
+    let best: { id: string; score: number } | null = null;
+    for (const candidate of candidates) {
+      if (!candidate.orderNo) continue;
+      const score = calculateOrderSimilarity(normalizedOrderNo, candidate.orderNo);
+      if (!best || score > best.score) {
+        best = { id: candidate.id, score };
+      }
+    }
+    if (best && best.score >= threshold) {
+      return best.id;
+    }
+    return null;
+  };
 
   // 先尝试精确匹配：ORDER和金额都匹配
   const allReceipts = await db.receipt.findMany({
@@ -218,26 +275,24 @@ export async function findMatchingReceipt(
       usd: amount,
       status: ReceiptStatus.SR_Received
     },
-    orderBy: { createdAt: 'asc' }
+    orderBy: { createdAt: 'asc' },
+    select: selectFields
   });
 
-  const exactMatch = allReceipts.find(r => 
-    r.orderNo && r.orderNo.toLowerCase().includes(normalizedOrderNo)
-  );
+  const exactMatch = chooseBest(allReceipts, 0.6);
 
-  if (exactMatch) return exactMatch.id;
+  if (exactMatch) return exactMatch;
 
   // 如果没有精确匹配，尝试只匹配ORDER
   const allMatchingReceipts = await db.receipt.findMany({
     where: {
       status: ReceiptStatus.SR_Received
     },
-    orderBy: { createdAt: 'asc' }
+    orderBy: { createdAt: 'asc' },
+    select: selectFields
   });
 
-  const orderMatch = allMatchingReceipts.find(r => 
-    r.orderNo && r.orderNo.toLowerCase().includes(normalizedOrderNo)
-  );
+  const orderMatch = chooseBest(allMatchingReceipts, 0.72);
 
   return orderMatch?.id || null;
 }

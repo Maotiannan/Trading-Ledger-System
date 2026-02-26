@@ -29,7 +29,7 @@
 
 - [ ] **升级 next-auth** 到 v5（App Router 原生支持更好）
 - [x] **封装权限中间件**：`withAuth` + `withRole`（统一所有 API Route 鉴权） ✅ 2026-02-26
-- [ ] **模糊匹配优化**：使用 `Order.tokens` 字段 + Levenshtein / token 相似度（当前仅 `includes` 容易误匹配）
+- [x] **模糊匹配优化**：使用 `Order.tokens` 字段 + Levenshtein / token 相似度（当前仅 `includes` 容易误匹配） ✅ 2026-02-26
 - [ ] **AI 调用增强**：VLM 接口增加重试、超时、费用日志、失败 fallback
 
 ## P2（后续迭代）

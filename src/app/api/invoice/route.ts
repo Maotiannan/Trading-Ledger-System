@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import { updateOrderBalance } from '@/lib/matching';
 import { withAuth, withRole } from '@/lib/route-auth';
+import { serializeOrderTokens } from '@/lib/tokenizer';
 
 // 获取账单列表
 export const GET = withAuth(async (request: NextRequest) => {
@@ -144,6 +145,7 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
         orders: {
           create: processedOrders.map(order => ({
             orderNo: order.orderNo,
+            tokens: serializeOrderTokens(order.orderNo),
             amount: order.amount,
             orderBalance: order.amount
           }))
@@ -410,6 +412,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
         where: { id: orderId },
         data: {
           orderNo: orderNo !== undefined ? orderNo : order.orderNo,
+          tokens: orderNo !== undefined ? serializeOrderTokens(orderNo) : order.tokens,
           amount: amount !== undefined ? amount : order.amount,
         }
       });
@@ -460,6 +463,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
         data: {
           invoiceId,
           orderNo,
+          tokens: serializeOrderTokens(orderNo),
           amount,
           orderBalance: amount
         }
@@ -582,6 +586,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
           data: {
             invoiceId: unAssociated.id,
             orderNo: toOrderNo,
+            tokens: serializeOrderTokens(toOrderNo),
             amount: 0,  // Un_Associated 下的订单金额为0
             orderBalance: 0
           }

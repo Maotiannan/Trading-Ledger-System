@@ -2,6 +2,11 @@ import ZAI from 'z-ai-web-dev-sdk';
 import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult } from '@/lib/types';
 
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
+const OCR_MAX_RETRIES = Number(process.env.OCR_MAX_RETRIES || 3);
+const OCR_TIMEOUT_MS = Number(process.env.OCR_TIMEOUT_MS || 15000);
+const OCR_RETRY_BASE_DELAY_MS = Number(process.env.OCR_RETRY_BASE_DELAY_MS || 1200);
+const OCR_INPUT_COST_PER_1K = Number(process.env.OCR_INPUT_COST_PER_1K || 0);
+const OCR_OUTPUT_COST_PER_1K = Number(process.env.OCR_OUTPUT_COST_PER_1K || 0);
 
 async function getZai() {
   if (!zaiInstance) {
@@ -10,43 +15,110 @@ async function getZai() {
   return zaiInstance;
 }
 
-// 重试包装函数
-async function withRetry<T>(fn: () => Promise<T>, maxRetries: number = 3, delayMs: number = 1000): Promise<T> {
-  let lastError: Error | null = null;
-  
-  for (let i = 0; i < maxRetries; i++) {
+function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  const msg = error.message.toLowerCase();
+  return msg.includes('timeout') || msg.includes('timed out') || msg.includes('fetch failed') || msg.includes('network');
+}
+
+async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return Promise.race([
+    fn(),
+    new Promise<T>((_, reject) => {
+      const timeoutError = new Error(`${label} request timeout after ${timeoutMs}ms`);
+      setTimeout(() => reject(timeoutError), timeoutMs);
+    }),
+  ]);
+}
+
+async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  let lastError: unknown;
+
+  for (let i = 0; i < OCR_MAX_RETRIES; i++) {
     try {
-      return await fn();
+      return await withTimeout(fn, OCR_TIMEOUT_MS, label);
     } catch (error) {
-      lastError = error as Error;
-      console.error(`Attempt ${i + 1} failed:`, error);
-      
-      // 如果是网络超时错误，等待后重试
-      if (error instanceof Error && (
-        error.message.includes('timeout') || 
-        error.message.includes('Timeout') ||
-        error.message.includes('fetch failed')
-      )) {
-        if (i < maxRetries - 1) {
-          console.log(`Retrying in ${delayMs}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          delayMs *= 2; // 指数退避
-          continue;
-        }
+      lastError = error;
+      console.error(`[OCR:${label}] attempt ${i + 1} failed`, error);
+
+      if (i < OCR_MAX_RETRIES - 1 && isRetryableError(error)) {
+        const waitMs = OCR_RETRY_BASE_DELAY_MS * Math.pow(2, i);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        continue;
       }
-      
-      // 其他错误直接抛出
-      throw error;
+
+      break;
     }
   }
-  
-  throw lastError;
+
+  throw (lastError instanceof Error ? lastError : new Error(`[OCR:${label}] unknown failure`));
+}
+
+function parseJsonObject<T>(content: string): T | null {
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]) as T;
+  } catch {
+    return null;
+  }
+}
+
+function logUsage(label: string, response: any): void {
+  const usage = response?.usage;
+  if (!usage) return;
+
+  const promptTokens = Number(usage.prompt_tokens || 0);
+  const completionTokens = Number(usage.completion_tokens || 0);
+  const totalTokens = Number(usage.total_tokens || promptTokens + completionTokens);
+  const estimatedCost =
+    (promptTokens / 1000) * OCR_INPUT_COST_PER_1K +
+    (completionTokens / 1000) * OCR_OUTPUT_COST_PER_1K;
+
+  console.log(
+    `[OCR:${label}] usage prompt=${promptTokens} completion=${completionTokens} total=${totalTokens} estimated_cost=${estimatedCost.toFixed(6)}`
+  );
+}
+
+async function runVisionRequest<T>(
+  label: string,
+  imageBase64: string,
+  prompt: string,
+  fallback: T
+): Promise<T> {
+  try {
+    const zai = await getZai();
+    const response = await withRetry(
+      () => zai.chat.completions.createVision({
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageBase64 } }
+            ]
+          }
+        ],
+        thinking: { type: 'disabled' }
+      }),
+      label
+    );
+
+    logUsage(label, response);
+    const content = response?.choices?.[0]?.message?.content || '{}';
+    const parsed = parseJsonObject<T>(content);
+    if (parsed) return parsed;
+
+    console.error(`[OCR:${label}] parse failed, fallback used`, content);
+    return fallback;
+  } catch (error) {
+    console.error(`[OCR:${label}] request failed, fallback used`, error);
+    return fallback;
+  }
 }
 
 // 识别收据(RECEIPT)
 export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrResult> {
-  const zai = await getZai();
-
   const prompt = `请识别这张收据图片并提取以下信息，以JSON格式返回：
 {
   "receiptNo": "收据号(No.后面的字符串)",
@@ -66,32 +138,7 @@ export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrR
 4. 如果某个字段无法识别，返回null
 5. 只返回JSON，不要其他文字`;
 
-  const response = await withRetry(() => zai.chat.completions.createVision({
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageBase64 } }
-        ]
-      }
-    ],
-    thinking: { type: 'disabled' }
-  }), 3, 2000);
-
-  const content = response.choices[0]?.message?.content || '{}';
-
-  try {
-    // 尝试解析JSON
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as ReceiptOcrResult;
-    }
-  } catch {
-    console.error('Failed to parse receipt OCR result:', content);
-  }
-
-  return {
+  const fallback: ReceiptOcrResult = {
     receiptNo: null,
     date: null,
     tel: null,
@@ -101,12 +148,12 @@ export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrR
     payer: null,
     isDeposit: false
   };
+
+  return runVisionRequest<ReceiptOcrResult>('receipt', imageBase64, prompt, fallback);
 }
 
 // 识别付款明细(DETAIL)
 export async function recognizeDetail(imageBase64: string): Promise<DetailOcrResult> {
-  const zai = await getZai();
-
   const prompt = `请识别这张付款明细图片并提取以下信息，以JSON格式返回：
 {
   "date": "明细创建日期(格式: YYYY-MM-DD)",
@@ -127,40 +174,16 @@ export async function recognizeDetail(imageBase64: string): Promise<DetailOcrRes
 5. 识别所有可见的明细行
 6. 只返回JSON，不要其他文字`;
 
-  const response = await withRetry(() => zai.chat.completions.createVision({
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageBase64 } }
-        ]
-      }
-    ],
-    thinking: { type: 'disabled' }
-  }), 3, 2000);
-
-  const content = response.choices[0]?.message?.content || '{}';
-
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as DetailOcrResult;
-    }
-  } catch {
-    console.error('Failed to parse detail OCR result:', content);
-  }
-
-  return {
+  const fallback: DetailOcrResult = {
     date: null,
     items: []
   };
+
+  return runVisionRequest<DetailOcrResult>('detail', imageBase64, prompt, fallback);
 }
 
 // 识别SWIFT水单
 export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResult> {
-  const zai = await getZai();
-
   const prompt = `请识别这张SWIFT转账水单图片并提取以下信息，以JSON格式返回：
 {
   "amount": 汇款金额(数字，不含货币符号),
@@ -177,31 +200,7 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
 3. 如果某个字段无法识别，返回null
 4. 只返回JSON，不要其他文字`;
 
-  const response = await withRetry(() => zai.chat.completions.createVision({
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageBase64 } }
-        ]
-      }
-    ],
-    thinking: { type: 'disabled' }
-  }), 3, 2000);
-
-  const content = response.choices[0]?.message?.content || '{}';
-
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as SwiftOcrResult;
-    }
-  } catch {
-    console.error('Failed to parse SWIFT OCR result:', content);
-  }
-
-  return {
+  const fallback: SwiftOcrResult = {
     amount: null,
     date: null,
     senderName: null,
@@ -209,4 +208,6 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
     receiverName: null,
     receiverAccount: null
   };
+
+  return runVisionRequest<SwiftOcrResult>('swift', imageBase64, prompt, fallback);
 }

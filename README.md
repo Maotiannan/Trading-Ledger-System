@@ -456,6 +456,13 @@ ENABLE_INIT_ROUTE=false
 INIT_ADMIN_TOKEN=replace-init-token
 INIT_ADMIN_EMAIL=admin@example.com
 INIT_ADMIN_PASSWORD=replace-strong-password
+
+# OCR 稳定性与费用日志
+OCR_MAX_RETRIES=3
+OCR_TIMEOUT_MS=15000
+OCR_RETRY_BASE_DELAY_MS=1200
+OCR_INPUT_COST_PER_1K=0
+OCR_OUTPUT_COST_PER_1K=0
 ```
 
 > 安全说明：不再提供默认管理员弱口令；`/api/init` 默认禁用。
@@ -516,6 +523,7 @@ src/
 - 🚀 应用容器启动时自动执行 `prisma migrate deploy`
 - 🛡️ 新增 `withAuth` + `withRole` 鉴权封装并接入核心 API 路由
 - 🔎 匹配算法升级：`Order.tokens + Levenshtein + token 相似度` 评分选优，替换纯 `includes`
+- 🤖 OCR 调用增强：统一超时、指数退避重试、usage 费用日志、失败自动 fallback
 
 ### v1.0.2 (2026-02-26)
 - 🔐 会话鉴权改造：从 `x-user-id` 头改为服务端签名 Cookie（HttpOnly）

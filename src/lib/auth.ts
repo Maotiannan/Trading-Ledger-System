@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 
 // bcrypt 工作因子（cost factor），值越高越安全但越慢
 const SALT_ROUNDS = 12;
+const DUMMY_BCRYPT_HASH = '$2b$12$rH0I1qVK9ChrohNuFhABA.5o38Cb0QrXKIX/aM3v5IylP3qzRBgJC';
 
 // 检查是否为旧的 SHA-256 哈希格式（64位十六进制）
 function isLegacyHash(hash: string): boolean {
@@ -80,7 +81,11 @@ export async function validateUser(email: string, password: string): Promise<Use
     where: { email }
   });
 
-  if (!user) return null;
+  if (!user) {
+    // 不存在用户时也执行一次 bcrypt compare，降低枚举攻击的时间差。
+    await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
+    return null;
+  }
 
   const isValid = await verifyPassword(password, user.password);
   if (!isValid) return null;

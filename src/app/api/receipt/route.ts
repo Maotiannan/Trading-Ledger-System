@@ -5,9 +5,13 @@ import { recognizeReceipt } from '@/lib/ocr';
 import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
+import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
+import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptPayloadSchema } from '@/lib/validators';
+import { recordAuditEvent } from '@/lib/audit';
+import { parseActionRequest } from '@/lib/http-body';
 
 // 获取收据列表
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as ReceiptStatus | null;
@@ -19,9 +23,13 @@ export const GET = withAuth(async (request: NextRequest) => {
     const maxUsd = searchParams.get('maxUsd');
 
     const where: Record<string, unknown> = {};
+    if (!isAdmin(currentUser)) {
+      where.createdBy = currentUser.id;
+    }
     
     if (status) where.status = status;
     if (search) {
+      assertSearchLength(search);
       where.OR = [
         { receiptNo: { contains: search } },
         { orderNo: { contains: search } },
@@ -63,84 +71,10 @@ export const GET = withAuth(async (request: NextRequest) => {
   }
 });
 
-// 解析请求体（支持JSON和FormData）
-async function parseRequestBody(request: NextRequest): Promise<{ action: string; data: Record<string, unknown>; file?: File }> {
-  const contentType = request.headers.get('content-type') || '';
-  console.log('[parseRequestBody] Content-Type:', contentType);
-  
-  if (contentType.includes('application/json')) {
-    console.log('[parseRequestBody] Parsing as JSON');
-    const body = await request.json();
-    return { 
-      action: body.action || '', 
-      data: body,
-      file: undefined
-    };
-  } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
-    console.log('[parseRequestBody] Parsing as FormData');
-    const formData = await request.formData();
-    const result: { action: string; data: Record<string, unknown>; file?: File } = {
-      action: (formData.get('action') as string) || '',
-      data: {}
-    };
-    
-    // 提取所有非文件字段
-    formData.forEach((value, key) => {
-      if (key !== 'file' && typeof value === 'string') {
-        result.data[key] = value;
-      }
-    });
-    
-    // 提取文件
-    const file = formData.get('file');
-    if (file && file instanceof File) {
-      result.file = file;
-    }
-    
-    return result;
-  } else {
-    // 尝试作为JSON解析（可能是没有正确设置Content-Type的情况）
-    console.log('[parseRequestBody] Unknown content type, trying JSON');
-    try {
-      const body = await request.json();
-      return { 
-        action: body.action || '', 
-        data: body,
-        file: undefined
-      };
-    } catch {
-      console.log('[parseRequestBody] JSON parse failed, trying FormData');
-      try {
-        const formData = await request.formData();
-        const result: { action: string; data: Record<string, unknown>; file?: File } = {
-          action: (formData.get('action') as string) || '',
-          data: {}
-        };
-        
-        formData.forEach((value, key) => {
-          if (key !== 'file' && typeof value === 'string') {
-            result.data[key] = value;
-          }
-        });
-        
-        const file = formData.get('file');
-        if (file && file instanceof File) {
-          result.file = file;
-        }
-        
-        return result;
-      } catch (formDataError) {
-        console.error('[parseRequestBody] FormData parse also failed:', formDataError);
-        return { action: '', data: {}, file: undefined };
-      }
-    }
-  }
-}
-
 // 上传并识别收据
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const { action, data, file } = await parseRequestBody(request);
+    const { action, data, file } = await parseActionRequest(request);
     const receiptId = data.receiptId as string | undefined;
 
     if (action === 'recognize') {
@@ -190,34 +124,31 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: false, error: '缺少收据数据' }, { status: 400 });
       }
 
-      const receiptData = JSON.parse(dataStr);
+      const receiptData = parseJsonWithSchema(dataStr, receiptPayloadSchema, '收据数据格式错误');
       const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit } = receiptData;
 
-      if (usd === null || usd === undefined || usd < 0) {
-        return NextResponse.json({ success: false, error: '付款金额无效' }, { status: 400 });
-      }
-
-      if (receiptData.receiptNo && receiptData.receiptNo.trim()) {
+      if (receiptData.receiptNo) {
         const existingReceipt = await db.receipt.findFirst({
           where: { 
-            receiptNo: receiptNo.trim()
+            receiptNo: receiptData.receiptNo
           }
         });
         if (existingReceipt) {
           return NextResponse.json({ 
             success: false, 
-            error: `收据号 "${receiptData.receiptNo}" 已存在，请检查是否重复录入` 
+            error: '收据创建失败，请稍后重试'
           }, { status: 400 });
         }
       }
 
       // 查找匹配的ORDER
-      const matchedOrder = await findMatchingOrder(receiptData.orderNo);
+      const normalizedOrderNo = typeof receiptData.orderNo === 'string' ? receiptData.orderNo : null;
+      const matchedOrder = await findMatchingOrder(normalizedOrderNo);
 
       let orderId: string | null = matchedOrder?.orderId || null;
 
       // 如果是定金，需要创建一个独立的订单记录
-      if (receiptData.isDeposit && receiptData.orderNo && !matchedOrder) {
+      if (receiptData.isDeposit && normalizedOrderNo && !matchedOrder) {
         // 查找或创建一个默认发票来存放定金订单
         let defaultInvoice = await db.invoice.findFirst({
           where: { invNo: 'DEPOSIT_POOL' }
@@ -235,7 +166,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         const depositOrder = await db.order.create({
           data: {
             invoiceId: defaultInvoice.id,
-            orderNo: receiptData.orderNo,
+            orderNo: normalizedOrderNo,
             amount: 0,
             orderBalance: -receiptData.usd
           }
@@ -249,11 +180,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         data: {
           receiptNo: receiptData.receiptNo?.trim() || null,
           date: receiptData.date ? new Date(receiptData.date) : null,
-          tel: receiptData.tel,
+          tel: receiptData.tel || null,
           usd: receiptData.usd,
-          invNo: receiptData.invNo,
-          orderNo: receiptData.orderNo,
-          payer: receiptData.payer,
+          invNo: receiptData.invNo || null,
+          orderNo: normalizedOrderNo,
+          payer: receiptData.payer || null,
           isDeposit: receiptData.isDeposit || false,
           status: ReceiptStatus.SR_Received,
           imageUrl: imagePath,
@@ -270,6 +201,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       if (orderId) {
         await updateOrderBalance(orderId);
       }
+      await recordAuditEvent({
+        action: 'RECEIPT_CREATE',
+        actorId: currentUser.id,
+        targetType: 'RECEIPT',
+        targetId: receipt.id,
+      });
 
       return NextResponse.json({ success: true, data: receipt });
     }
@@ -286,6 +223,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       if (!existingReceipt) {
         return NextResponse.json({ success: false, error: '收据不存在' }, { status: 400 });
+      }
+      if (!canAccessOwnedResource(existingReceipt.createdBy, currentUser)) {
+        return forbiddenOwnershipResponse('无权修改该收据');
       }
 
       // 检查状态
@@ -321,23 +261,24 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       const updateImageName = data.imageName as string;
       
       if (updateDataStr) {
-        const updateData = JSON.parse(updateDataStr);
+        const updateData = parseJsonWithSchema(updateDataStr, receiptPayloadSchema, '收据数据格式错误');
         const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit } = updateData;
+        const normalizedOrderNo = orderNo;
 
         // 查找匹配的ORDER
-        const matchedOrder = await findMatchingOrder(orderNo);
+        const matchedOrder = await findMatchingOrder(normalizedOrderNo);
 
         // 更新收据
         const updated = await db.receipt.update({
           where: { id: receiptId },
           data: {
-            receiptNo,
+            receiptNo: receiptNo || null,
             date: date ? new Date(date) : null,
-            tel,
+            tel: tel || null,
             usd,
-            invNo,
-            orderNo,
-            payer,
+            invNo: invNo || null,
+            orderNo: normalizedOrderNo,
+            payer: payer || null,
             isDeposit: isDeposit || false,
             imageUrl: updateImagePath || existingReceipt.imageUrl,
             imageName: updateImageName || existingReceipt.imageName,
@@ -352,6 +293,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (matchedOrder && matchedOrder.orderId !== existingReceipt.orderId) {
           await updateOrderBalance(matchedOrder.orderId);
         }
+        await recordAuditEvent({
+          action: 'RECEIPT_UPDATE',
+          actorId: currentUser.id,
+          targetType: 'RECEIPT',
+          targetId: receiptId,
+        });
 
         return NextResponse.json({ success: true, data: updated });
       }
@@ -405,6 +352,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           }
         }
       }
+      await recordAuditEvent({
+        action: 'RECEIPT_MARK_RECEIVED',
+        actorId: currentUser.id,
+        targetType: 'RECEIPT',
+        targetId: receiptId,
+      });
 
       return NextResponse.json({ success: true, data: updated });
     }
@@ -412,6 +365,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
   } catch (error) {
     console.error('Receipt API error:', error);
+    if (error instanceof InputValidationError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
 });

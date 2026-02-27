@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { ReceiptStatus, UserRole } from '@prisma/client';
+import { ReceiptStatus } from '@prisma/client';
 import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
 
 // 确保DEPOSIT_POOL发票池存在
@@ -43,18 +43,34 @@ export async function ensureSystemPoolInvoice(userId: string): Promise<string> {
 // 创建新的Order
 export async function createOrder(orderNo: string, userId: string): Promise<string> {
   const invoiceId = await ensureSystemPoolInvoice(userId);
-  
-  const order = await db.order.create({
-    data: {
-      invoiceId,
-      orderNo,
-      tokens: serializeOrderTokens(orderNo),
-      amount: 0, // 初始金额为0，会随着收据累加
-      orderBalance: 0
-    }
-  });
 
-  return order.id;
+  try {
+    const order = await db.order.create({
+      data: {
+        invoiceId,
+        orderNo,
+        tokens: serializeOrderTokens(orderNo),
+        amount: 0, // 初始金额为0，会随着收据累加
+        orderBalance: 0
+      }
+    });
+
+    return order.id;
+  } catch (error: unknown) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code !== 'P2002') {
+      throw error;
+    }
+
+    const existing = await db.order.findFirst({
+      where: { invoiceId, orderNo },
+      select: { id: true }
+    });
+    if (existing) {
+      return existing.id;
+    }
+    throw error;
+  }
 }
 
 // 查找或创建Order
@@ -294,7 +310,7 @@ export async function findMatchingReceipt(
 
   const orderMatch = chooseBest(allMatchingReceipts, 0.72);
 
-  return orderMatch?.id || null;
+  return orderMatch || null;
 }
 
 // 验证金额容差

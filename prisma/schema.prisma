@@ -65,6 +65,7 @@ model User {
   swifts            Swift[]
   deletionRequests  DeletionRequest[]
   deletionApprovals DeletionRequest[] @relation("ApprovedBy")
+  auditLogs         AuditLog[]
 }
 
 // ==================== 账单表 (Invoice) ====================
@@ -102,6 +103,7 @@ model Order {
 
   @@index([invoiceId])
   @@index([orderNo])
+  @@unique([invoiceId, orderNo])
 }
 
 // ==================== 收据表 (Receipt) ====================
@@ -129,7 +131,7 @@ model Receipt {
   creator          User             @relation(fields: [createdBy], references: [id])
   histories        ReceiptHistory[]
   detailItems      DetailItem[]
-  mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id])
+  mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
   order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
   orderId          String?
 
@@ -289,4 +291,22 @@ model BalanceTransfer {
 
   @@index([fromOrderId])
   @@index([toOrderId])
+}
+
+// ==================== 审计日志表 ====================
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  targetType String
+  targetId   String?
+  actorId    String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
 }

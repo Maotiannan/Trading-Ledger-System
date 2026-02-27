@@ -10,6 +10,8 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/heif',
 ]);
 const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif']);
+const DEFAULT_UPLOAD_DIR = '/app/upload/images';
+const DEFAULT_UPLOAD_PUBLIC_PATH = '/upload/images';
 
 export class UploadValidationError extends Error {
   constructor(message: string) {
@@ -45,6 +47,31 @@ function validateUploadFile(file: File): void {
   }
 }
 
+function hasValidImageMagic(buffer: Buffer, extension: string): boolean {
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+
+  if (extension === '.png') {
+    const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    return buffer.length >= 8 && buffer.subarray(0, 8).equals(pngSig);
+  }
+
+  if (extension === '.webp') {
+    const riff = buffer.subarray(0, 4).toString('ascii');
+    const webp = buffer.subarray(8, 12).toString('ascii');
+    return buffer.length >= 12 && riff === 'RIFF' && webp === 'WEBP';
+  }
+
+  if (extension === '.heic' || extension === '.heif') {
+    const boxType = buffer.subarray(4, 8).toString('ascii');
+    const brand = buffer.subarray(8, 12).toString('ascii');
+    return boxType === 'ftyp' && ['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand);
+  }
+
+  return false;
+}
+
 export async function saveUploadedImage(file: File): Promise<{ path: string; name: string }> {
   validateUploadFile(file);
 
@@ -52,12 +79,20 @@ export async function saveUploadedImage(file: File): Promise<{ path: string; nam
   const buffer = Buffer.from(bytes);
   const safeName = sanitizeFileName(file.name);
   const extension = path.extname(safeName).toLowerCase();
-  const uploadDir = path.join(process.cwd(), 'upload', 'images');
+  if (!hasValidImageMagic(buffer, extension)) {
+    throw new UploadValidationError('文件内容与扩展名不匹配');
+  }
+
+  const configuredDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
+  const uploadDir = path.isAbsolute(configuredDir)
+    ? configuredDir
+    : path.resolve(process.cwd(), configuredDir);
   await mkdir(uploadDir, { recursive: true });
 
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${extension}`;
   const filePath = path.join(uploadDir, fileName);
   await writeFile(filePath, buffer);
 
-  return { path: `/upload/images/${fileName}`, name: safeName };
+  const publicBase = process.env.UPLOAD_PUBLIC_PATH || DEFAULT_UPLOAD_PUBLIC_PATH;
+  return { path: `${publicBase.replace(/\/$/, '')}/${fileName}`, name: safeName };
 }

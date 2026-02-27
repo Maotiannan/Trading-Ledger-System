@@ -2,13 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ReceiptStatus, DetailStatus } from '@prisma/client';
 import { recognizeDetail } from '@/lib/ocr';
-import { findMatchingReceipt, ensureSystemPoolInvoice, updateOrderBalance, findOrCreateOrder } from '@/lib/matching';
-import { tokenizeOrder, checkTokenMatch } from '@/lib/tokenizer';
+import { findMatchingReceipt, updateOrderBalance, findOrCreateOrder } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
+import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
+import { assertSearchLength, detailPayloadSchema, InputValidationError, parseJsonWithSchema } from '@/lib/validators';
+import { recordAuditEvent } from '@/lib/audit';
+
+type DetailProcessedItem = {
+  mark: string | null;
+  orderNo: string | null;
+  amount: number;
+  receiptId: string | null;
+};
 
 // 获取付款明细列表
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') as DetailStatus | null;
@@ -19,9 +28,13 @@ export const GET = withAuth(async (request: NextRequest) => {
     const maxAmount = searchParams.get('maxAmount');
 
     const where: Record<string, unknown> = {};
+    if (!isAdmin(currentUser)) {
+      where.createdBy = currentUser.id;
+    }
     
     if (status) where.status = status;
     if (search) {
+      assertSearchLength(search);
       where.OR = [
         { items: { some: { orderNo: { contains: search } } } },
         { items: { some: { mark: { contains: search } } } }
@@ -89,7 +102,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         const ocrResult = await recognizeDetail(base64);
 
         // 为每一行尝试匹配RECEIPT
-        const matchedItems = [];
+        const matchedItems: Array<(typeof ocrResult.items)[number] & { matchedReceiptId: string | null }> = [];
         for (const item of ocrResult.items) {
           const matchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount);
           matchedItems.push({
@@ -133,16 +146,31 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: false, error: '缺少明细数据' }, { status: 400 });
       }
 
-      const data = JSON.parse(dataStr);
-      const { date, items } = data;
+      const data = parseJsonWithSchema(dataStr, detailPayloadSchema, '明细数据格式错误');
+      const { date } = data;
+      const normalizedItems = data.items.map((item) => ({
+        mark: item.mark,
+        orderNo: item.orderNo,
+        amount: item.amount,
+        receiptId: item.receiptId || item.matchedReceiptId || null,
+      }));
 
       // 处理每个item，确保有对应的ORDER和RECEIPT
-      const processedItems = [];
-      for (const item of items) {
+      const processedItems: DetailProcessedItem[] = [];
+      for (const item of normalizedItems) {
         // 兼容两种字段名：receiptId 或 matchedReceiptId
-        let receiptId = item.receiptId || item.matchedReceiptId;
+        let receiptId = item.receiptId;
         
         console.log(`Processing item: orderNo=${item.orderNo}, amount=${item.amount}, receiptId=${receiptId}`);
+        if (receiptId) {
+          const receipt = await db.receipt.findUnique({ where: { id: receiptId }, select: { createdBy: true } });
+          if (!receipt) {
+            return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
+          }
+          if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+            return forbiddenOwnershipResponse('无权关联该收据');
+          }
+        }
         
         // 如果没有匹配的Receipt，创建新的Order和Receipt
         if (!receiptId && item.orderNo) {
@@ -180,34 +208,43 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         });
       }
 
-      // 创建付款明细
-      const detail = await db.detail.create({
-        data: {
-          date: date ? new Date(date) : null,
-          status: DetailStatus.Waiting_SWIFT,
-          imageUrl: imagePath,
-          imageName,
-          totalAmount: processedItems.reduce((sum, item) => sum + item.amount, 0),
-          createdBy: currentUser.id,
-          items: {
-            create: processedItems
+      // 创建明细并更新收据状态，保证一致性
+      const detail = await db.$transaction(async (tx) => {
+        const created = await tx.detail.create({
+          data: {
+            date: date ? new Date(date) : null,
+            status: DetailStatus.Waiting_SWIFT,
+            imageUrl: imagePath,
+            imageName,
+            totalAmount: processedItems.reduce((sum, item) => sum + item.amount, 0),
+            createdBy: currentUser.id,
+            items: {
+              create: processedItems
+            }
+          },
+          include: {
+            items: { include: { receipt: true } },
+            creator: { select: { id: true, name: true, email: true } }
           }
-        },
-        include: {
-          items: { include: { receipt: true } },
-          creator: { select: { id: true, name: true, email: true } }
-        }
-      });
+        });
 
-      // 更新关联的RECEIPT状态
-      for (const item of detail.items) {
-        if (item.receiptId) {
-          await db.receipt.update({
-            where: { id: item.receiptId },
-            data: { status: ReceiptStatus.Waiting_SWIFT }
-          });
+        for (const item of created.items) {
+          if (item.receiptId) {
+            await tx.receipt.update({
+              where: { id: item.receiptId },
+              data: { status: ReceiptStatus.Waiting_SWIFT }
+            });
+          }
         }
-      }
+
+        return created;
+      });
+      await recordAuditEvent({
+        action: 'DETAIL_CREATE',
+        actorId: currentUser.id,
+        targetType: 'DETAIL',
+        targetId: detail.id,
+      });
 
       return NextResponse.json({ success: true, data: detail });
     }
@@ -225,6 +262,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       if (!existingDetail) {
         return NextResponse.json({ success: false, error: '明细不存在' }, { status: 400 });
+      }
+      if (!canAccessOwnedResource(existingDetail.createdBy, currentUser)) {
+        return forbiddenOwnershipResponse('无权修改该明细');
       }
 
       // 检查状态
@@ -255,19 +295,34 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       const imageName = formData.get('imageName') as string;
       
       if (dataStr) {
-        const data = JSON.parse(dataStr);
-        const { date, items } = data;
+        const data = parseJsonWithSchema(dataStr, detailPayloadSchema, '明细数据格式错误');
+        const { date } = data;
+        const normalizedItems = data.items.map((item) => ({
+          mark: item.mark,
+          orderNo: item.orderNo,
+          amount: item.amount,
+          receiptId: item.receiptId || item.matchedReceiptId || null,
+        }));
 
         // 删除旧的明细项
         await db.detailItem.deleteMany({ where: { detailId } });
 
         // 处理每个item，确保有对应的ORDER和RECEIPT
-        const processedItems = [];
-        for (const item of items) {
+        const processedItems: DetailProcessedItem[] = [];
+        for (const item of normalizedItems) {
           // 兼容两种字段名：receiptId 或 matchedReceiptId
-          let receiptId = item.receiptId || item.matchedReceiptId;
+          let receiptId = item.receiptId;
           
           console.log(`[Update] Processing item: orderNo=${item.orderNo}, amount=${item.amount}, receiptId=${receiptId}`);
+          if (receiptId) {
+            const receipt = await db.receipt.findUnique({ where: { id: receiptId }, select: { createdBy: true } });
+            if (!receipt) {
+              return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
+            }
+            if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+              return forbiddenOwnershipResponse('无权关联该收据');
+            }
+          }
           
           // 如果没有匹配的Receipt，创建新的Order和Receipt
           if (!receiptId && item.orderNo) {
@@ -331,6 +386,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             });
           }
         }
+        await recordAuditEvent({
+          action: 'DETAIL_UPDATE',
+          actorId: currentUser.id,
+          targetType: 'DETAIL',
+          targetId: detailId,
+        });
 
         return NextResponse.json({ success: true, data: updated });
       }
@@ -341,6 +402,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
   } catch (error) {
     console.error('Detail API error:', error);
+    if (error instanceof UploadValidationError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+    if (error instanceof InputValidationError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
 });

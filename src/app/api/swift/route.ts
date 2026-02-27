@@ -5,9 +5,13 @@ import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
+import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
+import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPayloadSchema } from '@/lib/validators';
+import { recordAuditEvent } from '@/lib/audit';
+import { parseActionRequest } from '@/lib/http-body';
 
 // 获取SWIFT列表
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
@@ -18,7 +22,11 @@ export const GET = withAuth(async (request: NextRequest) => {
     const hasError = searchParams.get('hasError');
 
     const where: Record<string, unknown> = {};
+    if (!isAdmin(currentUser)) {
+      where.createdBy = currentUser.id;
+    }
     if (search) {
+      assertSearchLength(search);
       where.OR = [
         { senderName: { contains: search } },
         { senderAddress: { contains: search } },
@@ -65,10 +73,8 @@ export const GET = withAuth(async (request: NextRequest) => {
 // 上传并识别SWIFT
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const action = formData.get('action') as string;
-    const detailId = formData.get('detailId') as string;
+    const { action, data: requestData, file } = await parseActionRequest(request);
+    const detailId = (requestData.detailId as string) || '';
 
     if (action === 'recognize') {
       // AI识别SWIFT
@@ -109,15 +115,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     if (action === 'confirm') {
       // 确认创建SWIFT
-      const dataStr = formData.get('data') as string;
-      const imagePath = formData.get('imagePath') as string;
-      const imageName = formData.get('imageName') as string;
+      const dataStr = requestData.data as string;
+      const imagePath = requestData.imagePath as string;
+      const imageName = requestData.imageName as string;
       
       if (!dataStr || !detailId) {
         return NextResponse.json({ success: false, error: '缺少必要数据' }, { status: 400 });
       }
 
-      const data = JSON.parse(dataStr);
+      const data = parseJsonWithSchema(dataStr, swiftPayloadSchema, 'SWIFT数据格式错误');
       const { amount, date, senderName, senderAddress, receiverName, receiverAccount } = data;
 
       // 获取关联的DETAIL
@@ -130,6 +136,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       if (!detail) {
         return NextResponse.json({ success: false, error: '关联的付款明细不存在' }, { status: 400 });
+      }
+      if (!canAccessOwnedResource(detail.createdBy, currentUser)) {
+        return forbiddenOwnershipResponse('无权关联该付款明细');
       }
 
       // 验证金额
@@ -183,6 +192,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         });
         console.log(`Detail ${detailId} marked as ERROR due to amount mismatch`);
       }
+      await recordAuditEvent({
+        action: 'SWIFT_CREATE',
+        actorId: currentUser.id,
+        targetType: 'SWIFT',
+        targetId: swift.id,
+      });
 
       return NextResponse.json({ 
         success: true, 
@@ -196,7 +211,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: false, error: '只有管理员可以删除SWIFT' }, { status: 403 });
       }
 
-      const swiftId = formData.get('swiftId') as string;
+      const swiftId = (requestData.swiftId as string) || '';
       
       if (!swiftId) {
         return NextResponse.json({ success: false, error: '缺少SWIFT ID' }, { status: 400 });
@@ -235,6 +250,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           }
         }
       }
+      await recordAuditEvent({
+        action: 'SWIFT_DELETE',
+        actorId: currentUser.id,
+        targetType: 'SWIFT',
+        targetId: swiftId,
+      });
 
       return NextResponse.json({ success: true, message: 'SWIFT已删除，状态已回退' });
     }
@@ -242,6 +263,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
   } catch (error) {
     console.error('Swift API error:', error);
+    if (error instanceof InputValidationError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
 });

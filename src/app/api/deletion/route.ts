@@ -3,6 +3,8 @@ import { db } from '@/lib/db';
 import { DeletionStatus, ReceiptStatus, DetailStatus } from '@prisma/client';
 import { UserRole } from '@prisma/client';
 import { withAuth } from '@/lib/route-auth';
+import { canAccessOwnedResource, forbiddenOwnershipResponse } from '@/lib/ownership';
+import { recordAuditEvent } from '@/lib/audit';
 
 // 获取删除申请列表
 export const GET = withAuth(async (_request: NextRequest, currentUser) => {
@@ -57,6 +59,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (!receipt) {
           return NextResponse.json({ success: false, error: '收据不存在' }, { status: 400 });
         }
+        if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+          return forbiddenOwnershipResponse('无权申请删除该收据');
+        }
         if (receipt.status === ReceiptStatus.RECEIVED) {
           canDelete = false;
           errorMessage = 'RECEIVED状态下禁止删除';
@@ -69,6 +74,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         const detail = await db.detail.findUnique({ where: { id: targetId } });
         if (!detail) {
           return NextResponse.json({ success: false, error: '付款明细不存在' }, { status: 400 });
+        }
+        if (!canAccessOwnedResource(detail.createdBy, currentUser)) {
+          return forbiddenOwnershipResponse('无权申请删除该明细');
         }
         if (detail.status === DetailStatus.RECEIVED) {
           canDelete = false;
@@ -83,6 +91,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (!swift) {
           return NextResponse.json({ success: false, error: 'SWIFT不存在' }, { status: 400 });
         }
+        if (!canAccessOwnedResource(swift.createdBy, currentUser)) {
+          return forbiddenOwnershipResponse('无权申请删除该SWIFT');
+        }
+      } else {
+        return NextResponse.json({ success: false, error: '无效的删除目标类型' }, { status: 400 });
       }
 
       if (!canDelete) {
@@ -100,6 +113,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         include: {
           requester: { select: { id: true, name: true, email: true } }
         }
+      });
+      await recordAuditEvent({
+        action: 'DELETION_REQUEST_CREATE',
+        actorId: currentUser.id,
+        targetType: targetType,
+        targetId,
+        metadata: { requestId: deletionRequest.id },
       });
 
       return NextResponse.json({ success: true, data: deletionRequest });
@@ -136,104 +156,117 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             approvedAt: new Date()
           }
         });
+        await recordAuditEvent({
+          action: 'DELETION_REQUEST_REJECT',
+          actorId: currentUser.id,
+          targetType: existingRequest.targetType,
+          targetId: existingRequest.targetId,
+          metadata: { requestId },
+        });
         return NextResponse.json({ success: true, message: '申请已拒绝' });
       }
 
-      // 执行删除
-      const { targetType, targetId } = existingRequest;
-
-      if (targetType === 'RECEIPT') {
-        // 保存历史记录
-        const receipt = await db.receipt.findUnique({ where: { id: targetId } });
-        if (receipt) {
-          await db.receiptHistory.create({
-            data: {
-              receiptId: targetId,
-              receiptNo: receipt.receiptNo,
-              date: receipt.date,
-              tel: receipt.tel,
-              usd: receipt.usd,
-              invNo: receipt.invNo,
-              orderNo: receipt.orderNo,
-              payer: receipt.payer,
-              imageUrl: receipt.imageUrl,
-              imageName: receipt.imageName,
-              status: receipt.status,
-              note: '删除前保存',
-              createdBy: currentUser.id
-            }
-          });
-
-          // 删除关联的DetailItem
-          await db.detailItem.deleteMany({
-            where: { receiptId: targetId }
-          });
-
-          // 真正删除收据
-          await db.receipt.delete({
-            where: { id: targetId }
-          });
-        }
-      } else if (targetType === 'DETAIL') {
-        const detail = await db.detail.findUnique({
-          where: { id: targetId },
-          include: { items: true }
+      await db.$transaction(async (tx) => {
+        const requestInTx = await tx.deletionRequest.findUnique({
+          where: { id: requestId }
         });
-        if (detail) {
-          // 关联的RECEIPT回退到SR_Received状态
-          for (const item of detail.items) {
-            if (item.receiptId) {
-              await db.receipt.update({
-                where: { id: item.receiptId },
-                data: { status: ReceiptStatus.SR_Received }
-              });
-            }
-          }
-
-          // 删除明细项
-          await db.detailItem.deleteMany({ where: { detailId: targetId } });
-
-          // 删除明细
-          await db.detail.delete({ where: { id: targetId } });
+        if (!requestInTx || requestInTx.status !== DeletionStatus.PENDING) {
+          throw new Error('删除申请状态已变化，请刷新后重试');
         }
-      } else if (targetType === 'SWIFT') {
-        const swift = await db.swift.findUnique({ where: { id: targetId } });
-        if (swift) {
-          // DETAIL回退到Waiting_SWIFT状态
-          await db.detail.update({
-            where: { id: swift.detailId },
-            data: { status: DetailStatus.Waiting_SWIFT }
-          });
 
-          // 关联的RECEIPT也回退
-          const detail = await db.detail.findUnique({
-            where: { id: swift.detailId },
+        // 执行删除
+        const { targetType, targetId } = requestInTx;
+
+        if (targetType === 'RECEIPT') {
+          const receipt = await tx.receipt.findUnique({ where: { id: targetId } });
+          if (receipt) {
+            await tx.receiptHistory.create({
+              data: {
+                receiptId: targetId,
+                receiptNo: receipt.receiptNo,
+                date: receipt.date,
+                tel: receipt.tel,
+                usd: receipt.usd,
+                invNo: receipt.invNo,
+                orderNo: receipt.orderNo,
+                payer: receipt.payer,
+                imageUrl: receipt.imageUrl,
+                imageName: receipt.imageName,
+                status: receipt.status,
+                note: '删除前保存',
+                createdBy: currentUser.id
+              }
+            });
+
+            await tx.detailItem.deleteMany({
+              where: { receiptId: targetId }
+            });
+
+            await tx.receipt.delete({
+              where: { id: targetId }
+            });
+          }
+        } else if (targetType === 'DETAIL') {
+          const detail = await tx.detail.findUnique({
+            where: { id: targetId },
             include: { items: true }
           });
-
           if (detail) {
             for (const item of detail.items) {
               if (item.receiptId) {
-                await db.receipt.update({
+                await tx.receipt.update({
                   where: { id: item.receiptId },
-                  data: { status: ReceiptStatus.Waiting_SWIFT }
+                  data: { status: ReceiptStatus.SR_Received }
                 });
               }
             }
+
+            await tx.detailItem.deleteMany({ where: { detailId: targetId } });
+            await tx.detail.delete({ where: { id: targetId } });
           }
+        } else if (targetType === 'SWIFT') {
+          const swift = await tx.swift.findUnique({ where: { id: targetId } });
+          if (swift) {
+            await tx.detail.update({
+              where: { id: swift.detailId },
+              data: { status: DetailStatus.Waiting_SWIFT }
+            });
 
-          await db.swift.delete({ where: { id: targetId } });
-        }
-      }
+            const detail = await tx.detail.findUnique({
+              where: { id: swift.detailId },
+              include: { items: true }
+            });
 
-      // 更新申请状态
-      await db.deletionRequest.update({
-        where: { id: requestId },
-        data: {
-          status: DeletionStatus.APPROVED,
-          approvedBy: currentUser.id,
-          approvedAt: new Date()
+            if (detail) {
+              for (const item of detail.items) {
+                if (item.receiptId) {
+                  await tx.receipt.update({
+                    where: { id: item.receiptId },
+                    data: { status: ReceiptStatus.Waiting_SWIFT }
+                  });
+                }
+              }
+            }
+
+            await tx.swift.delete({ where: { id: targetId } });
+          }
         }
+
+        await tx.deletionRequest.update({
+          where: { id: requestId },
+          data: {
+            status: DeletionStatus.APPROVED,
+            approvedBy: currentUser.id,
+            approvedAt: new Date()
+          }
+        });
+      });
+      await recordAuditEvent({
+        action: 'DELETION_REQUEST_APPROVE',
+        actorId: currentUser.id,
+        targetType: existingRequest.targetType,
+        targetId: existingRequest.targetId,
+        metadata: { requestId },
       });
 
       return NextResponse.json({ success: true, message: '删除成功，状态已回退' });

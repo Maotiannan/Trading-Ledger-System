@@ -33,7 +33,14 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
     headers,
   });
 
-  return response.json();
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      typeof json?.error === 'string' ? json.error : `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  return json;
 }
 
 // 登录组件

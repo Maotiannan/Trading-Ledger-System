@@ -552,16 +552,22 @@ src/
 
 ## 更新日志
 
+### v1.0.4 (2026-02-27)
+- 🔐 权限模型升级：普通用户仅可访问/修改自己创建的 Receipt、Detail、SWIFT 与删除申请目标资源
+- 🧾 Receipt/Detail/SWIFT 接口增加统一输入校验（非法 JSON、空明细、非法金额会返回 400）
+- 🧮 付款明细确认链路改为事务执行，避免“明细创建成功但状态更新失败”的数据不一致
+- 🛡️ 上传安全增强：增加图片 magic number 校验，防止伪造 MIME 类型上传
+- 🍪 会话 Cookie 安全增强：`SameSite=Strict`
+- 🔒 登录防枚举增强：用户不存在时执行固定 bcrypt 校验，降低时序差异
+- 🚫 收据金额校验收紧：拒绝 `<= 0` 金额
+- 🔎 搜索风控增强：Receipt/Detail/SWIFT 搜索词长度限制（默认 100）
+- 🧱 订单并发防重：新增 `Order(invoiceId, orderNo)` 唯一约束 + `P2002` 冲突兜底
+- 📚 新增审计日志能力：关键业务动作记录到 `AuditLog`（失败自动降级到日志输出）
+
 ### v1.0.3 (2026-02-26)
-- 🐳 新增 `Dockerfile` + `docker-compose.yml`（Postgres + App + Caddy）
-- 🌐 `Caddyfile` 更新为容器内反向代理 `app:3000`
-- 🚀 应用容器启动时自动执行 `prisma migrate deploy`
 - 🛡️ 新增 `withAuth` + `withRole` 鉴权封装并接入核心 API 路由
 - 🔎 匹配算法升级：`Order.tokens + Levenshtein + token 相似度` 评分选优，替换纯 `includes`
 - 🤖 OCR 调用增强：统一超时、指数退避重试、usage 费用日志、失败自动 fallback
-- ⬆️ 依赖升级：`next-auth` 升级到 `v5 beta`（`^5.0.0-beta.30`）
-- ✅ 新增 Jest + React Testing Library 基础测试框架与示例测试
-- ✅ 新增 Playwright E2E 配置与登录页冒烟测试
 - 📊 新增报表导出（Excel/PDF）接口与前端下载入口
 - 🌐 启用 next-intl 中英双语（登录/侧栏/仪表盘）
 - 🔍 新增高级搜索与过滤（收据/明细/SWIFT）

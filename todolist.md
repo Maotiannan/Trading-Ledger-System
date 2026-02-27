@@ -25,12 +25,29 @@
 ### 核心修复
 - [x] 切换 Prisma + PostgreSQL 并更新 `docker-compose.yml` 和 `Caddyfile` ✅ 2026-02-26
 
+### 代码审查整改（2026-02-27）
+- [x] **前端 API 调用统一状态码校验**（`apiCall` 增加 `response.ok` 检查）✅ 2026-02-27
+- [x] **Detail 确认接口输入校验**（空 items/非法金额直接拒绝）✅ 2026-02-27
+- [x] **Detail 创建链路事务化**（创建明细 + 更新收据状态）✅ 2026-02-27
+- [x] **资源所有权校验**（Receipt/Detail/SWIFT/Deletion 申请接入 owner 校验）✅ 2026-02-27
+- [x] **Session Cookie 加固**（`SameSite` 调整为 `strict`）✅ 2026-02-27
+- [x] **上传文件二进制签名校验**（magic number，防止 MIME 伪造）✅ 2026-02-27
+- [x] **订单并发去重**（`Order(invoiceId, orderNo)` 唯一约束 + `P2002` 兜底）✅ 2026-02-27
+- [x] **登录防用户枚举**（不存在用户也执行 dummy bcrypt compare）✅ 2026-02-27
+- [x] **搜索参数长度限制**（Receipt/Detail/SWIFT）✅ 2026-02-27
+- [x] **收据金额校验收紧**（金额必须 `> 0`）✅ 2026-02-27
+- [ ] **请求体大小限制**（Next.js/Caddy 双层限制，防 DoS）
+
 ## P1（2 周内完成）
 
 - [x] **升级 next-auth** 到 v5（App Router 原生支持更好） ✅ 2026-02-26
 - [x] **封装权限中间件**：`withAuth` + `withRole`（统一所有 API Route 鉴权） ✅ 2026-02-26
 - [x] **模糊匹配优化**：使用 `Order.tokens` 字段 + Levenshtein / token 相似度（当前仅 `includes` 容易误匹配） ✅ 2026-02-26
 - [x] **AI 调用增强**：VLM 接口增加重试、超时、费用日志、失败 fallback ✅ 2026-02-26
+- [x] **统一输入验证层**：新增 `src/lib/validators.ts`（Zod）✅ 2026-02-27
+- [x] **审计接口抽象**：新增 `src/lib/audit.ts`（可插拔 sink）✅ 2026-02-27
+- [x] **审计日志模型与迁移**：新增 `AuditLog` + migration 脚本 ✅ 2026-02-27
+- [ ] **执行并验证数据库迁移**（开发/生产环境）
 
 ## P2（后续迭代）
 

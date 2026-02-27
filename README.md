@@ -379,6 +379,11 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 
 ## API 接口
 
+### 系统测试接口 `/api/system/*`
+- `GET /api/system/health` - 服务健康检查（含 DB 连通性）
+- `GET /api/system/routes` - 全量 API 模块与 action 清单（便于测试）
+- `GET /api/system/config-template` - 配置占位模板与当前是否已设置
+
 ### 账单接口 `/api/invoice`
 - `GET` - 获取账单列表
 - `POST` - 创建账单
@@ -397,10 +402,9 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 - `GET` - 获取SWIFT列表
 - `POST` - 上传SWIFT/确认识别
 
-### 用户接口 `/api/user`
-- `GET` - 获取用户列表
-- `POST` - 创建用户
-- `PUT` - 更新用户
+### 用户与认证接口 `/api/auth`
+- `POST(action=login|logout|me)` - 登录/登出/获取当前用户
+- `POST(action=list|create|delete|reset-password)` - 用户管理（管理员）
 
 ### 删除审批接口 `/api/deletion`
 - `GET` - 获取删除申请列表
@@ -458,6 +462,10 @@ INIT_ADMIN_EMAIL=admin@example.com
 INIT_ADMIN_PASSWORD=replace-strong-password
 
 # OCR 稳定性与费用日志
+OCR_DISABLED=false
+OCR_API_BASE_URL=https://api.openai.com/v1
+OCR_API_KEY=replace-with-your-ocr-api-key
+OCR_MODEL=gpt-4o-mini
 OCR_MAX_RETRIES=3
 OCR_TIMEOUT_MS=15000
 OCR_RETRY_BASE_DELAY_MS=1200
@@ -492,6 +500,9 @@ npm run test:watch
 
 # 运行 E2E 测试（Playwright）
 npm run test:e2e
+
+# API 冒烟测试（登录 + 核心业务接口 + 导出）
+./scripts/smoke-api.sh
 ```
 
 ### 报表导出

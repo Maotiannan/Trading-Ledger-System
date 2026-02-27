@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     if (action === 'me') {
       const user = await getCurrentUser(request);
       if (!user) {
-        return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
+        return NextResponse.json({ success: false, error: '未登录' });
       }
       return NextResponse.json({ success: true, data: user });
     }

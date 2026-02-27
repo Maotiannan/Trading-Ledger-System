@@ -15,7 +15,7 @@ Work Log:
 
 Stage Summary:
 - 系统核心功能：账单管理、RECEIPT管理、DETAIL管理、SWIFT管理
-- AI识别：使用 z-ai-web-dev-sdk 的 VLM 能力
+- AI识别：使用兼容 OpenAI 的视觉模型接口
 - 数据库：Prisma + SQLite
 - 认证：自定义认证系统
 - UI：shadcn/ui + Tailwind CSS
@@ -112,4 +112,3 @@ Stage Summary:
 ### 状态流转
 RECEIPT: SR_Received → Waiting_SWIFT → Bank_Transfer → RECEIVED
 DETAIL: Waiting_SWIFT → Bank_Transfer → RECEIVED (或 ERROR)
-

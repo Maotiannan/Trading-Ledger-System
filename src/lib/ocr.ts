@@ -1,18 +1,72 @@
-import ZAI from 'z-ai-web-dev-sdk';
 import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult } from '@/lib/types';
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
 const OCR_MAX_RETRIES = Number(process.env.OCR_MAX_RETRIES || 3);
 const OCR_TIMEOUT_MS = Number(process.env.OCR_TIMEOUT_MS || 15000);
 const OCR_RETRY_BASE_DELAY_MS = Number(process.env.OCR_RETRY_BASE_DELAY_MS || 1200);
 const OCR_INPUT_COST_PER_1K = Number(process.env.OCR_INPUT_COST_PER_1K || 0);
 const OCR_OUTPUT_COST_PER_1K = Number(process.env.OCR_OUTPUT_COST_PER_1K || 0);
+const OCR_MODEL = process.env.OCR_MODEL || 'gpt-4o-mini';
+const OCR_API_BASE_URL = (process.env.OCR_API_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+const OCR_API_KEY = process.env.OCR_API_KEY || '';
+const OCR_DISABLED = process.env.OCR_DISABLED === 'true';
+let ocrDisabledLogged = false;
 
-async function getZai() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
+function ensureDataUrl(imageBase64: string): string {
+  if (imageBase64.startsWith('data:')) return imageBase64;
+  return `data:image/jpeg;base64,${imageBase64}`;
+}
+
+async function createVisionCompletion(prompt: string, imageBase64: string) {
+  if (OCR_DISABLED) {
+    throw new Error('OCR disabled by OCR_DISABLED=true');
   }
-  return zaiInstance;
+  if (!OCR_API_KEY) {
+    throw new Error('OCR_API_KEY is not configured');
+  }
+
+  const response = await fetch(`${OCR_API_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OCR_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OCR_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: ensureDataUrl(imageBase64) } },
+          ],
+        },
+      ],
+      temperature: 0,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`OCR provider HTTP ${response.status}: ${text}`);
+  }
+
+  return response.json();
+}
+
+function canUseOcr(): boolean {
+  if (OCR_DISABLED) return false;
+  if (!OCR_API_KEY) return false;
+  return true;
+}
+
+function logOcrDisabledReason(label: string): void {
+  if (ocrDisabledLogged) return;
+  if (OCR_DISABLED) {
+    console.warn(`[OCR:${label}] OCR is disabled by OCR_DISABLED=true, fallback parser will be used`);
+  } else if (!OCR_API_KEY) {
+    console.warn(`[OCR:${label}] OCR_API_KEY is not configured, fallback parser will be used`);
+  }
+  ocrDisabledLogged = true;
 }
 
 function isRetryableError(error: unknown): boolean {
@@ -86,21 +140,14 @@ async function runVisionRequest<T>(
   prompt: string,
   fallback: T
 ): Promise<T> {
+  if (!canUseOcr()) {
+    logOcrDisabledReason(label);
+    return fallback;
+  }
+
   try {
-    const zai = await getZai();
     const response = await withRetry(
-      () => zai.chat.completions.createVision({
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: prompt },
-              { type: 'image_url', image_url: { url: imageBase64 } }
-            ]
-          }
-        ],
-        thinking: { type: 'disabled' }
-      }),
+      () => createVisionCompletion(prompt, imageBase64),
       label
     );
 

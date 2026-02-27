@@ -68,8 +68,12 @@ function LoginPage() {
       } else {
         setError(result.error || t('loginFailed'));
       }
-    } catch {
-      setError(t('networkError'));
+    } catch (err) {
+      if (err instanceof Error && err.message) {
+        setError(err.message);
+      } else {
+        setError(t('networkError'));
+      }
     } finally {
       setLoading(false);
     }
@@ -2410,16 +2414,21 @@ export default function HomePage() {
   // 检查登录状态
   useEffect(() => {
     const checkAuth = async () => {
-      const result = await apiCall('auth', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'me' }),
-      });
-      if (result.success && result.data) {
-        setUser(result.data);
-      } else {
+      try {
+        const result = await apiCall('auth', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'me' }),
+        });
+        if (result.success && result.data) {
+          setUser(result.data);
+        } else {
+          setUser(null);
+        }
+      } catch {
         setUser(null);
+      } finally {
+        setInitialized(true);
       }
-      setInitialized(true);
     };
     checkAuth();
   }, [setUser]);

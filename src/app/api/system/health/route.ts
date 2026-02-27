@@ -1,0 +1,32 @@
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+
+export async function GET() {
+  const startedAt = process.uptime();
+  try {
+    await db.$queryRaw`SELECT 1`;
+    return NextResponse.json({
+      success: true,
+      data: {
+        status: 'ok',
+        db: 'ok',
+        uptimeSeconds: Math.floor(startedAt),
+        ocrConfigured: Boolean(process.env.OCR_API_KEY) && process.env.OCR_DISABLED !== 'true',
+      },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        data: {
+          status: 'degraded',
+          db: 'error',
+          uptimeSeconds: Math.floor(startedAt),
+          ocrConfigured: Boolean(process.env.OCR_API_KEY) && process.env.OCR_DISABLED !== 'true',
+          error: error instanceof Error ? error.message : 'unknown error',
+        },
+      },
+      { status: 500 }
+    );
+  }
+}

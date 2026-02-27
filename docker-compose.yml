@@ -34,6 +34,7 @@ services:
 
   caddy:
     image: caddy:2.8-alpine
+    container_name: trading-ledger-caddy
     restart: unless-stopped
     depends_on:
       - app
@@ -44,9 +45,16 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - dainty_net
 
 volumes:
   postgres_data:
   upload_data:
   caddy_data:
   caddy_config:
+
+networks:
+  dainty_net:
+    external: true

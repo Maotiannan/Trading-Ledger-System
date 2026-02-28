@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import ExcelJS from 'exceljs';
 import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import { updateOrderBalance } from '@/lib/matching';
@@ -6,14 +7,46 @@ import { withAuth, withRole } from '@/lib/route-auth';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
+import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 
 // 获取账单列表
 export const GET = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
+    const action = (searchParams.get('action') || '').trim();
     const search = (searchParams.get('search') || '').trim();
     const orderId = searchParams.get('orderId');
     const orderNo = (searchParams.get('orderNo') || '').trim();
+
+    if (action === 'import-template') {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('invoice_import');
+      sheet.columns = [
+        { header: 'INV_NO', key: 'invNo', width: 22 },
+        { header: 'ORDER_NO', key: 'orderNo', width: 26 },
+        { header: 'AMOUNT', key: 'amount', width: 14 },
+        { header: 'CUSTOMER_MARK', key: 'customerMark', width: 22 },
+        { header: 'CUSTOMER_ORDER_NAME', key: 'customerName', width: 24 },
+        { header: 'CUSTOMER_ID', key: 'customerId', width: 28 },
+      ];
+      sheet.addRow({
+        invNo: 'INV-2026-001',
+        orderNo: 'MAB-1-05',
+        amount: 1200,
+        customerMark: 'MAB-1',
+        customerName: 'MAB-1',
+        customerId: '',
+      });
+      sheet.getRow(1).font = { bold: true };
+      const buffer = await workbook.xlsx.writeBuffer();
+      return new NextResponse(Buffer.from(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': 'attachment; filename="invoice-import-template.xlsx"',
+        },
+      });
+    }
 
     if (orderId) {
       const receipts = await db.receipt.findMany({
@@ -138,219 +171,110 @@ export const GET = withAuth(async (request: NextRequest) => {
 // 创建账单
 export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
   try {
+    const contentType = request.headers.get('content-type') || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      const form = await request.formData();
+      const action = String(form.get('action') || '');
+      if (action !== 'import-excel') {
+        return NextResponse.json({ success: false, error: '未知上传操作' }, { status: 400 });
+      }
+
+      const file = form.get('file');
+      if (!(file instanceof File)) {
+        return NextResponse.json({ success: false, error: '请上传Excel文件' }, { status: 400 });
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const arrayBuffer = await file.arrayBuffer();
+      await workbook.xlsx.load(Buffer.from(arrayBuffer));
+      const sheet = workbook.worksheets[0];
+      if (!sheet) {
+        return NextResponse.json({ success: false, error: 'Excel为空' }, { status: 400 });
+      }
+
+      const headerRow = sheet.getRow(1);
+      const headerMap = new Map<string, number>();
+      for (let i = 1; i <= sheet.columnCount; i++) {
+        const raw = String(headerRow.getCell(i).value || '').trim().toUpperCase();
+        if (raw) headerMap.set(raw, i);
+      }
+      const required = ['INV_NO', 'ORDER_NO', 'AMOUNT', 'CUSTOMER_MARK'];
+      const missing = required.filter((h) => !headerMap.has(h));
+      if (missing.length > 0) {
+        return NextResponse.json({ success: false, error: `模板缺少列: ${missing.join(', ')}` }, { status: 400 });
+      }
+
+      const grouped = new Map<string, Array<{ orderNo: string; amount: number; customerMark: string; customerName?: string; customerId?: string }>>();
+      const errors: string[] = [];
+
+      for (let rowNo = 2; rowNo <= sheet.rowCount; rowNo++) {
+        const row = sheet.getRow(rowNo);
+        const invNo = String(row.getCell(headerMap.get('INV_NO')!).value || '').trim();
+        const orderNo = String(row.getCell(headerMap.get('ORDER_NO')!).value || '').trim();
+        const amountRaw = String(row.getCell(headerMap.get('AMOUNT')!).value || '').trim();
+        const customerMark = String(row.getCell(headerMap.get('CUSTOMER_MARK')!).value || '').trim();
+        const customerOrderNameCol = headerMap.get('CUSTOMER_ORDER_NAME');
+        const customerIdCol = headerMap.get('CUSTOMER_ID');
+        const customerName = customerOrderNameCol ? String(row.getCell(customerOrderNameCol).value || '').trim() : '';
+        const customerId = customerIdCol ? String(row.getCell(customerIdCol).value || '').trim() : '';
+
+        if (!invNo && !orderNo && !amountRaw && !customerMark) continue;
+
+        const rowErrors: string[] = [];
+        const amount = Number(amountRaw);
+        if (!invNo) rowErrors.push(`第${rowNo}行 INV_NO 不能为空`);
+        if (!orderNo) rowErrors.push(`第${rowNo}行 ORDER_NO 不能为空`);
+        if (!customerMark) rowErrors.push(`第${rowNo}行 CUSTOMER_MARK 不能为空`);
+        if (!Number.isFinite(amount) || amount <= 0) rowErrors.push(`第${rowNo}行 AMOUNT 必须大于0`);
+        if (rowErrors.length > 0) {
+          errors.push(...rowErrors);
+          continue;
+        }
+
+        if (!grouped.has(invNo)) grouped.set(invNo, []);
+        grouped.get(invNo)!.push({
+          orderNo,
+          amount,
+          customerMark,
+          customerName: customerName || undefined,
+          customerId: customerId || undefined,
+        });
+      }
+
+      if (errors.length > 0) {
+        return NextResponse.json({ success: false, error: 'Excel校验失败', details: errors.slice(0, 200) }, { status: 400 });
+      }
+      if (grouped.size === 0) {
+        return NextResponse.json({ success: false, error: '没有可导入的数据行' }, { status: 400 });
+      }
+
+      const messages: string[] = [];
+      for (const [invNo, rows] of grouped.entries()) {
+        const saved = await saveInvoiceWithOrders({
+          invNo,
+          orders: rows,
+          createdBy: currentUser.id,
+        });
+        if (!saved.ok) {
+          return NextResponse.json({ success: false, error: `导入失败(INV_NO=${invNo}): ${saved.error}` }, { status: saved.status });
+        }
+        messages.push(`${invNo}: ${saved.message}`);
+      }
+      return NextResponse.json({ success: true, message: `导入完成，共 ${grouped.size} 个账单`, details: messages });
+    }
+
     const body = await request.json();
     const { invNo, orders } = body;
-
-    if (!invNo || !orders || !Array.isArray(orders) || orders.length === 0) {
-      return NextResponse.json({ success: false, error: '账单号和订单列表不能为空' }, { status: 400 });
-    }
-    const normalizedInvNo = String(invNo).trim();
-    const normalizeOrderNo = (value: string) => value.toLowerCase().trim();
-
-    // 同 INV NO 允许重复提交：统一并入同一账单组（同一 invoice 记录）
-    let targetInvoice = await db.invoice.findFirst({
-      where: { invNo: normalizedInvNo },
-      select: { id: true, invNo: true },
+    const saved = await saveInvoiceWithOrders({
+      invNo: String(invNo || ''),
+      orders: Array.isArray(orders) ? orders : [],
+      createdBy: currentUser.id,
     });
-    if (!targetInvoice) {
-      targetInvoice = await db.invoice.create({
-        data: {
-          invNo: normalizedInvNo,
-          createdBy: currentUser.id,
-        },
-        select: { id: true, invNo: true },
-      });
+    if (!saved.ok) {
+      return NextResponse.json({ success: false, error: saved.error }, { status: saved.status });
     }
-
-    const mergedOrdersInfo: string[] = [];
-    const touchedOrderIds = new Set<string>();
-    let hasNeedsCustomerFix = false;
-
-    for (const rawOrder of orders) {
-      const normalizedOrderNoRaw = typeof rawOrder.orderNo === 'string' ? rawOrder.orderNo.trim() : '';
-      const amountNumber = Number(rawOrder.amount);
-      const rowCustomerMark = typeof rawOrder.customerMark === 'string' ? rawOrder.customerMark.trim() : '';
-      const rowCustomerName = typeof rawOrder.customerName === 'string' ? rawOrder.customerName.trim() : '';
-      const rowCustomerId = typeof rawOrder.customerId === 'string' ? rawOrder.customerId.trim() : '';
-      if (!normalizedOrderNoRaw || !Number.isFinite(amountNumber) || amountNumber <= 0 || !rowCustomerMark) {
-        return NextResponse.json(
-          { success: false, error: '每一行订单都必须填写 ORDER、AMOUNT(>0)、MARK' },
-          { status: 400 }
-        );
-      }
-      const customerResolution = await resolveCustomer({
-        customerMark: rowCustomerMark,
-        customerName: rowCustomerName || null,
-        customerId: rowCustomerId || null,
-      });
-      if (customerResolution.needsCustomerFix) hasNeedsCustomerFix = true;
-
-      // 1) 目标账单内已存在同 ORDER：直接累加金额
-      const existingInTarget = await db.order.findFirst({
-        where: {
-          invoiceId: targetInvoice.id,
-          orderNo: {
-            equals: normalizedOrderNoRaw,
-          },
-        },
-        select: { id: true, orderNo: true },
-      });
-
-      if (existingInTarget) {
-        await db.order.update({
-          where: { id: existingInTarget.id },
-          data: {
-            amount: { increment: amountNumber },
-            orderBalance: { increment: amountNumber },
-            customerId: customerResolution.customerId,
-            customerMark: customerResolution.customerMark,
-            customerName: customerResolution.customerName,
-            customerPhone: customerResolution.customerPhone,
-            customerCity: customerResolution.customerCity,
-            needsCustomerFix: customerResolution.needsCustomerFix,
-          },
-        });
-        touchedOrderIds.add(existingInTarget.id);
-        continue;
-      }
-
-      // 2) 优先处理 Un_Associated：创建到目标账单并转移收据，确保绿色负数可冲减新账单红色余额
-      const existingSystemOrder = await db.order.findFirst({
-        where: {
-          orderNo: {
-            equals: normalizedOrderNoRaw,
-          },
-          invoice: { invNo: 'Un_Associated' },
-        },
-        include: { invoice: true },
-      });
-
-      if (existingSystemOrder) {
-        const newOrder = await db.order.create({
-          data: {
-            invoiceId: targetInvoice.id,
-            orderNo: normalizedOrderNoRaw,
-            tokens: serializeOrderTokens(normalizedOrderNoRaw),
-            amount: amountNumber,
-            orderBalance: amountNumber,
-            customerId: customerResolution.customerId,
-            customerMark: customerResolution.customerMark,
-            customerName: customerResolution.customerName,
-            customerPhone: customerResolution.customerPhone,
-            customerCity: customerResolution.customerCity,
-            needsCustomerFix: customerResolution.needsCustomerFix,
-          },
-          select: { id: true, orderNo: true },
-        });
-
-        await db.receipt.updateMany({
-          where: { orderId: existingSystemOrder.id },
-          data: { orderId: newOrder.id },
-        });
-        await db.order.delete({ where: { id: existingSystemOrder.id } });
-        await updateOrderBalance(newOrder.id);
-
-        touchedOrderIds.add(newOrder.id);
-        mergedOrdersInfo.push(`${normalizedOrderNoRaw} (从 Un_Associated 合并)`);
-        continue;
-      }
-
-      // 3) 其他账单中已存在同 ORDER：按历史规则并入已有订单
-      const existingOrder = await db.order.findFirst({
-        where: {
-          orderNo: {
-            equals: normalizedOrderNoRaw,
-          },
-        },
-        include: { invoice: true },
-      });
-
-      if (existingOrder) {
-        await db.order.update({
-          where: { id: existingOrder.id },
-          data: {
-            amount: { increment: amountNumber },
-            orderBalance: { increment: amountNumber },
-            customerId: customerResolution.customerId,
-            customerMark: customerResolution.customerMark,
-            customerName: customerResolution.customerName,
-            customerPhone: customerResolution.customerPhone,
-            customerCity: customerResolution.customerCity,
-            needsCustomerFix: customerResolution.needsCustomerFix,
-          },
-        });
-        touchedOrderIds.add(existingOrder.id);
-        mergedOrdersInfo.push(`${normalizedOrderNoRaw} (合并到账单 ${existingOrder.invoice.invNo})`);
-        continue;
-      }
-
-      // 4) 全新订单：创建到目标账单
-      const created = await db.order.create({
-        data: {
-          invoiceId: targetInvoice.id,
-          orderNo: normalizedOrderNoRaw,
-          tokens: serializeOrderTokens(normalizedOrderNoRaw),
-          amount: amountNumber,
-          orderBalance: amountNumber,
-          customerId: customerResolution.customerId,
-          customerMark: customerResolution.customerMark,
-          customerName: customerResolution.customerName,
-          customerPhone: customerResolution.customerPhone,
-          customerCity: customerResolution.customerCity,
-          needsCustomerFix: customerResolution.needsCustomerFix,
-        },
-        select: { id: true, orderNo: true },
-      });
-      touchedOrderIds.add(created.id);
-    }
-
-    // 合并定金记录（对本次触达的订单执行）
-    for (const orderId of touchedOrderIds) {
-      const order = await db.order.findUnique({
-        where: { id: orderId },
-        select: { id: true, orderNo: true },
-      });
-      if (!order) continue;
-
-      const allDeposits = await db.receipt.findMany({
-        where: {
-          isDeposit: true,
-          isMerged: false,
-        },
-      });
-
-      const normalizedOrderNo = normalizeOrderNo(order.orderNo);
-      const deposits = allDeposits.filter((d) =>
-        d.orderNo ? normalizeOrderNo(d.orderNo).includes(normalizedOrderNo) : false
-      );
-
-      for (const deposit of deposits) {
-        await db.receipt.update({
-          where: { id: deposit.id },
-          data: {
-            orderId: order.id,
-            isMerged: true,
-          },
-        });
-      }
-      await updateOrderBalance(order.id);
-    }
-
-    const invoice = await db.invoice.findUnique({
-      where: { id: targetInvoice.id },
-      include: { orders: true },
-    });
-
-    const messageParts: string[] = [];
-    if (mergedOrdersInfo.length > 0) {
-      messageParts.push(`部分订单已合并: ${mergedOrdersInfo.join(', ')}`);
-    }
-    if (hasNeedsCustomerFix) {
-      messageParts.push('please modify guest information');
-    }
-    const message = messageParts.length > 0 ? `账单已保存，${messageParts.join('；')}` : '账单已保存';
-
-    return NextResponse.json({ success: true, data: invoice, message });
+    return NextResponse.json({ success: true, data: saved.data, message: saved.message });
   } catch (error) {
     console.error('Create invoice error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });

@@ -344,6 +344,7 @@ function Dashboard() {
 // 账单管理
 function InvoiceManager() {
   const { invoices, setInvoices, loading, setLoading, user } = useStore();
+  const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [invNo, setInvNo] = useState('');
   const [customerMark, setCustomerMark] = useState('');
@@ -387,12 +388,14 @@ function InvoiceManager() {
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
-    const result = await apiCall('invoice');
+    const params = new URLSearchParams();
+    if (search.trim()) params.set('search', search.trim());
+    const result = await apiCall(`invoice${params.toString() ? `?${params.toString()}` : ''}`);
     if (result.success) {
       setInvoices(result.data);
     }
     setLoading(false);
-  }, [setInvoices, setLoading]);
+  }, [setInvoices, setLoading, search]);
 
   useEffect(() => {
     loadInvoices();
@@ -742,6 +745,22 @@ function InvoiceManager() {
           )}
         </div>
       </div>
+
+      <Card>
+        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Input
+            placeholder="搜索 INV NO / ORDER"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div />
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setSearch('')}>
+              重置筛选
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         {invoices.map((invoice) => (

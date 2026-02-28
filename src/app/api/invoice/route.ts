@@ -10,7 +10,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 export const GET = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search') || '';
+    const search = (searchParams.get('search') || '').trim();
     const orderId = searchParams.get('orderId');
 
     if (orderId) {
@@ -34,9 +34,14 @@ export const GET = withAuth(async (request: NextRequest) => {
     }
 
     const invoices = await db.invoice.findMany({
-      where: search ? {
-        invNo: { contains: search }
-      } : undefined,
+      where: search
+        ? {
+            OR: [
+              { invNo: { contains: search, mode: 'insensitive' } },
+              { orders: { some: { orderNo: { contains: search, mode: 'insensitive' } } } },
+            ],
+          }
+        : undefined,
       include: {
         orders: {
           include: {
@@ -51,8 +56,24 @@ export const GET = withAuth(async (request: NextRequest) => {
       orderBy: { createdAt: 'desc' }
     });
 
+    const normalizedSearch = search.toLowerCase();
+    const filteredInvoices = search
+      ? invoices
+          .map((invoice) => {
+            const invMatched = invoice.invNo.toLowerCase().includes(normalizedSearch);
+            if (invMatched) return invoice;
+            return {
+              ...invoice,
+              orders: invoice.orders.filter((order) =>
+                order.orderNo.toLowerCase().includes(normalizedSearch)
+              ),
+            };
+          })
+          .filter((invoice) => invoice.orders.length > 0)
+      : invoices;
+
     // 计算每个账单的总金额和余额
-    const result = invoices.map(invoice => {
+    const result = filteredInvoices.map(invoice => {
       const isUnAssociated = invoice.invNo === 'Un_Associated';
       
       // Un_Associated 账单的总金额为0，余额为所有收据金额的负数

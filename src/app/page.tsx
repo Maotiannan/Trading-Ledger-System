@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocale, useTranslations } from 'next-intl';
+import { deriveOrderGroupKey } from '@/lib/order-group';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +42,36 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
   }
 
   return json;
+}
+
+async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
+  const normalized = orderNoInput.trim();
+  if (!normalized) return null;
+  const result = await apiCall(`invoice?orderNo=${encodeURIComponent(normalized)}`);
+  if (!result.success || !Array.isArray(result.data)) return null;
+  const inputGroupKey = deriveOrderGroupKey(normalized);
+  if (!inputGroupKey) return null;
+
+  const markMap = new Map<string, { mark: string; name: string; customerId: string }>();
+  for (const row of result.data as Array<Record<string, unknown>>) {
+    const rowOrderNo = String(row.orderNo || '');
+    if (!rowOrderNo || deriveOrderGroupKey(rowOrderNo) !== inputGroupKey) continue;
+    const mark = String(row.customerMark || '').trim();
+    if (!mark) continue;
+    const key = mark.toLowerCase();
+    if (!markMap.has(key)) {
+      markMap.set(key, {
+        mark,
+        name: String(row.customerName || ''),
+        customerId: String(row.customerId || ''),
+      });
+    }
+  }
+
+  if (markMap.size === 1) {
+    return Array.from(markMap.values())[0];
+  }
+  return null;
 }
 
 // 登录组件
@@ -359,7 +390,17 @@ function InvoiceManager() {
   const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set());
   
   // 编辑订单对话框
-  const [editingOrder, setEditingOrder] = useState<{ id: string; orderNo: string; amount: number; invoiceId: string } | null>(null);
+  const [editingOrder, setEditingOrder] = useState<{
+    id: string;
+    orderNo: string;
+    amount: number;
+    invoiceId: string;
+    customerMark: string;
+    customerName: string;
+    customerPhone: string;
+    customerCity: string;
+    customerId: string;
+  } | null>(null);
   const [showOrderDialog, setShowOrderDialog] = useState(false);
   const [orderFormError, setOrderFormError] = useState('');
   
@@ -545,8 +586,8 @@ function InvoiceManager() {
       return;
     }
     
-    if (!editingOrder.amount || editingOrder.amount <= 0) {
-      setOrderFormError('请输入有效金额');
+    if (!Number.isFinite(editingOrder.amount) || editingOrder.amount < 0) {
+      setOrderFormError('请输入有效金额(>=0)');
       return;
     }
 
@@ -559,7 +600,12 @@ function InvoiceManager() {
           action: 'updateOrder',
           orderId: editingOrder.id,
           orderNo: editingOrder.orderNo,
-          amount: editingOrder.amount
+          amount: editingOrder.amount,
+          customerMark: editingOrder.customerMark,
+          customerName: editingOrder.customerName || null,
+          customerPhone: editingOrder.customerPhone || null,
+          customerCity: editingOrder.customerCity || null,
+          customerId: editingOrder.customerId || null,
         }),
       });
 
@@ -818,6 +864,7 @@ function InvoiceManager() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>客户单号 (ORDER)</TableHead>
+                      <TableHead>MARK</TableHead>
                       <TableHead>金额 (AMOUNT)</TableHead>
                       <TableHead>未收金额</TableHead>
                       {isManager && <TableHead className="text-right">操作</TableHead>}
@@ -825,7 +872,6 @@ function InvoiceManager() {
                   </TableHeader>
                   <TableBody>
                     {invoice.orders.map((order) => {
-                      const isSystemOrder = (order as Order & { isSystemOrder?: boolean }).isSystemOrder;
                       return (
                         <TableRow key={order.id}>
                           <TableCell className="font-medium">
@@ -841,7 +887,10 @@ function InvoiceManager() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {isSystemOrder ? '-' : `$${order.amount.toFixed(2)}`}
+                            {order.customerMark || '-'}
+                          </TableCell>
+                          <TableCell>
+                            ${order.amount.toFixed(2)}
                           </TableCell>
                           <TableCell className={order.orderBalance > 0 ? 'text-red-500' : 'text-green-500'}>
                             ${Math.abs(order.orderBalance).toFixed(2)}
@@ -876,7 +925,12 @@ function InvoiceManager() {
                                     id: order.id,
                                     orderNo: order.orderNo,
                                     amount: order.amount,
-                                    invoiceId: invoice.id
+                                    invoiceId: invoice.id,
+                                    customerMark: order.customerMark || '',
+                                    customerName: order.customerName || '',
+                                    customerPhone: order.customerPhone || '',
+                                    customerCity: order.customerCity || '',
+                                    customerId: '',
                                   });
                                   setShowOrderDialog(true);
                                 }}
@@ -897,7 +951,7 @@ function InvoiceManager() {
                     })}
                     {invoice.orders.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={isManager ? 4 : 3} className="text-center py-4 text-gray-500">
+                        <TableCell colSpan={isManager ? 5 : 4} className="text-center py-4 text-gray-500">
                           暂无订单
                         </TableCell>
                       </TableRow>
@@ -1114,6 +1168,34 @@ function InvoiceManager() {
                 onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, amount: parseFloat(e.target.value) || 0 })} 
               />
             </div>
+            <div className="space-y-2">
+              <Label>客户MARK</Label>
+              <Input
+                value={editingOrder?.customerMark || ''}
+                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerMark: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>客户NAME</Label>
+              <Input
+                value={editingOrder?.customerName || ''}
+                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerName: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>客户PHONE</Label>
+              <Input
+                value={editingOrder?.customerPhone || ''}
+                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerPhone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>客户CITY</Label>
+              <Input
+                value={editingOrder?.customerCity || ''}
+                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerCity: e.target.value })}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowOrderDialog(false)} disabled={submitting}>取消</Button>
@@ -1285,6 +1367,46 @@ function ReceiptManager() {
   useEffect(() => {
     setCurrentPage(1);
   }, [search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
+
+  useEffect(() => {
+    if (!showDirectCreate) return;
+    const currentOrderNo = directForm.orderNo;
+    if (!currentOrderNo.trim()) return;
+    const timer = setTimeout(() => {
+      void lookupCustomerByOrderNoGroup(currentOrderNo).then((matched) => {
+        if (!matched) return;
+        setDirectForm((prev) => ({
+          ...prev,
+          customerMark: matched.mark,
+          customerName: matched.name || prev.customerName,
+          customerId: matched.customerId || prev.customerId,
+        }));
+        loadCustomerCandidates(
+          matched.mark,
+          (rows) => setDirectCustomerCandidates(rows),
+          (resolvedName) => setDirectForm((prev) => ({ ...prev, customerName: resolvedName })),
+          (resolvedId) => setDirectForm((prev) => ({ ...prev, customerId: resolvedId }))
+        );
+      });
+    }, 260);
+    return () => clearTimeout(timer);
+  }, [directForm.orderNo, showDirectCreate]);
+
+  useEffect(() => {
+    if (!showUpload || !ocrResult) return;
+    const currentOrderNo = typeof ocrResult.orderNo === 'string' ? ocrResult.orderNo : '';
+    if (!currentOrderNo.trim()) return;
+    const timer = setTimeout(() => {
+      void lookupCustomerByOrderNoGroup(currentOrderNo).then((matched) => {
+        if (!matched) return;
+        setOcrCustomerMark(matched.mark);
+        setOcrCustomerName(matched.name);
+        setOcrCustomerId(matched.customerId);
+        loadCustomerCandidates(matched.mark, setOcrCustomerCandidates, setOcrCustomerName, setOcrCustomerId);
+      });
+    }, 260);
+    return () => clearTimeout(timer);
+  }, [ocrResult, showUpload]);
 
   const loadCustomerCandidates = async (
     mark: string,
@@ -1570,6 +1692,7 @@ function ReceiptManager() {
               <TableRow>
                 <TableHead>收据号</TableHead>
                 <TableHead>客户单号</TableHead>
+                <TableHead>MARK</TableHead>
                 <TableHead>付款金额</TableHead>
                 <TableHead>付款人</TableHead>
                 <TableHead>状态</TableHead>
@@ -1585,6 +1708,7 @@ function ReceiptManager() {
                     {receipt.orderNo || '-'}
                     {receipt.needsCustomerFix && <div className="text-xs text-red-500">please modify guest information</div>}
                   </TableCell>
+                  <TableCell>{receipt.customerMark || '-'}</TableCell>
                   <TableCell className="font-medium">${receipt.usd.toFixed(2)}</TableCell>
                   <TableCell>{receipt.payer || '-'}</TableCell>
                   <TableCell>{getStatusBadge(receipt.status)}</TableCell>
@@ -1628,7 +1752,7 @@ function ReceiptManager() {
               ))}
               {receipts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                     暂无收据
                   </TableCell>
                 </TableRow>

@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
+import { deriveOrderGroupKey } from '@/lib/order-group';
 
 function trimStr(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -93,6 +94,69 @@ async function upsertCustomer(currentUserId: string, role: UserRole, payload: Fi
   });
 }
 
+async function syncSameGroupCustomer(
+  baseOrderNo: string | null | undefined,
+  customer: { id: string; mark: string; name: string; phone: string; city: string }
+) {
+  const groupKey = deriveOrderGroupKey(baseOrderNo);
+  if (!groupKey) return 0;
+
+  const allOrders = await db.order.findMany({
+    select: { id: true, orderNo: true },
+  });
+  const targetOrderIds = allOrders
+    .filter((row) => deriveOrderGroupKey(row.orderNo) === groupKey)
+    .map((row) => row.id);
+  if (targetOrderIds.length === 0) return 0;
+
+  const orderUpdated = await db.order.updateMany({
+    where: { id: { in: targetOrderIds } },
+    data: {
+      customerId: customer.id,
+      customerMark: customer.mark,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerCity: customer.city,
+      needsCustomerFix: false,
+    },
+  });
+  const receiptUpdatedByOrder = await db.receipt.updateMany({
+    where: { orderId: { in: targetOrderIds } },
+    data: {
+      customerId: customer.id,
+      customerMark: customer.mark,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerCity: customer.city,
+      needsCustomerFix: false,
+    },
+  });
+  const receiptCandidates = await db.receipt.findMany({
+    where: {
+      orderNo: { not: null },
+    },
+    select: { id: true, orderNo: true },
+  });
+  const receiptIdsByGroup = receiptCandidates
+    .filter((row) => deriveOrderGroupKey(row.orderNo) === groupKey)
+    .map((row) => row.id);
+  const receiptUpdatedByOrderNo = receiptIdsByGroup.length
+    ? await db.receipt.updateMany({
+        where: { id: { in: receiptIdsByGroup } },
+        data: {
+          customerId: customer.id,
+          customerMark: customer.mark,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerCity: customer.city,
+          needsCustomerFix: false,
+        },
+      })
+    : { count: 0 };
+
+  return orderUpdated.count + receiptUpdatedByOrder.count + receiptUpdatedByOrderNo.count;
+}
+
 export const GET = withAuth(async (_request: NextRequest, currentUser) => {
   const denied = managerOnly(currentUser.role as UserRole);
   if (denied) return denied;
@@ -152,7 +216,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const orderId = trimStr(body.orderId);
     if (!orderId) return NextResponse.json({ success: false, error: 'orderId不能为空' }, { status: 400 });
 
-    await db.order.update({
+    const order = await db.order.update({
       where: { id: orderId },
       data: {
         customerId: customer.id,
@@ -162,19 +226,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         customerCity: customer.city,
         needsCustomerFix: false,
       },
+      select: { orderNo: true },
     });
 
-    await db.receipt.updateMany({
-      where: { orderId },
-      data: {
-        customerId: customer.id,
-        customerMark: customer.mark,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-        customerCity: customer.city,
-        needsCustomerFix: false,
-      },
-    });
+    await syncSameGroupCustomer(order.orderNo, customer);
 
     return NextResponse.json({ success: true, message: '订单客户信息已修复', data: customer });
   }
@@ -192,7 +247,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       customerCity: customer.city,
       needsCustomerFix: false,
     },
-    select: { orderId: true },
+    select: { orderId: true, orderNo: true },
   });
 
   if (receipt.orderId) {
@@ -208,6 +263,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       },
     });
   }
+
+  await syncSameGroupCustomer(receipt.orderNo, customer);
 
   return NextResponse.json({ success: true, message: '收据客户信息已修复', data: customer });
 });

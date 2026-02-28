@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { ReceiptStatus } from '@prisma/client';
 import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
+import { deriveOrderGroupKey } from '@/lib/order-group';
 
 // 确保DEPOSIT_POOL发票池存在
 export async function ensureDepositPoolInvoice(userId: string): Promise<string> {
@@ -113,6 +114,8 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
   orderBalance: number;
 } | null> {
   if (!orderNo) return null;
+  const normalizedOrderNo = orderNo.toLowerCase().trim();
+  if (!normalizedOrderNo) return null;
 
   // 查找所有订单，按创建时间排序
   const orders = await db.order.findMany({
@@ -125,6 +128,31 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
       tokens: true,
     }
   });
+
+  // 先做精确匹配
+  const exact = orders.find((order) => order.orderNo.toLowerCase().trim() === normalizedOrderNo);
+  if (exact) {
+    return {
+      orderId: exact.id,
+      orderNo: exact.orderNo,
+      amount: exact.amount,
+      orderBalance: exact.orderBalance,
+    };
+  }
+
+  // 再做“拆分元素去掉最右序号”匹配
+  const inputKey = deriveOrderGroupKey(orderNo);
+  if (inputKey) {
+    const grouped = orders.find((order) => deriveOrderGroupKey(order.orderNo) === inputKey);
+    if (grouped) {
+      return {
+        orderId: grouped.id,
+        orderNo: grouped.orderNo,
+        amount: grouped.amount,
+        orderBalance: grouped.orderBalance,
+      };
+    }
+  }
 
   let bestMatch: {
     id: string;

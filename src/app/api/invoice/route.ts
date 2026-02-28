@@ -5,6 +5,7 @@ import { updateOrderBalance } from '@/lib/matching';
 import { withAuth, withRole } from '@/lib/route-auth';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
+import { deriveOrderGroupKey } from '@/lib/order-group';
 
 // 获取账单列表
 export const GET = withAuth(async (request: NextRequest) => {
@@ -12,6 +13,7 @@ export const GET = withAuth(async (request: NextRequest) => {
     const { searchParams } = new URL(request.url);
     const search = (searchParams.get('search') || '').trim();
     const orderId = searchParams.get('orderId');
+    const orderNo = (searchParams.get('orderNo') || '').trim();
 
     if (orderId) {
       const receipts = await db.receipt.findMany({
@@ -31,6 +33,29 @@ export const GET = withAuth(async (request: NextRequest) => {
         take: 30,
       });
       return NextResponse.json({ success: true, data: receipts });
+    }
+
+    if (orderNo) {
+      const targetKey = deriveOrderGroupKey(orderNo);
+      if (!targetKey) {
+        return NextResponse.json({ success: true, data: [] });
+      }
+      const allOrders = await db.order.findMany({
+        select: {
+          id: true,
+          orderNo: true,
+          customerId: true,
+          customerMark: true,
+          customerName: true,
+          customerPhone: true,
+          customerCity: true,
+          needsCustomerFix: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      const matched = allOrders.filter((row) => deriveOrderGroupKey(row.orderNo) === targetKey);
+      return NextResponse.json({ success: true, data: matched });
     }
 
     const invoices = await db.invoice.findMany({
@@ -74,14 +99,11 @@ export const GET = withAuth(async (request: NextRequest) => {
 
     // 计算每个账单的总金额和余额
     const result = filteredInvoices.map(invoice => {
-      const isUnAssociated = invoice.invNo === 'Un_Associated';
-      
-      // Un_Associated 账单的总金额为0，余额为所有收据金额的负数
-      const invAmount = isUnAssociated ? 0 : invoice.orders.reduce((sum, order) => sum + order.amount, 0);
+      const invAmount = invoice.orders.reduce((sum, order) => sum + order.amount, 0);
       const receivedAmount = invoice.orders.reduce((sum, order) => {
         return sum + order.receipts.reduce((s, r) => s + r.usd, 0);
       }, 0);
-      const invBalance = isUnAssociated ? -receivedAmount : invAmount - receivedAmount;
+      const invBalance = invAmount - receivedAmount;
 
       return {
         ...invoice,
@@ -89,21 +111,11 @@ export const GET = withAuth(async (request: NextRequest) => {
         invBalance,
         orders: invoice.orders.map(order => {
           const orderReceived = order.receipts.reduce((s, r) => s + r.usd, 0);
-          
-          // Un_Associated 下的订单：金额显示为0（前端显示"-"），余额为收据金额的负数
-          if (isUnAssociated) {
-            return {
-              ...order,
-              amount: 0, // 前端会显示为 "-"
-              orderBalance: -orderReceived, // 负数表示多付
-              isSystemOrder: true
-            };
-          }
-          
+
           return {
             ...order,
             orderBalance: order.amount - orderReceived,
-            isSystemOrder: false
+            isSystemOrder: false,
           };
         })
       };
@@ -376,7 +388,9 @@ export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request:
 // 重新匹配所有订单
 async function rematchAllOrders() {
   console.log('[Rematch] Starting rematch all orders...');
-  
+
+  const normalizeOrderNo = (value: string | null | undefined) => (value || '').trim().toLowerCase();
+
   // 获取所有订单
   const allOrders = await db.order.findMany({
     include: {
@@ -386,12 +400,15 @@ async function rematchAllOrders() {
   });
 
   let mergedCount = 0;
+  let receiptMatchedCount = 0;
+  let customerSyncedCount = 0;
+  let deletedInvoiceCount = 0;
 
   // 按订单号分组，找出重复的订单
   const orderGroups = new Map<string, typeof allOrders>();
   
   for (const order of allOrders) {
-    const normalizedOrderNo = order.orderNo.toLowerCase().trim();
+    const normalizedOrderNo = normalizeOrderNo(order.orderNo);
     const key = normalizedOrderNo;
     
     if (!orderGroups.has(key)) {
@@ -429,7 +446,69 @@ async function rematchAllOrders() {
     await updateOrderBalance(targetOrder.id);
   }
 
-  // 重新匹配收据到订单
+  // 基于“同一客人”分组，同步客户信息（按拆分元素去掉最右序号）
+  const freshOrders = await db.order.findMany({
+    select: {
+      id: true,
+      orderNo: true,
+      customerId: true,
+      customerMark: true,
+      customerName: true,
+      customerPhone: true,
+      customerCity: true,
+      needsCustomerFix: true,
+    },
+  });
+  const groupMap = new Map<string, typeof freshOrders>();
+  for (const row of freshOrders) {
+    const key = deriveOrderGroupKey(row.orderNo);
+    if (!key) continue;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(row);
+  }
+  for (const [, grouped] of groupMap) {
+    if (grouped.length <= 1) continue;
+    const resolved = grouped.find((row) => row.customerId && !row.needsCustomerFix);
+    if (!resolved) continue;
+
+    const targetOrderIds = grouped.map((row) => row.id);
+    const touched = await db.order.updateMany({
+      where: { id: { in: targetOrderIds } },
+      data: {
+        customerId: resolved.customerId,
+        customerMark: resolved.customerMark,
+        customerName: resolved.customerName,
+        customerPhone: resolved.customerPhone,
+        customerCity: resolved.customerCity,
+        needsCustomerFix: false,
+      },
+    });
+    customerSyncedCount += touched.count;
+
+    const receiptRows = await db.receipt.findMany({
+      where: { orderNo: { not: null } },
+      select: { id: true, orderNo: true },
+    });
+    const targetReceiptIds = receiptRows
+      .filter((row) => deriveOrderGroupKey(row.orderNo) === deriveOrderGroupKey(resolved.orderNo))
+      .map((row) => row.id);
+    if (targetReceiptIds.length > 0) {
+      const syncedReceipts = await db.receipt.updateMany({
+        where: { id: { in: targetReceiptIds } },
+        data: {
+          customerId: resolved.customerId,
+          customerMark: resolved.customerMark,
+          customerName: resolved.customerName,
+          customerPhone: resolved.customerPhone,
+          customerCity: resolved.customerCity,
+          needsCustomerFix: false,
+        },
+      });
+      customerSyncedCount += syncedReceipts.count;
+    }
+  }
+
+  // 重新匹配收据到订单（优先精确，再按拆分规则）
   const allReceipts = await db.receipt.findMany({
     where: {
       orderId: null,
@@ -442,34 +521,60 @@ async function rematchAllOrders() {
   for (const receipt of allReceipts) {
     if (!receipt.orderNo) continue;
     
-    const normalizedOrderNo = receipt.orderNo.toLowerCase().trim();
-    
-    // 查找匹配的订单
-    const matchingOrder = await db.order.findFirst({
+    const normalizedOrderNo = normalizeOrderNo(receipt.orderNo);
+    const sameOrder = await db.order.findFirst({
       where: {
-        orderNo: {
-          contains: normalizedOrderNo
-        }
-      }
+        orderNo: { equals: receipt.orderNo, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'asc' },
     });
+    if (sameOrder) {
+      await db.receipt.update({
+        where: { id: receipt.id },
+        data: { orderId: sameOrder.id },
+      });
+      await updateOrderBalance(sameOrder.id);
+      receiptMatchedCount++;
+      continue;
+    }
 
-    if (matchingOrder) {
-      // 检查订单号是否匹配（双向包含）
-      const orderNoLower = matchingOrder.orderNo.toLowerCase();
-      if (orderNoLower.includes(normalizedOrderNo) || normalizedOrderNo.includes(orderNoLower)) {
-        await db.receipt.update({
-          where: { id: receipt.id },
-          data: { orderId: matchingOrder.id }
-        });
-        
-        await updateOrderBalance(matchingOrder.id);
-        console.log(`[Rematch] Matched receipt ${receipt.id} to order ${matchingOrder.orderNo}`);
-      }
+    const key = deriveOrderGroupKey(receipt.orderNo);
+    if (!key) continue;
+    const groupOrders = await db.order.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+    const matchedByGroup = groupOrders.find((row) => deriveOrderGroupKey(row.orderNo) === key);
+    if (matchedByGroup) {
+      await db.receipt.update({
+        where: { id: receipt.id },
+        data: { orderId: matchedByGroup.id },
+      });
+      await updateOrderBalance(matchedByGroup.id);
+      receiptMatchedCount++;
     }
   }
 
-  console.log(`[Rematch] Completed. Merged ${mergedCount} orders.`);
-  return { mergedCount };
+  // 删除空账单分支
+  const invoices = await db.invoice.findMany({
+    select: { id: true, invNo: true, _count: { select: { orders: true } } },
+  });
+  for (const invoice of invoices) {
+    if (invoice._count.orders === 0) {
+      await db.invoice.delete({ where: { id: invoice.id } });
+      deletedInvoiceCount++;
+    }
+  }
+
+  // 全量重算余额
+  const orderIds = await db.order.findMany({ select: { id: true } });
+  for (const row of orderIds) {
+    await updateOrderBalance(row.id);
+  }
+
+  console.log(
+    `[Rematch] Completed. merged=${mergedCount}, matchedReceipts=${receiptMatchedCount}, syncedCustomers=${customerSyncedCount}, deletedInvoices=${deletedInvoiceCount}`
+  );
+  return { mergedCount, receiptMatchedCount, customerSyncedCount, deletedInvoiceCount };
 }
 
 // 更新订单
@@ -483,7 +588,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const result = await rematchAllOrders();
       return NextResponse.json({ 
         success: true, 
-        message: `重新匹配完成，合并了 ${result.mergedCount} 个重复订单` 
+        message: `重新匹配完成：合并重复订单 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}` 
       });
     }
 
@@ -498,21 +603,96 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         return NextResponse.json({ success: false, error: '订单不存在' }, { status: 400 });
       }
 
+      const incomingOrderNo = typeof orderNo === 'string' ? orderNo.trim() : order.orderNo;
+      const incomingAmount = amount !== undefined ? Number(amount) : order.amount;
+      if (!incomingOrderNo) {
+        return NextResponse.json({ success: false, error: '客户单号不能为空' }, { status: 400 });
+      }
+      if (!Number.isFinite(incomingAmount) || incomingAmount < 0) {
+        return NextResponse.json({ success: false, error: '金额必须为大于等于0的数字' }, { status: 400 });
+      }
+
+      const incomingCustomerMark = typeof body.customerMark === 'string' ? body.customerMark.trim() : (order.customerMark || '');
+      const incomingCustomerName = typeof body.customerName === 'string' ? body.customerName.trim() : (order.customerName || '');
+      const incomingCustomerId = typeof body.customerId === 'string' ? body.customerId.trim() : (order.customerId || '');
+      const incomingCustomerPhone = typeof body.customerPhone === 'string' ? body.customerPhone.trim() : (order.customerPhone || '');
+      const incomingCustomerCity = typeof body.customerCity === 'string' ? body.customerCity.trim() : (order.customerCity || '');
+
+      let customerData: {
+        customerId: string | null;
+        customerMark: string | null;
+        customerName: string | null;
+        customerPhone: string | null;
+        customerCity: string | null;
+        needsCustomerFix: boolean;
+      } = {
+        customerId: order.customerId,
+        customerMark: order.customerMark,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        customerCity: order.customerCity,
+        needsCustomerFix: order.needsCustomerFix,
+      };
+
+      if (incomingCustomerMark) {
+        const resolved = await resolveCustomer({
+          customerMark: incomingCustomerMark,
+          customerName: incomingCustomerName || null,
+          customerId: incomingCustomerId || null,
+        });
+        customerData = {
+          customerId: resolved.customerId,
+          customerMark: resolved.customerMark,
+          customerName: resolved.customerName,
+          customerPhone: resolved.customerPhone ?? (incomingCustomerPhone || null),
+          customerCity: resolved.customerCity ?? (incomingCustomerCity || null),
+          needsCustomerFix: resolved.needsCustomerFix,
+        };
+      } else {
+        customerData = {
+          customerId: null,
+          customerMark: null,
+          customerName: incomingCustomerName || null,
+          customerPhone: incomingCustomerPhone || null,
+          customerCity: incomingCustomerCity || null,
+          needsCustomerFix: true,
+        };
+      }
+
       const updated = await db.order.update({
         where: { id: orderId },
         data: {
-          orderNo: orderNo !== undefined ? orderNo : order.orderNo,
-          tokens: orderNo !== undefined ? serializeOrderTokens(orderNo) : order.tokens,
-          amount: amount !== undefined ? amount : order.amount,
+          orderNo: incomingOrderNo,
+          tokens: serializeOrderTokens(incomingOrderNo),
+          amount: incomingAmount,
+          customerId: customerData.customerId,
+          customerMark: customerData.customerMark,
+          customerName: customerData.customerName,
+          customerPhone: customerData.customerPhone,
+          customerCity: customerData.customerCity,
+          needsCustomerFix: customerData.needsCustomerFix,
         }
+      });
+
+      await db.receipt.updateMany({
+        where: { orderId },
+        data: {
+          orderNo: incomingOrderNo,
+          customerId: customerData.customerId,
+          customerMark: customerData.customerMark,
+          customerName: customerData.customerName,
+          customerPhone: customerData.customerPhone,
+          customerCity: customerData.customerCity,
+          needsCustomerFix: customerData.needsCustomerFix,
+        },
       });
 
       // 重新计算订单余额
       await updateOrderBalance(orderId);
 
       // 如果订单号有变化，触发重新匹配
-      if (orderNo !== undefined && orderNo !== order.orderNo) {
-        console.log(`[UpdateOrder] OrderNo changed from "${order.orderNo}" to "${orderNo}", triggering rematch...`);
+      if (incomingOrderNo !== order.orderNo) {
+        console.log(`[UpdateOrder] OrderNo changed from "${order.orderNo}" to "${incomingOrderNo}", triggering rematch...`);
         await rematchAllOrders();
       }
 
@@ -636,7 +816,20 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         return NextResponse.json({ success: false, error: '该订单下有收据，无法删除' }, { status: 400 });
       }
 
+      const deletingOrder = await db.order.findUnique({
+        where: { id: orderId },
+        select: { invoiceId: true },
+      });
+      if (!deletingOrder) {
+        return NextResponse.json({ success: false, error: '订单不存在' }, { status: 400 });
+      }
+
       await db.order.delete({ where: { id: orderId } });
+
+      const remaining = await db.order.count({ where: { invoiceId: deletingOrder.invoiceId } });
+      if (remaining === 0) {
+        await db.invoice.delete({ where: { id: deletingOrder.invoiceId } });
+      }
       return NextResponse.json({ success: true, message: '订单已删除' });
     }
 

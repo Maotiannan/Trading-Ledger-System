@@ -178,7 +178,25 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           }
         }
         
-        // 如果没有匹配的Receipt，创建新的Order和Receipt
+        // 如果没有显式关联收据，先尝试按 AI 同规则自动匹配
+        if (!receiptId && item.orderNo) {
+          const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount);
+          if (autoMatchedReceiptId) {
+            const matchedReceipt = await db.receipt.findUnique({
+              where: { id: autoMatchedReceiptId },
+              select: { createdBy: true },
+            });
+            if (!matchedReceipt) {
+              return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
+            }
+            if (!canAccessOwnedResource(matchedReceipt.createdBy, currentUser)) {
+              return forbiddenOwnershipResponse('无权关联该收据');
+            }
+            receiptId = autoMatchedReceiptId;
+          }
+        }
+
+        // 仍未匹配到时，创建新的Order和Receipt
         if (!receiptId && item.orderNo) {
           // 使用分词匹配查找或创建Order
           console.log(`Creating/finding order for: ${item.orderNo}`);
@@ -275,6 +293,23 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           }
           if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
             return forbiddenOwnershipResponse('无权关联该收据');
+          }
+        }
+
+        if (!receiptId && item.orderNo) {
+          const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount);
+          if (autoMatchedReceiptId) {
+            const matchedReceipt = await db.receipt.findUnique({
+              where: { id: autoMatchedReceiptId },
+              select: { createdBy: true },
+            });
+            if (!matchedReceipt) {
+              return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
+            }
+            if (!canAccessOwnedResource(matchedReceipt.createdBy, currentUser)) {
+              return forbiddenOwnershipResponse('无权关联该收据');
+            }
+            receiptId = autoMatchedReceiptId;
           }
         }
 
@@ -418,7 +453,25 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             }
           }
           
-          // 如果没有匹配的Receipt，创建新的Order和Receipt
+          // 如果没有显式关联收据，先尝试按 AI 同规则自动匹配
+          if (!receiptId && item.orderNo) {
+            const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount);
+            if (autoMatchedReceiptId) {
+              const matchedReceipt = await db.receipt.findUnique({
+                where: { id: autoMatchedReceiptId },
+                select: { createdBy: true },
+              });
+              if (!matchedReceipt) {
+                return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
+              }
+              if (!canAccessOwnedResource(matchedReceipt.createdBy, currentUser)) {
+                return forbiddenOwnershipResponse('无权关联该收据');
+              }
+              receiptId = autoMatchedReceiptId;
+            }
+          }
+
+          // 仍未匹配到时，创建新的Order和Receipt
           if (!receiptId && item.orderNo) {
             // 使用分词匹配查找或创建Order
             console.log(`[Update] Creating/finding order for: ${item.orderNo}`);

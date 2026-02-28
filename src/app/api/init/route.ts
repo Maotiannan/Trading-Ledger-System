@@ -17,8 +17,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: '初始化令牌无效' }, { status: 401 });
     }
 
-    const adminEmail = process.env.INIT_ADMIN_EMAIL;
-    const adminPassword = process.env.INIT_ADMIN_PASSWORD;
+    const adminEmail = process.env.INIT_ADMIN_EMAIL || 'admin@example.com';
+    const adminPassword = process.env.INIT_ADMIN_PASSWORD || '12345678';
     if (!adminEmail || !adminPassword) {
       return NextResponse.json({ success: false, error: '缺少初始化管理员配置' }, { status: 400 });
     }

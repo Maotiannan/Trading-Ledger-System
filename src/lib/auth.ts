@@ -43,8 +43,8 @@ export async function migratePassword(userId: string, newPassword: string): Prom
 
 // 创建默认管理员账户
 export async function createDefaultAdmin() {
-  const adminEmail = process.env.INIT_ADMIN_EMAIL;
-  const adminPassword = process.env.INIT_ADMIN_PASSWORD;
+  const adminEmail = process.env.INIT_ADMIN_EMAIL || 'admin@example.com';
+  const adminPassword = process.env.INIT_ADMIN_PASSWORD || '12345678';
   if (!adminEmail || !adminPassword) {
     return;
   }

@@ -89,165 +89,172 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
     if (!invNo || !orders || !Array.isArray(orders) || orders.length === 0) {
       return NextResponse.json({ success: false, error: '账单号和订单列表不能为空' }, { status: 400 });
     }
+    const normalizedInvNo = String(invNo).trim();
+    const normalizeOrderNo = (value: string) => value.toLowerCase().trim();
 
-    // 检查账单号是否已存在
-    const existing = await db.invoice.findUnique({ where: { invNo } });
-    if (existing) {
-      return NextResponse.json({ success: false, error: '账单号已存在' }, { status: 400 });
+    // 同 INV NO 允许重复提交：统一并入同一账单组（同一 invoice 记录）
+    let targetInvoice = await db.invoice.findFirst({
+      where: { invNo: normalizedInvNo },
+      select: { id: true, invNo: true },
+    });
+    if (!targetInvoice) {
+      targetInvoice = await db.invoice.create({
+        data: {
+          invNo: normalizedInvNo,
+          createdBy: currentUser.id,
+        },
+        select: { id: true, invNo: true },
+      });
     }
 
-    // 处理订单：检查是否有已存在的订单
-    const processedOrders: { orderNo: string; amount: number; existingOrderId?: string }[] = [];
     const mergedOrdersInfo: string[] = [];
+    const touchedOrderIds = new Set<string>();
 
-    for (const order of orders) {
-      // 检查系统中是否已存在相同订单号
+    for (const rawOrder of orders) {
+      const normalizedOrderNoRaw = typeof rawOrder.orderNo === 'string' ? rawOrder.orderNo.trim() : '';
+      const amountNumber = Number(rawOrder.amount);
+      if (!normalizedOrderNoRaw || !Number.isFinite(amountNumber)) {
+        continue;
+      }
+
+      // 1) 目标账单内已存在同 ORDER：直接累加金额
+      const existingInTarget = await db.order.findFirst({
+        where: {
+          invoiceId: targetInvoice.id,
+          orderNo: {
+            equals: normalizedOrderNoRaw,
+            mode: 'insensitive',
+          },
+        },
+        select: { id: true, orderNo: true },
+      });
+
+      if (existingInTarget) {
+        await db.order.update({
+          where: { id: existingInTarget.id },
+          data: {
+            amount: { increment: amountNumber },
+            orderBalance: { increment: amountNumber },
+          },
+        });
+        touchedOrderIds.add(existingInTarget.id);
+        continue;
+      }
+
+      // 2) 优先处理 Un_Associated：创建到目标账单并转移收据，确保绿色负数可冲减新账单红色余额
+      const existingSystemOrder = await db.order.findFirst({
+        where: {
+          orderNo: {
+            equals: normalizedOrderNoRaw,
+            mode: 'insensitive',
+          },
+          invoice: { invNo: 'Un_Associated' },
+        },
+        include: { invoice: true },
+      });
+
+      if (existingSystemOrder) {
+        const newOrder = await db.order.create({
+          data: {
+            invoiceId: targetInvoice.id,
+            orderNo: normalizedOrderNoRaw,
+            tokens: serializeOrderTokens(normalizedOrderNoRaw),
+            amount: amountNumber,
+            orderBalance: amountNumber,
+          },
+          select: { id: true, orderNo: true },
+        });
+
+        await db.receipt.updateMany({
+          where: { orderId: existingSystemOrder.id },
+          data: { orderId: newOrder.id },
+        });
+        await db.order.delete({ where: { id: existingSystemOrder.id } });
+        await updateOrderBalance(newOrder.id);
+
+        touchedOrderIds.add(newOrder.id);
+        mergedOrdersInfo.push(`${normalizedOrderNoRaw} (从 Un_Associated 合并)`);
+        continue;
+      }
+
+      // 3) 其他账单中已存在同 ORDER：按历史规则并入已有订单
       const existingOrder = await db.order.findFirst({
         where: {
           orderNo: {
-            equals: order.orderNo,
-            mode: 'insensitive'
-          }
+            equals: normalizedOrderNoRaw,
+            mode: 'insensitive',
+          },
         },
-        include: { invoice: true }
+        include: { invoice: true },
       });
 
       if (existingOrder) {
-        // 如果已存在，增加金额到现有订单
         await db.order.update({
           where: { id: existingOrder.id },
           data: {
-            amount: { increment: order.amount },
-            orderBalance: { increment: order.amount }
-          }
+            amount: { increment: amountNumber },
+            orderBalance: { increment: amountNumber },
+          },
         });
-        mergedOrdersInfo.push(`${order.orderNo} (合并到账单 ${existingOrder.invoice.invNo})`);
-        console.log(`[Invoice Create] Merged order ${order.orderNo} to existing in invoice ${existingOrder.invoice.invNo}`);
-      } else {
-        processedOrders.push({ orderNo: order.orderNo, amount: order.amount });
+        touchedOrderIds.add(existingOrder.id);
+        mergedOrdersInfo.push(`${normalizedOrderNoRaw} (合并到账单 ${existingOrder.invoice.invNo})`);
+        continue;
       }
-    }
 
-    // 如果所有订单都被合并了，不创建新账单
-    if (processedOrders.length === 0) {
-      return NextResponse.json({ 
-        success: true, 
-        message: `所有订单已合并到现有账单: ${mergedOrdersInfo.join(', ')}`,
-        merged: true
+      // 4) 全新订单：创建到目标账单
+      const created = await db.order.create({
+        data: {
+          invoiceId: targetInvoice.id,
+          orderNo: normalizedOrderNoRaw,
+          tokens: serializeOrderTokens(normalizedOrderNoRaw),
+          amount: amountNumber,
+          orderBalance: amountNumber,
+        },
+        select: { id: true, orderNo: true },
       });
+      touchedOrderIds.add(created.id);
     }
 
-    // 创建账单（只包含未合并的订单）
-    const invoice = await db.invoice.create({
-      data: {
-        invNo,
-        createdBy: currentUser.id,
-        orders: {
-          create: processedOrders.map(order => ({
-            orderNo: order.orderNo,
-            tokens: serializeOrderTokens(order.orderNo),
-            amount: order.amount,
-            orderBalance: order.amount
-          }))
-        }
-      },
-      include: {
-        orders: true
-      }
-    });
+    // 合并定金记录（对本次触达的订单执行）
+    for (const orderId of touchedOrderIds) {
+      const order = await db.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, orderNo: true },
+      });
+      if (!order) continue;
 
-    // 合并匹配的自动创建的订单（从Un_Associated）
-    const systemPool = await db.invoice.findFirst({
-      where: { invNo: 'Un_Associated' }
-    });
-
-    console.log('[Invoice Create] Checking for Un_Associated:', systemPool?.id);
-
-    if (systemPool) {
-      for (const newOrder of invoice.orders) {
-        console.log(`[Invoice Create] Checking order: ${newOrder.orderNo}`);
-        
-        // 查找Un_Associated中匹配的订单（ORDER名称匹配，不区分大小写）
-        const systemOrders = await db.order.findMany({
-          where: { invoiceId: systemPool.id }
-        });
-
-        console.log(`[Invoice Create] Found ${systemOrders.length} system orders to check`);
-
-        const normalizedNewOrderNo = newOrder.orderNo.toLowerCase().trim();
-        
-        for (const sysOrder of systemOrders) {
-          const normalizedSysOrderNo = sysOrder.orderNo.toLowerCase().trim();
-          
-          // 检查是否匹配（双向包含或相等）
-          const isMatch = normalizedNewOrderNo === normalizedSysOrderNo ||
-                          normalizedNewOrderNo.includes(normalizedSysOrderNo) ||
-                          normalizedSysOrderNo.includes(normalizedNewOrderNo);
-          
-          console.log(`[Invoice Create] Comparing: "${normalizedNewOrderNo}" vs "${normalizedSysOrderNo}" = ${isMatch}`);
-
-          if (isMatch) {
-            console.log(`[Invoice Create] Merging Un_Associated order ${sysOrder.orderNo} to invoice order ${newOrder.orderNo}`);
-            
-            // 检查系统订单下是否有收据
-            const sysReceipts = await db.receipt.findMany({
-              where: { orderId: sysOrder.id }
-            });
-            console.log(`[Invoice Create] Un_Associated order has ${sysReceipts.length} receipts`);
-
-            // 将匹配的Un_Associated订单下的所有收据转移到新订单
-            await db.receipt.updateMany({
-              where: { orderId: sysOrder.id },
-              data: { orderId: newOrder.id }
-            });
-
-            // 删除Un_Associated中的订单
-            await db.order.delete({
-              where: { id: sysOrder.id }
-            });
-
-            console.log(`[Invoice Create] Deleted Un_Associated order ${sysOrder.id}`);
-
-            // 重新计算新订单的余额
-            await updateOrderBalance(newOrder.id);
-          }
-        }
-      }
-    }
-
-    // 合并定金记录
-    for (const order of invoice.orders) {
-      // SQLite 不支持 mode: 'insensitive'，需要手动过滤
       const allDeposits = await db.receipt.findMany({
         where: {
           isDeposit: true,
-          isMerged: false
-        }
+          isMerged: false,
+        },
       });
 
-      const normalizedOrderNo = order.orderNo.toLowerCase();
-      const deposits = allDeposits.filter(d => 
-        d.orderNo && d.orderNo.toLowerCase().includes(normalizedOrderNo)
+      const normalizedOrderNo = normalizeOrderNo(order.orderNo);
+      const deposits = allDeposits.filter((d) =>
+        d.orderNo ? normalizeOrderNo(d.orderNo).includes(normalizedOrderNo) : false
       );
 
       for (const deposit of deposits) {
-        // 将定金合并到正式账单
         await db.receipt.update({
           where: { id: deposit.id },
           data: {
             orderId: order.id,
-            isMerged: true
-          }
+            isMerged: true,
+          },
         });
-
-        // 更新订单余额
-        await updateOrderBalance(order.id);
       }
+      await updateOrderBalance(order.id);
     }
 
-    const message = mergedOrdersInfo.length > 0 
-      ? `账单创建成功，部分订单已合并: ${mergedOrdersInfo.join(', ')}`
-      : undefined;
+    const invoice = await db.invoice.findUnique({
+      where: { id: targetInvoice.id },
+      include: { orders: true },
+    });
+
+    const message = mergedOrdersInfo.length > 0
+      ? `账单已保存，部分订单已合并: ${mergedOrdersInfo.join(', ')}`
+      : '账单已保存';
 
     return NextResponse.json({ success: true, data: invoice, message });
   } catch (error) {

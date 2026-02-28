@@ -4,12 +4,34 @@ import { UserRole } from '@prisma/client';
 import { updateOrderBalance } from '@/lib/matching';
 import { withAuth, withRole } from '@/lib/route-auth';
 import { serializeOrderTokens } from '@/lib/tokenizer';
+import { resolveCustomer } from '@/lib/customer-matching';
 
 // 获取账单列表
 export const GET = withAuth(async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
+    const orderId = searchParams.get('orderId');
+
+    if (orderId) {
+      const receipts = await db.receipt.findMany({
+        where: { orderId },
+        select: {
+          id: true,
+          receiptNo: true,
+          usd: true,
+          status: true,
+          date: true,
+          createdAt: true,
+          payer: true,
+          invNo: true,
+          orderNo: true,
+        },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: 30,
+      });
+      return NextResponse.json({ success: true, data: receipts });
+    }
 
     const invoices = await db.invoice.findMany({
       where: search ? {
@@ -81,16 +103,27 @@ export const GET = withAuth(async (request: NextRequest) => {
 });
 
 // 创建账单
-export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
+export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
   try {
     const body = await request.json();
     const { invNo, orders } = body;
+    const customerMark = typeof body.customerMark === 'string' ? body.customerMark.trim() : '';
+    const customerName = typeof body.customerName === 'string' ? body.customerName.trim() : '';
+    const customerId = typeof body.customerId === 'string' ? body.customerId.trim() : '';
 
     if (!invNo || !orders || !Array.isArray(orders) || orders.length === 0) {
       return NextResponse.json({ success: false, error: '账单号和订单列表不能为空' }, { status: 400 });
     }
+    if (!customerMark) {
+      return NextResponse.json({ success: false, error: '客户MARK不能为空' }, { status: 400 });
+    }
     const normalizedInvNo = String(invNo).trim();
     const normalizeOrderNo = (value: string) => value.toLowerCase().trim();
+    const customerResolution = await resolveCustomer({
+      customerMark,
+      customerName: customerName || null,
+      customerId: customerId || null,
+    });
 
     // 同 INV NO 允许重复提交：统一并入同一账单组（同一 invoice 记录）
     let targetInvoice = await db.invoice.findFirst({
@@ -135,6 +168,12 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
           data: {
             amount: { increment: amountNumber },
             orderBalance: { increment: amountNumber },
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
           },
         });
         touchedOrderIds.add(existingInTarget.id);
@@ -161,6 +200,12 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
             tokens: serializeOrderTokens(normalizedOrderNoRaw),
             amount: amountNumber,
             orderBalance: amountNumber,
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
           },
           select: { id: true, orderNo: true },
         });
@@ -194,6 +239,12 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
           data: {
             amount: { increment: amountNumber },
             orderBalance: { increment: amountNumber },
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
           },
         });
         touchedOrderIds.add(existingOrder.id);
@@ -209,6 +260,12 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
           tokens: serializeOrderTokens(normalizedOrderNoRaw),
           amount: amountNumber,
           orderBalance: amountNumber,
+          customerId: customerResolution.customerId,
+          customerMark: customerResolution.customerMark,
+          customerName: customerResolution.customerName,
+          customerPhone: customerResolution.customerPhone,
+          customerCity: customerResolution.customerCity,
+          needsCustomerFix: customerResolution.needsCustomerFix,
         },
         select: { id: true, orderNo: true },
       });
@@ -252,19 +309,24 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
       include: { orders: true },
     });
 
-    const message = mergedOrdersInfo.length > 0
-      ? `账单已保存，部分订单已合并: ${mergedOrdersInfo.join(', ')}`
-      : '账单已保存';
+    const messageParts: string[] = [];
+    if (mergedOrdersInfo.length > 0) {
+      messageParts.push(`部分订单已合并: ${mergedOrdersInfo.join(', ')}`);
+    }
+    if (customerResolution.needsCustomerFix) {
+      messageParts.push('please modify guest information');
+    }
+    const message = messageParts.length > 0 ? `账单已保存，${messageParts.join('；')}` : '账单已保存';
 
     return NextResponse.json({ success: true, data: invoice, message });
   } catch (error) {
     console.error('Create invoice error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}, '只有管理员可以创建账单');
+}, '只有管理员和销售代表可以创建账单');
 
 // 删除账单
-export const DELETE = withRole(UserRole.ADMIN, async (request: NextRequest) => {
+export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -288,7 +350,7 @@ export const DELETE = withRole(UserRole.ADMIN, async (request: NextRequest) => {
     console.error('Delete invoice error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}, '只有管理员可以删除账单');
+}, '只有管理员和销售代表可以删除账单');
 
 // 重新匹配所有订单
 async function rematchAllOrders() {
@@ -390,7 +452,7 @@ async function rematchAllOrders() {
 }
 
 // 更新订单
-export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
+export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
   try {
     const body = await request.json();
     const { action, orderId, orderNo, amount, invoiceId } = body;
@@ -438,9 +500,17 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
 
     // 添加订单到账单
     if (action === 'addOrder') {
-      if (!invoiceId || !orderNo || amount === undefined) {
+      const customerMark = typeof body.customerMark === 'string' ? body.customerMark.trim() : '';
+      const customerName = typeof body.customerName === 'string' ? body.customerName.trim() : '';
+      const customerId = typeof body.customerId === 'string' ? body.customerId.trim() : '';
+      if (!invoiceId || !orderNo || amount === undefined || !customerMark) {
         return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
       }
+      const customerResolution = await resolveCustomer({
+        customerMark,
+        customerName: customerName || null,
+        customerId: customerId || null,
+      });
 
       // 先检查是否已存在相同订单号的订单
       const existingOrder = await db.order.findFirst({
@@ -459,7 +529,13 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
           where: { id: existingOrder.id },
           data: {
             amount: { increment: amount },
-            orderBalance: { increment: amount }
+            orderBalance: { increment: amount },
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
           }
         });
         console.log(`[AddOrder] Merged to existing order ${existingOrder.orderNo}, new amount: ${updated.amount}`);
@@ -472,7 +548,13 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
           orderNo,
           tokens: serializeOrderTokens(orderNo),
           amount,
-          orderBalance: amount
+          orderBalance: amount,
+          customerId: customerResolution.customerId,
+          customerMark: customerResolution.customerMark,
+          customerName: customerResolution.customerName,
+          customerPhone: customerResolution.customerPhone,
+          customerCity: customerResolution.customerCity,
+          needsCustomerFix: customerResolution.needsCustomerFix,
         }
       });
 
@@ -595,7 +677,8 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
             orderNo: toOrderNo,
             tokens: serializeOrderTokens(toOrderNo),
             amount: 0,  // Un_Associated 下的订单金额为0
-            orderBalance: 0
+            orderBalance: 0,
+            needsCustomerFix: true,
           }
         });
         console.log(`[Transfer] Created new order in Un_Associated: ${toOrderNo}`);
@@ -630,6 +713,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
           payer: `余额转移自 ${fromOrder.orderNo}`,
           status: 'Bank_Transfer',
           orderId: toOrder.id,
+          needsCustomerFix: true,
           note: `从订单 ${fromOrder.orderNo} 转移的余额`,
           createdBy: currentUser.id
         }
@@ -650,4 +734,4 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
     console.error('Update order error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
   }
-}, '只有管理员可以修改订单');
+}, '只有管理员和销售代表可以修改订单');

@@ -144,10 +144,12 @@ function Sidebar() {
     { id: 'receipts' as const, label: t('receipts'), icon: Receipt },
     { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
-    { id: 'deletions' as const, label: t('deletions'), icon: Trash2, adminOnly: true },
-    { id: 'users' as const, label: t('users'), icon: Users, adminOnly: true },
+    { id: 'deletions' as const, label: t('deletions'), icon: Trash2, managerOnly: true },
+    { id: 'users' as const, label: t('users'), icon: Users, managerOnly: true },
+    { id: 'customers' as const, label: '客户管理', icon: Users, managerOnly: true },
     { id: 'settings' as const, label: t('settings'), icon: Settings },
   ];
+  const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
 
   const switchLocale = async (nextLocale: 'zh' | 'en') => {
     if (nextLocale === locale) return;
@@ -171,8 +173,8 @@ function Sidebar() {
         <h1 className="text-xl font-bold">{tCommon('appName')}</h1>
         <p className="text-sm text-gray-500 mt-1">
           {user?.name || user?.email} 
-          <Badge variant={user?.role === 'ADMIN' ? 'default' : 'secondary'} className="ml-2">
-            {user?.role === 'ADMIN' ? tCommon('admin') : tCommon('user')}
+          <Badge variant={user?.role === 'ADMIN' ? 'default' : (user?.role === 'SALES' ? 'outline' : 'secondary')} className="ml-2">
+            {user?.role === 'ADMIN' ? tCommon('admin') : user?.role === 'SALES' ? 'SALES' : tCommon('user')}
           </Badge>
         </p>
       </div>
@@ -189,7 +191,7 @@ function Sidebar() {
       </div>
       <nav className="flex-1 p-2">
         {menuItems.map((item) => {
-          if (item.adminOnly && user?.role !== 'ADMIN') return null;
+          if (item.managerOnly && !isManager) return null;
           return (
             <Button
               key={item.id}
@@ -216,14 +218,15 @@ function Sidebar() {
 // 仪表盘
 function Dashboard() {
   const t = useTranslations('dashboard');
-  const { invoices, receipts, details, swifts, deletionRequests } = useStore();
+  const { invoices, receipts, details, deletionRequests } = useStore();
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
+  const normalInvoices = invoices.filter((i) => i.invNo !== 'Un_Associated' && i.invNo !== 'DEPOSIT_POOL');
+  const unpaidTotal = normalInvoices.reduce((sum, inv) => sum + Math.max(inv.invBalance, 0), 0);
   
   const stats = [
-    { label: t('invoiceCount'), value: invoices.length, color: 'text-blue-600' },
+    { label: `账单总数 (${normalInvoices.length})`, value: `$${unpaidTotal.toFixed(2)}`, color: 'text-blue-600' },
     { label: t('pendingReceipts'), value: receipts.filter(r => r.status === 'SR_Received').length, color: 'text-yellow-600' },
     { label: t('waitingSwift'), value: details.filter(d => d.status === 'Waiting_SWIFT').length, color: 'text-orange-600' },
-    { label: t('bankTransfer'), value: details.filter(d => d.status === 'Bank_Transfer').length, color: 'text-purple-600' },
     { label: t('pendingDeletion'), value: deletionRequests.filter(d => d.status === 'PENDING').length, color: 'text-red-600' },
   ];
 
@@ -343,6 +346,10 @@ function InvoiceManager() {
   const { invoices, setInvoices, loading, setLoading, user } = useStore();
   const [showDialog, setShowDialog] = useState(false);
   const [invNo, setInvNo] = useState('');
+  const [customerMark, setCustomerMark] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [customerCandidates, setCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
   const [orders, setOrders] = useState<{ orderNo: string; amount: string }[]>([{ orderNo: '', amount: '' }]);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -359,6 +366,10 @@ function InvoiceManager() {
   const [addingOrderToInvoice, setAddingOrderToInvoice] = useState<string | null>(null);
   const [newOrderNo, setNewOrderNo] = useState('');
   const [newOrderAmount, setNewOrderAmount] = useState('');
+  const [newOrderCustomerMark, setNewOrderCustomerMark] = useState('');
+  const [newOrderCustomerName, setNewOrderCustomerName] = useState('');
+  const [newOrderCustomerId, setNewOrderCustomerId] = useState('');
+  const [newOrderCustomerCandidates, setNewOrderCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
   const [addError, setAddError] = useState('');
   
   // 转移余额对话框
@@ -370,6 +381,9 @@ function InvoiceManager() {
   
   // 刷新匹配状态
   const [refreshing, setRefreshing] = useState(false);
+  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
+  const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
+  const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -383,6 +397,53 @@ function InvoiceManager() {
   useEffect(() => {
     loadInvoices();
   }, [loadInvoices]);
+
+  const loadCustomerCandidates = async (
+    mark: string,
+    setter: (rows: Array<{ id: string; mark: string; name: string }>) => void,
+    setDefaultName?: (value: string) => void,
+    setDefaultId?: (value: string) => void
+  ) => {
+    const normalized = mark.trim();
+    if (!normalized) {
+      setter([]);
+      if (setDefaultName) setDefaultName('');
+      if (setDefaultId) setDefaultId('');
+      return;
+    }
+    try {
+      const result = await apiCall(`customer?mark=${encodeURIComponent(normalized)}`);
+      if (!result.success || !Array.isArray(result.data)) {
+        setter([]);
+        return;
+      }
+      const rows = result.data.map((row: { id: string; mark: string; name: string }) => ({
+        id: row.id,
+        mark: row.mark,
+        name: row.name,
+      }));
+      setter(rows);
+      if (rows.length === 1) {
+        if (setDefaultName) setDefaultName(rows[0].name);
+        if (setDefaultId) setDefaultId(rows[0].id);
+      }
+    } catch {
+      setter([]);
+    }
+  };
+
+  const openOrderHistory = async (orderId: string, orderNo: string) => {
+    try {
+      const result = await apiCall(`invoice?orderId=${encodeURIComponent(orderId)}`);
+      if (result.success) {
+        setOrderHistoryRows(Array.isArray(result.data) ? result.data : []);
+        setOrderHistoryTitle(orderNo);
+        setOrderHistoryOpen(true);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '加载付款记录失败');
+    }
+  };
 
   // 刷新匹配
   const handleRematch = async () => {
@@ -424,6 +485,10 @@ function InvoiceManager() {
       setFormError('请输入账单号');
       return;
     }
+    if (!customerMark.trim()) {
+      setFormError('请输入客户MARK');
+      return;
+    }
     
     if (orders.some(o => !o.orderNo.trim() || !o.amount)) {
       setFormError('请填写所有订单的客户单号和金额');
@@ -437,6 +502,9 @@ function InvoiceManager() {
         method: 'POST',
         body: JSON.stringify({
           invNo,
+          customerMark,
+          customerName: customerName || null,
+          customerId: selectedCustomerId || null,
           orders: orders.map(o => ({ orderNo: o.orderNo, amount: parseFloat(o.amount) }))
         }),
       });
@@ -444,6 +512,10 @@ function InvoiceManager() {
       if (result.success) {
         setShowDialog(false);
         setInvNo('');
+        setCustomerMark('');
+        setCustomerName('');
+        setSelectedCustomerId('');
+        setCustomerCandidates([]);
         setOrders([{ orderNo: '', amount: '' }]);
         // 显示合并消息（如果有）
         if (result.message) {
@@ -539,6 +611,10 @@ function InvoiceManager() {
       setAddError('请输入有效金额');
       return;
     }
+    if (!newOrderCustomerMark.trim()) {
+      setAddError('请输入客户MARK');
+      return;
+    }
 
     setSubmitting(true);
     
@@ -549,7 +625,10 @@ function InvoiceManager() {
           action: 'addOrder',
           invoiceId: addingOrderToInvoice,
           orderNo: newOrderNo,
-          amount: parseFloat(newOrderAmount)
+          amount: parseFloat(newOrderAmount),
+          customerMark: newOrderCustomerMark,
+          customerName: newOrderCustomerName || null,
+          customerId: newOrderCustomerId || null,
         }),
       });
 
@@ -557,6 +636,10 @@ function InvoiceManager() {
         setAddingOrderToInvoice(null);
         setNewOrderNo('');
         setNewOrderAmount('');
+        setNewOrderCustomerMark('');
+        setNewOrderCustomerName('');
+        setNewOrderCustomerId('');
+        setNewOrderCustomerCandidates([]);
         loadInvoices();
       } else {
         setAddError(result.error || '添加失败');
@@ -630,14 +713,14 @@ function InvoiceManager() {
     }
   };
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">账单管理</h2>
         <div className="flex gap-2">
-          {isAdmin && (
+          {isManager && (
             <>
               <Button 
                 variant="outline" 
@@ -700,7 +783,7 @@ function InvoiceManager() {
               <CardContent className="border-t pt-4">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="font-medium">订单明细</h4>
-                  {isAdmin && (
+                  {isManager && (
                     <Button 
                       size="sm" 
                       variant="outline"
@@ -718,7 +801,7 @@ function InvoiceManager() {
                       <TableHead>客户单号 (ORDER)</TableHead>
                       <TableHead>金额 (AMOUNT)</TableHead>
                       <TableHead>未收金额</TableHead>
-                      {isAdmin && <TableHead className="text-right">操作</TableHead>}
+                      {isManager && <TableHead className="text-right">操作</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -726,7 +809,18 @@ function InvoiceManager() {
                       const isSystemOrder = (order as Order & { isSystemOrder?: boolean }).isSystemOrder;
                       return (
                         <TableRow key={order.id}>
-                          <TableCell className="font-medium">{order.orderNo}</TableCell>
+                          <TableCell className="font-medium">
+                            <button
+                              type="button"
+                              className={`underline ${order.needsCustomerFix ? 'text-red-600' : 'text-blue-600'}`}
+                              onClick={() => openOrderHistory(order.id, order.orderNo)}
+                            >
+                              {order.orderNo}
+                            </button>
+                            {order.needsCustomerFix && (
+                              <div className="text-xs text-red-500">please modify guest information</div>
+                            )}
+                          </TableCell>
                           <TableCell>
                             {isSystemOrder ? '-' : `$${order.amount.toFixed(2)}`}
                           </TableCell>
@@ -734,7 +828,7 @@ function InvoiceManager() {
                             ${Math.abs(order.orderBalance).toFixed(2)}
                             {order.orderBalance < 0 && <span className="ml-1 text-xs">(多付)</span>}
                           </TableCell>
-                          {isAdmin && (
+                          {isManager && (
                             <TableCell className="text-right">
                               {order.orderBalance < 0 && (
                                 <Button 
@@ -784,7 +878,7 @@ function InvoiceManager() {
                     })}
                     {invoice.orders.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={isAdmin ? 4 : 3} className="text-center py-4 text-gray-500">
+                        <TableCell colSpan={isManager ? 4 : 3} className="text-center py-4 text-gray-500">
                           暂无订单
                         </TableCell>
                       </TableRow>
@@ -815,6 +909,40 @@ function InvoiceManager() {
                         onChange={(e) => setNewOrderAmount(e.target.value)}
                         className="w-32"
                       />
+                      <Input
+                        placeholder="客户MARK(必填)"
+                        value={newOrderCustomerMark}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewOrderCustomerMark(value);
+                          setNewOrderCustomerId('');
+                          setNewOrderCustomerName('');
+                          loadCustomerCandidates(
+                            value,
+                            setNewOrderCustomerCandidates,
+                            setNewOrderCustomerName,
+                            setNewOrderCustomerId
+                          );
+                        }}
+                        className="w-44"
+                      />
+                      {newOrderCustomerCandidates.length > 1 && (
+                        <select
+                          className="border rounded-md px-2 py-2 text-sm"
+                          value={newOrderCustomerId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setNewOrderCustomerId(id);
+                            const selected = newOrderCustomerCandidates.find((c) => c.id === id);
+                            setNewOrderCustomerName(selected?.name || '');
+                          }}
+                        >
+                          <option value="">选择客户</option>
+                          {newOrderCustomerCandidates.map((candidate) => (
+                            <option key={candidate.id} value={candidate.id}>{candidate.mark}/{candidate.name}</option>
+                          ))}
+                        </select>
+                      )}
                       <Button onClick={handleAddOrder} disabled={submitting}>
                         {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
                         添加
@@ -825,6 +953,10 @@ function InvoiceManager() {
                           setAddingOrderToInvoice(null);
                           setNewOrderNo('');
                           setNewOrderAmount('');
+                          setNewOrderCustomerMark('');
+                          setNewOrderCustomerName('');
+                          setNewOrderCustomerId('');
+                          setNewOrderCustomerCandidates([]);
                           setAddError('');
                         }}
                       >
@@ -863,6 +995,38 @@ function InvoiceManager() {
             <div className="space-y-2">
               <Label>账单号 (INV NO)</Label>
               <Input value={invNo} onChange={(e) => setInvNo(e.target.value)} placeholder="如: L25MH090125" />
+            </div>
+            <div className="space-y-2">
+              <Label>客户MARK（必填）</Label>
+              <Input
+                value={customerMark}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setCustomerMark(value);
+                  setSelectedCustomerId('');
+                  setCustomerName('');
+                  loadCustomerCandidates(value, setCustomerCandidates, setCustomerName, setSelectedCustomerId);
+                }}
+                placeholder="输入客户MARK"
+              />
+              {customerCandidates.length > 1 && (
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  value={selectedCustomerId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedCustomerId(id);
+                    const selected = customerCandidates.find((c) => c.id === id);
+                    setCustomerName(selected?.name || '');
+                  }}
+                >
+                  <option value="">请选择准确客户(MARK+NAME)</option>
+                  {customerCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                  ))}
+                </select>
+              )}
+              {customerName && <p className="text-xs text-gray-500">匹配客户：{customerName}</p>}
             </div>
             <div className="space-y-2">
               <Label>订单列表</Label>
@@ -991,6 +1155,44 @@ function InvoiceManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={orderHistoryOpen} onOpenChange={setOrderHistoryOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>ORDER 付款记录</DialogTitle>
+            <DialogDescription>{orderHistoryTitle}</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>收据号</TableHead>
+                  <TableHead>金额</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>日期</TableHead>
+                  <TableHead>创建时间</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orderHistoryRows.map((row) => (
+                  <TableRow key={String(row.id)}>
+                    <TableCell>{(row.receiptNo as string) || '-'}</TableCell>
+                    <TableCell>${Number(row.usd || 0).toFixed(2)}</TableCell>
+                    <TableCell><Badge>{String(row.status || '-')}</Badge></TableCell>
+                    <TableCell>{row.date ? new Date(String(row.date)).toLocaleDateString() : '-'}</TableCell>
+                    <TableCell>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {orderHistoryRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-gray-500">暂无付款记录</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1003,6 +1205,10 @@ function ReceiptManager() {
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ocrResult, setOcrResult] = useState<Record<string, unknown> | null>(null);
+  const [ocrCustomerMark, setOcrCustomerMark] = useState('');
+  const [ocrCustomerName, setOcrCustomerName] = useState('');
+  const [ocrCustomerId, setOcrCustomerId] = useState('');
+  const [ocrCustomerCandidates, setOcrCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1014,8 +1220,12 @@ function ReceiptManager() {
     invNo: '',
     orderNo: '',
     payer: '',
+    customerMark: '',
+    customerName: '',
+    customerId: '',
     isDeposit: false,
   });
+  const [directCustomerCandidates, setDirectCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
   
   // 图片查看对话框
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
@@ -1057,6 +1267,40 @@ function ReceiptManager() {
     setCurrentPage(1);
   }, [search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
 
+  const loadCustomerCandidates = async (
+    mark: string,
+    setter: (rows: Array<{ id: string; mark: string; name: string }>) => void,
+    setDefaultName?: (value: string) => void,
+    setDefaultId?: (value: string) => void
+  ) => {
+    const normalized = mark.trim();
+    if (!normalized) {
+      setter([]);
+      if (setDefaultName) setDefaultName('');
+      if (setDefaultId) setDefaultId('');
+      return;
+    }
+    try {
+      const result = await apiCall(`customer?mark=${encodeURIComponent(normalized)}`);
+      if (!result.success || !Array.isArray(result.data)) {
+        setter([]);
+        return;
+      }
+      const rows = result.data.map((row: { id: string; mark: string; name: string }) => ({
+        id: row.id,
+        mark: row.mark,
+        name: row.name,
+      }));
+      setter(rows);
+      if (rows.length === 1) {
+        if (setDefaultName) setDefaultName(rows[0].name);
+        if (setDefaultId) setDefaultId(rows[0].id);
+      }
+    } catch {
+      setter([]);
+    }
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1084,6 +1328,10 @@ function ReceiptManager() {
 
       if (result.success) {
         setOcrResult(result.data.ocrResult);
+        setOcrCustomerMark('');
+        setOcrCustomerName('');
+        setOcrCustomerId('');
+        setOcrCustomerCandidates([]);
       } else {
         setError(result.error || 'AI识别失败，请重试');
       }
@@ -1096,12 +1344,22 @@ function ReceiptManager() {
 
   const handleConfirm = async () => {
     if (!selectedFile || !ocrResult) return;
+    if (!ocrCustomerMark.trim()) {
+      setError('客户MARK不能为空');
+      return;
+    }
 
     setError(null);
     setSubmitting(true);
     const formData = new FormData();
+    const payload = {
+      ...ocrResult,
+      customerMark: ocrCustomerMark.trim(),
+      customerName: ocrCustomerName || null,
+      customerId: ocrCustomerId || null,
+    };
     formData.append('action', 'confirm');
-    formData.append('data', JSON.stringify(ocrResult));
+    formData.append('data', JSON.stringify(payload));
     formData.append('imagePath', imagePreview || '');
     formData.append('imageName', selectedFile.name);
 
@@ -1115,6 +1373,10 @@ function ReceiptManager() {
       if (result.success) {
         setShowUpload(false);
         setOcrResult(null);
+        setOcrCustomerMark('');
+        setOcrCustomerName('');
+        setOcrCustomerId('');
+        setOcrCustomerCandidates([]);
         setImagePreview(null);
         setSelectedFile(null);
         loadReceipts();
@@ -1155,6 +1417,10 @@ function ReceiptManager() {
 
   const handleDirectCreate = async () => {
     setError(null);
+    if (!directForm.customerMark.trim()) {
+      setError('客户MARK不能为空');
+      return;
+    }
     try {
       const result = await apiCall('receipt', {
         method: 'POST',
@@ -1167,6 +1433,9 @@ function ReceiptManager() {
           invNo: directForm.invNo || null,
           orderNo: directForm.orderNo || null,
           payer: directForm.payer || null,
+          customerMark: directForm.customerMark || null,
+          customerName: directForm.customerName || null,
+          customerId: directForm.customerId || null,
           isDeposit: directForm.isDeposit,
         }),
       });
@@ -1180,8 +1449,12 @@ function ReceiptManager() {
           invNo: '',
           orderNo: '',
           payer: '',
+          customerMark: '',
+          customerName: '',
+          customerId: '',
           isDeposit: false,
         });
+        setDirectCustomerCandidates([]);
         loadReceipts();
       } else {
         setError(result.error || '创建失败，请重试');
@@ -1221,7 +1494,7 @@ function ReceiptManager() {
     }
   };
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
 
   return (
     <div className="space-y-6">
@@ -1287,9 +1560,12 @@ function ReceiptManager() {
             </TableHeader>
             <TableBody>
               {paginatedReceipts.map((receipt) => (
-                <TableRow key={receipt.id}>
+                <TableRow key={receipt.id} className={receipt.needsCustomerFix ? 'bg-red-50' : ''}>
                   <TableCell>{receipt.receiptNo || '-'}</TableCell>
-                  <TableCell>{receipt.orderNo || '-'}</TableCell>
+                  <TableCell>
+                    {receipt.orderNo || '-'}
+                    {receipt.needsCustomerFix && <div className="text-xs text-red-500">please modify guest information</div>}
+                  </TableCell>
                   <TableCell className="font-medium">${receipt.usd.toFixed(2)}</TableCell>
                   <TableCell>{receipt.payer || '-'}</TableCell>
                   <TableCell>{getStatusBadge(receipt.status)}</TableCell>
@@ -1306,7 +1582,7 @@ function ReceiptManager() {
                           <Eye className="h-4 w-4" />
                         </Button>
                       )}
-                      {receipt.status === 'Bank_Transfer' && isAdmin && (
+                      {receipt.status === 'Bank_Transfer' && isManager && (
                         <Button 
                           size="sm" 
                           variant="ghost" 
@@ -1369,7 +1645,7 @@ function ReceiptManager() {
       </Card>
 
       {/* 上传对话框 */}
-      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); } }}>
+      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setOcrCustomerMark(''); setOcrCustomerName(''); setOcrCustomerId(''); setOcrCustomerCandidates([]); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>上传收据</DialogTitle>
@@ -1446,6 +1722,39 @@ function ReceiptManager() {
                     />
                   </div>
                   <div className="col-span-2">
+                    <Label className="text-sm text-gray-500">客户MARK（必填）</Label>
+                    <Input
+                      value={ocrCustomerMark}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setOcrCustomerMark(value);
+                        setOcrCustomerName('');
+                        setOcrCustomerId('');
+                        loadCustomerCandidates(value, setOcrCustomerCandidates, setOcrCustomerName, setOcrCustomerId);
+                      }}
+                    />
+                  </div>
+                  {ocrCustomerCandidates.length > 1 && (
+                    <div className="col-span-2">
+                      <Label className="text-sm text-gray-500">选择准确客户(MARK+NAME)</Label>
+                      <select
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        value={ocrCustomerId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setOcrCustomerId(id);
+                          const selected = ocrCustomerCandidates.find((c) => c.id === id);
+                          setOcrCustomerName(selected?.name || '');
+                        }}
+                      >
+                        <option value="">请选择</option>
+                        {ocrCustomerCandidates.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="col-span-2">
                     <Label className="flex items-center gap-2">
                       <input 
                         type="checkbox" 
@@ -1481,7 +1790,7 @@ function ReceiptManager() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showDirectCreate} onOpenChange={(open) => { setShowDirectCreate(open); if (!open) setError(null); }}>
+      <Dialog open={showDirectCreate} onOpenChange={(open) => { setShowDirectCreate(open); if (!open) { setError(null); setDirectCustomerCandidates([]); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>直接创建收据</DialogTitle>
@@ -1495,6 +1804,36 @@ function ReceiptManager() {
             <Input placeholder="账单号(invNo)" value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
             <Input placeholder="客户单号(orderNo)" value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
             <Input placeholder="付款人" value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
+            <Input
+              placeholder="客户MARK(必填)"
+              value={directForm.customerMark}
+              onChange={(e) => {
+                const value = e.target.value;
+                setDirectForm((p) => ({ ...p, customerMark: value, customerName: '', customerId: '' }));
+                loadCustomerCandidates(
+                  value,
+                  (rows) => setDirectCustomerCandidates(rows),
+                  (name) => setDirectForm((p) => ({ ...p, customerName: name })),
+                  (id) => setDirectForm((p) => ({ ...p, customerId: id }))
+                );
+              }}
+            />
+            {directCustomerCandidates.length > 1 && (
+              <select
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                value={directForm.customerId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const selected = directCustomerCandidates.find((c) => c.id === id);
+                  setDirectForm((p) => ({ ...p, customerId: id, customerName: selected?.name || '' }));
+                }}
+              >
+                <option value="">请选择准确客户(MARK+NAME)</option>
+                {directCustomerCandidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                ))}
+              </select>
+            )}
             <Label className="flex items-center gap-2">
               <input type="checkbox" checked={directForm.isDeposit} onChange={(e) => setDirectForm((p) => ({ ...p, isDeposit: e.target.checked }))} />
               定金
@@ -2071,6 +2410,14 @@ function SwiftManager() {
   }, [loadSwifts]);
 
   const waitingDetails = details.filter(d => d.status === 'Waiting_SWIFT');
+  const getSwiftStatus = (swift: { status?: string; detailId: string }) => {
+    if (swift.status) return swift.status;
+    const detail = details.find((d) => d.id === swift.detailId);
+    if (!detail) return 'Bank_Transfer';
+    if (detail.status === 'RECEIVED') return 'RECEIVED';
+    if (detail.status === 'ERROR') return 'ERROR';
+    return 'Bank_Transfer';
+  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2263,6 +2610,9 @@ function SwiftManager() {
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Badge variant={getSwiftStatus(swift) === 'RECEIVED' ? 'default' : (getSwiftStatus(swift) === 'ERROR' ? 'destructive' : 'outline')}>
+                    {getSwiftStatus(swift)}
+                  </Badge>
                   {swift.hasError && (
                     <AlertTriangle className="h-5 w-5 text-red-500" />
                   )}
@@ -2449,7 +2799,8 @@ function SwiftManager() {
 
 // 删除审批
 function DeletionManager() {
-  const { deletionRequests, setDeletionRequests } = useStore();
+  const { deletionRequests, setDeletionRequests, user } = useStore();
+  const canApprove = user?.role === 'ADMIN';
 
   const loadRequests = useCallback(async () => {
     const result = await apiCall('deletion');
@@ -2513,7 +2864,7 @@ function DeletionManager() {
                   <TableCell>{getStatusBadge(request.status)}</TableCell>
                   <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    {request.status === 'PENDING' && (
+                    {request.status === 'PENDING' && canApprove && (
                       <div className="flex gap-2">
                         <Button size="sm" variant="default" onClick={() => handleApprove(request.id)}>
                           <Check className="h-4 w-4" />
@@ -2543,9 +2894,9 @@ function DeletionManager() {
 
 // 用户管理
 function UserManager() {
-  const { users, setUsers } = useStore();
+  const { users, setUsers, user } = useStore();
   const [showCreate, setShowCreate] = useState(false);
-  const [newUser, setNewUser] = useState({ email: '', password: '', name: '' });
+  const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'USER' as 'USER' | 'ADMIN' | 'SALES' });
 
   const loadUsers = useCallback(async () => {
     const result = await apiCall('auth', {
@@ -2564,12 +2915,26 @@ function UserManager() {
   const handleCreate = async () => {
     const result = await apiCall('auth', {
       method: 'POST',
-      body: JSON.stringify({ action: 'create', ...newUser }),
+      body: JSON.stringify({ action: 'create', ...newUser, role: user?.role === 'SALES' ? 'USER' : newUser.role }),
     });
     if (result.success) {
       setShowCreate(false);
-      setNewUser({ email: '', password: '', name: '' });
+      setNewUser({ email: '', password: '', name: '', role: 'USER' });
       loadUsers();
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    const password = window.prompt('请输入新密码（至少8位）');
+    if (!password) return;
+    const result = await apiCall('auth', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'reset-password', userId, password }),
+    });
+    if (!result.success) {
+      alert(result.error || '重置失败');
+    } else {
+      alert('密码已重置');
     }
   };
 
@@ -2611,12 +2976,15 @@ function UserManager() {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.name || '-'}</TableCell>
                   <TableCell>
-                    <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'}>
-                      {user.role === 'ADMIN' ? '管理员' : '用户'}
+                    <Badge variant={user.role === 'ADMIN' ? 'default' : (user.role === 'SALES' ? 'outline' : 'secondary')}>
+                      {user.role === 'ADMIN' ? '管理员' : user.role === 'SALES' ? '销售代表' : '用户'}
                     </Badge>
                   </TableCell>
                   <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>
+                    <Button size="sm" variant="ghost" onClick={() => handleResetPassword(user.id)} title="重置密码">
+                      <Key className="h-4 w-4" />
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => handleDelete(user.id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -2656,10 +3024,327 @@ function UserManager() {
                 onChange={(e) => setNewUser({...newUser, password: e.target.value})}
               />
             </div>
+            {user?.role === 'ADMIN' && (
+              <div>
+                <Label>角色</Label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'USER' | 'ADMIN' | 'SALES' })}
+                >
+                  <option value="USER">USER</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="SALES">SALES</option>
+                </select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
             <Button onClick={handleCreate}>创建</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function CustomerManager() {
+  const { user } = useStore();
+  const isAdmin = user?.role === 'ADMIN';
+  const [customers, setCustomers] = useState<Array<Record<string, unknown>>>([]);
+  const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
+  const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
+  const [search, setSearch] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
+  const [fixingTarget, setFixingTarget] = useState<{ type: 'order' | 'receipt'; id: string } | null>(null);
+  const [form, setForm] = useState({
+    mark: '',
+    name: '',
+    phone: '',
+    city: '',
+    consignee: '',
+    companyName: '',
+    credit: '',
+    companyAddress: '',
+  });
+
+  const resetForm = () => {
+    setForm({
+      mark: '',
+      name: '',
+      phone: '',
+      city: '',
+      consignee: '',
+      companyName: '',
+      credit: '',
+      companyAddress: '',
+    });
+  };
+
+  const loadCustomers = useCallback(async () => {
+    const result = await apiCall(`customer${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''}`);
+    if (result.success) setCustomers(Array.isArray(result.data) ? result.data : []);
+  }, [search]);
+
+  const loadFixes = useCallback(async () => {
+    const result = await apiCall('customer/fixes');
+    if (result.success && result.data) {
+      setFixOrders(Array.isArray(result.data.orders) ? result.data.orders : []);
+      setFixReceipts(Array.isArray(result.data.receipts) ? result.data.receipts : []);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCustomers();
+    loadFixes();
+  }, [loadCustomers, loadFixes]);
+
+  const handleCreateOrUpdate = async () => {
+    const payload = {
+      ...(editing ? { action: 'update', id: editing.id } : { action: 'create' }),
+      mark: form.mark,
+      name: form.name,
+      phone: form.phone,
+      city: form.city,
+      consignee: form.consignee,
+      companyName: form.companyName || null,
+      companyAddress: form.companyAddress || null,
+      credit: form.credit ? Number(form.credit) : null,
+    };
+    const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
+    if (!result.success) {
+      alert(result.error || '保存失败');
+      return;
+    }
+    setShowCreate(false);
+    setEditing(null);
+    resetForm();
+    loadCustomers();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!isAdmin) return;
+    if (!confirm('确定删除该客户吗？')) return;
+    const result = await apiCall('customer', { method: 'POST', body: JSON.stringify({ action: 'delete', id }) });
+    if (!result.success) {
+      alert(result.error || '删除失败');
+      return;
+    }
+    loadCustomers();
+  };
+
+  const openEdit = (row: Record<string, unknown>) => {
+    setEditing(row);
+    setForm({
+      mark: String(row.mark || ''),
+      name: String(row.name || ''),
+      phone: String(row.phone || ''),
+      city: String(row.city || ''),
+      consignee: String(row.consignee || ''),
+      companyName: String(row.companyName || ''),
+      credit: row.credit === null || row.credit === undefined ? '' : String(row.credit),
+      companyAddress: String(row.companyAddress || ''),
+    });
+    setShowCreate(true);
+  };
+
+  const openFix = (type: 'order' | 'receipt', row: Record<string, unknown>) => {
+    setFixingTarget({ type, id: String(row.id) });
+    setForm({
+      mark: String(row.customerMark || ''),
+      name: String(row.customerName || ''),
+      phone: String(row.customerPhone || ''),
+      city: String(row.customerCity || ''),
+      consignee: '',
+      companyName: '',
+      credit: '',
+      companyAddress: '',
+    });
+  };
+
+  const submitFix = async () => {
+    if (!fixingTarget) return;
+    const payload = {
+      action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
+      ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
+      mark: form.mark,
+      name: form.name,
+      phone: form.phone,
+      city: form.city,
+      consignee: form.consignee,
+      companyName: form.companyName || null,
+      companyAddress: form.companyAddress || null,
+      credit: form.credit ? Number(form.credit) : null,
+    };
+    const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
+    if (!result.success) {
+      alert(result.error || '修复失败');
+      return;
+    }
+    setFixingTarget(null);
+    resetForm();
+    loadCustomers();
+    loadFixes();
+  };
+
+  const canSeeExtended = isAdmin || customers.some((row) => row.companyName !== null || row.companyAddress !== null || row.credit !== null);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">客户管理</h2>
+        <div className="flex gap-2">
+          <Input placeholder="搜索 mark/name/phone/city" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
+          <Button onClick={() => { setEditing(null); resetForm(); setShowCreate(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            新建客户
+          </Button>
+        </div>
+      </div>
+
+      <Tabs defaultValue="customers">
+        <TabsList>
+          <TabsTrigger value="customers">客户列表</TabsTrigger>
+          <TabsTrigger value="fixes">待修复客户信息</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="customers">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>MARK</TableHead>
+                    <TableHead>NAME</TableHead>
+                    <TableHead>PHONE</TableHead>
+                    <TableHead>CITY</TableHead>
+                    <TableHead>CONSIGNEE</TableHead>
+                    {canSeeExtended && <TableHead>COMPANY_NAME</TableHead>}
+                    {canSeeExtended && <TableHead>CREDIT</TableHead>}
+                    {canSeeExtended && <TableHead>COMPANY_ADDRESS</TableHead>}
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {customers.map((row) => (
+                    <TableRow key={String(row.id)}>
+                      <TableCell>{String(row.mark || '-')}</TableCell>
+                      <TableCell>{String(row.name || '-')}</TableCell>
+                      <TableCell>{String(row.phone || '-')}</TableCell>
+                      <TableCell>{String(row.city || '-')}</TableCell>
+                      <TableCell>{String(row.consignee || '-')}</TableCell>
+                      {canSeeExtended && <TableCell>{String(row.companyName || '-')}</TableCell>}
+                      {canSeeExtended && <TableCell>{row.credit !== null && row.credit !== undefined ? String(row.credit) : '-'}</TableCell>}
+                      {canSeeExtended && <TableCell>{String(row.companyAddress || '-')}</TableCell>}
+                      <TableCell>
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {isAdmin && (
+                          <Button size="sm" variant="ghost" onClick={() => handleDelete(String(row.id))}>
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fixes">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>待修复 ORDER</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {fixOrders.map((row) => (
+                  <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
+                    <div>
+                      <div className="font-medium">{String(row.orderNo || '-')}</div>
+                      <div className="text-xs text-red-500">please modify guest information</div>
+                    </div>
+                    <Button size="sm" onClick={() => openFix('order', row)}>修复</Button>
+                  </div>
+                ))}
+                {fixOrders.length === 0 && <p className="text-sm text-gray-500">暂无</p>}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>待修复 RECEIPT</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {fixReceipts.map((row) => (
+                  <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
+                    <div>
+                      <div className="font-medium">{String(row.receiptNo || row.orderNo || '-')}</div>
+                      <div className="text-xs text-red-500">please modify guest information</div>
+                    </div>
+                    <Button size="sm" onClick={() => openFix('receipt', row)}>修复</Button>
+                  </div>
+                ))}
+                {fixReceipts.length === 0 && <p className="text-sm text-gray-500">暂无</p>}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? '编辑客户' : '创建客户'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
+            <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+            <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+            <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
+            <Input placeholder="CONSIGNEE*" value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
+            {isAdmin && (
+              <>
+                <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
+                <Input placeholder="CREDIT" type="number" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
+                <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => setForm((p) => ({ ...p, companyAddress: e.target.value }))} />
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
+            <Button onClick={handleCreateOrUpdate}>保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!fixingTarget} onOpenChange={(open) => { if (!open) setFixingTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>修复客户信息并加入客户库</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
+            <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+            <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+            <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
+            <Input placeholder="CONSIGNEE*" value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
+            {isAdmin && (
+              <>
+                <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
+                <Input placeholder="CREDIT" type="number" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
+                <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => setForm((p) => ({ ...p, companyAddress: e.target.value }))} />
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFixingTarget(null)}>取消</Button>
+            <Button onClick={submitFix}>修复并保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2858,6 +3543,18 @@ function SettingsManager() {
                   <Label>OCR_OUTPUT_COST_PER_1K</Label>
                   <Input value={config.OCR_OUTPUT_COST_PER_1K || ''} onChange={(e) => updateConfigField('OCR_OUTPUT_COST_PER_1K', e.target.value)} disabled={!canEditConfig} />
                 </div>
+                <div>
+                  <Label>SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS</Label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={config.SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS || 'false'}
+                    onChange={(e) => updateConfigField('SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS', e.target.value)}
+                    disabled={!canEditConfig}
+                  >
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                  </select>
+                </div>
               </div>
               <div className="flex justify-end">
                 <Button onClick={handleSaveConfig} disabled={!canEditConfig || savingConfig}>
@@ -2930,6 +3627,8 @@ export default function HomePage() {
         return <DeletionManager />;
       case 'users':
         return <UserManager />;
+      case 'customers':
+        return <CustomerManager />;
       case 'settings':
         return <SettingsManager />;
       default:

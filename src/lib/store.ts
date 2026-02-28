@@ -1,15 +1,18 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-export type UserRole = 'ADMIN' | 'USER';
+export type UserRole = 'ADMIN' | 'SALES' | 'USER';
 export type ReceiptStatus = 'SR_Received' | 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED';
 export type DetailStatus = 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
+export type SwiftStatus = 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
 
 export interface User {
   id: string;
   email: string;
   name: string | null;
   role: UserRole;
+  createdAt?: string;
+  createdById?: string | null;
 }
 
 export interface Order {
@@ -17,6 +20,11 @@ export interface Order {
   orderNo: string;
   amount: number;
   orderBalance: number;
+  customerMark?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerCity?: string | null;
+  needsCustomerFix?: boolean;
 }
 
 export interface Invoice {
@@ -37,6 +45,11 @@ export interface Receipt {
   invNo: string | null;
   orderNo: string | null;
   payer: string | null;
+  customerMark?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerCity?: string | null;
+  needsCustomerFix?: boolean;
   status: ReceiptStatus;
   imageUrl: string | null;
   isDeposit: boolean;
@@ -78,6 +91,7 @@ export interface Swift {
   receiverName: string | null;
   receiverAccount: string | null;
   imageUrl: string | null;
+  status?: SwiftStatus;
   hasError: boolean;
   errorMessage: string | null;
   createdAt: string;
@@ -102,7 +116,7 @@ interface AppState {
   setUser: (user: User | null) => void;
   
   // 当前视图
-  currentView: 'dashboard' | 'invoices' | 'receipts' | 'details' | 'swifts' | 'deletions' | 'users' | 'settings';
+  currentView: 'dashboard' | 'invoices' | 'receipts' | 'details' | 'swifts' | 'deletions' | 'users' | 'customers' | 'settings';
   setCurrentView: (view: AppState['currentView']) => void;
   
   // 数据

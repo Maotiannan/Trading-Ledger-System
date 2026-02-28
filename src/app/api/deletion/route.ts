@@ -9,8 +9,8 @@ import { recordAuditEvent } from '@/lib/audit';
 // 获取删除申请列表
 export const GET = withAuth(async (_request: NextRequest, currentUser) => {
   try {
-    // 只有管理员可以查看所有删除申请
-    if (currentUser.role !== UserRole.ADMIN) {
+    // 管理员和销售可查看全部，普通用户仅看自己的申请
+    if (currentUser.role === UserRole.USER) {
       // 普通用户只能看自己的申请
       const requests = await db.deletionRequest.findMany({
         where: { requestedBy: currentUser.id },

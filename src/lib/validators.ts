@@ -33,6 +33,11 @@ export const receiptPayloadSchema = z.object({
   invNo: nullableTrimmedString,
   orderNo: nullableTrimmedString,
   payer: nullableTrimmedString,
+  customerMark: nullableTrimmedString.optional(),
+  customerName: nullableTrimmedString.optional(),
+  customerPhone: nullableTrimmedString.optional(),
+  customerCity: nullableTrimmedString.optional(),
+  customerId: nullableTrimmedString.optional(),
   isDeposit: booleanLike,
 });
 

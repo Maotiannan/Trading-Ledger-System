@@ -43,15 +43,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, data: user });
     }
 
-    // 创建用户 (管理员)
+    // 创建用户 (管理员/销售)
     if (action === 'create') {
       const currentUser = await getCurrentUser(request);
-      if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+      if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
         return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
       }
 
       if (!email || !password) {
         return NextResponse.json({ success: false, error: '邮箱和密码不能为空' }, { status: 400 });
+      }
+
+      const requestedRole = typeof body.role === 'string' ? body.role : UserRole.USER;
+      const targetRole = currentUser.role === UserRole.SALES
+        ? UserRole.USER
+        : ([UserRole.USER, UserRole.ADMIN, UserRole.SALES].includes(requestedRole as UserRole)
+          ? (requestedRole as UserRole)
+          : UserRole.USER);
+
+      if (currentUser.role === UserRole.SALES && targetRole !== UserRole.USER) {
+        return NextResponse.json({ success: false, error: '销售代表只能创建普通账户' }, { status: 403 });
       }
 
       const existing = await db.user.findUnique({ where: { email } });
@@ -65,33 +76,35 @@ export async function POST(request: NextRequest) {
           email,
           password: hashedPassword,
           name: name || null,
-          role: UserRole.USER
+          role: targetRole,
+          createdById: currentUser.id,
         },
-        select: { id: true, email: true, name: true, role: true, createdAt: true }
+        select: { id: true, email: true, name: true, role: true, createdAt: true, createdById: true }
       });
 
       return NextResponse.json({ success: true, data: newUser });
     }
 
-    // 获取用户列表 (管理员)
+    // 获取用户列表 (管理员/销售)
     if (action === 'list') {
       const currentUser = await getCurrentUser(request);
-      if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+      if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
         return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
       }
 
       const users = await db.user.findMany({
-        select: { id: true, email: true, name: true, role: true, createdAt: true },
+        where: currentUser.role === UserRole.ADMIN ? undefined : { createdById: currentUser.id },
+        select: { id: true, email: true, name: true, role: true, createdAt: true, createdById: true },
         orderBy: { createdAt: 'desc' }
       });
 
       return NextResponse.json({ success: true, data: users });
     }
 
-    // 删除用户 (管理员)
+    // 删除用户 (管理员/销售)
     if (action === 'delete') {
       const currentUser = await getCurrentUser(request);
-      if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+      if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
         return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
       }
 
@@ -103,19 +116,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '不能删除自己' }, { status: 400 });
       }
 
+      if (currentUser.role === UserRole.SALES) {
+        const target = await db.user.findUnique({
+          where: { id: userId },
+          select: { createdById: true, role: true },
+        });
+        if (!target || target.createdById !== currentUser.id || target.role !== UserRole.USER) {
+          return NextResponse.json({ success: false, error: '销售代表只能删除自己创建的普通用户' }, { status: 403 });
+        }
+      }
+
       await db.user.delete({ where: { id: userId } });
       return NextResponse.json({ success: true, message: '用户已删除' });
     }
 
-    // 重置密码 (管理员)
+    // 重置密码 (管理员/销售)
     if (action === 'reset-password') {
       const currentUser = await getCurrentUser(request);
-      if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+      if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
         return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
       }
 
       if (!userId || !password) {
         return NextResponse.json({ success: false, error: '用户ID和新密码不能为空' }, { status: 400 });
+      }
+
+      if (currentUser.role === UserRole.SALES) {
+        const target = await db.user.findUnique({
+          where: { id: userId },
+          select: { createdById: true, role: true },
+        });
+        if (!target || target.createdById !== currentUser.id || target.role !== UserRole.USER) {
+          return NextResponse.json({ success: false, error: '销售代表只能重置自己创建的普通用户密码' }, { status: 403 });
+        }
       }
 
       const hashedPassword = await hashPassword(password);

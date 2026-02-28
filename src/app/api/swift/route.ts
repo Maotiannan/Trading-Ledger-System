@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { ReceiptStatus, DetailStatus } from '@prisma/client';
+import { ReceiptStatus, DetailStatus, SwiftStatus } from '@prisma/client';
 import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
@@ -167,6 +167,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           receiverAccount,
           imageUrl: imagePath || null,
           imageName: imageName || null,
+          status: validation.valid ? SwiftStatus.Bank_Transfer : SwiftStatus.ERROR,
           hasError: validation.hasWarning || !validation.valid,
           errorMessage: validation.valid ? null : validation.message,
           createdBy: currentUser.id
@@ -182,6 +183,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         await db.detail.update({
           where: { id: detailId },
           data: { status: DetailStatus.Bank_Transfer }
+        });
+        await db.swift.update({
+          where: { id: swift.id },
+          data: { status: SwiftStatus.Bank_Transfer },
         });
 
         // 更新关联的所有RECEIPT状态为Bank_Transfer
@@ -200,6 +205,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         await db.detail.update({
           where: { id: detailId },
           data: { status: DetailStatus.ERROR }
+        });
+        await db.swift.update({
+          where: { id: swift.id },
+          data: { status: SwiftStatus.ERROR },
         });
         console.log(`Detail ${detailId} marked as ERROR due to amount mismatch`);
       }

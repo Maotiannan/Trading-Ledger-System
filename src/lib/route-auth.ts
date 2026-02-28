@@ -14,9 +14,10 @@ export function withAuth(handler: AuthedHandler) {
   };
 }
 
-export function withRole(role: UserRole, handler: AuthedHandler, message = '无权限') {
+export function withRole(role: UserRole | UserRole[], handler: AuthedHandler, message = '无权限') {
   return withAuth(async (request, currentUser) => {
-    if (currentUser.role !== role) {
+    const allowed = Array.isArray(role) ? role : [role];
+    if (!allowed.includes(currentUser.role)) {
       return NextResponse.json({ success: false, error: message }, { status: 403 });
     }
     return handler(request, currentUser);

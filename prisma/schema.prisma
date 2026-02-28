@@ -13,7 +13,14 @@ datasource db {
 // 用户角色枚举
 enum UserRole {
   ADMIN
+  SALES
   USER
+}
+
+enum SwiftStatus {
+  Bank_Transfer
+  RECEIVED
+  ERROR
 }
 
 // 收据状态枚举
@@ -53,20 +60,26 @@ model User {
   password     String
   name         String?
   role         UserRole @default(USER)
+  createdById  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // 关联
+  createdBy         User?            @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers      User[]           @relation("UserCreatedBy")
   invoices          Invoice[]
   receipts          Receipt[]
   receiptHistories  ReceiptHistory[]
   details           Detail[]
   detailHistories   DetailHistory[]
   swifts            Swift[]
+  customers         Customer[]
   deletionRequests  DeletionRequest[]
   deletionApprovals DeletionRequest[] @relation("ApprovedBy")
   auditLogs         AuditLog[]
   systemSettings    SystemSetting[]   @relation("SystemSettingUpdatedBy")
+
+  @@index([createdById])
 }
 
 // ==================== 账单表 (Invoice) ====================
@@ -92,11 +105,18 @@ model Order {
   tokens        String   @default("[]") // 分词结果，JSON格式存储数组
   amount        Float    // AMOUNT 单个ORDER总金额
   orderBalance  Float    @default(0) // ORDER BALANCE 未付金额
+  customerId    String?
+  customerMark  String?
+  customerName  String?
+  customerPhone String?
+  customerCity  String?
+  needsCustomerFix Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   // 关联
   invoice         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   receipts        Receipt[]        @relation("ReceiptOrder")
   mergedReceipts  Receipt[]        @relation("MergedTo")
   balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
@@ -123,6 +143,12 @@ model Receipt {
   isDeposit    Boolean        @default(false) // 是否为定金
   isMerged     Boolean        @default(false) // 是否已合并到正式账单
   mergedToId   String?        // 合并到的订单ID
+  customerId   String?
+  customerMark String?
+  customerName String?
+  customerPhone String?
+  customerCity String?
+  needsCustomerFix Boolean    @default(false)
   note         String?        // 备注
   createdBy    String
   createdAt    DateTime       @default(now())
@@ -132,6 +158,7 @@ model Receipt {
   creator          User             @relation(fields: [createdBy], references: [id])
   histories        ReceiptHistory[]
   detailItems      DetailItem[]
+  customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
   order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
   orderId          String?
@@ -233,6 +260,7 @@ model DetailHistory {
 model Swift {
   id             String   @id @default(cuid())
   detailId       String   @unique // 一张SWIFT对应一张DETAIL
+  status         SwiftStatus @default(Bank_Transfer)
   amount         Float    // 汇款金额
   date           DateTime? // 汇款日期
   senderName     String?  // 汇款人姓名
@@ -252,6 +280,30 @@ model Swift {
   creator User   @relation(fields: [createdBy], references: [id])
 
   @@index([detailId])
+  @@index([status])
+}
+
+// ==================== 客户表 ====================
+model Customer {
+  id             String   @id @default(cuid())
+  mark           String
+  name           String
+  phone          String
+  city           String
+  consignee      String
+  companyName    String?
+  credit         Float?
+  companyAddress String?
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  orders  Order[]
+  receipts Receipt[]
+
+  @@index([mark])
+  @@index([name])
 }
 
 // ==================== 删除申请表 ====================

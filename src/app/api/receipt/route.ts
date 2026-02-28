@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { ReceiptStatus } from '@prisma/client';
+import { ReceiptStatus, UserRole } from '@prisma/client';
 import { recognizeReceipt } from '@/lib/ocr';
 import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
@@ -9,6 +9,7 @@ import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/l
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptPayloadSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
+import { resolveCustomer } from '@/lib/customer-matching';
 
 function parseReceiptPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -132,7 +133,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       const imageName = data.imageName as string;
 
       const receiptData = parseReceiptPayload(data);
-      const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit } = receiptData;
+      const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit, customerMark, customerName, customerPhone, customerCity, customerId } = receiptData;
+      if (!customerMark || !customerMark.trim()) {
+        return NextResponse.json({ success: false, error: '客户MARK不能为空' }, { status: 400 });
+      }
 
       if (receiptData.receiptNo) {
         const existingReceipt = await db.receipt.findFirst({
@@ -151,6 +155,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       // 查找匹配的ORDER
       const normalizedOrderNo = typeof receiptData.orderNo === 'string' ? receiptData.orderNo : null;
       const matchedOrder = await findMatchingOrder(normalizedOrderNo);
+      const customerResolution = await resolveCustomer({
+        customerMark,
+        customerName: customerName || null,
+        customerId: customerId || null,
+      });
 
       let orderId: string | null = matchedOrder?.orderId || null;
 
@@ -175,7 +184,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             invoiceId: defaultInvoice.id,
             orderNo: normalizedOrderNo,
             amount: 0,
-            orderBalance: -receiptData.usd
+            orderBalance: -receiptData.usd,
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
           }
         });
 
@@ -192,6 +207,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           invNo: receiptData.invNo || null,
           orderNo: normalizedOrderNo,
           payer: receiptData.payer || null,
+          customerId: customerResolution.customerId,
+          customerMark: customerResolution.customerMark,
+          customerName: customerResolution.customerName,
+          customerPhone: customerResolution.customerPhone,
+          customerCity: customerResolution.customerCity,
+          needsCustomerFix: customerResolution.needsCustomerFix,
           isDeposit: receiptData.isDeposit || false,
           status: ReceiptStatus.SR_Received,
           imageUrl: imagePath || null,
@@ -206,6 +227,17 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       // 更新订单余额
       if (orderId) {
+        await db.order.update({
+          where: { id: orderId },
+          data: {
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
+          },
+        });
         await updateOrderBalance(orderId);
       }
       await recordAuditEvent({
@@ -218,7 +250,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       return NextResponse.json({
         success: true,
         data: receipt,
-        message: action === 'direct-create' ? '收据已直接创建' : undefined,
+        message: customerResolution.needsCustomerFix
+          ? 'please modify guest information'
+          : (action === 'direct-create' ? '收据已直接创建' : undefined),
       });
     }
 
@@ -273,11 +307,18 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       
       if (updateDataStr) {
         const updateData = parseJsonWithSchema(updateDataStr, receiptPayloadSchema, '收据数据格式错误');
-        const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit } = updateData;
+        const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit, customerMark, customerName, customerPhone, customerCity, customerId } = updateData;
         const normalizedOrderNo = orderNo;
 
         // 查找匹配的ORDER
         const matchedOrder = await findMatchingOrder(normalizedOrderNo);
+        const customerResolution = customerMark
+          ? await resolveCustomer({
+              customerMark,
+              customerName: customerName || null,
+              customerId: customerId || null,
+            })
+          : null;
 
         // 更新收据
         const updated = await db.receipt.update({
@@ -291,6 +332,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             orderNo: normalizedOrderNo,
             payer: payer || null,
             isDeposit: isDeposit || false,
+            customerId: customerResolution?.customerId ?? existingReceipt.customerId,
+            customerMark: customerResolution?.customerMark ?? existingReceipt.customerMark,
+            customerName: customerResolution?.customerName ?? existingReceipt.customerName,
+            customerPhone: customerResolution?.customerPhone ?? existingReceipt.customerPhone,
+            customerCity: customerResolution?.customerCity ?? existingReceipt.customerCity,
+            needsCustomerFix: customerResolution?.needsCustomerFix ?? existingReceipt.needsCustomerFix,
             imageUrl: updateImagePath || existingReceipt.imageUrl,
             imageName: updateImageName || existingReceipt.imageName,
             orderId: matchedOrder?.orderId || existingReceipt.orderId
@@ -319,8 +366,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     if (action === 'mark-received') {
       // 标记为已签收（管理员）
-      if (currentUser.role !== 'ADMIN') {
-        return NextResponse.json({ success: false, error: '只有管理员可以标记签收' }, { status: 403 });
+      if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES) {
+        return NextResponse.json({ success: false, error: '只有管理员和销售代表可以标记签收' }, { status: 403 });
       }
 
       if (!receiptId) {
@@ -359,6 +406,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             await db.detail.update({
               where: { id: item.detail.id },
               data: { status: 'RECEIVED' }
+            });
+            await db.swift.updateMany({
+              where: { detailId: item.detail.id },
+              data: { status: 'RECEIVED' },
             });
           }
         }

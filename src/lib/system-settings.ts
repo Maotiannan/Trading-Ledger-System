@@ -10,6 +10,7 @@ export const editableSystemSettingKeys = [
   'OCR_RETRY_BASE_DELAY_MS',
   'OCR_INPUT_COST_PER_1K',
   'OCR_OUTPUT_COST_PER_1K',
+  'SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS',
 ] as const;
 
 export type EditableSystemSettingKey = (typeof editableSystemSettingKeys)[number];

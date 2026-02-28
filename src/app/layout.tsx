@@ -17,23 +17,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Trading Ledger System",
-  description: "Trading Ledger System for receipts, invoices, payment details, and SWIFT workflows.",
-  keywords: ["Trading Ledger", "Next.js", "TypeScript", "Finance", "Receipts", "SWIFT"],
-  authors: [{ name: "Trading Ledger Team" }],
+  title: "muledger",
+  description: "muledger for receipts, invoices, payment details, and SWIFT workflows.",
+  keywords: ["muledger", "Ledger", "Finance", "Receipts", "SWIFT"],
+  authors: [{ name: "muledger" }],
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "Trading Ledger System",
+    title: "muledger",
     description: "Ledger operations for trading workflows",
     url: "https://muledger.dainty.vip",
-    siteName: "Trading Ledger System",
+    siteName: "muledger",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Trading Ledger System",
+    title: "muledger",
     description: "Ledger operations for trading workflows",
   },
 };

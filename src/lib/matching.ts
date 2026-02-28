@@ -51,7 +51,8 @@ export async function createOrder(orderNo: string, userId: string): Promise<stri
         orderNo,
         tokens: serializeOrderTokens(orderNo),
         amount: 0, // 初始金额为0，会随着收据累加
-        orderBalance: 0
+        orderBalance: 0,
+        needsCustomerFix: true,
       }
     });
 

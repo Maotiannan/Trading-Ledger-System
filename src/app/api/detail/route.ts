@@ -9,6 +9,7 @@ import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/l
 import { assertSearchLength, detailPayloadSchema, InputValidationError, parseJsonWithSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
+import { resolveCustomer } from '@/lib/customer-matching';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -16,6 +17,29 @@ type DetailProcessedItem = {
   amount: number;
   receiptId: string | null;
 };
+
+async function resolveDetailItemCustomer(mark: string | null) {
+  const normalized = typeof mark === 'string' ? mark.trim() : '';
+  if (!normalized) {
+    return {
+      customerId: null,
+      customerMark: null,
+      customerName: null,
+      customerPhone: null,
+      customerCity: null,
+      needsCustomerFix: true,
+    };
+  }
+  const matched = await resolveCustomer({ customerMark: normalized });
+  return {
+    customerId: matched.customerId,
+    customerMark: matched.customerMark,
+    customerName: matched.customerName,
+    customerPhone: matched.customerPhone,
+    customerCity: matched.customerCity,
+    needsCustomerFix: matched.needsCustomerFix,
+  };
+}
 
 function parseDetailPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -202,6 +226,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           console.log(`Creating/finding order for: ${item.orderNo}`);
           const orderId = await findOrCreateOrder(item.orderNo, currentUser.id);
           console.log(`Order ID: ${orderId}`);
+          const customerInfo = await resolveDetailItemCustomer(item.mark);
           
           // 创建新的Receipt，引用DETAIL的图片
           const newReceipt = await db.receipt.create({
@@ -213,7 +238,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
               createdBy: currentUser.id,
               note: '由付款明细自动创建',
               imageUrl: imagePath,
-              imageName: imageName
+              imageName: imageName,
+              customerId: customerInfo.customerId,
+              customerMark: customerInfo.customerMark,
+              customerName: customerInfo.customerName,
+              customerPhone: customerInfo.customerPhone,
+              customerCity: customerInfo.customerCity,
+              needsCustomerFix: customerInfo.needsCustomerFix,
             }
           });
           
@@ -221,6 +252,17 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           console.log(`Created receipt: ${receiptId}`);
           
           // 更新Order余额
+          await db.order.update({
+            where: { id: orderId },
+            data: {
+              customerId: customerInfo.customerId,
+              customerMark: customerInfo.customerMark,
+              customerName: customerInfo.customerName,
+              customerPhone: customerInfo.customerPhone,
+              customerCity: customerInfo.customerCity,
+              needsCustomerFix: customerInfo.needsCustomerFix,
+            },
+          });
           await updateOrderBalance(orderId);
         }
         
@@ -315,6 +357,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
         if (!receiptId && item.orderNo) {
           const orderId = await findOrCreateOrder(item.orderNo, currentUser.id);
+          const customerInfo = await resolveDetailItemCustomer(item.mark);
           const newReceipt = await db.receipt.create({
             data: {
               orderNo: item.orderNo,
@@ -323,9 +366,26 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
               orderId,
               createdBy: currentUser.id,
               note: '由付款明细直接创建',
+              customerId: customerInfo.customerId,
+              customerMark: customerInfo.customerMark,
+              customerName: customerInfo.customerName,
+              customerPhone: customerInfo.customerPhone,
+              customerCity: customerInfo.customerCity,
+              needsCustomerFix: customerInfo.needsCustomerFix,
             }
           });
           receiptId = newReceipt.id;
+          await db.order.update({
+            where: { id: orderId },
+            data: {
+              customerId: customerInfo.customerId,
+              customerMark: customerInfo.customerMark,
+              customerName: customerInfo.customerName,
+              customerPhone: customerInfo.customerPhone,
+              customerCity: customerInfo.customerCity,
+              needsCustomerFix: customerInfo.needsCustomerFix,
+            },
+          });
           await updateOrderBalance(orderId);
         }
 
@@ -477,6 +537,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             console.log(`[Update] Creating/finding order for: ${item.orderNo}`);
             const orderId = await findOrCreateOrder(item.orderNo, currentUser.id);
             console.log(`[Update] Order ID: ${orderId}`);
+            const customerInfo = await resolveDetailItemCustomer(item.mark);
             
             // 创建新的Receipt，引用DETAIL的图片
             const newReceipt = await db.receipt.create({
@@ -488,7 +549,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
                 createdBy: currentUser.id,
                 note: '由付款明细自动创建',
                 imageUrl: imagePath || existingDetail.imageUrl,
-                imageName: imageName || existingDetail.imageName
+                imageName: imageName || existingDetail.imageName,
+                customerId: customerInfo.customerId,
+                customerMark: customerInfo.customerMark,
+                customerName: customerInfo.customerName,
+                customerPhone: customerInfo.customerPhone,
+                customerCity: customerInfo.customerCity,
+                needsCustomerFix: customerInfo.needsCustomerFix,
               }
             });
             
@@ -496,6 +563,17 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             console.log(`[Update] Created receipt: ${receiptId}`);
             
             // 更新Order余额
+            await db.order.update({
+              where: { id: orderId },
+              data: {
+                customerId: customerInfo.customerId,
+                customerMark: customerInfo.customerMark,
+                customerName: customerInfo.customerName,
+                customerPhone: customerInfo.customerPhone,
+                customerCity: customerInfo.customerCity,
+                needsCustomerFix: customerInfo.needsCustomerFix,
+              },
+            });
             await updateOrderBalance(orderId);
           }
           

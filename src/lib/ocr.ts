@@ -12,6 +12,23 @@ type OcrConfig = {
   apiKey: string;
   disabled: boolean;
 };
+let ocrModelOverrideLogged = false;
+
+function normalizeOcrApiBaseUrl(rawValue: string): string {
+  let normalized = String(rawValue || '').trim();
+  if (!normalized) return 'https://api.openai.com/v1';
+
+  // Allow users to paste full endpoints; strip known suffixes to keep a stable base URL.
+  normalized = normalized.replace(/\/+$/, '');
+  normalized = normalized.replace(/\/chat\/completions$/i, '');
+  normalized = normalized.replace(/\/models$/i, '');
+  normalized = normalized.replace(/\/+$/, '');
+  return normalized || 'https://api.openai.com/v1';
+}
+
+function buildEndpoint(baseUrl: string, path: string): string {
+  return `${baseUrl.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+}
 
 const OCR_DEFAULTS = {
   OCR_DISABLED: process.env.OCR_DISABLED ?? 'false',
@@ -19,17 +36,46 @@ const OCR_DEFAULTS = {
   OCR_API_KEY: process.env.OCR_API_KEY ?? '',
   OCR_MODEL: process.env.OCR_MODEL ?? 'gpt-4o-mini',
   OCR_MAX_RETRIES: process.env.OCR_MAX_RETRIES ?? '3',
-  OCR_TIMEOUT_MS: process.env.OCR_TIMEOUT_MS ?? '15000',
+  OCR_TIMEOUT_MS: process.env.OCR_TIMEOUT_MS ?? '60000',
   OCR_RETRY_BASE_DELAY_MS: process.env.OCR_RETRY_BASE_DELAY_MS ?? '1200',
   OCR_INPUT_COST_PER_1K: process.env.OCR_INPUT_COST_PER_1K ?? '0',
   OCR_OUTPUT_COST_PER_1K: process.env.OCR_OUTPUT_COST_PER_1K ?? '0',
 };
 let ocrDisabledLogged = false;
 
+function isBigModelProvider(baseUrl: string): boolean {
+  return /(^https?:\/\/)?([a-z0-9-]+\.)*bigmodel\.cn/i.test(baseUrl);
+}
+
+function isVisionModel(model: string): boolean {
+  const normalized = String(model || '').toLowerCase();
+  return normalized.includes('v') || normalized.includes('vision') || normalized.includes('ocr');
+}
+
+function resolveVisionModel(config: OcrConfig): string {
+  const normalized = String(config.model || '').trim();
+  if (!isBigModelProvider(config.apiBaseUrl)) return normalized;
+  if (isVisionModel(normalized)) return normalized;
+  if (!ocrModelOverrideLogged) {
+    console.warn(`[OCR] BigModel configured with non-vision model "${normalized}", auto-switching to "glm-4.6v" for image OCR`);
+    ocrModelOverrideLogged = true;
+  }
+  return 'glm-4.6v';
+}
+
+function prepareImageUrlForProvider(imageBase64: string, config: OcrConfig): string {
+  const input = String(imageBase64 || '').trim();
+  if (!input) return input;
+  if (input.startsWith('http://') || input.startsWith('https://')) return input;
+  if (input.startsWith('data:')) return input;
+  return ensureDataUrl(input);
+}
+
 function ensureDataUrl(imageBase64: string): string {
   if (imageBase64.startsWith('data:')) return imageBase64;
   return `data:image/jpeg;base64,${imageBase64}`;
 }
+
 
 function parseBoolean(value: string): boolean {
   return value.toLowerCase() === 'true';
@@ -48,20 +94,31 @@ async function getOcrConfig(): Promise<OcrConfig> {
     keys.map((key) => [key, overrides[key] ?? OCR_DEFAULTS[key as keyof typeof OCR_DEFAULTS]])
   );
 
+  const timeoutMs = Math.max(1000, parseNumber(merged.OCR_TIMEOUT_MS, 60000));
+  const normalizedBaseUrl = normalizeOcrApiBaseUrl(merged.OCR_API_BASE_URL || 'https://api.openai.com/v1');
+  const effectiveTimeoutMs = isBigModelProvider(normalizedBaseUrl)
+    ? Math.max(timeoutMs, 60000)
+    : timeoutMs;
+
   return {
     maxRetries: Math.max(1, parseNumber(merged.OCR_MAX_RETRIES, 3)),
-    timeoutMs: Math.max(1000, parseNumber(merged.OCR_TIMEOUT_MS, 15000)),
+    timeoutMs: effectiveTimeoutMs,
     retryBaseDelayMs: Math.max(100, parseNumber(merged.OCR_RETRY_BASE_DELAY_MS, 1200)),
     inputCostPer1k: Math.max(0, parseNumber(merged.OCR_INPUT_COST_PER_1K, 0)),
     outputCostPer1k: Math.max(0, parseNumber(merged.OCR_OUTPUT_COST_PER_1K, 0)),
     model: merged.OCR_MODEL || 'gpt-4o-mini',
-    apiBaseUrl: (merged.OCR_API_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+    apiBaseUrl: normalizedBaseUrl,
     apiKey: merged.OCR_API_KEY || '',
     disabled: parseBoolean(merged.OCR_DISABLED || 'false'),
   };
 }
 
-async function createVisionCompletion(prompt: string, imageBase64: string, config: OcrConfig) {
+async function createVisionCompletion(
+  prompt: string,
+  imageBase64: string,
+  config: OcrConfig,
+  signal?: AbortSignal
+) {
   if (config.disabled) {
     throw new Error('OCR disabled by OCR_DISABLED=true');
   }
@@ -69,25 +126,34 @@ async function createVisionCompletion(prompt: string, imageBase64: string, confi
     throw new Error('OCR_API_KEY is not configured');
   }
 
-  const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
+  const model = resolveVisionModel(config);
+  const imageUrl = prepareImageUrlForProvider(imageBase64, config);
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: imageUrl } },
+        ],
+      },
+    ],
+    temperature: 0,
+  };
+  // GLM-4.6V supports configurable thinking mode; OCR extraction is faster with thinking disabled.
+  if (isBigModelProvider(config.apiBaseUrl)) {
+    body.thinking = { type: 'disabled' };
+  }
+
+  const response = await fetch(buildEndpoint(config.apiBaseUrl, '/chat/completions'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: ensureDataUrl(imageBase64) } },
-          ],
-        },
-      ],
-      temperature: 0,
-    }),
+    body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -96,6 +162,58 @@ async function createVisionCompletion(prompt: string, imageBase64: string, confi
   }
 
   return response.json();
+}
+
+async function probeProviderModels(
+  config: OcrConfig,
+  signal?: AbortSignal
+): Promise<{ modelExists: boolean; total: number; available: string[] }> {
+  const response = await fetch(buildEndpoint(config.apiBaseUrl, '/models'), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`OCR provider HTTP ${response.status}: ${text}`);
+  }
+
+  const json = await response.json().catch(() => ({}));
+  const data = Array.isArray(json?.data) ? json.data : [];
+  const available = data
+    .map((m: { id?: string }) => String(m?.id || '').trim())
+    .filter((id: string) => Boolean(id));
+  const modelExists = available.some((id) => id.toLowerCase() === config.model.toLowerCase());
+  return { modelExists, total: data.length, available };
+}
+
+async function probeModelCompletion(config: OcrConfig, signal?: AbortSignal): Promise<boolean> {
+  const model = resolveVisionModel(config);
+  const response = await fetch(buildEndpoint(config.apiBaseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    signal,
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: '请仅返回OK' }],
+      temperature: 0,
+      ...(isBigModelProvider(config.apiBaseUrl) ? { thinking: { type: 'disabled' } } : {}),
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`OCR provider HTTP ${response.status}: ${text}`);
+  }
+  const json = await response.json().catch(() => ({}));
+  const content = String(json?.choices?.[0]?.message?.content || '').trim();
+  return Boolean(content);
 }
 
 function canUseOcr(config: OcrConfig): boolean {
@@ -120,17 +238,26 @@ function isRetryableError(error: unknown): boolean {
   return msg.includes('timeout') || msg.includes('timed out') || msg.includes('fetch failed') || msg.includes('network');
 }
 
-async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: string): Promise<T> {
-  return Promise.race([
-    fn(),
-    new Promise<T>((_, reject) => {
-      const timeoutError = new Error(`${label} request timeout after ${timeoutMs}ms`);
-      setTimeout(() => reject(timeoutError), timeoutMs);
-    }),
-  ]);
+async function withTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(`${label} request timeout after ${timeoutMs}ms`), timeoutMs);
+  try {
+    return await fn(controller.signal);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`${label} request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-async function withRetry<T>(fn: () => Promise<T>, label: string, config: OcrConfig): Promise<T> {
+async function withRetry<T>(fn: (signal: AbortSignal) => Promise<T>, label: string, config: OcrConfig): Promise<T> {
   let lastError: unknown;
 
   for (let i = 0; i < config.maxRetries; i++) {
@@ -257,7 +384,7 @@ async function runVisionRequest<T>(
 
   try {
     const response = await withRetry(
-      () => createVisionCompletion(prompt, imageBase64, config),
+      (signal) => createVisionCompletion(prompt, imageBase64, config, signal),
       label,
       config
     );
@@ -267,11 +394,11 @@ async function runVisionRequest<T>(
     const parsed = parseJsonObject<T>(content);
     if (parsed) return parsed;
 
-    console.error(`[OCR:${label}] parse failed, fallback used`, content);
-    return fallback;
+    console.error(`[OCR:${label}] parse failed`, content);
+    throw new Error(`OCR响应解析失败，请检查模型输出格式`);
   } catch (error) {
-    console.error(`[OCR:${label}] request failed, fallback used`, error);
-    return fallback;
+    console.error(`[OCR:${label}] request failed`, error);
+    throw (error instanceof Error ? error : new Error('OCR识别失败'));
   }
 }
 
@@ -368,4 +495,61 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
   };
 
   return runVisionRequest<SwiftOcrResult>('swift', imageBase64, prompt, fallback);
+}
+
+export async function testOcrConnectivity(): Promise<{ success: boolean; message: string; detail?: string }> {
+  const config = await getOcrConfig();
+  if (config.disabled) {
+    return { success: false, message: 'OCR_DISABLED=true，当前已禁用OCR' };
+  }
+  if (!config.apiKey) {
+    return { success: false, message: 'OCR_API_KEY 未配置' };
+  }
+
+  try {
+    const effectiveModel = resolveVisionModel(config);
+    const probe = await withRetry(
+      (signal) => probeProviderModels(config, signal),
+      'settings-ocr-test',
+      config
+    );
+    const preview = probe.available.slice(0, 8).join(', ');
+    const listedModelExists = probe.available.some((id) => id.toLowerCase() === effectiveModel.toLowerCase());
+    let modelUsable = listedModelExists;
+    let visionProbeNote = '';
+    if (!modelUsable) {
+      try {
+        modelUsable = await withRetry(
+          (signal) => probeModelCompletion({ ...config, model: effectiveModel }, signal),
+          'settings-ocr-vision-probe',
+          config
+        );
+        if (modelUsable) {
+          visionProbeNote = '；/models 未列出该模型，但 chat/completions 实测调用成功';
+        }
+      } catch (probeError) {
+        const reason = probeError instanceof Error ? probeError.message : 'unknown';
+        visionProbeNote = `；视觉实测调用失败：${reason}`;
+      }
+    }
+    const modelsEndpoint = buildEndpoint(config.apiBaseUrl, '/models');
+    const chatEndpoint = buildEndpoint(config.apiBaseUrl, '/chat/completions');
+    const detail = modelUsable
+      ? `configuredModel=${config.model}，effectiveModel=${effectiveModel} 可用，provider models=${probe.total}，available=[${preview}]，modelsEndpoint=${modelsEndpoint}，chatEndpoint=${chatEndpoint}${visionProbeNote}`
+      : `已连通 provider，但模型不可用（effectiveModel=${effectiveModel}，configuredModel=${config.model}，models=${probe.total}，available=[${preview}]，modelsEndpoint=${modelsEndpoint}，chatEndpoint=${chatEndpoint}${visionProbeNote}）`;
+    return {
+      success: modelUsable,
+      message: modelUsable
+        ? 'OCR配置连通成功'
+        : 'OCR配置已连通，但模型不可用',
+      detail,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'unknown error';
+    return {
+      success: false,
+      message: `OCR连接失败（model=${config.model}）`,
+      detail: msg,
+    };
+  }
 }

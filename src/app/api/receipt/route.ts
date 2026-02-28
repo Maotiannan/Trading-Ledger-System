@@ -10,6 +10,7 @@ import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptP
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 import { resolveCustomer } from '@/lib/customer-matching';
+import { toOcrDataUrl } from '@/lib/ocr-input';
 
 function parseReceiptPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -97,10 +98,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
 
       try {
-        // 转换为base64
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-        const base64 = `data:${file.type};base64,${buffer.toString('base64')}`;
+        const base64 = await toOcrDataUrl(file);
 
         // AI识别
         const ocrResult = await recognizeReceipt(base64);
@@ -120,9 +118,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (ocrError instanceof UploadValidationError) {
           return NextResponse.json({ success: false, error: ocrError.message }, { status: 400 });
         }
+        const detail = ocrError instanceof Error ? ocrError.message : '未知错误';
         return NextResponse.json({ 
           success: false, 
-          error: 'AI识别失败，请检查图片是否清晰' 
+          error: `AI识别失败：${detail}` 
         }, { status: 500 });
       }
     }

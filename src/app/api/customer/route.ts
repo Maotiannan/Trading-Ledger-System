@@ -6,6 +6,7 @@ import { getSystemSettings } from '@/lib/system-settings';
 
 type CustomerPayload = {
   mark?: string;
+  orderName?: string;
   name?: string;
   phone?: string;
   city?: string;
@@ -27,6 +28,7 @@ function managerOnly(userRole: UserRole): NextResponse | null {
 function parsePayload(body: Record<string, unknown>): CustomerPayload {
   return {
     mark: trimStr(body.mark),
+    orderName: trimStr(body.orderName),
     name: trimStr(body.name),
     phone: trimStr(body.phone),
     city: trimStr(body.city),
@@ -44,6 +46,7 @@ async function canSalesEditExtendedFields(): Promise<boolean> {
 
 function validateRequired(payload: CustomerPayload): string | null {
   if (!payload.mark) return 'MARK不能为空';
+  if (!payload.orderName) return 'ORDER_NAME不能为空';
   if (!payload.name) return 'NAME不能为空';
   if (!payload.phone) return 'PHONE不能为空';
   if (!payload.city) return 'CITY不能为空';
@@ -76,9 +79,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   if (mark) {
     where.mark = { equals: mark, mode: 'insensitive' };
   } else if (search) {
-    where.OR = [
-      { mark: { contains: search, mode: 'insensitive' } },
-      { name: { contains: search, mode: 'insensitive' } },
+      where.OR = [
+        { mark: { contains: search, mode: 'insensitive' } },
+        { orderName: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search, mode: 'insensitive' } },
       { city: { contains: search, mode: 'insensitive' } },
       { consignee: { contains: search, mode: 'insensitive' } },
@@ -115,6 +119,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const created = await db.customer.create({
       data: {
         mark: payload.mark!,
+        orderName: payload.orderName!,
         name: payload.name!,
         phone: payload.phone!,
         city: payload.city!,
@@ -146,6 +151,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       where: { id },
       data: {
         mark: payload.mark!,
+        orderName: payload.orderName!,
         name: payload.name!,
         phone: payload.phone!,
         city: payload.city!,

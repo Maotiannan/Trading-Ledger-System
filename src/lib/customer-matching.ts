@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 
 export type CustomerResolveInput = {
   customerMark: string;
+  customerOrderName?: string | null;
   customerName?: string | null;
   customerId?: string | null;
 };
@@ -23,7 +24,7 @@ function normalize(value: string | null | undefined): string {
 
 export async function resolveCustomer(input: CustomerResolveInput): Promise<CustomerResolveResult> {
   const customerMark = normalize(input.customerMark);
-  const customerNameInput = normalize(input.customerName);
+  const customerOrderNameInput = normalize(input.customerOrderName ?? input.customerName);
   const customerIdInput = normalize(input.customerId);
 
   const markCandidates = customerMark
@@ -34,7 +35,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
             mode: 'insensitive',
           },
         },
-        select: { id: true, mark: true, name: true, phone: true, city: true },
+        select: { id: true, mark: true, orderName: true, phone: true, city: true },
       })
     : [];
 
@@ -43,7 +44,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
     return {
       customerId: customer.id,
       customerMark: customer.mark,
-      customerName: customer.name,
+      customerName: customer.orderName,
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -58,7 +59,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
       return {
         customerId: selected.id,
         customerMark: selected.mark,
-        customerName: selected.name,
+        customerName: selected.orderName,
         customerPhone: selected.phone,
         customerCity: selected.city,
         needsCustomerFix: false,
@@ -68,15 +69,15 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
     }
   }
 
-  if (customerNameInput) {
+  if (customerOrderNameInput) {
     const nameCandidates = await db.customer.findMany({
       where: {
-        name: {
-          equals: customerNameInput,
+        orderName: {
+          equals: customerOrderNameInput,
           mode: 'insensitive',
         },
       },
-      select: { id: true, mark: true, name: true, phone: true, city: true },
+      select: { id: true, mark: true, orderName: true, phone: true, city: true },
     });
 
     if (nameCandidates.length === 1) {
@@ -84,7 +85,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
       return {
         customerId: customer.id,
         customerMark: customer.mark,
-        customerName: customer.name,
+        customerName: customer.orderName,
         customerPhone: customer.phone,
         customerCity: customer.city,
         needsCustomerFix: false,
@@ -97,7 +98,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
   return {
     customerId: null,
     customerMark,
-    customerName: customerNameInput || null,
+    customerName: customerOrderNameInput || null,
     customerPhone: null,
     customerCity: null,
     needsCustomerFix: true,

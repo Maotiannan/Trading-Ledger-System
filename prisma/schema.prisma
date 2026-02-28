@@ -287,7 +287,8 @@ model Swift {
 model Customer {
   id             String   @id @default(cuid())
   mark           String
-  name           String
+  orderName      String   @map("order_name")
+  name           String   @unique
   phone          String
   city           String
   consignee      String
@@ -303,7 +304,7 @@ model Customer {
   receipts Receipt[]
 
   @@index([mark])
-  @@index([name])
+  @@index([orderName])
 }
 
 // ==================== 删除申请表 ====================

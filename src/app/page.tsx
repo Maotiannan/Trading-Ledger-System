@@ -77,7 +77,8 @@ async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mar
 type CustomerCandidate = {
   id: string;
   mark: string;
-  name: string;
+  orderName: string;
+  displayName?: string;
   phone?: string | null;
   city?: string | null;
 };
@@ -475,16 +476,17 @@ function InvoiceManager() {
         setter([]);
         return;
       }
-      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; name: string; phone?: string | null; city?: string | null }) => ({
+      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; orderName?: string; name?: string; phone?: string | null; city?: string | null }) => ({
         id: row.id,
         mark: row.mark,
-        name: row.name,
+        orderName: row.orderName || row.name || '',
+        displayName: row.name || '',
         phone: row.phone ?? null,
         city: row.city ?? null,
       }));
       setter(rows);
       if (rows.length === 1) {
-        if (setDefaultName) setDefaultName(rows[0].name);
+        if (setDefaultName) setDefaultName(rows[0].orderName);
         if (setDefaultId) setDefaultId(rows[0].id);
         if (setDefaultPhone) setDefaultPhone(rows[0].phone || '');
         if (setDefaultCity) setDefaultCity(rows[0].city || '');
@@ -777,7 +779,7 @@ function InvoiceManager() {
             if (!row) return prev;
             row.customerCandidates = rows;
             if (rows.length === 1) {
-              row.customerName = rows[0].name;
+              row.customerName = rows[0].orderName;
               row.customerId = rows[0].id;
             }
             return copy;
@@ -1114,12 +1116,12 @@ function InvoiceManager() {
                             const id = e.target.value;
                             setNewOrderCustomerId(id);
                             const selected = newOrderCustomerCandidates.find((c) => c.id === id);
-                            setNewOrderCustomerName(selected?.name || '');
+                            setNewOrderCustomerName(selected?.orderName || '');
                           }}
                         >
                           <option value="">选择客户</option>
                           {newOrderCustomerCandidates.map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>{candidate.mark}/{candidate.name}</option>
+                            <option key={candidate.id} value={candidate.id}>{candidate.mark}/{candidate.orderName}</option>
                           ))}
                         </select>
                       )}
@@ -1218,14 +1220,14 @@ function InvoiceManager() {
                           if (!row) return prev;
                           row.customerId = id;
                           const selected = row.customerCandidates.find((c) => c.id === id);
-                          row.customerName = selected?.name || '';
+                          row.customerName = selected?.orderName || '';
                           return copy;
                         });
                       }}
                     >
-                      <option value="">请选择准确客户(MARK+NAME)</option>
+                      <option value="">请选择准确客户(MARK+ORDER_NAME)</option>
                       {order.customerCandidates.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                        <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                       ))}
                     </select>
                   )}
@@ -1305,21 +1307,21 @@ function InvoiceManager() {
                     setEditingOrder((prev) => prev ? ({
                       ...prev,
                       customerId: id,
-                      customerName: selected?.name || '',
+                      customerName: selected?.orderName || '',
                       customerPhone: selected?.phone || '',
                       customerCity: selected?.city || '',
                     }) : prev);
                   }}
                 >
-                  <option value="">请选择准确客户(MARK+NAME)</option>
+                  <option value="">请选择准确客户(MARK+ORDER_NAME)</option>
                   {editingOrderCandidates.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                    <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                   ))}
                 </select>
               </div>
             )}
             <div className="space-y-2">
-              <Label>客户NAME</Label>
+              <Label>客户ORDER_NAME</Label>
               <Input
                 value={editingOrder?.customerName || ''}
                 onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerName: e.target.value })}
@@ -1570,16 +1572,17 @@ function ReceiptManager() {
         setter([]);
         return;
       }
-      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; name: string; phone?: string | null; city?: string | null }) => ({
+      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; orderName?: string; name?: string; phone?: string | null; city?: string | null }) => ({
         id: row.id,
         mark: row.mark,
-        name: row.name,
+        orderName: row.orderName || row.name || '',
+        displayName: row.name || '',
         phone: row.phone ?? null,
         city: row.city ?? null,
       }));
       setter(rows);
       if (rows.length === 1) {
-        if (setDefaultName) setDefaultName(rows[0].name);
+        if (setDefaultName) setDefaultName(rows[0].orderName);
         if (setDefaultId) setDefaultId(rows[0].id);
       }
     } catch {
@@ -2024,7 +2027,7 @@ function ReceiptManager() {
                   </div>
                   {ocrCustomerCandidates.length > 1 && (
                     <div className="col-span-2">
-                      <Label className="text-sm text-gray-500">选择准确客户(MARK+NAME)</Label>
+                      <Label className="text-sm text-gray-500">选择准确客户(MARK+ORDER_NAME)</Label>
                       <select
                         className="w-full border rounded-md px-3 py-2 text-sm"
                         value={ocrCustomerId}
@@ -2032,12 +2035,12 @@ function ReceiptManager() {
                           const id = e.target.value;
                           setOcrCustomerId(id);
                           const selected = ocrCustomerCandidates.find((c) => c.id === id);
-                          setOcrCustomerName(selected?.name || '');
+                          setOcrCustomerName(selected?.orderName || '');
                         }}
                       >
                         <option value="">请选择</option>
                         {ocrCustomerCandidates.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                          <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                         ))}
                       </select>
                     </div>
@@ -2113,12 +2116,12 @@ function ReceiptManager() {
                 onChange={(e) => {
                   const id = e.target.value;
                   const selected = directCustomerCandidates.find((c) => c.id === id);
-                  setDirectForm((p) => ({ ...p, customerId: id, customerName: selected?.name || '' }));
+                  setDirectForm((p) => ({ ...p, customerId: id, customerName: selected?.orderName || '' }));
                 }}
               >
-                <option value="">请选择准确客户(MARK+NAME)</option>
+                <option value="">请选择准确客户(MARK+ORDER_NAME)</option>
                 {directCustomerCandidates.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                  <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                 ))}
               </select>
             )}
@@ -3387,6 +3390,7 @@ function CustomerManager() {
   const [fixingTarget, setFixingTarget] = useState<{ type: 'order' | 'receipt'; id: string } | null>(null);
   const [form, setForm] = useState({
     mark: '',
+    orderName: '',
     name: '',
     phone: '',
     city: '',
@@ -3399,6 +3403,7 @@ function CustomerManager() {
   const resetForm = () => {
     setForm({
       mark: '',
+      orderName: '',
       name: '',
       phone: '',
       city: '',
@@ -3433,6 +3438,7 @@ function CustomerManager() {
     const payload = {
       ...(editing ? { action: 'update', id: editing.id } : { action: 'create' }),
       mark: form.mark,
+      orderName: form.orderName,
       name: form.name,
       phone: form.phone,
       city: form.city,
@@ -3467,6 +3473,7 @@ function CustomerManager() {
     setEditing(row);
     setForm({
       mark: String(row.mark || ''),
+      orderName: String(row.orderName || ''),
       name: String(row.name || ''),
       phone: String(row.phone || ''),
       city: String(row.city || ''),
@@ -3482,7 +3489,8 @@ function CustomerManager() {
     setFixingTarget({ type, id: String(row.id) });
     setForm({
       mark: String(row.customerMark || ''),
-      name: String(row.customerName || ''),
+      orderName: String(row.customerName || ''),
+      name: '',
       phone: String(row.customerPhone || ''),
       city: String(row.customerCity || ''),
       consignee: '',
@@ -3498,6 +3506,7 @@ function CustomerManager() {
       action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
       ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
       mark: form.mark,
+      orderName: form.orderName,
       name: form.name,
       phone: form.phone,
       city: form.city,
@@ -3524,7 +3533,7 @@ function CustomerManager() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">客户管理</h2>
         <div className="flex gap-2">
-          <Input placeholder="搜索 mark/name/phone/city" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
+          <Input placeholder="搜索 mark/order_name/name/phone/city" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
           <Button onClick={() => { setEditing(null); resetForm(); setShowCreate(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             新建客户
@@ -3545,6 +3554,7 @@ function CustomerManager() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>MARK</TableHead>
+                    <TableHead>ORDER_NAME</TableHead>
                     <TableHead>NAME</TableHead>
                     <TableHead>PHONE</TableHead>
                     <TableHead>CITY</TableHead>
@@ -3559,6 +3569,7 @@ function CustomerManager() {
                   {customers.map((row) => (
                     <TableRow key={String(row.id)}>
                       <TableCell>{String(row.mark || '-')}</TableCell>
+                      <TableCell>{String(row.orderName || '-')}</TableCell>
                       <TableCell>{String(row.name || '-')}</TableCell>
                       <TableCell>{String(row.phone || '-')}</TableCell>
                       <TableCell>{String(row.city || '-')}</TableCell>
@@ -3632,6 +3643,7 @@ function CustomerManager() {
           </DialogHeader>
           <div className="space-y-3">
             <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
+            <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => setForm((p) => ({ ...p, orderName: e.target.value }))} />
             <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
             <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
             <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
@@ -3658,6 +3670,7 @@ function CustomerManager() {
           </DialogHeader>
           <div className="space-y-3">
             <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
+            <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => setForm((p) => ({ ...p, orderName: e.target.value }))} />
             <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
             <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
             <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />

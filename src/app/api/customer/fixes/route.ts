@@ -21,6 +21,7 @@ async function salesCanEditExtended(): Promise<boolean> {
 
 type FixCustomerPayload = {
   mark: string;
+  orderName: string;
   name: string;
   phone: string;
   city: string;
@@ -32,6 +33,7 @@ type FixCustomerPayload = {
 
 function parsePayload(body: Record<string, unknown>): FixCustomerPayload | { error: string } {
   const mark = trimStr(body.mark);
+  const orderName = trimStr(body.orderName);
   const name = trimStr(body.name);
   const phone = trimStr(body.phone);
   const city = trimStr(body.city);
@@ -41,21 +43,21 @@ function parsePayload(body: Record<string, unknown>): FixCustomerPayload | { err
   const creditRaw = body.credit;
   const credit = creditRaw === null || creditRaw === undefined || creditRaw === '' ? null : Number(creditRaw);
 
-  if (!mark || !name || !phone || !city || !consignee) {
-    return { error: 'MARK/NAME/PHONE/CITY/CONSIGNEE均为必填' };
+  if (!mark || !orderName || !name || !phone || !city || !consignee) {
+    return { error: 'MARK/ORDER_NAME/NAME/PHONE/CITY/CONSIGNEE均为必填' };
   }
   if (credit !== null && (!Number.isFinite(credit) || credit <= 0)) {
     return { error: 'CREDIT必须为正数' };
   }
 
-  return { mark, name, phone, city, consignee, companyName, companyAddress, credit };
+  return { mark, orderName, name, phone, city, consignee, companyName, companyAddress, credit };
 }
 
 async function upsertCustomer(currentUserId: string, role: UserRole, payload: FixCustomerPayload) {
   const existing = await db.customer.findFirst({
-    where: {
-      mark: { equals: payload.mark, mode: 'insensitive' },
-      name: { equals: payload.name, mode: 'insensitive' },
+      where: {
+        mark: { equals: payload.mark, mode: 'insensitive' },
+      orderName: { equals: payload.orderName, mode: 'insensitive' },
     },
   });
 
@@ -65,6 +67,7 @@ async function upsertCustomer(currentUserId: string, role: UserRole, payload: Fi
     return db.customer.create({
       data: {
         mark: payload.mark,
+        orderName: payload.orderName,
         name: payload.name,
         phone: payload.phone,
         city: payload.city,
@@ -80,8 +83,10 @@ async function upsertCustomer(currentUserId: string, role: UserRole, payload: Fi
   return db.customer.update({
     where: { id: existing.id },
     data: {
+      name: payload.name,
       phone: payload.phone,
       city: payload.city,
+      orderName: payload.orderName,
       consignee: payload.consignee,
       ...(allowExtended
         ? {
@@ -96,7 +101,7 @@ async function upsertCustomer(currentUserId: string, role: UserRole, payload: Fi
 
 async function syncSameGroupCustomer(
   baseOrderNo: string | null | undefined,
-  customer: { id: string; mark: string; name: string; phone: string; city: string }
+  customer: { id: string; mark: string; name: string; orderName: string; phone: string; city: string }
 ) {
   const groupKey = deriveOrderGroupKey(baseOrderNo);
   if (!groupKey) return 0;
@@ -114,7 +119,7 @@ async function syncSameGroupCustomer(
     data: {
       customerId: customer.id,
       customerMark: customer.mark,
-      customerName: customer.name,
+      customerName: customer.orderName,
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -125,7 +130,7 @@ async function syncSameGroupCustomer(
     data: {
       customerId: customer.id,
       customerMark: customer.mark,
-      customerName: customer.name,
+      customerName: customer.orderName,
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -146,7 +151,7 @@ async function syncSameGroupCustomer(
         data: {
           customerId: customer.id,
           customerMark: customer.mark,
-          customerName: customer.name,
+          customerName: customer.orderName,
           customerPhone: customer.phone,
           customerCity: customer.city,
           needsCustomerFix: false,
@@ -221,7 +226,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       data: {
         customerId: customer.id,
         customerMark: customer.mark,
-        customerName: customer.name,
+        customerName: customer.orderName,
         customerPhone: customer.phone,
         customerCity: customer.city,
         needsCustomerFix: false,
@@ -242,7 +247,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     data: {
       customerId: customer.id,
       customerMark: customer.mark,
-      customerName: customer.name,
+      customerName: customer.orderName,
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -256,7 +261,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       data: {
         customerId: customer.id,
         customerMark: customer.mark,
-        customerName: customer.name,
+        customerName: customer.orderName,
         customerPhone: customer.phone,
         customerCity: customer.city,
         needsCustomerFix: false,

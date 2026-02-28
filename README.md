@@ -393,18 +393,26 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 ### 收据接口 `/api/receipt`
 - `GET` - 获取收据列表
 - `POST` - 上传收据/确认识别/标记签收
+- `POST(action=direct-create)` - 直接创建收据（跳过AI）
 
 ### 付款明细接口 `/api/detail`
 - `GET` - 获取明细列表
 - `POST` - 上传明细/确认识别
+- `POST(action=direct-create)` - 直接创建付款明细（跳过AI）
 
 ### SWIFT接口 `/api/swift`
 - `GET` - 获取SWIFT列表
 - `POST` - 上传SWIFT/确认识别
+- `POST(action=direct-create)` - 直接创建SWIFT（跳过AI）
 
 ### 用户与认证接口 `/api/auth`
 - `POST(action=login|logout|me)` - 登录/登出/获取当前用户
 - `POST(action=list|create|delete|reset-password)` - 用户管理（管理员）
+- `POST(action=change-password)` - 当前用户修改密码
+
+### 设置接口 `/api/settings`
+- `GET` - 获取可编辑系统配置（含权限）
+- `POST(action=update-config)` - 修改系统配置（管理员）
 
 ### 删除审批接口 `/api/deletion`
 - `GET` - 获取删除申请列表
@@ -516,6 +524,14 @@ npm run test:e2e
 - 已接入 `next-intl`，支持 `中文 / English` 双语切换。
 - 页面入口：侧栏语言切换按钮（会写入 `NEXT_LOCALE` cookie）。
 - 已国际化模块：登录页、侧栏、仪表盘（含导出相关文案）。
+
+### 权限与操作规则
+
+- 普通账户可查看“账单管理”页面，但不能创建/修改账单（后端会返回 `403`）。
+- 收据/付款明细/SWIFT 管理均支持两种创建方式：
+  - 上传图片 + AI识别
+  - 直接创建（手工录入，跳过AI）
+- 配置修改统一通过“设置”页面进行，不再依赖手动改代码。
 
 ### 高级搜索与过滤
 

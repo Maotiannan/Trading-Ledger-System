@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { hashPassword, validateUser } from '@/lib/auth';
+import { hashPassword, validateUser, verifyPassword } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
@@ -125,6 +125,44 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ success: true, message: '密码已重置' });
+    }
+
+    // 修改自己密码
+    if (action === 'change-password') {
+      const currentUser = await getCurrentUser(request);
+      if (!currentUser) {
+        return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
+      }
+
+      const oldPassword = typeof body.oldPassword === 'string' ? body.oldPassword : '';
+      const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+      if (!oldPassword || !newPassword) {
+        return NextResponse.json({ success: false, error: '旧密码和新密码不能为空' }, { status: 400 });
+      }
+      if (newPassword.length < 8) {
+        return NextResponse.json({ success: false, error: '新密码至少8位' }, { status: 400 });
+      }
+
+      const userWithPassword = await db.user.findUnique({
+        where: { id: currentUser.id },
+        select: { id: true, password: true },
+      });
+      if (!userWithPassword) {
+        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+      }
+
+      const oldValid = await verifyPassword(oldPassword, userWithPassword.password);
+      if (!oldValid) {
+        return NextResponse.json({ success: false, error: '旧密码错误' }, { status: 400 });
+      }
+
+      const hashedPassword = await hashPassword(newPassword);
+      await db.user.update({
+        where: { id: currentUser.id },
+        data: { password: hashedPassword },
+      });
+      return NextResponse.json({ success: true, message: '密码修改成功' });
     }
 
     return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });

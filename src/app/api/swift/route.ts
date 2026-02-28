@@ -10,6 +10,18 @@ import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPay
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 
+function parseSwiftPayload(data: Record<string, unknown>) {
+  if (typeof data.data === 'string') {
+    return parseJsonWithSchema(data.data, swiftPayloadSchema, 'SWIFT数据格式错误');
+  }
+  const result = swiftPayloadSchema.safeParse(data);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new InputValidationError(issue?.message || 'SWIFT数据格式错误');
+  }
+  return result.data;
+}
+
 // 获取SWIFT列表
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
@@ -113,17 +125,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
     }
 
-    if (action === 'confirm') {
+    if (action === 'confirm' || action === 'direct-create') {
       // 确认创建SWIFT
-      const dataStr = requestData.data as string;
       const imagePath = requestData.imagePath as string;
       const imageName = requestData.imageName as string;
       
-      if (!dataStr || !detailId) {
+      if (!detailId) {
         return NextResponse.json({ success: false, error: '缺少必要数据' }, { status: 400 });
       }
 
-      const data = parseJsonWithSchema(dataStr, swiftPayloadSchema, 'SWIFT数据格式错误');
+      const data = parseSwiftPayload(requestData);
       const { amount, date, senderName, senderAddress, receiverName, receiverAccount } = data;
 
       // 获取关联的DETAIL
@@ -154,8 +165,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           senderAddress,
           receiverName,
           receiverAccount,
-          imageUrl: imagePath,
-          imageName,
+          imageUrl: imagePath || null,
+          imageName: imageName || null,
           hasError: validation.hasWarning || !validation.valid,
           errorMessage: validation.valid ? null : validation.message,
           createdBy: currentUser.id
@@ -199,9 +210,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         targetId: swift.id,
       });
 
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true, 
-        data: { swift, validation } 
+        data: { swift, validation },
+        message: action === 'direct-create' ? 'SWIFT已直接创建' : undefined,
       });
     }
 

@@ -10,6 +10,18 @@ import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptP
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 
+function parseReceiptPayload(data: Record<string, unknown>) {
+  if (typeof data.data === 'string') {
+    return parseJsonWithSchema(data.data, receiptPayloadSchema, '收据数据格式错误');
+  }
+  const result = receiptPayloadSchema.safeParse(data);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new InputValidationError(issue?.message || '收据数据格式错误');
+  }
+  return result.data;
+}
+
 // 获取收据列表
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
@@ -114,17 +126,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
     }
 
-    if (action === 'confirm') {
+    if (action === 'confirm' || action === 'direct-create') {
       // 确认创建收据
-      const dataStr = data.data as string;
       const imagePath = data.imagePath as string;
       const imageName = data.imageName as string;
-      
-      if (!dataStr) {
-        return NextResponse.json({ success: false, error: '缺少收据数据' }, { status: 400 });
-      }
 
-      const receiptData = parseJsonWithSchema(dataStr, receiptPayloadSchema, '收据数据格式错误');
+      const receiptData = parseReceiptPayload(data);
       const { receiptNo, date, tel, usd, invNo, orderNo, payer, isDeposit } = receiptData;
 
       if (receiptData.receiptNo) {
@@ -187,8 +194,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           payer: receiptData.payer || null,
           isDeposit: receiptData.isDeposit || false,
           status: ReceiptStatus.SR_Received,
-          imageUrl: imagePath,
-          imageName,
+          imageUrl: imagePath || null,
+          imageName: imageName || null,
           orderId: orderId,
           createdBy: currentUser.id
         },
@@ -208,7 +215,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         targetId: receipt.id,
       });
 
-      return NextResponse.json({ success: true, data: receipt });
+      return NextResponse.json({
+        success: true,
+        data: receipt,
+        message: action === 'direct-create' ? '收据已直接创建' : undefined,
+      });
     }
 
     if (action === 'update') {

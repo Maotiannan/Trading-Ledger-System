@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet, 
   Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye, 
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard,
+  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
   ChevronDown, ChevronRight, Pencil
 } from 'lucide-react';
 
@@ -140,12 +140,13 @@ function Sidebar() {
 
   const menuItems = [
     { id: 'dashboard' as const, label: t('dashboard'), icon: LayoutDashboard },
-    { id: 'invoices' as const, label: t('invoices'), icon: FileText, adminOnly: true },
+    { id: 'invoices' as const, label: t('invoices'), icon: FileText },
     { id: 'receipts' as const, label: t('receipts'), icon: Receipt },
     { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
     { id: 'deletions' as const, label: t('deletions'), icon: Trash2, adminOnly: true },
     { id: 'users' as const, label: t('users'), icon: Users, adminOnly: true },
+    { id: 'settings' as const, label: t('settings'), icon: Settings },
   ];
 
   const switchLocale = async (nextLocale: 'zh' | 'en') => {
@@ -652,7 +653,7 @@ function InvoiceManager() {
               </Button>
               <Button onClick={() => setShowDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                创建账单
+                直接创建账单
               </Button>
             </>
           )}
@@ -998,12 +999,23 @@ function InvoiceManager() {
 function ReceiptManager() {
   const { receipts, setReceipts, loading, setLoading, user } = useStore();
   const [showUpload, setShowUpload] = useState(false);
+  const [showDirectCreate, setShowDirectCreate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ocrResult, setOcrResult] = useState<Record<string, unknown> | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [directForm, setDirectForm] = useState({
+    receiptNo: '',
+    date: '',
+    tel: '',
+    usd: '',
+    invNo: '',
+    orderNo: '',
+    payer: '',
+    isDeposit: false,
+  });
   
   // 图片查看对话框
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
@@ -1141,6 +1153,44 @@ function ReceiptManager() {
     }
   };
 
+  const handleDirectCreate = async () => {
+    setError(null);
+    try {
+      const result = await apiCall('receipt', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'direct-create',
+          receiptNo: directForm.receiptNo || null,
+          date: directForm.date || null,
+          tel: directForm.tel || null,
+          usd: Number(directForm.usd),
+          invNo: directForm.invNo || null,
+          orderNo: directForm.orderNo || null,
+          payer: directForm.payer || null,
+          isDeposit: directForm.isDeposit,
+        }),
+      });
+      if (result.success) {
+        setShowDirectCreate(false);
+        setDirectForm({
+          receiptNo: '',
+          date: '',
+          tel: '',
+          usd: '',
+          invNo: '',
+          orderNo: '',
+          payer: '',
+          isDeposit: false,
+        });
+        loadReceipts();
+      } else {
+        setError(result.error || '创建失败，请重试');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建失败，请重试');
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     const colors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
       'SR_Received': 'secondary',
@@ -1177,10 +1227,16 @@ function ReceiptManager() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">收据管理</h2>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          上传收据
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            直接创建
+          </Button>
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            上传收据
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -1425,6 +1481,35 @@ function ReceiptManager() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showDirectCreate} onOpenChange={(open) => { setShowDirectCreate(open); if (!open) setError(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>直接创建收据</DialogTitle>
+            <DialogDescription>跳过AI识别，手动录入收据信息</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Input placeholder="收据号" value={directForm.receiptNo} onChange={(e) => setDirectForm((p) => ({ ...p, receiptNo: e.target.value }))} />
+            <Input type="date" placeholder="日期" value={directForm.date} onChange={(e) => setDirectForm((p) => ({ ...p, date: e.target.value }))} />
+            <Input placeholder="电话" value={directForm.tel} onChange={(e) => setDirectForm((p) => ({ ...p, tel: e.target.value }))} />
+            <Input type="number" placeholder="付款金额(USD)" value={directForm.usd} onChange={(e) => setDirectForm((p) => ({ ...p, usd: e.target.value }))} />
+            <Input placeholder="账单号(invNo)" value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
+            <Input placeholder="客户单号(orderNo)" value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
+            <Input placeholder="付款人" value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
+            <Label className="flex items-center gap-2">
+              <input type="checkbox" checked={directForm.isDeposit} onChange={(e) => setDirectForm((p) => ({ ...p, isDeposit: e.target.checked }))} />
+              定金
+            </Label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>取消</Button>
+            <Button onClick={handleDirectCreate}>
+              <Check className="h-4 w-4 mr-2" />
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 图片查看对话框 */}
       <Dialog open={!!viewingImage} onOpenChange={(open) => { if (!open) setViewingImage(null); }}>
         <DialogContent className="max-w-4xl">
@@ -1450,6 +1535,7 @@ function ReceiptManager() {
 function DetailManager() {
   const { details, setDetails } = useStore();
   const [showUpload, setShowUpload] = useState(false);
+  const [showDirectCreate, setShowDirectCreate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ocrResult, setOcrResult] = useState<{ date: string | null; items: { mark: string | null; orderNo: string | null; amount: number; matchedReceiptId?: string | null }[] } | null>(null);
@@ -1458,6 +1544,8 @@ function DetailManager() {
   const [error, setError] = useState<string | null>(null);
   // 服务器保存的图片路径
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+  const [directDate, setDirectDate] = useState('');
+  const [directItems, setDirectItems] = useState([{ mark: '', orderNo: '', amount: '' }]);
   
   // 折叠状态
   const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
@@ -1598,14 +1686,53 @@ function DetailManager() {
     }
   };
 
+  const handleDirectCreate = async () => {
+    setError(null);
+    try {
+      const payloadItems = directItems
+        .filter((item) => item.amount && Number(item.amount) > 0)
+        .map((item) => ({
+          mark: item.mark || null,
+          orderNo: item.orderNo || null,
+          amount: Number(item.amount),
+        }));
+
+      const result = await apiCall('detail', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'direct-create',
+          date: directDate || null,
+          items: payloadItems,
+        }),
+      });
+
+      if (result.success) {
+        setShowDirectCreate(false);
+        setDirectDate('');
+        setDirectItems([{ mark: '', orderNo: '', amount: '' }]);
+        loadDetails();
+      } else {
+        setError(result.error || '创建失败');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建失败');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">付款明细管理</h2>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          上传付款明细
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            直接创建
+          </Button>
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            上传付款明细
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -1832,6 +1959,49 @@ function DetailManager() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={showDirectCreate} onOpenChange={setShowDirectCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>直接创建付款明细</DialogTitle>
+            <DialogDescription>跳过AI识别，手动录入明细行</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Input type="date" value={directDate} onChange={(e) => setDirectDate(e.target.value)} />
+            {directItems.map((item, idx) => (
+              <div key={idx} className="grid grid-cols-3 gap-2">
+                <Input
+                  placeholder="唛头"
+                  value={item.mark}
+                  onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, mark: e.target.value } : row)))}
+                />
+                <Input
+                  placeholder="单号"
+                  value={item.orderNo}
+                  onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, orderNo: e.target.value } : row)))}
+                />
+                <Input
+                  type="number"
+                  placeholder="金额"
+                  value={item.amount}
+                  onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))}
+                />
+              </div>
+            ))}
+            <Button variant="outline" onClick={() => setDirectItems((prev) => [...prev, { mark: '', orderNo: '', amount: '' }])}>
+              <Plus className="h-4 w-4 mr-2" />
+              增加明细行
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>取消</Button>
+            <Button onClick={handleDirectCreate}>
+              <Check className="h-4 w-4 mr-2" />
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* 图片查看对话框 */}
       <Dialog open={!!viewingImage} onOpenChange={(open) => { if (!open) setViewingImage(null); }}>
         <DialogContent className="max-w-4xl">
@@ -1857,6 +2027,7 @@ function DetailManager() {
 function SwiftManager() {
   const { swifts, setSwifts, details } = useStore();
   const [showUpload, setShowUpload] = useState(false);
+  const [showDirectCreate, setShowDirectCreate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ocrResult, setOcrResult] = useState<Record<string, unknown> | null>(null);
@@ -1870,6 +2041,15 @@ function SwiftManager() {
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [hasErrorFilter, setHasErrorFilter] = useState('');
+  const [directForm, setDirectForm] = useState({
+    detailId: '',
+    amount: '',
+    date: '',
+    senderName: '',
+    senderAddress: '',
+    receiverName: '',
+    receiverAccount: '',
+  });
 
   const loadSwifts = useCallback(async () => {
     const params = new URLSearchParams();
@@ -1987,14 +2167,56 @@ function SwiftManager() {
     }
   };
 
+  const handleDirectCreate = async () => {
+    setError(null);
+    try {
+      const result = await apiCall('swift', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'direct-create',
+          detailId: directForm.detailId,
+          amount: Number(directForm.amount),
+          date: directForm.date || null,
+          senderName: directForm.senderName || null,
+          senderAddress: directForm.senderAddress || null,
+          receiverName: directForm.receiverName || null,
+          receiverAccount: directForm.receiverAccount || null,
+        }),
+      });
+      if (result.success) {
+        setShowDirectCreate(false);
+        setDirectForm({
+          detailId: '',
+          amount: '',
+          date: '',
+          senderName: '',
+          senderAddress: '',
+          receiverName: '',
+          receiverAccount: '',
+        });
+        loadSwifts();
+      } else {
+        setError(result.error || '创建失败');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建失败');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">SWIFT水单管理</h2>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          上传SWIFT
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            直接创建
+          </Button>
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            上传SWIFT
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -2178,6 +2400,45 @@ function SwiftManager() {
                   <Check className="h-4 w-4 mr-2" /> 确认创建
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDirectCreate} onOpenChange={setShowDirectCreate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>直接创建SWIFT</DialogTitle>
+            <DialogDescription>跳过AI识别，手动录入SWIFT信息</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>关联付款明细</Label>
+              <select
+                className="w-full mt-1 border rounded-md p-2"
+                value={directForm.detailId}
+                onChange={(e) => setDirectForm((prev) => ({ ...prev, detailId: e.target.value }))}
+              >
+                <option value="">请选择...</option>
+                {waitingDetails.map((detail) => (
+                  <option key={detail.id} value={detail.id}>
+                    {detail.date ? new Date(detail.date).toLocaleDateString() : '日期未知'} - ${detail.totalAmount.toFixed(2)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Input type="number" placeholder="汇款金额" value={directForm.amount} onChange={(e) => setDirectForm((prev) => ({ ...prev, amount: e.target.value }))} />
+            <Input type="date" placeholder="汇款日期" value={directForm.date} onChange={(e) => setDirectForm((prev) => ({ ...prev, date: e.target.value }))} />
+            <Input placeholder="汇款人姓名" value={directForm.senderName} onChange={(e) => setDirectForm((prev) => ({ ...prev, senderName: e.target.value }))} />
+            <Input placeholder="汇款人地址" value={directForm.senderAddress} onChange={(e) => setDirectForm((prev) => ({ ...prev, senderAddress: e.target.value }))} />
+            <Input placeholder="收款人姓名" value={directForm.receiverName} onChange={(e) => setDirectForm((prev) => ({ ...prev, receiverName: e.target.value }))} />
+            <Input placeholder="收款账号" value={directForm.receiverAccount} onChange={(e) => setDirectForm((prev) => ({ ...prev, receiverAccount: e.target.value }))} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>取消</Button>
+            <Button onClick={handleDirectCreate}>
+              <Check className="h-4 w-4 mr-2" />
+              创建
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2406,6 +2667,214 @@ function UserManager() {
   );
 }
 
+function SettingsManager() {
+  const { user } = useStore();
+  const [loading, setLoading] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [config, setConfig] = useState<Record<string, string>>({});
+  const [canEditConfig, setCanEditConfig] = useState(false);
+  const [pwd, setPwd] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall('settings');
+      if (result.success) {
+        setConfig(result.data.settings || {});
+        setCanEditConfig(Boolean(result.data.canEdit));
+      }
+    } catch (err) {
+      if (err instanceof Error) setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
+
+  const handleSaveConfig = async () => {
+    if (!canEditConfig) return;
+    setSavingConfig(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await apiCall('settings', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'update-config', settings: config }),
+      });
+      if (result.success) {
+        setMessage(result.message || '配置已保存');
+      } else {
+        setError(result.error || '保存失败');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setError(null);
+    setMessage(null);
+    if (!pwd.oldPassword || !pwd.newPassword || !pwd.confirmPassword) {
+      setError('请填写完整密码信息');
+      return;
+    }
+    if (pwd.newPassword !== pwd.confirmPassword) {
+      setError('两次输入的新密码不一致');
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const result = await apiCall('auth', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'change-password',
+          oldPassword: pwd.oldPassword,
+          newPassword: pwd.newPassword,
+        }),
+      });
+      if (result.success) {
+        setPwd({ oldPassword: '', newPassword: '', confirmPassword: '' });
+        setMessage(result.message || '密码修改成功');
+      } else {
+        setError(result.error || '密码修改失败');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '密码修改失败');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const updateConfigField = (key: string, value: string) => {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">设置</h2>
+      {(error || message) && (
+        <Alert variant={error ? 'destructive' : 'default'}>
+          <AlertDescription>{error || message}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>修改密码</CardTitle>
+          <CardDescription>当前账号：{user?.email}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            type="password"
+            placeholder="旧密码"
+            value={pwd.oldPassword}
+            onChange={(e) => setPwd((prev) => ({ ...prev, oldPassword: e.target.value }))}
+          />
+          <Input
+            type="password"
+            placeholder="新密码（至少8位）"
+            value={pwd.newPassword}
+            onChange={(e) => setPwd((prev) => ({ ...prev, newPassword: e.target.value }))}
+          />
+          <Input
+            type="password"
+            placeholder="确认新密码"
+            value={pwd.confirmPassword}
+            onChange={(e) => setPwd((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+          />
+          <div className="flex justify-end">
+            <Button onClick={handleChangePassword} disabled={passwordLoading}>
+              {passwordLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Key className="h-4 w-4 mr-2" />
+              保存新密码
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>系统配置</CardTitle>
+          <CardDescription>配置通过设置按钮修改，保存后立即生效（管理员权限）</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {loading ? (
+            <div className="py-8 flex items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label>OCR_API_BASE_URL</Label>
+                  <Input value={config.OCR_API_BASE_URL || ''} onChange={(e) => updateConfigField('OCR_API_BASE_URL', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_MODEL</Label>
+                  <Input value={config.OCR_MODEL || ''} onChange={(e) => updateConfigField('OCR_MODEL', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_API_KEY</Label>
+                  <Input type="password" value={config.OCR_API_KEY || ''} onChange={(e) => updateConfigField('OCR_API_KEY', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_DISABLED</Label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={config.OCR_DISABLED || 'false'}
+                    onChange={(e) => updateConfigField('OCR_DISABLED', e.target.value)}
+                    disabled={!canEditConfig}
+                  >
+                    <option value="false">false</option>
+                    <option value="true">true</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>OCR_MAX_RETRIES</Label>
+                  <Input value={config.OCR_MAX_RETRIES || ''} onChange={(e) => updateConfigField('OCR_MAX_RETRIES', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_TIMEOUT_MS</Label>
+                  <Input value={config.OCR_TIMEOUT_MS || ''} onChange={(e) => updateConfigField('OCR_TIMEOUT_MS', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_RETRY_BASE_DELAY_MS</Label>
+                  <Input value={config.OCR_RETRY_BASE_DELAY_MS || ''} onChange={(e) => updateConfigField('OCR_RETRY_BASE_DELAY_MS', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_INPUT_COST_PER_1K</Label>
+                  <Input value={config.OCR_INPUT_COST_PER_1K || ''} onChange={(e) => updateConfigField('OCR_INPUT_COST_PER_1K', e.target.value)} disabled={!canEditConfig} />
+                </div>
+                <div>
+                  <Label>OCR_OUTPUT_COST_PER_1K</Label>
+                  <Input value={config.OCR_OUTPUT_COST_PER_1K || ''} onChange={(e) => updateConfigField('OCR_OUTPUT_COST_PER_1K', e.target.value)} disabled={!canEditConfig} />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={handleSaveConfig} disabled={!canEditConfig || savingConfig}>
+                  {savingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  <Save className="h-4 w-4 mr-2" />
+                  保存系统配置
+                </Button>
+              </div>
+              {!canEditConfig && <p className="text-sm text-gray-500">仅管理员可编辑系统配置。</p>}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // 主应用
 export default function HomePage() {
   const { user, setUser, currentView } = useStore();
@@ -2461,6 +2930,8 @@ export default function HomePage() {
         return <DeletionManager />;
       case 'users':
         return <UserManager />;
+      case 'settings':
+        return <SettingsManager />;
       default:
         return <Dashboard />;
     }

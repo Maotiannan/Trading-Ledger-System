@@ -102,7 +102,7 @@ interface AppState {
   setUser: (user: User | null) => void;
   
   // 当前视图
-  currentView: 'dashboard' | 'invoices' | 'receipts' | 'details' | 'swifts' | 'deletions' | 'users';
+  currentView: 'dashboard' | 'invoices' | 'receipts' | 'details' | 'swifts' | 'deletions' | 'users' | 'settings';
   setCurrentView: (view: AppState['currentView']) => void;
   
   // 数据

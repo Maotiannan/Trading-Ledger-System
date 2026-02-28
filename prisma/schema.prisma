@@ -66,6 +66,7 @@ model User {
   deletionRequests  DeletionRequest[]
   deletionApprovals DeletionRequest[] @relation("ApprovedBy")
   auditLogs         AuditLog[]
+  systemSettings    SystemSetting[]   @relation("SystemSettingUpdatedBy")
 }
 
 // ==================== 账单表 (Invoice) ====================
@@ -309,4 +310,18 @@ model AuditLog {
   @@index([targetType, targetId])
   @@index([actorId, createdAt])
   @@index([createdAt])
+}
+
+// ==================== 系统配置表 ====================
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  updater User? @relation("SystemSettingUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([updatedAt])
 }

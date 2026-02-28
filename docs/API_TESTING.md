@@ -7,6 +7,7 @@ This project is fully API-driven. UI features map to API endpoints under `/api/*
 - `GET /api/system/health`
 - `GET /api/system/routes`
 - `GET /api/system/config-template`
+- `GET /api/settings`
 
 Use these first to verify runtime status and config placeholders.
 
@@ -40,6 +41,11 @@ curl -b cookie.txt -X POST http://127.0.0.1/api/auth \
 
 # invoice list
 curl -b cookie.txt http://127.0.0.1/api/invoice
+
+# direct create receipt (no OCR)
+curl -b cookie.txt -X POST http://127.0.0.1/api/receipt \
+  -H "Content-Type: application/json" \
+  --data '{"action":"direct-create","usd":100,"orderNo":"ORDER-001","isDeposit":false}'
 
 # receipt list
 curl -b cookie.txt http://127.0.0.1/api/receipt

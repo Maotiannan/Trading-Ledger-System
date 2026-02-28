@@ -23,6 +23,7 @@ export const apiCatalog: ApiModule[] = [
       { action: 'create', method: 'POST', description: 'Create user (admin)', bodyExample: { action: 'create', email: 'user@example.com', password: '***', name: 'User' } },
       { action: 'delete', method: 'POST', description: 'Delete user (admin)', bodyExample: { action: 'delete', userId: 'user-id' } },
       { action: 'reset-password', method: 'POST', description: 'Reset password (admin)', bodyExample: { action: 'reset-password', userId: 'user-id', password: '***' } },
+      { action: 'change-password', method: 'POST', description: 'Change own password', bodyExample: { action: 'change-password', oldPassword: '***', newPassword: '***' } },
     ],
   },
   {
@@ -99,6 +100,14 @@ export const apiCatalog: ApiModule[] = [
     description: 'Admin bootstrap route (disabled by default)',
     actions: [
       { action: 'init', method: 'POST', description: 'Create initial admin with token header', bodyExample: { header: 'x-init-token: ...' } },
+    ],
+  },
+  {
+    endpoint: '/api/settings',
+    description: 'System settings',
+    actions: [
+      { action: 'list', method: 'GET', description: 'Get settings and permissions' },
+      { action: 'update-config', method: 'POST', description: 'Update system config (admin)', bodyExample: { action: 'update-config', settings: { OCR_MODEL: 'gpt-4o-mini' } } },
     ],
   },
 ];

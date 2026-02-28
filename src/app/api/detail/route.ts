@@ -8,6 +8,7 @@ import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
 import { assertSearchLength, detailPayloadSchema, InputValidationError, parseJsonWithSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
+import { parseActionRequest } from '@/lib/http-body';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -15,6 +16,18 @@ type DetailProcessedItem = {
   amount: number;
   receiptId: string | null;
 };
+
+function parseDetailPayload(data: Record<string, unknown>) {
+  if (typeof data.data === 'string') {
+    return parseJsonWithSchema(data.data, detailPayloadSchema, '明细数据格式错误');
+  }
+  const result = detailPayloadSchema.safeParse(data);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new InputValidationError(issue?.message || '明细数据格式错误');
+  }
+  return result.data;
+}
 
 // 获取付款明细列表
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -81,10 +94,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 // 上传并识别付款明细
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const action = formData.get('action') as string;
-    const detailId = formData.get('detailId') as string;
+    const { action, data: requestData, file } = await parseActionRequest(request);
+    const detailId = (requestData.detailId as string) || '';
 
     if (action === 'recognize') {
       // AI识别付款明细
@@ -135,20 +146,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     if (action === 'confirm') {
       // 确认创建付款明细
-      const dataStr = formData.get('data') as string;
-      const imagePath = formData.get('imagePath') as string;
-      const imageName = formData.get('imageName') as string;
+      const imagePath = (requestData.imagePath as string) || '';
+      const imageName = (requestData.imageName as string) || '';
       
       console.log('[Detail Confirm] imagePath:', imagePath);
       console.log('[Detail Confirm] imageName:', imageName);
       
-      if (!dataStr) {
-        return NextResponse.json({ success: false, error: '缺少明细数据' }, { status: 400 });
-      }
-
-      const data = parseJsonWithSchema(dataStr, detailPayloadSchema, '明细数据格式错误');
-      const { date } = data;
-      const normalizedItems = data.items.map((item) => ({
+      const detailPayload = parseDetailPayload(requestData);
+      const { date } = detailPayload;
+      const normalizedItems = detailPayload.items.map((item) => ({
         mark: item.mark,
         orderNo: item.orderNo,
         amount: item.amount,
@@ -249,6 +255,94 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       return NextResponse.json({ success: true, data: detail });
     }
 
+    if (action === 'direct-create') {
+      const detailPayload = parseDetailPayload(requestData);
+      const { date } = detailPayload;
+      const normalizedItems = detailPayload.items.map((item) => ({
+        mark: item.mark,
+        orderNo: item.orderNo,
+        amount: item.amount,
+        receiptId: item.receiptId || item.matchedReceiptId || null,
+      }));
+
+      const processedItems: DetailProcessedItem[] = [];
+      for (const item of normalizedItems) {
+        let receiptId = item.receiptId;
+        if (receiptId) {
+          const receipt = await db.receipt.findUnique({ where: { id: receiptId }, select: { createdBy: true } });
+          if (!receipt) {
+            return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
+          }
+          if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+            return forbiddenOwnershipResponse('无权关联该收据');
+          }
+        }
+
+        if (!receiptId && item.orderNo) {
+          const orderId = await findOrCreateOrder(item.orderNo, currentUser.id);
+          const newReceipt = await db.receipt.create({
+            data: {
+              orderNo: item.orderNo,
+              usd: item.amount,
+              status: ReceiptStatus.SR_Received,
+              orderId,
+              createdBy: currentUser.id,
+              note: '由付款明细直接创建',
+            }
+          });
+          receiptId = newReceipt.id;
+          await updateOrderBalance(orderId);
+        }
+
+        processedItems.push({
+          mark: item.mark,
+          orderNo: item.orderNo,
+          amount: item.amount,
+          receiptId
+        });
+      }
+
+      const detail = await db.$transaction(async (tx) => {
+        const created = await tx.detail.create({
+          data: {
+            date: date ? new Date(date) : null,
+            status: DetailStatus.Waiting_SWIFT,
+            imageUrl: null,
+            imageName: null,
+            totalAmount: processedItems.reduce((sum, item) => sum + item.amount, 0),
+            createdBy: currentUser.id,
+            items: {
+              create: processedItems
+            }
+          },
+          include: {
+            items: { include: { receipt: true } },
+            creator: { select: { id: true, name: true, email: true } }
+          }
+        });
+
+        for (const item of created.items) {
+          if (item.receiptId) {
+            await tx.receipt.update({
+              where: { id: item.receiptId },
+              data: { status: ReceiptStatus.Waiting_SWIFT }
+            });
+          }
+        }
+
+        return created;
+      });
+
+      await recordAuditEvent({
+        action: 'DETAIL_CREATE_DIRECT',
+        actorId: currentUser.id,
+        targetType: 'DETAIL',
+        targetId: detail.id,
+      });
+
+      return NextResponse.json({ success: true, data: detail, message: '付款明细已直接创建' });
+    }
+
     if (action === 'update') {
       // 更新付款明细（重新识别）
       if (!detailId) {
@@ -290,9 +384,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         }
       });
 
-      const dataStr = formData.get('data') as string;
-      const imagePath = formData.get('imagePath') as string;
-      const imageName = formData.get('imageName') as string;
+      const dataStr = requestData.data as string;
+      const imagePath = requestData.imagePath as string;
+      const imageName = requestData.imageName as string;
       
       if (dataStr) {
         const data = parseJsonWithSchema(dataStr, detailPayloadSchema, '明细数据格式错误');

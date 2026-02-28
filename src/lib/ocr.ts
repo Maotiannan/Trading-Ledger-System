@@ -1,14 +1,29 @@
 import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult } from '@/lib/types';
+import { getSystemSettings } from '@/lib/system-settings';
 
-const OCR_MAX_RETRIES = Number(process.env.OCR_MAX_RETRIES || 3);
-const OCR_TIMEOUT_MS = Number(process.env.OCR_TIMEOUT_MS || 15000);
-const OCR_RETRY_BASE_DELAY_MS = Number(process.env.OCR_RETRY_BASE_DELAY_MS || 1200);
-const OCR_INPUT_COST_PER_1K = Number(process.env.OCR_INPUT_COST_PER_1K || 0);
-const OCR_OUTPUT_COST_PER_1K = Number(process.env.OCR_OUTPUT_COST_PER_1K || 0);
-const OCR_MODEL = process.env.OCR_MODEL || 'gpt-4o-mini';
-const OCR_API_BASE_URL = (process.env.OCR_API_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
-const OCR_API_KEY = process.env.OCR_API_KEY || '';
-const OCR_DISABLED = process.env.OCR_DISABLED === 'true';
+type OcrConfig = {
+  maxRetries: number;
+  timeoutMs: number;
+  retryBaseDelayMs: number;
+  inputCostPer1k: number;
+  outputCostPer1k: number;
+  model: string;
+  apiBaseUrl: string;
+  apiKey: string;
+  disabled: boolean;
+};
+
+const OCR_DEFAULTS = {
+  OCR_DISABLED: process.env.OCR_DISABLED ?? 'false',
+  OCR_API_BASE_URL: process.env.OCR_API_BASE_URL ?? 'https://api.openai.com/v1',
+  OCR_API_KEY: process.env.OCR_API_KEY ?? '',
+  OCR_MODEL: process.env.OCR_MODEL ?? 'gpt-4o-mini',
+  OCR_MAX_RETRIES: process.env.OCR_MAX_RETRIES ?? '3',
+  OCR_TIMEOUT_MS: process.env.OCR_TIMEOUT_MS ?? '15000',
+  OCR_RETRY_BASE_DELAY_MS: process.env.OCR_RETRY_BASE_DELAY_MS ?? '1200',
+  OCR_INPUT_COST_PER_1K: process.env.OCR_INPUT_COST_PER_1K ?? '0',
+  OCR_OUTPUT_COST_PER_1K: process.env.OCR_OUTPUT_COST_PER_1K ?? '0',
+};
 let ocrDisabledLogged = false;
 
 function ensureDataUrl(imageBase64: string): string {
@@ -16,22 +31,52 @@ function ensureDataUrl(imageBase64: string): string {
   return `data:image/jpeg;base64,${imageBase64}`;
 }
 
-async function createVisionCompletion(prompt: string, imageBase64: string) {
-  if (OCR_DISABLED) {
+function parseBoolean(value: string): boolean {
+  return value.toLowerCase() === 'true';
+}
+
+function parseNumber(value: string, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return parsed;
+}
+
+async function getOcrConfig(): Promise<OcrConfig> {
+  const keys = Object.keys(OCR_DEFAULTS);
+  const overrides = await getSystemSettings(keys);
+  const merged = Object.fromEntries(
+    keys.map((key) => [key, overrides[key] ?? OCR_DEFAULTS[key as keyof typeof OCR_DEFAULTS]])
+  );
+
+  return {
+    maxRetries: Math.max(1, parseNumber(merged.OCR_MAX_RETRIES, 3)),
+    timeoutMs: Math.max(1000, parseNumber(merged.OCR_TIMEOUT_MS, 15000)),
+    retryBaseDelayMs: Math.max(100, parseNumber(merged.OCR_RETRY_BASE_DELAY_MS, 1200)),
+    inputCostPer1k: Math.max(0, parseNumber(merged.OCR_INPUT_COST_PER_1K, 0)),
+    outputCostPer1k: Math.max(0, parseNumber(merged.OCR_OUTPUT_COST_PER_1K, 0)),
+    model: merged.OCR_MODEL || 'gpt-4o-mini',
+    apiBaseUrl: (merged.OCR_API_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+    apiKey: merged.OCR_API_KEY || '',
+    disabled: parseBoolean(merged.OCR_DISABLED || 'false'),
+  };
+}
+
+async function createVisionCompletion(prompt: string, imageBase64: string, config: OcrConfig) {
+  if (config.disabled) {
     throw new Error('OCR disabled by OCR_DISABLED=true');
   }
-  if (!OCR_API_KEY) {
+  if (!config.apiKey) {
     throw new Error('OCR_API_KEY is not configured');
   }
 
-  const response = await fetch(`${OCR_API_BASE_URL}/chat/completions`, {
+  const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${OCR_API_KEY}`,
+      Authorization: `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: OCR_MODEL,
+      model: config.model,
       messages: [
         {
           role: 'user',
@@ -53,17 +98,17 @@ async function createVisionCompletion(prompt: string, imageBase64: string) {
   return response.json();
 }
 
-function canUseOcr(): boolean {
-  if (OCR_DISABLED) return false;
-  if (!OCR_API_KEY) return false;
+function canUseOcr(config: OcrConfig): boolean {
+  if (config.disabled) return false;
+  if (!config.apiKey) return false;
   return true;
 }
 
-function logOcrDisabledReason(label: string): void {
+function logOcrDisabledReason(label: string, config: OcrConfig): void {
   if (ocrDisabledLogged) return;
-  if (OCR_DISABLED) {
+  if (config.disabled) {
     console.warn(`[OCR:${label}] OCR is disabled by OCR_DISABLED=true, fallback parser will be used`);
-  } else if (!OCR_API_KEY) {
+  } else if (!config.apiKey) {
     console.warn(`[OCR:${label}] OCR_API_KEY is not configured, fallback parser will be used`);
   }
   ocrDisabledLogged = true;
@@ -85,18 +130,18 @@ async function withTimeout<T>(fn: () => Promise<T>, timeoutMs: number, label: st
   ]);
 }
 
-async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, label: string, config: OcrConfig): Promise<T> {
   let lastError: unknown;
 
-  for (let i = 0; i < OCR_MAX_RETRIES; i++) {
+  for (let i = 0; i < config.maxRetries; i++) {
     try {
-      return await withTimeout(fn, OCR_TIMEOUT_MS, label);
+      return await withTimeout(fn, config.timeoutMs, label);
     } catch (error) {
       lastError = error;
       console.error(`[OCR:${label}] attempt ${i + 1} failed`, error);
 
-      if (i < OCR_MAX_RETRIES - 1 && isRetryableError(error)) {
-        const waitMs = OCR_RETRY_BASE_DELAY_MS * Math.pow(2, i);
+      if (i < config.maxRetries - 1 && isRetryableError(error)) {
+        const waitMs = config.retryBaseDelayMs * Math.pow(2, i);
         await new Promise((resolve) => setTimeout(resolve, waitMs));
         continue;
       }
@@ -118,7 +163,7 @@ function parseJsonObject<T>(content: string): T | null {
   }
 }
 
-function logUsage(label: string, response: any): void {
+function logUsage(label: string, response: any, config: OcrConfig): void {
   const usage = response?.usage;
   if (!usage) return;
 
@@ -126,8 +171,8 @@ function logUsage(label: string, response: any): void {
   const completionTokens = Number(usage.completion_tokens || 0);
   const totalTokens = Number(usage.total_tokens || promptTokens + completionTokens);
   const estimatedCost =
-    (promptTokens / 1000) * OCR_INPUT_COST_PER_1K +
-    (completionTokens / 1000) * OCR_OUTPUT_COST_PER_1K;
+    (promptTokens / 1000) * config.inputCostPer1k +
+    (completionTokens / 1000) * config.outputCostPer1k;
 
   console.log(
     `[OCR:${label}] usage prompt=${promptTokens} completion=${completionTokens} total=${totalTokens} estimated_cost=${estimatedCost.toFixed(6)}`
@@ -140,18 +185,21 @@ async function runVisionRequest<T>(
   prompt: string,
   fallback: T
 ): Promise<T> {
-  if (!canUseOcr()) {
-    logOcrDisabledReason(label);
+  const config = await getOcrConfig();
+
+  if (!canUseOcr(config)) {
+    logOcrDisabledReason(label, config);
     return fallback;
   }
 
   try {
     const response = await withRetry(
-      () => createVisionCompletion(prompt, imageBase64),
-      label
+      () => createVisionCompletion(prompt, imageBase64, config),
+      label,
+      config
     );
 
-    logUsage(label, response);
+    logUsage(label, response, config);
     const content = response?.choices?.[0]?.message?.content || '{}';
     const parsed = parseJsonObject<T>(content);
     if (parsed) return parsed;

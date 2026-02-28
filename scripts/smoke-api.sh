@@ -50,6 +50,7 @@ check_code "config template" "200" "GET" "/api/system/config-template"
 check_code "login" "200" "POST" "/api/auth" "{\"action\":\"login\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}"
 check_code "me" "200" "POST" "/api/auth" '{"action":"me"}'
 check_code "set locale" "200" "POST" "/api/locale" '{"locale":"zh"}'
+check_code "settings get" "200" "GET" "/api/settings"
 
 check_code "invoice list" "200" "GET" "/api/invoice"
 check_code "receipt list" "200" "GET" "/api/receipt"

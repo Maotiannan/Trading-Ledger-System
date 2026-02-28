@@ -62,8 +62,8 @@ export const GET = withAuth(async (request: NextRequest) => {
       where: search
         ? {
             OR: [
-              { invNo: { contains: search, mode: 'insensitive' } },
-              { orders: { some: { orderNo: { contains: search, mode: 'insensitive' } } } },
+              { invNo: { contains: search } },
+              { orders: { some: { orderNo: { contains: search } } } },
             ],
           }
         : undefined,
@@ -191,7 +191,6 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
           invoiceId: targetInvoice.id,
           orderNo: {
             equals: normalizedOrderNoRaw,
-            mode: 'insensitive',
           },
         },
         select: { id: true, orderNo: true },
@@ -220,7 +219,6 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         where: {
           orderNo: {
             equals: normalizedOrderNoRaw,
-            mode: 'insensitive',
           },
           invoice: { invNo: 'Un_Associated' },
         },
@@ -262,7 +260,6 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         where: {
           orderNo: {
             equals: normalizedOrderNoRaw,
-            mode: 'insensitive',
           },
         },
         include: { invoice: true },
@@ -526,7 +523,7 @@ async function rematchAllOrders() {
     const normalizedOrderNo = normalizeOrderNo(receipt.orderNo);
     const sameOrder = await db.order.findFirst({
       where: {
-        orderNo: { equals: receipt.orderNo, mode: 'insensitive' },
+        orderNo: { equals: receipt.orderNo },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -719,8 +716,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const existingOrder = await db.order.findFirst({
         where: {
           orderNo: {
-            equals: orderNo,
-            mode: 'insensitive'
+            equals: orderNo
           }
         },
         include: { invoice: true }

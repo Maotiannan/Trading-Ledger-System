@@ -32,7 +32,6 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
         where: {
           mark: {
             equals: customerMark,
-            mode: 'insensitive',
           },
         },
         select: { id: true, mark: true, orderName: true, phone: true, city: true },
@@ -74,7 +73,6 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
       where: {
         orderName: {
           equals: customerOrderNameInput,
-          mode: 'insensitive',
         },
       },
       select: { id: true, mark: true, orderName: true, phone: true, city: true },

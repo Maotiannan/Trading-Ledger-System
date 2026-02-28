@@ -77,15 +77,15 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
   const where: Record<string, unknown> = {};
   if (mark) {
-    where.mark = { equals: mark, mode: 'insensitive' };
+    where.mark = { equals: mark };
   } else if (search) {
       where.OR = [
-        { mark: { contains: search, mode: 'insensitive' } },
-        { orderName: { contains: search, mode: 'insensitive' } },
-        { name: { contains: search, mode: 'insensitive' } },
-      { phone: { contains: search, mode: 'insensitive' } },
-      { city: { contains: search, mode: 'insensitive' } },
-      { consignee: { contains: search, mode: 'insensitive' } },
+        { mark: { contains: search } },
+        { orderName: { contains: search } },
+        { name: { contains: search } },
+      { phone: { contains: search } },
+      { city: { contains: search } },
+      { consignee: { contains: search } },
     ];
   }
 

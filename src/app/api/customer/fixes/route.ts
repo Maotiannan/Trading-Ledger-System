@@ -56,9 +56,9 @@ function parsePayload(body: Record<string, unknown>): FixCustomerPayload | { err
 async function upsertCustomer(currentUserId: string, role: UserRole, payload: FixCustomerPayload) {
   const existing = await db.customer.findFirst({
       where: {
-        mark: { equals: payload.mark, mode: 'insensitive' },
-      orderName: { equals: payload.orderName, mode: 'insensitive' },
-    },
+        mark: { equals: payload.mark },
+      orderName: { equals: payload.orderName },
+      },
   });
 
   const allowExtended = role === UserRole.ADMIN || (await salesCanEditExtended());

@@ -3240,8 +3240,10 @@ function CustomerManager() {
   }, []);
 
   useEffect(() => {
-    loadCustomers();
-    loadFixes();
+    void Promise.resolve().then(() => {
+      void loadCustomers();
+      void loadFixes();
+    });
   }, [loadCustomers, loadFixes]);
 
   const handleCreateOrUpdate = async () => {

@@ -154,10 +154,73 @@ async function withRetry<T>(fn: () => Promise<T>, label: string, config: OcrConf
 }
 
 function parseJsonObject<T>(content: string): T | null {
+  const parseCandidate = (raw: string): T | null => {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  };
+
+  const sanitizeUnescapedInnerQuotes = (raw: string): string => {
+    let out = '';
+    let inString = false;
+    let escaped = false;
+
+    for (let i = 0; i < raw.length; i++) {
+      const ch = raw[i];
+
+      if (!inString) {
+        out += ch;
+        if (ch === '"') {
+          inString = true;
+          escaped = false;
+        }
+        continue;
+      }
+
+      if (escaped) {
+        out += ch;
+        escaped = false;
+        continue;
+      }
+
+      if (ch === '\\') {
+        out += ch;
+        escaped = true;
+        continue;
+      }
+
+      if (ch === '"') {
+        let j = i + 1;
+        while (j < raw.length && /\s/.test(raw[j])) j++;
+        const next = raw[j];
+        // 合法结束引号: key 后面接冒号，value 后面接逗号/右花括号/右中括号
+        if (next === ':' || next === ',' || next === '}' || next === ']' || next === undefined) {
+          out += ch;
+          inString = false;
+        } else {
+          // 字符串内部未转义双引号，替换为单引号以提高容错
+          out += "'";
+        }
+        continue;
+      }
+
+      out += ch;
+    }
+
+    return out;
+  };
+
   try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const cleaned = content.replace(/```json|```/gi, '');
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
-    return JSON.parse(jsonMatch[0]) as T;
+    const strictParsed = parseCandidate(jsonMatch[0]);
+    if (strictParsed) return strictParsed;
+
+    const repaired = sanitizeUnescapedInnerQuotes(jsonMatch[0]);
+    return parseCandidate(repaired);
   } catch {
     return null;
   }

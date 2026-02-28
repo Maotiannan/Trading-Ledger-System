@@ -140,23 +140,12 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
   try {
     const body = await request.json();
     const { invNo, orders } = body;
-    const customerMark = typeof body.customerMark === 'string' ? body.customerMark.trim() : '';
-    const customerName = typeof body.customerName === 'string' ? body.customerName.trim() : '';
-    const customerId = typeof body.customerId === 'string' ? body.customerId.trim() : '';
 
     if (!invNo || !orders || !Array.isArray(orders) || orders.length === 0) {
       return NextResponse.json({ success: false, error: '账单号和订单列表不能为空' }, { status: 400 });
     }
-    if (!customerMark) {
-      return NextResponse.json({ success: false, error: '客户MARK不能为空' }, { status: 400 });
-    }
     const normalizedInvNo = String(invNo).trim();
     const normalizeOrderNo = (value: string) => value.toLowerCase().trim();
-    const customerResolution = await resolveCustomer({
-      customerMark,
-      customerName: customerName || null,
-      customerId: customerId || null,
-    });
 
     // 同 INV NO 允许重复提交：统一并入同一账单组（同一 invoice 记录）
     let targetInvoice = await db.invoice.findFirst({
@@ -175,13 +164,26 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
 
     const mergedOrdersInfo: string[] = [];
     const touchedOrderIds = new Set<string>();
+    let hasNeedsCustomerFix = false;
 
     for (const rawOrder of orders) {
       const normalizedOrderNoRaw = typeof rawOrder.orderNo === 'string' ? rawOrder.orderNo.trim() : '';
       const amountNumber = Number(rawOrder.amount);
-      if (!normalizedOrderNoRaw || !Number.isFinite(amountNumber)) {
-        continue;
+      const rowCustomerMark = typeof rawOrder.customerMark === 'string' ? rawOrder.customerMark.trim() : '';
+      const rowCustomerName = typeof rawOrder.customerName === 'string' ? rawOrder.customerName.trim() : '';
+      const rowCustomerId = typeof rawOrder.customerId === 'string' ? rawOrder.customerId.trim() : '';
+      if (!normalizedOrderNoRaw || !Number.isFinite(amountNumber) || amountNumber <= 0 || !rowCustomerMark) {
+        return NextResponse.json(
+          { success: false, error: '每一行订单都必须填写 ORDER、AMOUNT(>0)、MARK' },
+          { status: 400 }
+        );
       }
+      const customerResolution = await resolveCustomer({
+        customerMark: rowCustomerMark,
+        customerName: rowCustomerName || null,
+        customerId: rowCustomerId || null,
+      });
+      if (customerResolution.needsCustomerFix) hasNeedsCustomerFix = true;
 
       // 1) 目标账单内已存在同 ORDER：直接累加金额
       const existingInTarget = await db.order.findFirst({
@@ -346,7 +348,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
     if (mergedOrdersInfo.length > 0) {
       messageParts.push(`部分订单已合并: ${mergedOrdersInfo.join(', ')}`);
     }
-    if (customerResolution.needsCustomerFix) {
+    if (hasNeedsCustomerFix) {
       messageParts.push('please modify guest information');
     }
     const message = messageParts.length > 0 ? `账单已保存，${messageParts.join('；')}` : '账单已保存';

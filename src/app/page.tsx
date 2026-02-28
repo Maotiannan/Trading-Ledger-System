@@ -74,6 +74,14 @@ async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mar
   return null;
 }
 
+type CustomerCandidate = {
+  id: string;
+  mark: string;
+  name: string;
+  phone?: string | null;
+  city?: string | null;
+};
+
 // 登录组件
 function LoginPage() {
   const t = useTranslations('login');
@@ -378,11 +386,14 @@ function InvoiceManager() {
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [invNo, setInvNo] = useState('');
-  const [customerMark, setCustomerMark] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
-  const [customerCandidates, setCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
-  const [orders, setOrders] = useState<{ orderNo: string; amount: string }[]>([{ orderNo: '', amount: '' }]);
+  const [orders, setOrders] = useState<Array<{
+    orderNo: string;
+    amount: string;
+    customerMark: string;
+    customerName: string;
+    customerId: string;
+    customerCandidates: CustomerCandidate[];
+  }>>([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
@@ -411,7 +422,7 @@ function InvoiceManager() {
   const [newOrderCustomerMark, setNewOrderCustomerMark] = useState('');
   const [newOrderCustomerName, setNewOrderCustomerName] = useState('');
   const [newOrderCustomerId, setNewOrderCustomerId] = useState('');
-  const [newOrderCustomerCandidates, setNewOrderCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
+  const [newOrderCustomerCandidates, setNewOrderCustomerCandidates] = useState<CustomerCandidate[]>([]);
   const [addError, setAddError] = useState('');
   
   // 转移余额对话框
@@ -426,6 +437,7 @@ function InvoiceManager() {
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
+  const [editingOrderCandidates, setEditingOrderCandidates] = useState<CustomerCandidate[]>([]);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -444,9 +456,11 @@ function InvoiceManager() {
 
   const loadCustomerCandidates = async (
     mark: string,
-    setter: (rows: Array<{ id: string; mark: string; name: string }>) => void,
+    setter: (rows: CustomerCandidate[]) => void,
     setDefaultName?: (value: string) => void,
-    setDefaultId?: (value: string) => void
+    setDefaultId?: (value: string) => void,
+    setDefaultPhone?: (value: string) => void,
+    setDefaultCity?: (value: string) => void
   ) => {
     const normalized = mark.trim();
     if (!normalized) {
@@ -461,15 +475,19 @@ function InvoiceManager() {
         setter([]);
         return;
       }
-      const rows = result.data.map((row: { id: string; mark: string; name: string }) => ({
+      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; name: string; phone?: string | null; city?: string | null }) => ({
         id: row.id,
         mark: row.mark,
         name: row.name,
+        phone: row.phone ?? null,
+        city: row.city ?? null,
       }));
       setter(rows);
       if (rows.length === 1) {
         if (setDefaultName) setDefaultName(rows[0].name);
         if (setDefaultId) setDefaultId(rows[0].id);
+        if (setDefaultPhone) setDefaultPhone(rows[0].phone || '');
+        if (setDefaultCity) setDefaultCity(rows[0].city || '');
       }
     } catch {
       setter([]);
@@ -529,13 +547,8 @@ function InvoiceManager() {
       setFormError('请输入账单号');
       return;
     }
-    if (!customerMark.trim()) {
-      setFormError('请输入客户MARK');
-      return;
-    }
-    
-    if (orders.some(o => !o.orderNo.trim() || !o.amount)) {
-      setFormError('请填写所有订单的客户单号和金额');
+    if (orders.some((o) => !o.orderNo.trim() || !o.amount || !o.customerMark.trim())) {
+      setFormError('请填写所有订单的客户单号、金额和MARK');
       return;
     }
 
@@ -546,21 +559,20 @@ function InvoiceManager() {
         method: 'POST',
         body: JSON.stringify({
           invNo,
-          customerMark,
-          customerName: customerName || null,
-          customerId: selectedCustomerId || null,
-          orders: orders.map(o => ({ orderNo: o.orderNo, amount: parseFloat(o.amount) }))
+          orders: orders.map((o) => ({
+            orderNo: o.orderNo,
+            amount: parseFloat(o.amount),
+            customerMark: o.customerMark,
+            customerName: o.customerName || null,
+            customerId: o.customerId || null,
+          })),
         }),
       });
 
       if (result.success) {
         setShowDialog(false);
         setInvNo('');
-        setCustomerMark('');
-        setCustomerName('');
-        setSelectedCustomerId('');
-        setCustomerCandidates([]);
-        setOrders([{ orderNo: '', amount: '' }]);
+        setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
         // 显示合并消息（如果有）
         if (result.message) {
           alert(result.message);
@@ -747,12 +759,79 @@ function InvoiceManager() {
   };
 
   const addOrderRow = () => {
-    setOrders([...orders, { orderNo: '', amount: '' }]);
+    setOrders([...orders, { orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
   };
 
-  const updateOrder = (index: number, field: 'orderNo' | 'amount', value: string) => {
+  const updateOrder = (index: number, field: 'orderNo' | 'amount' | 'customerMark', value: string) => {
     const newOrders = [...orders];
-    newOrders[index][field] = value;
+    if (field === 'customerMark') {
+      newOrders[index].customerMark = value;
+      newOrders[index].customerId = '';
+      newOrders[index].customerName = '';
+      loadCustomerCandidates(
+        value,
+        (rows) => {
+          setOrders((prev) => {
+            const copy = [...prev];
+            const row = copy[index];
+            if (!row) return prev;
+            row.customerCandidates = rows;
+            if (rows.length === 1) {
+              row.customerName = rows[0].name;
+              row.customerId = rows[0].id;
+            }
+            return copy;
+          });
+        },
+        (name) => setOrders((prev) => {
+          const copy = [...prev];
+          if (copy[index]) copy[index].customerName = name;
+          return copy;
+        }),
+        (id) => setOrders((prev) => {
+          const copy = [...prev];
+          if (copy[index]) copy[index].customerId = id;
+          return copy;
+        })
+      );
+    } else if (field === 'orderNo') {
+      newOrders[index].orderNo = value;
+      const orderInput = value.trim();
+      if (orderInput) {
+        void lookupCustomerByOrderNoGroup(orderInput).then((matched) => {
+          if (!matched) return;
+          setOrders((prev) => {
+            const copy = [...prev];
+            const row = copy[index];
+            if (!row) return prev;
+            row.customerMark = matched.mark;
+            row.customerName = matched.name || row.customerName;
+            row.customerId = matched.customerId || row.customerId;
+            return copy;
+          });
+          loadCustomerCandidates(
+            matched.mark,
+            (rows) => setOrders((prev) => {
+              const copy = [...prev];
+              if (copy[index]) copy[index].customerCandidates = rows;
+              return copy;
+            }),
+            (name) => setOrders((prev) => {
+              const copy = [...prev];
+              if (copy[index]) copy[index].customerName = name;
+              return copy;
+            }),
+            (id) => setOrders((prev) => {
+              const copy = [...prev];
+              if (copy[index]) copy[index].customerId = id;
+              return copy;
+            })
+          );
+        });
+      }
+    } else {
+      newOrders[index].amount = value;
+    }
     setOrders(newOrders);
   };
 
@@ -932,6 +1011,17 @@ function InvoiceManager() {
                                     customerCity: order.customerCity || '',
                                     customerId: '',
                                   });
+                                  setEditingOrderCandidates([]);
+                                  if (order.customerMark) {
+                                    loadCustomerCandidates(
+                                      order.customerMark,
+                                      setEditingOrderCandidates,
+                                      undefined,
+                                      undefined,
+                                      undefined,
+                                      undefined
+                                    );
+                                  }
                                   setShowOrderDialog(true);
                                 }}
                               >
@@ -972,7 +1062,24 @@ function InvoiceManager() {
                       <Input
                         placeholder="客户单号"
                         value={newOrderNo}
-                        onChange={(e) => setNewOrderNo(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setNewOrderNo(value);
+                          if (value.trim()) {
+                            void lookupCustomerByOrderNoGroup(value).then((matched) => {
+                              if (!matched) return;
+                              setNewOrderCustomerMark(matched.mark);
+                              setNewOrderCustomerName(matched.name);
+                              setNewOrderCustomerId(matched.customerId);
+                              loadCustomerCandidates(
+                                matched.mark,
+                                setNewOrderCustomerCandidates,
+                                setNewOrderCustomerName,
+                                setNewOrderCustomerId
+                              );
+                            });
+                          }
+                        }}
                         className="flex-1"
                       />
                       <Input
@@ -1070,41 +1177,10 @@ function InvoiceManager() {
               <Input value={invNo} onChange={(e) => setInvNo(e.target.value)} placeholder="如: L25MH090125" />
             </div>
             <div className="space-y-2">
-              <Label>客户MARK（必填）</Label>
-              <Input
-                value={customerMark}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setCustomerMark(value);
-                  setSelectedCustomerId('');
-                  setCustomerName('');
-                  loadCustomerCandidates(value, setCustomerCandidates, setCustomerName, setSelectedCustomerId);
-                }}
-                placeholder="输入客户MARK"
-              />
-              {customerCandidates.length > 1 && (
-                <select
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  value={selectedCustomerId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedCustomerId(id);
-                    const selected = customerCandidates.find((c) => c.id === id);
-                    setCustomerName(selected?.name || '');
-                  }}
-                >
-                  <option value="">请选择准确客户(MARK+NAME)</option>
-                  {customerCandidates.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
-                  ))}
-                </select>
-              )}
-              {customerName && <p className="text-xs text-gray-500">匹配客户：{customerName}</p>}
-            </div>
-            <div className="space-y-2">
               <Label>订单列表</Label>
               {orders.map((order, index) => (
-                <div key={index} className="flex gap-2">
+                <div key={index} className="space-y-2 border rounded-md p-2">
+                  <div className="flex gap-2">
                   <Input
                     placeholder="客户单号 (ORDER)"
                     value={order.orderNo}
@@ -1118,10 +1194,40 @@ function InvoiceManager() {
                     onChange={(e) => updateOrder(index, 'amount', e.target.value)}
                     className="w-32"
                   />
+                    <Input
+                      placeholder="客户MARK(必填)"
+                      value={order.customerMark}
+                      onChange={(e) => updateOrder(index, 'customerMark', e.target.value)}
+                      className="w-44"
+                    />
                   {orders.length > 1 && (
                     <Button variant="ghost" size="icon" onClick={() => removeOrder(index)}>
                       <X className="h-4 w-4" />
                     </Button>
+                  )}
+                </div>
+                  {order.customerCandidates.length > 1 && (
+                    <select
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={order.customerId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setOrders((prev) => {
+                          const copy = [...prev];
+                          const row = copy[index];
+                          if (!row) return prev;
+                          row.customerId = id;
+                          const selected = row.customerCandidates.find((c) => c.id === id);
+                          row.customerName = selected?.name || '';
+                          return copy;
+                        });
+                      }}
+                    >
+                      <option value="">请选择准确客户(MARK+NAME)</option>
+                      {order.customerCandidates.map((candidate) => (
+                        <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                      ))}
+                    </select>
                   )}
                 </div>
               ))}
@@ -1172,9 +1278,46 @@ function InvoiceManager() {
               <Label>客户MARK</Label>
               <Input
                 value={editingOrder?.customerMark || ''}
-                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerMark: e.target.value })}
+                onChange={(e) => {
+                  if (!editingOrder) return;
+                  const mark = e.target.value;
+                  setEditingOrder({ ...editingOrder, customerMark: mark, customerName: '', customerPhone: '', customerCity: '', customerId: '' });
+                  loadCustomerCandidates(
+                    mark,
+                    setEditingOrderCandidates,
+                    (name) => setEditingOrder((prev) => prev ? ({ ...prev, customerName: name }) : prev),
+                    (id) => setEditingOrder((prev) => prev ? ({ ...prev, customerId: id }) : prev),
+                    (phone) => setEditingOrder((prev) => prev ? ({ ...prev, customerPhone: phone }) : prev),
+                    (city) => setEditingOrder((prev) => prev ? ({ ...prev, customerCity: city }) : prev)
+                  );
+                }}
               />
             </div>
+            {editingOrderCandidates.length > 1 && (
+              <div className="space-y-2">
+                <Label>选择客户</Label>
+                <select
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  value={editingOrder?.customerId || ''}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const selected = editingOrderCandidates.find((c) => c.id === id);
+                    setEditingOrder((prev) => prev ? ({
+                      ...prev,
+                      customerId: id,
+                      customerName: selected?.name || '',
+                      customerPhone: selected?.phone || '',
+                      customerCity: selected?.city || '',
+                    }) : prev);
+                  }}
+                >
+                  <option value="">请选择准确客户(MARK+NAME)</option>
+                  {editingOrderCandidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>客户NAME</Label>
               <Input
@@ -1309,7 +1452,7 @@ function ReceiptManager() {
   const [ocrCustomerMark, setOcrCustomerMark] = useState('');
   const [ocrCustomerName, setOcrCustomerName] = useState('');
   const [ocrCustomerId, setOcrCustomerId] = useState('');
-  const [ocrCustomerCandidates, setOcrCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
+  const [ocrCustomerCandidates, setOcrCustomerCandidates] = useState<CustomerCandidate[]>([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1326,7 +1469,7 @@ function ReceiptManager() {
     customerId: '',
     isDeposit: false,
   });
-  const [directCustomerCandidates, setDirectCustomerCandidates] = useState<Array<{ id: string; mark: string; name: string }>>([]);
+  const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
   
   // 图片查看对话框
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
@@ -1410,7 +1553,7 @@ function ReceiptManager() {
 
   const loadCustomerCandidates = async (
     mark: string,
-    setter: (rows: Array<{ id: string; mark: string; name: string }>) => void,
+    setter: (rows: CustomerCandidate[]) => void,
     setDefaultName?: (value: string) => void,
     setDefaultId?: (value: string) => void
   ) => {
@@ -1427,10 +1570,12 @@ function ReceiptManager() {
         setter([]);
         return;
       }
-      const rows = result.data.map((row: { id: string; mark: string; name: string }) => ({
+      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; name: string; phone?: string | null; city?: string | null }) => ({
         id: row.id,
         mark: row.mark,
         name: row.name,
+        phone: row.phone ?? null,
+        city: row.city ?? null,
       }));
       setter(rows);
       if (rows.length === 1) {
@@ -3040,6 +3185,14 @@ function UserManager() {
   const { users, setUsers, user } = useStore();
   const [showCreate, setShowCreate] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'USER' as 'USER' | 'ADMIN' | 'SALES' });
+  const isAdmin = user?.role === 'ADMIN';
+
+  const isProtectedPrimaryAdmin = (target: { role: 'ADMIN' | 'SALES' | 'USER'; email: string; name: string | null; createdById?: string | null }) => {
+    if (target.role !== 'ADMIN') return false;
+    const email = (target.email || '').trim().toLowerCase();
+    const name = (target.name || '').trim().toLowerCase();
+    return email === 'admin@example.com' || (name === 'admin' && !target.createdById);
+  };
 
   const loadUsers = useCallback(async () => {
     const result = await apiCall('auth', {
@@ -3091,6 +3244,18 @@ function UserManager() {
     }
   };
 
+  const handleChangeRole = async (userId: string, role: 'USER' | 'SALES' | 'ADMIN') => {
+    const result = await apiCall('auth', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'update-role', userId, role }),
+    });
+    if (!result.success) {
+      alert(result.error || '角色更新失败');
+      return;
+    }
+    loadUsers();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -3119,9 +3284,27 @@ function UserManager() {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.name || '-'}</TableCell>
                   <TableCell>
-                    <Badge variant={user.role === 'ADMIN' ? 'default' : (user.role === 'SALES' ? 'outline' : 'secondary')}>
-                      {user.role === 'ADMIN' ? '管理员' : user.role === 'SALES' ? '销售代表' : '用户'}
-                    </Badge>
+                    {isAdmin ? (
+                      <select
+                        className="border rounded-md px-2 py-1 text-sm"
+                        value={user.role}
+                        disabled={isProtectedPrimaryAdmin(user)}
+                        onChange={(e) => {
+                          void handleChangeRole(user.id, e.target.value as 'USER' | 'SALES' | 'ADMIN');
+                        }}
+                      >
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="SALES">SALES</option>
+                        <option value="USER">USER</option>
+                      </select>
+                    ) : (
+                      <Badge variant={user.role === 'ADMIN' ? 'default' : (user.role === 'SALES' ? 'outline' : 'secondary')}>
+                        {user.role === 'ADMIN' ? '管理员' : user.role === 'SALES' ? '销售代表' : '用户'}
+                      </Badge>
+                    )}
+                    {isAdmin && isProtectedPrimaryAdmin(user) && (
+                      <div className="text-xs text-gray-500 mt-1">唯一管理员不可修改</div>
+                    )}
                   </TableCell>
                   <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>

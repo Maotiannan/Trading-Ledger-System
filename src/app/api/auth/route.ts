@@ -5,6 +5,26 @@ import { UserRole } from '@prisma/client';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
 
+const roleRank: Record<UserRole, number> = {
+  [UserRole.ADMIN]: 3,
+  [UserRole.SALES]: 2,
+  [UserRole.USER]: 1,
+};
+
+function parseRole(value: unknown): UserRole {
+  if (value === UserRole.ADMIN || value === UserRole.SALES || value === UserRole.USER) {
+    return value;
+  }
+  return UserRole.USER;
+}
+
+function isProtectedPrimaryAdmin(target: { role: UserRole; email: string; name: string | null; createdById: string | null }): boolean {
+  if (target.role !== UserRole.ADMIN) return false;
+  const email = (target.email || '').trim().toLowerCase();
+  const name = (target.name || '').trim().toLowerCase();
+  return email === 'admin@example.com' || (name === 'admin' && !target.createdById);
+}
+
 // 登录
 export async function POST(request: NextRequest) {
   try {
@@ -54,12 +74,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '邮箱和密码不能为空' }, { status: 400 });
       }
 
-      const requestedRole = typeof body.role === 'string' ? body.role : UserRole.USER;
+      const requestedRole = parseRole(body.role);
       const targetRole = currentUser.role === UserRole.SALES
         ? UserRole.USER
-        : ([UserRole.USER, UserRole.ADMIN, UserRole.SALES].includes(requestedRole as UserRole)
-          ? (requestedRole as UserRole)
-          : UserRole.USER);
+        : requestedRole;
 
       if (currentUser.role === UserRole.SALES && targetRole !== UserRole.USER) {
         return NextResponse.json({ success: false, error: '销售代表只能创建普通账户' }, { status: 403 });
@@ -83,6 +101,40 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ success: true, data: newUser });
+    }
+
+    // 更新用户角色（仅管理员）
+    if (action === 'update-role') {
+      const currentUser = await getCurrentUser(request);
+      if (!currentUser || currentUser.role !== UserRole.ADMIN) {
+        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+      }
+
+      if (!userId) {
+        return NextResponse.json({ success: false, error: '用户ID不能为空' }, { status: 400 });
+      }
+      const newRole = parseRole(body.role);
+      if (roleRank[newRole] > roleRank[currentUser.role]) {
+        return NextResponse.json({ success: false, error: '不能设置高于自己的角色' }, { status: 400 });
+      }
+
+      const target = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, role: true, createdById: true },
+      });
+      if (!target) {
+        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+      }
+      if (isProtectedPrimaryAdmin(target)) {
+        return NextResponse.json({ success: false, error: '唯一管理员Admin角色不可修改' }, { status: 400 });
+      }
+
+      const updated = await db.user.update({
+        where: { id: userId },
+        data: { role: newRole },
+        select: { id: true, email: true, name: true, role: true, createdAt: true, createdById: true },
+      });
+      return NextResponse.json({ success: true, data: updated, message: '角色已更新' });
     }
 
     // 获取用户列表 (管理员/销售)

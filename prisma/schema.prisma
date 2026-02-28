@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -102,7 +102,7 @@ model Order {
   id            String   @id @default(cuid())
   invoiceId     String
   orderNo       String   // ORDER 客户单号
-  tokens        String   @default("[]") // 分词结果，JSON格式存储数组
+  tokens        String   @default("[]") @db.Text // 分词结果，JSON格式存储数组
   amount        Float    // AMOUNT 单个ORDER总金额
   orderBalance  Float    @default(0) // ORDER BALANCE 未付金额
   customerId    String?
@@ -136,10 +136,10 @@ model Receipt {
   usd          Float          // 付款金额 USD
   invNo        String?        // 账单号 (L**MH开头)
   orderNo      String?        // 客户单号 ORDER
-  payer        String?        // 付款人 recu de M./Mme
+  payer        String?        @db.Text // 付款人 recu de M./Mme
   status       ReceiptStatus  @default(SR_Received)
-  imageUrl     String?        // 图片路径
-  imageName    String?        // 图片原始名称
+  imageUrl     String?        @db.LongText // 图片路径
+  imageName    String?        @db.Text // 图片原始名称
   isDeposit    Boolean        @default(false) // 是否为定金
   isMerged     Boolean        @default(false) // 是否已合并到正式账单
   mergedToId   String?        // 合并到的订单ID
@@ -149,7 +149,7 @@ model Receipt {
   customerPhone String?
   customerCity String?
   needsCustomerFix Boolean    @default(false)
-  note         String?        // 备注
+  note         String?        @db.Text // 备注
   createdBy    String
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -179,11 +179,11 @@ model ReceiptHistory {
   usd          Float
   invNo        String?
   orderNo      String?
-  payer        String?
-  imageUrl     String?
-  imageName    String?
+  payer        String?   @db.Text
+  imageUrl     String?   @db.LongText
+  imageName    String?   @db.Text
   status       ReceiptStatus
-  note         String?  // 变更备注
+  note         String?   @db.Text // 变更备注
   createdBy    String
   createdAt    DateTime @default(now())
 
@@ -199,8 +199,8 @@ model Detail {
   id           String        @id @default(cuid())
   date         DateTime?     // 明细创建时间
   status       DetailStatus  @default(Waiting_SWIFT)
-  imageUrl     String?       // 图片路径
-  imageName    String?       // 图片原始名称
+  imageUrl     String?       @db.LongText // 图片路径
+  imageName    String?       @db.Text // 图片原始名称
   totalAmount  Float         @default(0) // 总金额
   createdBy    String
   createdAt    DateTime      @default(now())
@@ -224,7 +224,7 @@ model DetailItem {
   orderNo    String?  // 单号
   amount     Float    // 金额
   receiptId  String?  // 关联的Receipt
-  note       String?  // 备注
+  note       String?  @db.Text // 备注
   createdAt  DateTime @default(now())
 
   // 关联
@@ -241,11 +241,11 @@ model DetailHistory {
   id         String   @id @default(cuid())
   detailId   String
   date       DateTime?
-  items      String   // JSON格式存储DetailItem数组
-  imageUrl   String?
-  imageName  String?
+  items      String   @db.LongText // JSON格式存储DetailItem数组
+  imageUrl   String?  @db.LongText
+  imageName  String?  @db.Text
   status     DetailStatus
-  note       String?  // 变更备注
+  note       String?  @db.Text // 变更备注
   createdBy  String
   createdAt  DateTime @default(now())
 
@@ -264,13 +264,13 @@ model Swift {
   amount         Float    // 汇款金额
   date           DateTime? // 汇款日期
   senderName     String?  // 汇款人姓名
-  senderAddress  String?  // 汇款人地址
+  senderAddress  String?  @db.Text // 汇款人地址
   receiverName   String?  // 收款人姓名
   receiverAccount String? // 收款人账号
-  imageUrl       String?  // 图片路径
-  imageName      String?  // 图片原始名称
+  imageUrl       String?  @db.LongText // 图片路径
+  imageName      String?  @db.Text // 图片原始名称
   hasError       Boolean  @default(false) // 是否有错误(金额不一致)
-  errorMessage   String?  // 错误信息
+  errorMessage   String?  @db.Text // 错误信息
   createdBy      String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -312,7 +312,7 @@ model DeletionRequest {
   id           String           @id @default(cuid())
   targetType   DeletionTargetType // 删除目标类型
   targetId     String           // 目标ID
-  reason       String?          // 删除原因
+  reason       String?          @db.Text // 删除原因
   status       DeletionStatus   @default(PENDING)
   requestedBy  String
   approvedBy   String?
@@ -335,7 +335,7 @@ model BalanceTransfer {
   fromOrderId     String
   toOrderId       String
   amount          Float    // 转移金额
-  note            String?  // 转移备注
+  note            String?  @db.Text // 转移备注
   createdBy       String
   createdAt       DateTime @default(now())
 
@@ -369,7 +369,7 @@ model AuditLog {
 model SystemSetting {
   id        String   @id @default(cuid())
   key       String   @unique
-  value     String
+  value     String   @db.Text
   updatedBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

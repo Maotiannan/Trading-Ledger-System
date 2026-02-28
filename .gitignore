@@ -65,3 +65,4 @@ server.log
 # database
 *.db
 /db/
+/migration/*.json

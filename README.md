@@ -6,7 +6,7 @@
 
 - **前端**: Next.js 16 + React + TypeScript + Tailwind CSS + shadcn/ui
 - **后端**: Next.js API Routes + Prisma ORM
-- **数据库**: PostgreSQL + Prisma Migrate
+- **数据库**: MariaDB(MySQL) + Prisma Migrate
 - **状态管理**: Zustand
 - **AI能力**: VLM图像识别（收据OCR）
 
@@ -386,9 +386,17 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 
 ### 账单接口 `/api/invoice`
 - `GET` - 获取账单列表
+- `GET?action=import-template` - 下载账单批量导入模板（Excel）
 - `POST` - 创建账单
+- `POST(multipart action=import-excel)` - 批量导入账单（Excel）
 - `PUT` - 更新订单/添加订单/删除订单/转移余额/刷新匹配
 - `DELETE` - 删除账单
+
+### 客户接口 `/api/customer`
+- `GET` - 获取客户列表
+- `GET?action=import-template` - 下载客户批量导入模板（Excel）
+- `POST(action=create|update|delete)` - 客户管理
+- `POST(multipart action=import-excel)` - 批量导入客户（Excel）
 
 ### 收据接口 `/api/receipt`
 - `GET` - 获取收据列表
@@ -413,6 +421,7 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 ### 设置接口 `/api/settings`
 - `GET` - 获取可编辑系统配置（含权限）
 - `POST(action=update-config)` - 修改系统配置（管理员）
+- `POST(action=purge-business-data)` - 清空业务数据并保留用户（管理员）
 
 ### 删除审批接口 `/api/deletion`
 - `GET` - 获取删除申请列表
@@ -439,13 +448,13 @@ bun run dev
 
 访问 http://localhost:3000 查看应用。
 
-### Docker 部署（Postgres + App + Caddy）
+### Docker 部署（NAS MariaDB + App + Caddy）
 
 ```bash
 # 1) 准备环境变量
 cp .env.example .env
 
-# 2) 修改 .env 中的密钥（至少修改 SESSION_SECRET / POSTGRES_PASSWORD）
+# 2) 修改 .env 中的密钥（至少修改 SESSION_SECRET / DATABASE_URL）
 
 # 3) 一键构建并启动
 docker compose up -d --build
@@ -467,7 +476,7 @@ SESSION_SECRET=replace-with-a-long-random-secret
 ENABLE_INIT_ROUTE=false
 INIT_ADMIN_TOKEN=replace-init-token
 INIT_ADMIN_EMAIL=admin@example.com
-INIT_ADMIN_PASSWORD=replace-strong-password
+INIT_ADMIN_PASSWORD=12345678
 
 # OCR 稳定性与费用日志
 OCR_DISABLED=false
@@ -475,13 +484,13 @@ OCR_API_BASE_URL=https://api.openai.com/v1
 OCR_API_KEY=replace-with-your-ocr-api-key
 OCR_MODEL=gpt-4o-mini
 OCR_MAX_RETRIES=3
-OCR_TIMEOUT_MS=15000
+OCR_TIMEOUT_MS=60000
 OCR_RETRY_BASE_DELAY_MS=1200
 OCR_INPUT_COST_PER_1K=0
 OCR_OUTPUT_COST_PER_1K=0
 ```
 
-> 安全说明：不再提供默认管理员弱口令；`/api/init` 默认禁用。
+> 说明：`/api/init` 默认禁用；启用后如未配置 `INIT_ADMIN_PASSWORD`，默认管理员密码为 `12345678`。
 
 ### 上传与敏感数据规范
 
@@ -490,10 +499,23 @@ OCR_OUTPUT_COST_PER_1K=0
 - 严禁将敏感数据提交到仓库：`.env`、上传原图、运行时日志、本地数据库文件均已在 `.gitignore` 排除。
 - 请基于 `.env.example` 创建本地 `.env`，不要提交真实密钥。
 
-### 数据库迁移说明（PostgreSQL）
+### 数据存储位置说明（当前默认）
 
-- 当前 Prisma 数据源已切换为 PostgreSQL（`prisma/schema.prisma`）。
-- 初始迁移文件已提交：`prisma/migrations/20260226193500_init_postgres/migration.sql`。
+- 业务数据（用户、账单、收据、明细、SWIFT 等）存储在 `DATABASE_URL` 指向的 MariaDB/MySQL。  
+  如果 `DATABASE_URL` 指向 NAS（例如 `192.168.1.3:3306`），则这些数据落在 NAS。
+- 上传图片默认存储在 Docker volume `upload_data`（映射容器内 `/app/upload`）。  
+  在当前 `docker-compose.yml` 下，该 volume 为本机 Docker 托管，不在 NAS 数据库里。
+
+### OCR 性能优化（2026-02）
+
+- 收据/明细/SWIFT 的“确认创建”统一使用识别接口返回的服务器图片路径，不再提交 base64 预览图，减少保存请求体积。
+- OCR 入参在服务端增加图片边长上限压缩（最长边 1600），降低视觉模型推理延迟。
+- 前端 `MARK` 客户查询增加防抖与同值去重（含短时缓存），减少重复接口请求。
+
+### 数据库迁移说明（MariaDB / MySQL）
+
+- 当前 Prisma 数据源为 MySQL（兼容 MariaDB，`prisma/schema.prisma`）。
+- 迁移文件见 `prisma/migrations/*_mysql*`。
 - 开发环境使用：`bun run db:migrate`。
 - 生产环境发布使用：`bun run db:deploy`。
 
@@ -578,6 +600,12 @@ src/
 ---
 
 ## 更新日志
+
+### v1.0.5 (2026-02-28)
+- 🗄️ 数据库切换为 NAS MariaDB（应用从 Mac 直连 NAS DB）
+- 🧹 新增管理员清库能力：保留用户、清空业务数据（`POST /api/settings action=purge-business-data`）
+- 📥 账单管理新增 Excel 模板下载 + 批量导入（严格行级校验，不跳过业务逻辑）
+- 📥 客户管理新增 Excel 模板下载 + 批量导入（严格行级校验 + 权限规则继承）
 
 ### v1.0.4 (2026-02-27)
 - 🔐 权限模型升级：普通用户仅可访问/修改自己创建的 Receipt、Detail、SWIFT 与删除申请目标资源

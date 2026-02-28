@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocale, useTranslations } from 'next-intl';
 import { deriveOrderGroupKey } from '@/lib/order-group';
@@ -96,6 +96,49 @@ type CustomerCandidate = {
   phone?: string | null;
   city?: string | null;
 };
+
+type CustomerMarkApiRow = {
+  id: string;
+  mark: string;
+  orderName?: string;
+  name?: string;
+  phone?: string | null;
+  city?: string | null;
+};
+
+const CUSTOMER_MARK_CACHE_TTL_MS = 10_000;
+const customerMarkCache = new Map<string, { timestamp: number; data: CustomerMarkApiRow[] }>();
+const customerMarkInflight = new Map<string, Promise<{ success: boolean; data: CustomerMarkApiRow[] }>>();
+
+async function fetchCustomerCandidatesByMark(mark: string): Promise<{ success: boolean; data: CustomerMarkApiRow[] }> {
+  const normalized = mark.trim();
+  if (!normalized) return { success: true, data: [] };
+
+  const key = normalized.toLowerCase();
+  const now = Date.now();
+  const cached = customerMarkCache.get(key);
+  if (cached && now - cached.timestamp <= CUSTOMER_MARK_CACHE_TTL_MS) {
+    return { success: true, data: cached.data };
+  }
+
+  const inflight = customerMarkInflight.get(key);
+  if (inflight) return inflight;
+
+  const promise = (async () => {
+    const result = await apiCall(`customer?mark=${encodeURIComponent(normalized)}`);
+    if (!result.success || !Array.isArray(result.data)) {
+      return { success: false, data: [] as CustomerMarkApiRow[] };
+    }
+    const rows = result.data as CustomerMarkApiRow[];
+    customerMarkCache.set(key, { timestamp: Date.now(), data: rows });
+    return { success: true, data: rows };
+  })().finally(() => {
+    customerMarkInflight.delete(key);
+  });
+
+  customerMarkInflight.set(key, promise);
+  return promise;
+}
 
 // 登录组件
 function LoginPage() {
@@ -453,6 +496,9 @@ function InvoiceManager() {
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
   const [editingOrderCandidates, setEditingOrderCandidates] = useState<CustomerCandidate[]>([]);
+  const [invoiceImporting, setInvoiceImporting] = useState(false);
+  const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
+  const invoiceCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -465,11 +511,64 @@ function InvoiceManager() {
     setLoading(false);
   }, [setInvoices, setLoading, search]);
 
+  const downloadInvoiceImportTemplate = async () => {
+    try {
+      const response = await fetch('/api/invoice?action=import-template', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('模板下载失败');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'invoice-import-template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '模板下载失败');
+    }
+  };
+
+  const handleInvoiceExcelImport = async (file: File) => {
+    setInvoiceImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('action', 'import-excel');
+      formData.append('file', file);
+      const response = await fetch('/api/invoice', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || '导入失败'}${details}`);
+      }
+      alert(result.message || '导入成功');
+      await loadInvoices();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '导入失败');
+    } finally {
+      setInvoiceImporting(false);
+      if (invoiceImportInputRef.current) invoiceImportInputRef.current.value = '';
+    }
+  };
+
   useEffect(() => {
     loadInvoices();
   }, [loadInvoices]);
 
-  const loadCustomerCandidates = async (
+  useEffect(() => {
+    return () => {
+      if (invoiceCustomerLookupTimerRef.current) {
+        clearTimeout(invoiceCustomerLookupTimerRef.current);
+      }
+    };
+  }, []);
+
+  const loadCustomerCandidates = (
     mark: string,
     setter: (rows: CustomerCandidate[]) => void,
     setDefaultName?: (value: string) => void,
@@ -478,36 +577,45 @@ function InvoiceManager() {
     setDefaultCity?: (value: string) => void
   ) => {
     const normalized = mark.trim();
+    if (invoiceCustomerLookupTimerRef.current) {
+      clearTimeout(invoiceCustomerLookupTimerRef.current);
+      invoiceCustomerLookupTimerRef.current = null;
+    }
     if (!normalized) {
       setter([]);
       if (setDefaultName) setDefaultName('');
       if (setDefaultId) setDefaultId('');
       return;
     }
-    try {
-      const result = await apiCall(`customer?mark=${encodeURIComponent(normalized)}`);
-      if (!result.success || !Array.isArray(result.data)) {
-        setter([]);
-        return;
-      }
-      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; orderName?: string; name?: string; phone?: string | null; city?: string | null }) => ({
-        id: row.id,
-        mark: row.mark,
-        orderName: row.orderName || row.name || '',
-        displayName: row.name || '',
-        phone: row.phone ?? null,
-        city: row.city ?? null,
-      }));
-      setter(rows);
-      if (rows.length === 1) {
-        if (setDefaultName) setDefaultName(rows[0].orderName);
-        if (setDefaultId) setDefaultId(rows[0].id);
-        if (setDefaultPhone) setDefaultPhone(rows[0].phone || '');
-        if (setDefaultCity) setDefaultCity(rows[0].city || '');
-      }
-    } catch {
-      setter([]);
-    }
+
+    invoiceCustomerLookupTimerRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await fetchCustomerCandidatesByMark(normalized);
+          if (!result.success || !Array.isArray(result.data)) {
+            setter([]);
+            return;
+          }
+          const rows: CustomerCandidate[] = result.data.map((row) => ({
+            id: row.id,
+            mark: row.mark,
+            orderName: row.orderName || row.name || '',
+            displayName: row.name || '',
+            phone: row.phone ?? null,
+            city: row.city ?? null,
+          }));
+          setter(rows);
+          if (rows.length === 1) {
+            if (setDefaultName) setDefaultName(rows[0].orderName);
+            if (setDefaultId) setDefaultId(rows[0].id);
+            if (setDefaultPhone) setDefaultPhone(rows[0].phone || '');
+            if (setDefaultCity) setDefaultCity(rows[0].city || '');
+          }
+        } catch {
+          setter([]);
+        }
+      })();
+    }, 220);
   };
 
   const openOrderHistory = async (orderId: string, orderNo: string) => {
@@ -866,6 +974,27 @@ function InvoiceManager() {
         <div className="flex gap-2">
           {isManager && (
             <>
+              <input
+                ref={invoiceImportInputRef}
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleInvoiceExcelImport(file);
+                }}
+              />
+              <Button variant="outline" onClick={downloadInvoiceImportTemplate}>
+                下载账单模板
+              </Button>
+              <Button
+                variant="outline"
+                disabled={invoiceImporting}
+                onClick={() => invoiceImportInputRef.current?.click()}
+              >
+                {invoiceImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                批量上传账单
+              </Button>
               <Button 
                 variant="outline" 
                 onClick={handleRematch}
@@ -1471,6 +1600,7 @@ function ReceiptManager() {
   const [ocrCustomerCandidates, setOcrCustomerCandidates] = useState<CustomerCandidate[]>([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directForm, setDirectForm] = useState({
     receiptNo: '',
@@ -1495,6 +1625,7 @@ function ReceiptManager() {
   const [dateTo, setDateTo] = useState('');
   const [minUsd, setMinUsd] = useState('');
   const [maxUsd, setMaxUsd] = useState('');
+  const receiptCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
@@ -1526,6 +1657,14 @@ function ReceiptManager() {
   useEffect(() => {
     setCurrentPage(1);
   }, [search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
+
+  useEffect(() => {
+    return () => {
+      if (receiptCustomerLookupTimerRef.current) {
+        clearTimeout(receiptCustomerLookupTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!showDirectCreate) return;
@@ -1567,41 +1706,49 @@ function ReceiptManager() {
     return () => clearTimeout(timer);
   }, [ocrResult, showUpload]);
 
-  const loadCustomerCandidates = async (
+  const loadCustomerCandidates = (
     mark: string,
     setter: (rows: CustomerCandidate[]) => void,
     setDefaultName?: (value: string) => void,
     setDefaultId?: (value: string) => void
   ) => {
     const normalized = mark.trim();
+    if (receiptCustomerLookupTimerRef.current) {
+      clearTimeout(receiptCustomerLookupTimerRef.current);
+      receiptCustomerLookupTimerRef.current = null;
+    }
     if (!normalized) {
       setter([]);
       if (setDefaultName) setDefaultName('');
       if (setDefaultId) setDefaultId('');
       return;
     }
-    try {
-      const result = await apiCall(`customer?mark=${encodeURIComponent(normalized)}`);
-      if (!result.success || !Array.isArray(result.data)) {
-        setter([]);
-        return;
-      }
-      const rows: CustomerCandidate[] = result.data.map((row: { id: string; mark: string; orderName?: string; name?: string; phone?: string | null; city?: string | null }) => ({
-        id: row.id,
-        mark: row.mark,
-        orderName: row.orderName || row.name || '',
-        displayName: row.name || '',
-        phone: row.phone ?? null,
-        city: row.city ?? null,
-      }));
-      setter(rows);
-      if (rows.length === 1) {
-        if (setDefaultName) setDefaultName(rows[0].orderName);
-        if (setDefaultId) setDefaultId(rows[0].id);
-      }
-    } catch {
-      setter([]);
-    }
+    receiptCustomerLookupTimerRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await fetchCustomerCandidatesByMark(normalized);
+          if (!result.success || !Array.isArray(result.data)) {
+            setter([]);
+            return;
+          }
+          const rows: CustomerCandidate[] = result.data.map((row) => ({
+            id: row.id,
+            mark: row.mark,
+            orderName: row.orderName || row.name || '',
+            displayName: row.name || '',
+            phone: row.phone ?? null,
+            city: row.city ?? null,
+          }));
+          setter(rows);
+          if (rows.length === 1) {
+            if (setDefaultName) setDefaultName(rows[0].orderName);
+            if (setDefaultId) setDefaultId(rows[0].id);
+          }
+        } catch {
+          setter([]);
+        }
+      })();
+    }, 220);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1635,11 +1782,14 @@ function ReceiptManager() {
         setOcrCustomerName('');
         setOcrCustomerId('');
         setOcrCustomerCandidates([]);
+        setSavedImagePath(result.data.image || null);
       } else {
+        setSavedImagePath(null);
         setError(result.error || 'AI识别失败，请重试');
       }
     } catch (err) {
       console.error('OCR error:', err);
+      setSavedImagePath(null);
       setError('网络错误，请重试');
     }
     setUploading(false);
@@ -1663,8 +1813,8 @@ function ReceiptManager() {
     };
     formData.append('action', 'confirm');
     formData.append('data', JSON.stringify(payload));
-    formData.append('imagePath', imagePreview || '');
-    formData.append('imageName', selectedFile.name);
+    formData.append('imagePath', savedImagePath?.path || '');
+    formData.append('imageName', savedImagePath?.name || selectedFile.name);
 
     try {
       const result = await fetch('/api/receipt', {
@@ -1682,6 +1832,7 @@ function ReceiptManager() {
         setOcrCustomerCandidates([]);
         setImagePreview(null);
         setSelectedFile(null);
+        setSavedImagePath(null);
         loadReceipts();
       } else {
         setError(result.error || '创建失败，请重试');
@@ -1950,7 +2101,7 @@ function ReceiptManager() {
       </Card>
 
       {/* 上传对话框 */}
-      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setOcrCustomerMark(''); setOcrCustomerName(''); setOcrCustomerId(''); setOcrCustomerCandidates([]); } }}>
+      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setSavedImagePath(null); setOcrCustomerMark(''); setOcrCustomerName(''); setOcrCustomerId(''); setOcrCustomerCandidates([]); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>上传收据</DialogTitle>
@@ -2677,6 +2828,7 @@ function SwiftManager() {
   const [ocrResult, setOcrResult] = useState<Record<string, unknown> | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [selectedDetailId, setSelectedDetailId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -2749,11 +2901,14 @@ function SwiftManager() {
 
       if (result.success) {
         setOcrResult(result.data.ocrResult);
+        setSavedImagePath(result.data.image || null);
       } else {
+        setSavedImagePath(null);
         setError(result.error || 'AI识别失败，请重试');
       }
     } catch (err) {
       console.error('OCR error:', err);
+      setSavedImagePath(null);
       setError('网络错误，请重试');
     }
     setUploading(false);
@@ -2771,8 +2926,8 @@ function SwiftManager() {
     formData.append('action', 'confirm');
     formData.append('detailId', selectedDetailId);
     formData.append('data', JSON.stringify(ocrResult));
-    formData.append('imagePath', imagePreview || '');
-    formData.append('imageName', selectedFile.name);
+    formData.append('imagePath', savedImagePath?.path || '');
+    formData.append('imageName', savedImagePath?.name || selectedFile.name);
 
     try {
       const result = await fetch('/api/swift', {
@@ -2786,6 +2941,7 @@ function SwiftManager() {
         setOcrResult(null);
         setImagePreview(null);
         setSelectedFile(null);
+        setSavedImagePath(null);
         setSelectedDetailId('');
         loadSwifts();
       } else {
@@ -2956,7 +3112,7 @@ function SwiftManager() {
         )}
       </div>
 
-      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); } }}>
+      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setSavedImagePath(null); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>上传SWIFT水单</DialogTitle>
@@ -3402,6 +3558,8 @@ function CustomerManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [fixingTarget, setFixingTarget] = useState<{ type: 'order' | 'receipt'; id: string } | null>(null);
+  const [customerImporting, setCustomerImporting] = useState(false);
+  const customerImportInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
     mark: '',
     orderName: '',
@@ -3542,12 +3700,78 @@ function CustomerManager() {
 
   const canSeeExtended = isAdmin || customers.some((row) => row.companyName !== null || row.companyAddress !== null || row.credit !== null);
 
+  const downloadCustomerImportTemplate = async () => {
+    try {
+      const response = await fetch('/api/customer?action=import-template', {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('模板下载失败');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'customer-import-template.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '模板下载失败');
+    }
+  };
+
+  const handleCustomerExcelImport = async (file: File) => {
+    setCustomerImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('action', 'import-excel');
+      formData.append('file', file);
+      const response = await fetch('/api/customer', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || '导入失败'}${details}`);
+      }
+      alert(result.message || '导入成功');
+      await loadCustomers();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '导入失败');
+    } finally {
+      setCustomerImporting(false);
+      if (customerImportInputRef.current) customerImportInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">客户管理</h2>
         <div className="flex gap-2">
+          <input
+            ref={customerImportInputRef}
+            type="file"
+            accept=".xlsx"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleCustomerExcelImport(file);
+            }}
+          />
           <Input placeholder="搜索 mark/order_name/name/phone/city" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
+          <Button variant="outline" onClick={downloadCustomerImportTemplate}>
+            下载客户模板
+          </Button>
+          <Button
+            variant="outline"
+            disabled={customerImporting}
+            onClick={() => customerImportInputRef.current?.click()}
+          >
+            {customerImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+            批量上传客户
+          </Button>
           <Button onClick={() => { setEditing(null); resetForm(); setShowCreate(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             新建客户
@@ -3711,6 +3935,7 @@ function SettingsManager() {
   const { user } = useStore();
   const [loading, setLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [testingConfig, setTestingConfig] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -3757,6 +3982,30 @@ function SettingsManager() {
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const handleTestOcrConfig = async () => {
+    if (!canEditConfig) return;
+    setTestingConfig(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await apiCall('settings', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'test-ocr' }),
+      });
+      if (result.success) {
+        const detail = typeof result.detail === 'string' && result.detail ? ` | ${result.detail}` : '';
+        setMessage(`${result.message || 'OCR 测试成功'}${detail}`);
+      } else {
+        const detail = typeof result.detail === 'string' && result.detail ? ` | ${result.detail}` : '';
+        setError(`${result.error || 'OCR 测试失败'}${detail}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'OCR 测试失败');
+    } finally {
+      setTestingConfig(false);
     }
   };
 
@@ -3911,7 +4160,11 @@ function SettingsManager() {
                   </select>
                 </div>
               </div>
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleTestOcrConfig} disabled={!canEditConfig || testingConfig}>
+                  {testingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  测试OCR连通
+                </Button>
                 <Button onClick={handleSaveConfig} disabled={!canEditConfig || savingConfig}>
                   {savingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   <Save className="h-4 w-4 mr-2" />

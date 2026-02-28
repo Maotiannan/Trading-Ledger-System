@@ -47,10 +47,11 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
 async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
   const normalized = orderNoInput.trim();
   if (!normalized) return null;
-  const result = await apiCall(`invoice?orderNo=${encodeURIComponent(normalized)}`);
-  if (!result.success || !Array.isArray(result.data)) return null;
   const inputGroupKey = deriveOrderGroupKey(normalized);
   if (!inputGroupKey) return null;
+
+  const result = await apiCall(`invoice?orderNo=${encodeURIComponent(normalized)}`);
+  if (!result.success || !Array.isArray(result.data)) return null;
 
   const markMap = new Map<string, { mark: string; name: string; customerId: string }>();
   for (const row of result.data as Array<Record<string, unknown>>) {
@@ -71,6 +72,19 @@ async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mar
   if (markMap.size === 1) {
     return Array.from(markMap.values())[0];
   }
+
+  // Fallback: allow direct ORDER group key -> MARK match from customer table
+  // Example: ORDER "MAB-1-05" => group key "mab-1", match customer MARK "MAB-1"
+  const byMark = await apiCall(`customer?mark=${encodeURIComponent(inputGroupKey)}`);
+  if (byMark.success && Array.isArray(byMark.data) && byMark.data.length === 1) {
+    const row = byMark.data[0] as Record<string, unknown>;
+    return {
+      mark: String(row.mark || ''),
+      name: String(row.orderName || row.name || ''),
+      customerId: String(row.id || ''),
+    };
+  }
+
   return null;
 }
 

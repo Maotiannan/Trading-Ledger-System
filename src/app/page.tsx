@@ -1785,6 +1785,7 @@ function InvoiceManager() {
 // 收据管理
 function ReceiptManager() {
   const tx = useUiText();
+  const locale = useLocale();
   const { receipts, setReceipts, loading, setLoading, user } = useStore();
   const [showUpload, setShowUpload] = useState(false);
   const [showDirectCreate, setShowDirectCreate] = useState(false);
@@ -2173,8 +2174,8 @@ function ReceiptManager() {
             <option value="Bank_Transfer">Bank_Transfer</option>
             <option value="RECEIVED">RECEIVED</option>
           </select>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => setMinUsd(e.target.value)} />
           <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => setMaxUsd(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
@@ -2526,6 +2527,7 @@ function ReceiptManager() {
 // 付款明细管理
 function DetailManager() {
   const tx = useUiText();
+  const locale = useLocale();
   const { details, setDetails } = useStore();
   const [showUpload, setShowUpload] = useState(false);
   const [showDirectCreate, setShowDirectCreate] = useState(false);
@@ -2738,8 +2740,8 @@ function DetailManager() {
             <option value="RECEIVED">RECEIVED</option>
             <option value="ERROR">ERROR</option>
           </select>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input type="number" placeholder={tx('最小总金额', 'Min total amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
           <Input type="number" placeholder={tx('最大总金额', 'Max total amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
@@ -3019,6 +3021,7 @@ function DetailManager() {
 // SWIFT管理
 function SwiftManager() {
   const tx = useUiText();
+  const locale = useLocale();
   const { swifts, setSwifts, details } = useStore();
   const [showUpload, setShowUpload] = useState(false);
   const [showDirectCreate, setShowDirectCreate] = useState(false);
@@ -3258,8 +3261,8 @@ function SwiftManager() {
             <option value="true">{tx('仅异常', 'Errors only')}</option>
             <option value="false">{tx('仅正常', 'Normal only')}</option>
           </select>
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
           <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
@@ -4104,7 +4107,7 @@ function CustomerManager() {
               if (file) void handleCustomerExcelImport(file);
             }}
           />
-          <Input placeholder="搜索 mark/order_name/name/phone/city" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
+          <Input placeholder={tx('搜索 mark/order_name/name/phone/city', 'Search mark/order_name/name/phone/city')} value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
           <Button variant="outline" onClick={downloadCustomerImportTemplate}>
             {tx('下载客户模板', 'Download Customer Template')}
           </Button>

@@ -74,6 +74,7 @@ export interface Detail {
   date: string | null;
   status: DetailStatus;
   imageUrl: string | null;
+  imageName?: string | null;
   totalAmount: number;
   createdAt: string;
   creator: { id: string; name: string | null; email: string };

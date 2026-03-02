@@ -5,7 +5,7 @@ import { recognizeDetail } from '@/lib/ocr';
 import { findMatchingReceipt, updateOrderBalance, findOrCreateOrder } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
-import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
+import { canAccessOwnedResource, forbiddenOwnershipResponse, isManager } from '@/lib/ownership';
 import { assertSearchLength, detailPayloadSchema, InputValidationError, parseJsonWithSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
@@ -66,7 +66,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const maxAmount = searchParams.get('maxAmount');
 
     const where: Record<string, unknown> = {};
-    if (!isAdmin(currentUser)) {
+    if (!isManager(currentUser)) {
       where.createdBy = currentUser.id;
     }
     

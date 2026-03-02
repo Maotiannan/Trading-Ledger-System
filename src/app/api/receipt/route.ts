@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ReceiptStatus, UserRole } from '@prisma/client';
 import { recognizeReceipt } from '@/lib/ocr';
-import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
+import { createOrder, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
-import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
+import { canAccessOwnedResource, forbiddenOwnershipResponse, isManager } from '@/lib/ownership';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptPayloadSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
@@ -37,7 +37,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const maxUsd = searchParams.get('maxUsd');
 
     const where: Record<string, unknown> = {};
-    if (!isAdmin(currentUser)) {
+    if (!isManager(currentUser)) {
       where.createdBy = currentUser.id;
     }
     
@@ -196,6 +196,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         });
 
         orderId = depositOrder.id;
+      }
+
+      if (!orderId && normalizedOrderNo) {
+        orderId = await createOrder(normalizedOrderNo, currentUser.id);
       }
 
       // 创建收据

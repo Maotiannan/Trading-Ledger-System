@@ -5,7 +5,7 @@ import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
-import { canAccessOwnedResource, forbiddenOwnershipResponse, isAdmin } from '@/lib/ownership';
+import { canAccessOwnedResource, forbiddenOwnershipResponse, isManager } from '@/lib/ownership';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPayloadSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
@@ -35,7 +35,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const hasError = searchParams.get('hasError');
 
     const where: Record<string, unknown> = {};
-    if (!isAdmin(currentUser)) {
+    if (!isManager(currentUser)) {
       where.createdBy = currentUser.id;
     }
     if (search) {

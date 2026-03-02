@@ -326,6 +326,7 @@ async function rematchAllOrders() {
   let receiptMatchedCount = 0;
   let customerSyncedCount = 0;
   let deletedInvoiceCount = 0;
+  let deletedZeroOrdersCount = 0;
 
   // 按订单号分组，找出重复的订单
   const orderGroups = new Map<string, typeof allOrders>();
@@ -494,10 +495,26 @@ async function rematchAllOrders() {
     await updateOrderBalance(row.id);
   }
 
+  // 清理“金额=0 且 未收=0 且 无收据”的空订单
+  const zeroOrders = await db.order.findMany({
+    where: {
+      amount: 0,
+      orderBalance: 0,
+    },
+    include: {
+      _count: { select: { receipts: true } },
+    },
+  });
+  for (const order of zeroOrders) {
+    if (order._count.receipts > 0) continue;
+    await db.order.delete({ where: { id: order.id } });
+    deletedZeroOrdersCount++;
+  }
+
   console.log(
-    `[Rematch] Completed. merged=${mergedCount}, matchedReceipts=${receiptMatchedCount}, syncedCustomers=${customerSyncedCount}, deletedInvoices=${deletedInvoiceCount}`
+    `[Rematch] Completed. merged=${mergedCount}, matchedReceipts=${receiptMatchedCount}, syncedCustomers=${customerSyncedCount}, deletedInvoices=${deletedInvoiceCount}, deletedZeroOrders=${deletedZeroOrdersCount}`
   );
-  return { mergedCount, receiptMatchedCount, customerSyncedCount, deletedInvoiceCount };
+  return { mergedCount, receiptMatchedCount, customerSyncedCount, deletedInvoiceCount, deletedZeroOrdersCount };
 }
 
 // 更新订单
@@ -511,7 +528,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const result = await rematchAllOrders();
       return NextResponse.json({ 
         success: true, 
-        message: `重新匹配完成：合并重复订单 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}` 
+        message: `重新匹配完成：合并重复订单 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}` 
       });
     }
 

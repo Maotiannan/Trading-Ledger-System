@@ -54,6 +54,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function getDisplayImageUrl(rawUrl: string): string {
+  if (rawUrl.startsWith('/upload/images/')) {
+    return `/api/upload-image?path=${encodeURIComponent(rawUrl)}`;
+  }
+  return rawUrl;
+}
+
 async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
   const normalized = orderNoInput.trim();
   if (!normalized) return null;
@@ -258,7 +265,6 @@ function Sidebar() {
     { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
     { id: 'deletions' as const, label: t('deletions'), icon: Trash2, managerOnly: true },
-    { id: 'users' as const, label: t('users'), icon: Users, managerOnly: true },
     { id: 'customers' as const, label: tx('客户管理', 'Customers'), icon: Users, managerOnly: true },
     { id: 'settings' as const, label: t('settings'), icon: Settings },
   ];
@@ -2051,7 +2057,7 @@ function ReceiptManager() {
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          onClick={() => setViewingImage({ url: receipt.imageUrl!, name: receipt.imageName || tx('收据图片', 'Receipt image') })}
+                          onClick={() => setViewingImage({ url: getDisplayImageUrl(receipt.imageUrl!), name: receipt.imageName || tx('收据图片', 'Receipt image') })}
                           title={tx('查看图片', 'View image')}
                         >
                           <Eye className="h-4 w-4" />
@@ -2615,7 +2621,7 @@ function DetailManager() {
                       variant="ghost" 
                       onClick={(e) => { 
                         e.stopPropagation(); 
-                        setViewingImage({ url: detail.imageUrl!, name: detail.imageName || tx('付款明细图片', 'Payment detail image') }); 
+                        setViewingImage({ url: getDisplayImageUrl(detail.imageUrl!), name: detail.imageName || tx('付款明细图片', 'Payment detail image') }); 
                       }}
                       title={tx('查看图片', 'View image')}
                     >
@@ -3126,7 +3132,7 @@ function SwiftManager() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setViewingImage({ url: swift.imageUrl!, name: swift.imageName || tx('SWIFT图片', 'SWIFT image') })}
+                      onClick={() => setViewingImage({ url: getDisplayImageUrl(swift.imageUrl!), name: swift.imageName || tx('SWIFT图片', 'SWIFT image') })}
                       title={tx('查看图片', 'View image')}
                     >
                       <Eye className="h-4 w-4" />
@@ -4009,6 +4015,7 @@ function CustomerManager() {
 function SettingsManager() {
   const tx = useUiText();
   const { user } = useStore();
+  const canManageUsers = user?.role === 'ADMIN' || user?.role === 'SALES';
   const [loading, setLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [testingConfig, setTestingConfig] = useState(false);
@@ -4252,13 +4259,25 @@ function SettingsManager() {
           )}
         </CardContent>
       </Card>
+
+      {canManageUsers && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{tx('用户管理', 'User Management')}</CardTitle>
+            <CardDescription>{tx('用户管理已并入设置模块。', 'User management has been moved into Settings.')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UserManager />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
 // 主应用
 export default function HomePage() {
-  const { user, setUser, currentView } = useStore();
+  const { user, setUser, currentView, setCurrentView } = useStore();
   const [initialized, setInitialized] = useState(false);
 
   // 检查登录状态
@@ -4282,6 +4301,12 @@ export default function HomePage() {
     };
     checkAuth();
   }, [setUser]);
+
+  useEffect(() => {
+    if (currentView === 'users') {
+      setCurrentView('settings');
+    }
+  }, [currentView, setCurrentView]);
 
   if (!initialized) {
     return (

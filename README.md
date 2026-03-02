@@ -662,6 +662,13 @@ src/
 - 🖼️ 新增上传图片读取 API：`GET /api/upload-image?path=...`，并统一前端图片预览走该接口，修复明细图片查看失败。
 - 🧭 导航调整：左侧移除“用户管理”，改为并入“设置”页面内管理。
 
+### v1.0.12 (2026-03-02)
+- 🧩 用户管理创建增强：新增 `parentId` 上级账户选择接口与前端下拉，角色/层级规则与后端一致。
+- 🔒 可见性越权修复：`receipt/detail/swift` 查询改为 `AND(可见性,搜索)`，避免搜索条件覆盖 owner/customer 归属过滤。
+- 👁️ 账单可见性收口：`invoice` 的 `orderId`、`orderNo`、主列表与子级 `orders/receipts` 统一使用 owner + customer owner 并集可见。
+- 🧱 客户写操作补权控：`customer update/delete` 新增归属校验，仅允许可见范围内客户被修改/删除。
+- 🛠️ 用户管理修补：修复 `update-role` 缺失 `level` 字段导致的同级管理判定漏洞，并在前端展示 `level/parent`。
+
 ### v1.0.11 (2026-03-02)
 - 🧱 权限模型升级起步：新增用户层级字段 `level + parentId`，并完成历史数据回填（含 root admin 归位）。
 - 🔐 用户管理规则收敛：同级不可管理、仅可管理下级；创建账号默认挂到当前创建者，可按规则指定上级。

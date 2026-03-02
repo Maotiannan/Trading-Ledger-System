@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
 
       const target = await db.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true, name: true, role: true, createdById: true },
+        select: { id: true, email: true, name: true, role: true, level: true, createdById: true },
       });
       if (!target) {
         return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
@@ -192,6 +192,42 @@ export async function POST(request: NextRequest) {
         select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true },
       });
       return NextResponse.json({ success: true, data: updated, message: '角色已更新' });
+    }
+
+    // 创建用户时可选的上级列表
+    if (action === 'parent-options') {
+      const currentUser = await getCurrentUser(request);
+      if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
+        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+      }
+
+      const targetRole = parseRole(body.role);
+      if (!canCreateRole(currentUser.level, currentUser.role, targetRole)) {
+        return NextResponse.json({ success: false, error: '当前账户无权创建该角色' }, { status: 403 });
+      }
+
+      const scope = await getHierarchyScope(currentUser);
+      const visibleIds = Array.from(scope.visibleIds);
+      const candidates = await db.user.findMany({
+        where: { id: { in: visibleIds } },
+        select: { id: true, email: true, name: true, role: true, level: true },
+        orderBy: [{ level: 'asc' }, { createdAt: 'asc' }],
+      });
+
+      const filtered = candidates.filter((candidate) => {
+        if (targetRole === UserRole.ADMIN) {
+          return candidate.role === UserRole.ADMIN && candidate.level === 1;
+        }
+        if (targetRole === UserRole.SALES) {
+          return candidate.role === UserRole.ADMIN && (candidate.level === 1 || candidate.level === 2);
+        }
+        return (
+          (candidate.role === UserRole.ADMIN && (candidate.level === 1 || candidate.level === 2)) ||
+          (candidate.role === UserRole.SALES && candidate.level === 3)
+        );
+      });
+
+      return NextResponse.json({ success: true, data: filtered });
     }
 
     // 获取用户列表 (管理员/销售)

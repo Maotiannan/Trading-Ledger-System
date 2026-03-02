@@ -37,36 +37,45 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     const scope = await getHierarchyScope(currentUser);
     const ownerIds = Array.from(scope.ownerVisibleIds);
-    const where: Record<string, unknown> = {
-      OR: [
-        { createdBy: { in: ownerIds } },
-        { detail: { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } } },
-      ],
-    };
+    const filters: Record<string, unknown>[] = [
+      {
+        OR: [
+          { createdBy: { in: ownerIds } },
+          { detail: { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } } },
+        ],
+      },
+    ];
     if (search) {
       assertSearchLength(search);
-      where.OR = [
-        { senderName: { contains: search } },
-        { senderAddress: { contains: search } },
-        { receiverName: { contains: search } },
-        { receiverAccount: { contains: search } }
-      ];
+      filters.push({
+        OR: [
+          { senderName: { contains: search } },
+          { senderAddress: { contains: search } },
+          { receiverName: { contains: search } },
+          { receiverAccount: { contains: search } },
+        ],
+      });
     }
     if (dateFrom || dateTo) {
-      where.createdAt = {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
-      };
+      filters.push({
+        createdAt: {
+          ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+          ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
+        },
+      });
     }
     if (minAmount || maxAmount) {
-      where.amount = {
-        ...(minAmount ? { gte: Number(minAmount) } : {}),
-        ...(maxAmount ? { lte: Number(maxAmount) } : {})
-      };
+      filters.push({
+        amount: {
+          ...(minAmount ? { gte: Number(minAmount) } : {}),
+          ...(maxAmount ? { lte: Number(maxAmount) } : {})
+        },
+      });
     }
     if (hasError === 'true' || hasError === 'false') {
-      where.hasError = hasError === 'true';
+      filters.push({ hasError: hasError === 'true' });
     }
+    const where = filters.length === 1 ? filters[0] : { AND: filters };
 
     const swifts = await db.swift.findMany({
       where,

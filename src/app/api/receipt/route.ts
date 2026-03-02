@@ -39,36 +39,45 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     const scope = await getHierarchyScope(currentUser);
     const ownerIds = Array.from(scope.ownerVisibleIds);
-    const where: Record<string, unknown> = {
-      OR: [
-        { createdBy: { in: ownerIds } },
-        { customer: { createdBy: { in: ownerIds } } },
-      ],
-    };
-    
-    if (status) where.status = status;
+    const filters: Record<string, unknown>[] = [
+      {
+        OR: [
+          { createdBy: { in: ownerIds } },
+          { customer: { createdBy: { in: ownerIds } } },
+        ],
+      },
+    ];
+
+    if (status) filters.push({ status });
     if (search) {
       assertSearchLength(search);
-      where.OR = [
-        { receiptNo: { contains: search } },
-        { orderNo: { contains: search } },
-        { invNo: { contains: search } },
-        { payer: { contains: search } }
-      ];
+      filters.push({
+        OR: [
+          { receiptNo: { contains: search } },
+          { orderNo: { contains: search } },
+          { invNo: { contains: search } },
+          { payer: { contains: search } },
+        ],
+      });
     }
-    if (orderId) where.orderId = orderId;
+    if (orderId) filters.push({ orderId });
     if (dateFrom || dateTo) {
-      where.createdAt = {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
-      };
+      filters.push({
+        createdAt: {
+          ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+          ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
+        },
+      });
     }
     if (minUsd || maxUsd) {
-      where.usd = {
-        ...(minUsd ? { gte: Number(minUsd) } : {}),
-        ...(maxUsd ? { lte: Number(maxUsd) } : {})
-      };
+      filters.push({
+        usd: {
+          ...(minUsd ? { gte: Number(minUsd) } : {}),
+          ...(maxUsd ? { lte: Number(maxUsd) } : {})
+        },
+      });
     }
+    const where = filters.length === 1 ? filters[0] : { AND: filters };
 
     const receipts = await db.receipt.findMany({
       where,

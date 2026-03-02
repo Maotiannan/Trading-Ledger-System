@@ -53,13 +53,25 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     if (orderId) {
       const accessibleOrder = await db.order.findFirst({
-        where: { id: orderId, createdBy: { in: ownerIds } },
+        where: {
+          id: orderId,
+          OR: [
+            { createdBy: { in: ownerIds } },
+            { customer: { createdBy: { in: ownerIds } } },
+          ],
+        },
         select: { id: true },
       });
       if (!accessibleOrder) return NextResponse.json({ success: true, data: [] });
 
       const receipts = await db.receipt.findMany({
-        where: { orderId, createdBy: { in: ownerIds } },
+        where: {
+          orderId,
+          OR: [
+            { createdBy: { in: ownerIds } },
+            { customer: { createdBy: { in: ownerIds } } },
+          ],
+        },
         select: {
           id: true,
           receiptNo: true,
@@ -83,7 +95,12 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: true, data: [] });
       }
       const allOrders = await db.order.findMany({
-        where: { createdBy: { in: ownerIds } },
+        where: {
+          OR: [
+            { createdBy: { in: ownerIds } },
+            { customer: { createdBy: { in: ownerIds } } },
+          ],
+        },
         select: {
           id: true,
           orderNo: true,
@@ -116,7 +133,17 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
               {
                 OR: [
                   { invNo: { contains: search } },
-                  { orders: { some: { orderNo: { contains: search }, createdBy: { in: ownerIds } } } },
+                  {
+                    orders: {
+                      some: {
+                        orderNo: { contains: search },
+                        OR: [
+                          { createdBy: { in: ownerIds } },
+                          { customer: { createdBy: { in: ownerIds } } },
+                        ],
+                      },
+                    },
+                  },
                 ],
               },
             ],
@@ -124,10 +151,21 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         : baseVisibilityWhere,
       include: {
         orders: {
-          where: { createdBy: { in: ownerIds } },
+          where: {
+            OR: [
+              { createdBy: { in: ownerIds } },
+              { customer: { createdBy: { in: ownerIds } } },
+            ],
+          },
           include: {
             receipts: {
-              where: { orderId: { not: null }, createdBy: { in: ownerIds } },
+              where: {
+                orderId: { not: null },
+                OR: [
+                  { createdBy: { in: ownerIds } },
+                  { customer: { createdBy: { in: ownerIds } } },
+                ],
+              },
               select: { usd: true, status: true }
             }
           }

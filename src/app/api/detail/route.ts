@@ -68,33 +68,42 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     const scope = await getHierarchyScope(currentUser);
     const ownerIds = Array.from(scope.ownerVisibleIds);
-    const where: Record<string, unknown> = {
-      OR: [
-        { createdBy: { in: ownerIds } },
-        { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } },
-      ],
-    };
-    
-    if (status) where.status = status;
+    const filters: Record<string, unknown>[] = [
+      {
+        OR: [
+          { createdBy: { in: ownerIds } },
+          { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } },
+        ],
+      },
+    ];
+
+    if (status) filters.push({ status });
     if (search) {
       assertSearchLength(search);
-      where.OR = [
-        { items: { some: { orderNo: { contains: search } } } },
-        { items: { some: { mark: { contains: search } } } }
-      ];
+      filters.push({
+        OR: [
+          { items: { some: { orderNo: { contains: search } } } },
+          { items: { some: { mark: { contains: search } } } },
+        ],
+      });
     }
     if (dateFrom || dateTo) {
-      where.createdAt = {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
-      };
+      filters.push({
+        createdAt: {
+          ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+          ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59.999Z`) } : {})
+        },
+      });
     }
     if (minAmount || maxAmount) {
-      where.totalAmount = {
-        ...(minAmount ? { gte: Number(minAmount) } : {}),
-        ...(maxAmount ? { lte: Number(maxAmount) } : {})
-      };
+      filters.push({
+        totalAmount: {
+          ...(minAmount ? { gte: Number(minAmount) } : {}),
+          ...(maxAmount ? { lte: Number(maxAmount) } : {})
+        },
+      });
     }
+    const where = filters.length === 1 ? filters[0] : { AND: filters };
 
     const details = await db.detail.findMany({
       where,

@@ -148,6 +148,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   const denied = managerOnly(currentUser.role as UserRole);
   if (denied) return denied;
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
 
   const contentType = request.headers.get('content-type') || '';
   if (contentType.includes('multipart/form-data')) {
@@ -285,6 +287,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   if (action === 'update') {
     const id = trimStr(body.id);
     if (!id) return NextResponse.json({ success: false, error: '客户ID不能为空' }, { status: 400 });
+    const accessible = await db.customer.findFirst({
+      where: {
+        id,
+        createdBy: { in: ownerIds },
+      },
+      select: { id: true },
+    });
+    if (!accessible) {
+      return NextResponse.json({ success: false, error: '无权修改该客户' }, { status: 403 });
+    }
 
     const payload = parsePayload(body);
     const error = validateRequired(payload);
@@ -323,6 +335,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
     const id = trimStr(body.id);
     if (!id) return NextResponse.json({ success: false, error: '客户ID不能为空' }, { status: 400 });
+    const accessible = await db.customer.findFirst({
+      where: {
+        id,
+        createdBy: { in: ownerIds },
+      },
+      select: { id: true },
+    });
+    if (!accessible) {
+      return NextResponse.json({ success: false, error: '无权删除该客户' }, { status: 403 });
+    }
 
     await db.customer.delete({ where: { id } });
     return NextResponse.json({ success: true, message: '客户已删除' });

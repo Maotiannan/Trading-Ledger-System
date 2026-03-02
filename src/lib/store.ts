@@ -11,6 +11,8 @@ export interface User {
   email: string;
   name: string | null;
   role: UserRole;
+  level?: number;
+  parentId?: string | null;
   createdAt?: string;
   createdById?: string | null;
 }

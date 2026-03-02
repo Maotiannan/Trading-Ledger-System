@@ -153,10 +153,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       const existingSwift = await db.swift.findUnique({
         where: { detailId },
-        select: { id: true },
+        select: { id: true, hasError: true, createdBy: true },
       });
-      if (existingSwift) {
+      if (existingSwift && !existingSwift.hasError) {
         return NextResponse.json({ success: false, error: '该付款明细已创建SWIFT，请勿重复提交' }, { status: 400 });
+      }
+      if (existingSwift && existingSwift.hasError) {
+        if (!canAccessOwnedResource(existingSwift.createdBy, currentUser)) {
+          return forbiddenOwnershipResponse('无权覆盖该错误SWIFT记录');
+        }
+        await db.swift.delete({ where: { id: existingSwift.id } });
       }
 
       // 验证金额
@@ -208,16 +214,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         }
         console.log(`Detail ${detailId} and associated receipts updated to Bank_Transfer`);
       } else {
-        // 金额不匹配，更新DETAIL为ERROR状态
-        await db.detail.update({
-          where: { id: detailId },
-          data: { status: DetailStatus.ERROR }
-        });
+        // 金额不匹配时仅标记 SWIFT 为 ERROR，不改动 DETAIL/RECEIPT 状态
         await db.swift.update({
           where: { id: swift.id },
           data: { status: SwiftStatus.ERROR },
         });
-        console.log(`Detail ${detailId} marked as ERROR due to amount mismatch`);
+        console.log(`Swift ${swift.id} marked as ERROR due to amount mismatch`);
       }
       await recordAuditEvent({
         action: 'SWIFT_CREATE',
@@ -234,10 +236,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (action === 'delete') {
-      // 删除SWIFT（需要审批）
-      if (currentUser.role !== 'ADMIN') {
-        return NextResponse.json({ success: false, error: '只有管理员可以删除SWIFT' }, { status: 403 });
-      }
+      // 删除SWIFT：
+      // 1) 管理员可删除所有记录
+      // 2) 错误记录（hasError=true）允许记录创建者直接删除
 
       const swiftId = (requestData.swiftId as string) || '';
       
@@ -252,9 +253,24 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       if (!existingSwift) {
         return NextResponse.json({ success: false, error: 'SWIFT不存在' }, { status: 400 });
       }
+      const canDeleteErrorSwiftDirectly =
+        existingSwift.hasError && canAccessOwnedResource(existingSwift.createdBy, currentUser);
+      if (currentUser.role !== 'ADMIN' && !canDeleteErrorSwiftDirectly) {
+        return NextResponse.json({ success: false, error: '只有管理员可以删除该SWIFT记录' }, { status: 403 });
+      }
 
       // 删除SWIFT
       await db.swift.delete({ where: { id: swiftId } });
+
+      if (existingSwift.hasError) {
+        await recordAuditEvent({
+          action: 'SWIFT_DELETE',
+          actorId: currentUser.id,
+          targetType: 'SWIFT',
+          targetId: swiftId,
+        });
+        return NextResponse.json({ success: true, message: '错误SWIFT记录已删除' });
+      }
 
       // DETAIL回退到Waiting_SWIFT状态
       await db.detail.update({

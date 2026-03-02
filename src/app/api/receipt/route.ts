@@ -139,14 +139,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       if (receiptData.receiptNo) {
         const existingReceipt = await db.receipt.findFirst({
-          where: { 
-            receiptNo: receiptData.receiptNo
-          }
+          where: {
+            receiptNo: receiptData.receiptNo,
+            createdBy: currentUser.id,
+          },
+          select: { id: true },
         });
         if (existingReceipt) {
-          return NextResponse.json({ 
-            success: false, 
-            error: '收据创建失败，请稍后重试'
+          return NextResponse.json({
+            success: false,
+            error: '该收据号已存在于你的账户，请勿重复创建',
           }, { status: 400 });
         }
       }

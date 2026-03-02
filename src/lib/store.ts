@@ -91,6 +91,7 @@ export interface Swift {
   receiverName: string | null;
   receiverAccount: string | null;
   imageUrl: string | null;
+  imageName?: string | null;
   status?: SwiftStatus;
   hasError: boolean;
   errorMessage: string | null;

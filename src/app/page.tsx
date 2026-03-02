@@ -49,6 +49,11 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
   return json;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
 async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
   const normalized = orderNoInput.trim();
   if (!normalized) return null;
@@ -791,7 +796,7 @@ function InvoiceManager() {
         alert(result.error || tx('删除失败', 'Delete failed'));
       }
     } catch (err) {
-      alert(tx('网络错误，请重试', 'Network error, please retry.'));
+      alert(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
       console.error(err);
     }
   };
@@ -2845,6 +2850,7 @@ function SwiftManager() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+  const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
   const [selectedDetailId, setSelectedDetailId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -2883,8 +2889,9 @@ function SwiftManager() {
   }, [loadSwifts]);
 
   const waitingDetails = details.filter(d => d.status === 'Waiting_SWIFT');
-  const getSwiftStatus = (swift: { status?: string; detailId: string }) => {
+  const getSwiftStatus = (swift: { status?: string; detailId?: string | null }) => {
     if (swift.status) return swift.status;
+    if (!swift.detailId) return 'ERROR';
     const detail = details.find((d) => d.id === swift.detailId);
     if (!detail) return 'Bank_Transfer';
     if (detail.status === 'RECEIVED') return 'RECEIVED';
@@ -2971,15 +2978,37 @@ function SwiftManager() {
     }
   };
 
-  const handleDeleteSwift = async (swiftId: string) => {
+  const handleDeleteSwift = async (swift: { id: string; hasError: boolean }) => {
+    if (swift.hasError) {
+      if (!confirm(tx('确定要直接删除这条错误SWIFT记录吗？', 'Delete this erroneous SWIFT record directly?'))) return;
+      try {
+        const result = await apiCall('swift', {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'delete',
+            swiftId: swift.id,
+          }),
+        });
+        if (!result.success) {
+          alert(result.error || tx('删除失败', 'Delete failed'));
+          return;
+        }
+        loadSwifts();
+        return;
+      } catch (err) {
+        alert(getErrorMessage(err, tx('删除失败', 'Delete failed')));
+        return;
+      }
+    }
+
     if (!confirm(tx('确定要申请删除这条SWIFT水单吗？删除需要管理员审批。', 'Submit a deletion request for this SWIFT record? Admin approval is required.'))) return;
-    
+
     const result = await apiCall('deletion', {
       method: 'POST',
-      body: JSON.stringify({ 
-        action: 'request', 
-        targetType: 'SWIFT', 
-        targetId: swiftId 
+      body: JSON.stringify({
+        action: 'request',
+        targetType: 'SWIFT',
+        targetId: swift.id,
       }),
     });
 
@@ -3093,11 +3122,21 @@ function SwiftManager() {
                   {swift.hasError && (
                     <AlertTriangle className="h-5 w-5 text-red-500" />
                   )}
+                  {swift.imageUrl && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setViewingImage({ url: swift.imageUrl!, name: swift.imageName || tx('SWIFT图片', 'SWIFT image') })}
+                      title={tx('查看图片', 'View image')}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button 
                     size="sm" 
                     variant="ghost" 
-                    onClick={() => handleDeleteSwift(swift.id)}
-                    title={tx('申请删除', 'Request deletion')}
+                    onClick={() => handleDeleteSwift(swift)}
+                    title={swift.hasError ? tx('直接删除', 'Delete directly') : tx('申请删除', 'Request deletion')}
                   >
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
@@ -3268,6 +3307,23 @@ function SwiftManager() {
               {tx('创建', 'Create')}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewingImage} onOpenChange={(open) => { if (!open) setViewingImage(null); }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{viewingImage?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            {viewingImage && (
+              <img
+                src={viewingImage.url}
+                alt={viewingImage.name}
+                className="max-h-[70vh] w-full object-contain rounded border"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

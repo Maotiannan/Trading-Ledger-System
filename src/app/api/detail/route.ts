@@ -192,12 +192,24 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         
         console.log(`Processing item: orderNo=${item.orderNo}, amount=${item.amount}, receiptId=${receiptId}`);
         if (receiptId) {
-          const receipt = await db.receipt.findUnique({ where: { id: receiptId }, select: { createdBy: true } });
+          const receipt = await db.receipt.findUnique({
+            where: { id: receiptId },
+            select: { createdBy: true, imageUrl: true, imageName: true },
+          });
           if (!receipt) {
             return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
           }
           if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
             return forbiddenOwnershipResponse('无权关联该收据');
+          }
+          if (imagePath && !receipt.imageUrl) {
+            await db.receipt.update({
+              where: { id: receiptId },
+              data: {
+                imageUrl: imagePath,
+                imageName: imageName || receipt.imageName,
+              },
+            });
           }
         }
         
@@ -207,7 +219,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           if (autoMatchedReceiptId) {
             const matchedReceipt = await db.receipt.findUnique({
               where: { id: autoMatchedReceiptId },
-              select: { createdBy: true },
+              select: { createdBy: true, imageUrl: true, imageName: true },
             });
             if (!matchedReceipt) {
               return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
@@ -216,6 +228,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
               return forbiddenOwnershipResponse('无权关联该收据');
             }
             receiptId = autoMatchedReceiptId;
+            if (imagePath && !matchedReceipt.imageUrl) {
+              await db.receipt.update({
+                where: { id: autoMatchedReceiptId },
+                data: {
+                  imageUrl: imagePath,
+                  imageName: imageName || matchedReceipt.imageName,
+                },
+              });
+            }
           }
         }
 

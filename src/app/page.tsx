@@ -46,12 +46,41 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
     throw new Error(locale.startsWith('en') ? translateApiErrorMessage(message) : message);
   }
 
-  return json;
+  return normalizeNumericPayload(json);
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+const DECIMAL_KEYS = new Set([
+  'amount',
+  'orderBalance',
+  'usd',
+  'totalAmount',
+  'invAmount',
+  'invBalance',
+  'credit',
+]);
+
+function normalizeNumericPayload<T>(input: T): T {
+  const visit = (value: unknown, key?: string): unknown => {
+    if (Array.isArray(value)) return value.map((item) => visit(item));
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = visit(v, k);
+      }
+      return out;
+    }
+    if (typeof value === 'string' && key && DECIMAL_KEYS.has(key)) {
+      const n = Number(value);
+      if (Number.isFinite(n)) return n;
+    }
+    return value;
+  };
+  return visit(input) as T;
 }
 
 function getDisplayImageUrl(rawUrl: string): string {
@@ -516,6 +545,24 @@ function InvoiceManager() {
   
   // 刷新匹配状态
   const [refreshing, setRefreshing] = useState(false);
+  const [showRematchDialog, setShowRematchDialog] = useState(false);
+  const [rematchLoading, setRematchLoading] = useState(false);
+  const [applyingRematch, setApplyingRematch] = useState(false);
+  const [rematchGroups, setRematchGroups] = useState<Array<{
+    groupId: string;
+    groupType: 'exact' | 'customer-group';
+    groupKey: string;
+    orders: Array<{
+      id: string;
+      invNo: string;
+      orderNo: string;
+      amount: number;
+      orderBalance: number;
+      receiptCount: number;
+      createdAt: string;
+    }>;
+  }>>([]);
+  const [rematchSelections, setRematchSelections] = useState<Record<string, { keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>>({});
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
@@ -655,26 +702,64 @@ function InvoiceManager() {
     }
   };
 
-  // 刷新匹配
-  const handleRematch = async () => {
-    setRefreshing(true);
+  const openRematchDialog = async () => {
+    setRematchLoading(true);
     try {
       const result = await apiCall('invoice', {
         method: 'PUT',
-        body: JSON.stringify({ action: 'rematch' }),
+        body: JSON.stringify({ action: 'rematch-preview' }),
       });
-      
+
       if (result.success) {
-        alert(result.message || tx('刷新成功', 'Rematch completed'));
-        await loadInvoices();
+        const groups = Array.isArray(result.data) ? result.data : [];
+        setRematchGroups(groups);
+        const defaultSelections: Record<string, { keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }> = {};
+        for (const group of groups) {
+          const first = group.orders?.[0];
+          if (!first) continue;
+          defaultSelections[group.groupId] = {
+            keepOrderId: first.id,
+            mode: 'merge',
+            orderIds: group.orders.map((o: { id: string }) => o.id),
+          };
+        }
+        setRematchSelections(defaultSelections);
+        setShowRematchDialog(true);
       } else {
         alert(result.error || tx('刷新失败', 'Rematch failed'));
       }
     } catch (err) {
-      alert(tx('网络错误，请重试', 'Network error, please retry.'));
+      alert(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
       console.error(err);
     } finally {
-      setRefreshing(false);
+      setRematchLoading(false);
+    }
+  };
+
+  const handleRematchApply = async () => {
+    setApplyingRematch(true);
+    try {
+      const resolutions = Object.entries(rematchSelections).map(([groupId, selection]) => ({
+        groupId,
+        keepOrderId: selection.keepOrderId,
+        mode: selection.mode,
+        orderIds: selection.orderIds,
+      }));
+      const result = await apiCall('invoice', {
+        method: 'PUT',
+        body: JSON.stringify({ action: 'rematch-apply', resolutions }),
+      });
+      if (!result.success) {
+        alert(result.error || tx('应用失败', 'Apply rematch failed'));
+        return;
+      }
+      alert(result.message || tx('刷新成功', 'Rematch completed'));
+      setShowRematchDialog(false);
+      await loadInvoices();
+    } catch (err) {
+      alert(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
+    } finally {
+      setApplyingRematch(false);
     }
   };
 
@@ -1021,10 +1106,10 @@ function InvoiceManager() {
               </Button>
               <Button 
                 variant="outline" 
-                onClick={handleRematch}
-                disabled={refreshing}
+                onClick={openRematchDialog}
+                disabled={refreshing || rematchLoading}
               >
-                {refreshing ? (
+                {refreshing || rematchLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
@@ -1604,6 +1689,93 @@ function InvoiceManager() {
               </TableBody>
             </Table>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showRematchDialog} onOpenChange={setShowRematchDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{tx('冲突匹配处理', 'Conflict Match Resolution')}</DialogTitle>
+            <DialogDescription>{tx('逐组选择保留订单与处理方式，再执行刷新匹配。', 'Choose keeper and strategy for each group before applying rematch.')}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-auto">
+            {rematchGroups.map((group) => (
+              <Card key={group.groupId}>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {group.groupType === 'exact' ? tx('同订单号冲突', 'Exact order conflict') : tx('同客组冲突', 'Customer-group conflict')} - {group.groupKey}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <select
+                      className="border rounded-md px-3 py-2 text-sm"
+                      value={rematchSelections[group.groupId]?.keepOrderId || ''}
+                      onChange={(e) => setRematchSelections((prev) => ({
+                        ...prev,
+                        [group.groupId]: {
+                          ...(prev[group.groupId] || { mode: 'merge', orderIds: group.orders.map((o) => o.id) }),
+                          keepOrderId: e.target.value,
+                        },
+                      }))}
+                    >
+                      {group.orders.map((order) => (
+                        <option key={order.id} value={order.id}>
+                          {order.invNo} / {order.orderNo} / ${order.amount.toFixed(2)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="border rounded-md px-3 py-2 text-sm"
+                      value={rematchSelections[group.groupId]?.mode || 'merge'}
+                      onChange={(e) => setRematchSelections((prev) => ({
+                        ...prev,
+                        [group.groupId]: {
+                          ...(prev[group.groupId] || { keepOrderId: group.orders[0]?.id || '', orderIds: group.orders.map((o) => o.id) }),
+                          mode: e.target.value as 'keep' | 'merge',
+                        },
+                      }))}
+                    >
+                      <option value="merge">{tx('累加金额并删除其余', 'Merge amounts and delete others')}</option>
+                      <option value="keep">{tx('仅保留主订单并删除其余', 'Keep selected order and delete others')}</option>
+                    </select>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>INV</TableHead>
+                        <TableHead>ORDER</TableHead>
+                        <TableHead>{tx('金额', 'Amount')}</TableHead>
+                        <TableHead>{tx('余额', 'Balance')}</TableHead>
+                        <TableHead>{tx('收据数', 'Receipts')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {group.orders.map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell>{order.invNo}</TableCell>
+                          <TableCell>{order.orderNo}</TableCell>
+                          <TableCell>${order.amount.toFixed(2)}</TableCell>
+                          <TableCell>${order.orderBalance.toFixed(2)}</TableCell>
+                          <TableCell>{order.receiptCount}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            ))}
+            {rematchGroups.length === 0 && (
+              <div className="text-sm text-gray-500">{tx('未发现冲突组，可直接执行自动刷新匹配。', 'No conflict groups found; automatic rematch will still run.')}</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRematchDialog(false)}>{tx('取消', 'Cancel')}</Button>
+            <Button onClick={handleRematchApply} disabled={applyingRematch}>
+              {applyingRematch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {tx('确认执行', 'Apply')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -4241,6 +4413,10 @@ function SettingsManager() {
                     <option value="false">false</option>
                     <option value="true">true</option>
                   </select>
+                </div>
+                <div>
+                  <Label>DETAIL_RECEIPT_MATCH_TOLERANCE</Label>
+                  <Input value={config.DETAIL_RECEIPT_MATCH_TOLERANCE || '5'} onChange={(e) => updateConfigField('DETAIL_RECEIPT_MATCH_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
                 </div>
               </div>
               <div className="flex justify-end gap-2">

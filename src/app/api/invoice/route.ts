@@ -8,10 +8,13 @@ import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 // 获取账单列表
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
+    const scope = await getHierarchyScope(currentUser);
+    const ownerIds = Array.from(scope.ownerVisibleIds);
     const { searchParams } = new URL(request.url);
     const action = (searchParams.get('action') || '').trim();
     const search = (searchParams.get('search') || '').trim();
@@ -49,8 +52,14 @@ export const GET = withAuth(async (request: NextRequest) => {
     }
 
     if (orderId) {
+      const accessibleOrder = await db.order.findFirst({
+        where: { id: orderId, createdBy: { in: ownerIds } },
+        select: { id: true },
+      });
+      if (!accessibleOrder) return NextResponse.json({ success: true, data: [] });
+
       const receipts = await db.receipt.findMany({
-        where: { orderId },
+        where: { orderId, createdBy: { in: ownerIds } },
         select: {
           id: true,
           receiptNo: true,
@@ -74,6 +83,7 @@ export const GET = withAuth(async (request: NextRequest) => {
         return NextResponse.json({ success: true, data: [] });
       }
       const allOrders = await db.order.findMany({
+        where: { createdBy: { in: ownerIds } },
         select: {
           id: true,
           orderNo: true,
@@ -91,20 +101,33 @@ export const GET = withAuth(async (request: NextRequest) => {
       return NextResponse.json({ success: true, data: matched });
     }
 
+    const baseVisibilityWhere = {
+      OR: [
+        { createdBy: { in: ownerIds } },
+        { orders: { some: { createdBy: { in: ownerIds } } } },
+        { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
+      ],
+    };
     const invoices = await db.invoice.findMany({
       where: search
         ? {
-            OR: [
-              { invNo: { contains: search } },
-              { orders: { some: { orderNo: { contains: search } } } },
+            AND: [
+              baseVisibilityWhere,
+              {
+                OR: [
+                  { invNo: { contains: search } },
+                  { orders: { some: { orderNo: { contains: search }, createdBy: { in: ownerIds } } } },
+                ],
+              },
             ],
           }
-        : undefined,
+        : baseVisibilityWhere,
       include: {
         orders: {
+          where: { createdBy: { in: ownerIds } },
           include: {
             receipts: {
-              where: { orderId: { not: null } },
+              where: { orderId: { not: null }, createdBy: { in: ownerIds } },
               select: { usd: true, status: true }
             }
           }
@@ -132,9 +155,9 @@ export const GET = withAuth(async (request: NextRequest) => {
 
     // 计算每个账单的总金额和余额
     const result = filteredInvoices.map(invoice => {
-      const invAmount = invoice.orders.reduce((sum, order) => sum + order.amount, 0);
+      const invAmount = invoice.orders.reduce((sum, order) => sum + Number(order.amount), 0);
       const receivedAmount = invoice.orders.reduce((sum, order) => {
-        return sum + order.receipts.reduce((s, r) => s + r.usd, 0);
+        return sum + order.receipts.reduce((s, r) => s + Number(r.usd), 0);
       }, 0);
       const invBalance = invAmount - receivedAmount;
 
@@ -143,21 +166,27 @@ export const GET = withAuth(async (request: NextRequest) => {
         invAmount,
         invBalance,
         orders: invoice.orders.map(order => {
-          const orderReceived = order.receipts.reduce((s, r) => s + r.usd, 0);
+          const orderReceived = order.receipts.reduce((s, r) => s + Number(r.usd), 0);
 
           return {
             ...order,
-            orderBalance: order.amount - orderReceived,
+            orderBalance: Number(order.amount) - orderReceived,
             isSystemOrder: false,
           };
         })
       };
     });
 
-    // 排序：Un_Associated 置顶，其他按创建时间倒序
+    // 排序：DEPOSIT_POOL、Un_Associated 置顶，其他按创建时间倒序
     result.sort((a, b) => {
-      if (a.invNo === 'Un_Associated') return -1;
-      if (b.invNo === 'Un_Associated') return 1;
+      const rank = (invNo: string) => {
+        if (invNo === 'DEPOSIT_POOL') return 0;
+        if (invNo === 'Un_Associated') return 1;
+        return 2;
+      };
+      const rankA = rank(a.invNo);
+      const rankB = rank(b.invNo);
+      if (rankA !== rankB) return rankA - rankB;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
@@ -517,6 +546,135 @@ async function rematchAllOrders() {
   return { mergedCount, receiptMatchedCount, customerSyncedCount, deletedInvoiceCount, deletedZeroOrdersCount };
 }
 
+type RematchConflictGroup = {
+  groupId: string;
+  groupType: 'exact' | 'customer-group';
+  groupKey: string;
+  orders: Array<{
+    id: string;
+    invoiceId: string;
+    invNo: string;
+    orderNo: string;
+    amount: number;
+    orderBalance: number;
+    receiptCount: number;
+    createdAt: Date;
+  }>;
+};
+
+async function listRematchConflictGroups(): Promise<RematchConflictGroup[]> {
+  const orders = await db.order.findMany({
+    include: {
+      invoice: { select: { id: true, invNo: true } },
+      _count: { select: { receipts: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const normalized = (value: string) => value.trim().toLowerCase();
+  const exactMap = new Map<string, typeof orders>();
+  const groupMap = new Map<string, typeof orders>();
+  for (const order of orders) {
+    const exactKey = normalized(order.orderNo);
+    if (!exactMap.has(exactKey)) exactMap.set(exactKey, []);
+    exactMap.get(exactKey)!.push(order);
+
+    const groupKey = deriveOrderGroupKey(order.orderNo);
+    if (!groupKey) continue;
+    if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
+    groupMap.get(groupKey)!.push(order);
+  }
+
+  const groups: RematchConflictGroup[] = [];
+  for (const [key, rows] of exactMap) {
+    if (rows.length <= 1) continue;
+    groups.push({
+      groupId: `exact:${key}`,
+      groupType: 'exact',
+      groupKey: key,
+      orders: rows.map((row) => ({
+        id: row.id,
+        invoiceId: row.invoice.id,
+        invNo: row.invoice.invNo,
+        orderNo: row.orderNo,
+        amount: row.amount,
+        orderBalance: row.orderBalance,
+        receiptCount: row._count.receipts,
+        createdAt: row.createdAt,
+      })),
+    });
+  }
+  for (const [key, rows] of groupMap) {
+    if (rows.length <= 1) continue;
+    const uniqueOrderNos = new Set(rows.map((row) => normalized(row.orderNo)));
+    if (uniqueOrderNos.size <= 1) continue;
+    groups.push({
+      groupId: `group:${key}`,
+      groupType: 'customer-group',
+      groupKey: key,
+      orders: rows.map((row) => ({
+        id: row.id,
+        invoiceId: row.invoice.id,
+        invNo: row.invoice.invNo,
+        orderNo: row.orderNo,
+        amount: row.amount,
+        orderBalance: row.orderBalance,
+        receiptCount: row._count.receipts,
+        createdAt: row.createdAt,
+      })),
+    });
+  }
+
+  groups.sort((a, b) => a.groupId.localeCompare(b.groupId));
+  return groups;
+}
+
+async function applyRematchConflicts(
+  resolutions: Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>
+) {
+  let mergedCount = 0;
+  for (const resolution of resolutions) {
+    const uniqueOrderIds = Array.from(new Set(resolution.orderIds.filter(Boolean)));
+    if (uniqueOrderIds.length <= 1) continue;
+    if (!uniqueOrderIds.includes(resolution.keepOrderId)) continue;
+
+    const rows = await db.order.findMany({
+      where: { id: { in: uniqueOrderIds } },
+      include: { receipts: { select: { id: true } } },
+    });
+    if (rows.length <= 1) continue;
+
+    const keepRow = rows.find((row) => row.id === resolution.keepOrderId);
+    if (!keepRow) continue;
+
+    const sourceRows = rows.filter((row) => row.id !== keepRow.id);
+    if (sourceRows.length === 0) continue;
+
+    let incrementAmount = 0;
+    for (const source of sourceRows) {
+      await db.receipt.updateMany({
+        where: { orderId: source.id },
+        data: { orderId: keepRow.id },
+      });
+      if (resolution.mode === 'merge') {
+        incrementAmount += source.amount;
+      }
+      await db.order.delete({ where: { id: source.id } });
+      mergedCount++;
+    }
+
+    if (incrementAmount !== 0) {
+      await db.order.update({
+        where: { id: keepRow.id },
+        data: { amount: { increment: incrementAmount } },
+      });
+    }
+    await updateOrderBalance(keepRow.id);
+  }
+
+  return { mergedCount };
+}
+
 // 更新订单
 export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
   try {
@@ -524,6 +682,23 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
     const { action, orderId, orderNo, amount, invoiceId } = body;
 
     // 刷新匹配
+    if (action === 'rematch-preview') {
+      const groups = await listRematchConflictGroups();
+      return NextResponse.json({ success: true, data: groups });
+    }
+
+    if (action === 'rematch-apply') {
+      const resolutions = Array.isArray(body.resolutions) ? body.resolutions : [];
+      const applied = await applyRematchConflicts(
+        resolutions as Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>
+      );
+      const result = await rematchAllOrders();
+      return NextResponse.json({
+        success: true,
+        message: `冲突处理完成：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`,
+      });
+    }
+
     if (action === 'rematch') {
       const result = await rematchAllOrders();
       return NextResponse.json({ 
@@ -689,6 +864,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
           tokens: serializeOrderTokens(orderNo),
           amount,
           orderBalance: amount,
+          createdBy: currentUser.id,
           customerId: customerResolution.customerId,
           customerMark: customerResolution.customerMark,
           customerName: customerResolution.customerName,
@@ -788,8 +964,8 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
       // 计算源订单当前余额
       const fromReceipts = await db.receipt.findMany({ where: { orderId: fromOrderId } });
-      const fromReceived = fromReceipts.reduce((sum, r) => sum + r.usd, 0);
-      const fromBalance = fromOrder.amount - fromReceived;
+      const fromReceived = fromReceipts.reduce((sum, r) => sum + Number(r.usd), 0);
+      const fromBalance = Number(fromOrder.amount) - fromReceived;
 
       // 验证可转移余额（负数表示多付）
       if (fromBalance >= 0) {
@@ -831,6 +1007,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
             tokens: serializeOrderTokens(toOrderNo),
             amount: 0,  // Un_Associated 下的订单金额为0
             orderBalance: 0,
+            createdBy: currentUser.id,
             needsCustomerFix: true,
           }
         });

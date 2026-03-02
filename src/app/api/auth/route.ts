@@ -4,11 +4,18 @@ import { hashPassword, validateUser, verifyPassword } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 const roleRank: Record<UserRole, number> = {
-  [UserRole.ADMIN]: 3,
-  [UserRole.SALES]: 2,
-  [UserRole.USER]: 1,
+  [UserRole.ADMIN]: 4,
+  [UserRole.SALES]: 3,
+  [UserRole.USER]: 2,
+};
+
+const roleLevel: Record<UserRole, number> = {
+  [UserRole.ADMIN]: 2,
+  [UserRole.SALES]: 3,
+  [UserRole.USER]: 4,
 };
 
 function parseRole(value: unknown): UserRole {
@@ -23,6 +30,15 @@ function isProtectedPrimaryAdmin(target: { role: UserRole; email: string; name: 
   const email = (target.email || '').trim().toLowerCase();
   const name = (target.name || '').trim().toLowerCase();
   return email === 'admin@example.com' || (name === 'admin' && !target.createdById);
+}
+
+function canCreateRole(currentLevel: number, currentRole: UserRole, targetRole: UserRole): boolean {
+  const targetLevel = roleLevel[targetRole];
+  if (currentLevel >= 4 || currentRole === UserRole.USER) return false;
+  if (targetLevel <= currentLevel) return false; // 不允许创建同级或上级
+  if (currentLevel === 2 && targetRole === UserRole.ADMIN) return false; // 2级admin不能创建admin
+  if (currentRole === UserRole.SALES && targetRole !== UserRole.USER) return false;
+  return true;
 }
 
 // 登录
@@ -75,12 +91,41 @@ export async function POST(request: NextRequest) {
       }
 
       const requestedRole = parseRole(body.role);
-      const targetRole = currentUser.role === UserRole.SALES
-        ? UserRole.USER
-        : requestedRole;
+      const targetRole = requestedRole;
+      if (!canCreateRole(currentUser.level, currentUser.role, targetRole)) {
+        return NextResponse.json({ success: false, error: '当前账户无权创建该角色' }, { status: 403 });
+      }
 
-      if (currentUser.role === UserRole.SALES && targetRole !== UserRole.USER) {
-        return NextResponse.json({ success: false, error: '销售代表只能创建普通账户' }, { status: 403 });
+      const targetLevel = roleLevel[targetRole];
+      const requestedParentId = typeof body.parentId === 'string' && body.parentId.trim() ? body.parentId.trim() : currentUser.id;
+      const scope = await getHierarchyScope(currentUser);
+      const parent = await db.user.findUnique({
+        where: { id: requestedParentId },
+        select: { id: true, level: true, role: true },
+      });
+      if (!parent) {
+        return NextResponse.json({ success: false, error: '指定上级不存在' }, { status: 400 });
+      }
+
+      const isVisibleParent = scope.visibleIds.has(parent.id) || parent.id === currentUser.id;
+      if (!isVisibleParent) {
+        return NextResponse.json({ success: false, error: '无权指定该上级账户' }, { status: 403 });
+      }
+
+      if (targetRole === UserRole.SALES) {
+        if (parent.role !== UserRole.ADMIN || (parent.level !== 1 && parent.level !== 2)) {
+          return NextResponse.json({ success: false, error: 'SALES 上级必须为 1/2 级 ADMIN' }, { status: 400 });
+        }
+      } else if (targetRole === UserRole.USER) {
+        const parentAllowed = (parent.role === UserRole.SALES && parent.level === 3) ||
+          (parent.role === UserRole.ADMIN && (parent.level === 1 || parent.level === 2));
+        if (!parentAllowed) {
+          return NextResponse.json({ success: false, error: 'USER 上级必须为 1/2 级 ADMIN 或 3 级 SALES' }, { status: 400 });
+        }
+      } else if (targetRole === UserRole.ADMIN) {
+        if (parent.level !== 1 || parent.role !== UserRole.ADMIN) {
+          return NextResponse.json({ success: false, error: '2级 ADMIN 只能由 1级 ADMIN 创建' }, { status: 400 });
+        }
       }
 
       const existing = await db.user.findUnique({ where: { email } });
@@ -95,9 +140,11 @@ export async function POST(request: NextRequest) {
           password: hashedPassword,
           name: name || null,
           role: targetRole,
+          level: targetLevel,
+          parentId: parent.id,
           createdById: currentUser.id,
         },
-        select: { id: true, email: true, name: true, role: true, createdAt: true, createdById: true }
+        select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true }
       });
 
       return NextResponse.json({ success: true, data: newUser });
@@ -125,14 +172,24 @@ export async function POST(request: NextRequest) {
       if (!target) {
         return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
       }
+      const scope = await getHierarchyScope(currentUser);
+      if (!scope.descendantIds.has(target.id)) {
+        return NextResponse.json({ success: false, error: '只能管理下级用户' }, { status: 403 });
+      }
+      if (target.level === currentUser.level) {
+        return NextResponse.json({ success: false, error: '同级用户不可管理' }, { status: 403 });
+      }
       if (isProtectedPrimaryAdmin(target)) {
         return NextResponse.json({ success: false, error: '唯一管理员Admin角色不可修改' }, { status: 400 });
+      }
+      if (!canCreateRole(currentUser.level, currentUser.role, newRole)) {
+        return NextResponse.json({ success: false, error: '当前账户无权设置该角色' }, { status: 403 });
       }
 
       const updated = await db.user.update({
         where: { id: userId },
-        data: { role: newRole },
-        select: { id: true, email: true, name: true, role: true, createdAt: true, createdById: true },
+        data: { role: newRole, level: roleLevel[newRole] },
+        select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true },
       });
       return NextResponse.json({ success: true, data: updated, message: '角色已更新' });
     }
@@ -144,9 +201,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
       }
 
+      const scope = await getHierarchyScope(currentUser);
+
       const users = await db.user.findMany({
-        where: currentUser.role === UserRole.ADMIN ? undefined : { createdById: currentUser.id },
-        select: { id: true, email: true, name: true, role: true, createdAt: true, createdById: true },
+        where: {
+          OR: [
+            { id: { in: Array.from(scope.visibleIds) } },
+            { level: currentUser.level },
+          ],
+        },
+        select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true },
         orderBy: { createdAt: 'desc' }
       });
 
@@ -168,14 +232,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '不能删除自己' }, { status: 400 });
       }
 
-      if (currentUser.role === UserRole.SALES) {
-        const target = await db.user.findUnique({
-          where: { id: userId },
-          select: { createdById: true, role: true },
-        });
-        if (!target || target.createdById !== currentUser.id || target.role !== UserRole.USER) {
-          return NextResponse.json({ success: false, error: '销售代表只能删除自己创建的普通用户' }, { status: 403 });
-        }
+      const target = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, level: true },
+      });
+      if (!target) {
+        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+      }
+      const scope = await getHierarchyScope(currentUser);
+      if (!scope.descendantIds.has(target.id) || target.level <= currentUser.level) {
+        return NextResponse.json({ success: false, error: '仅可删除下级用户' }, { status: 403 });
       }
 
       await db.user.delete({ where: { id: userId } });
@@ -192,15 +258,16 @@ export async function POST(request: NextRequest) {
       if (!userId || !password) {
         return NextResponse.json({ success: false, error: '用户ID和新密码不能为空' }, { status: 400 });
       }
-
-      if (currentUser.role === UserRole.SALES) {
-        const target = await db.user.findUnique({
-          where: { id: userId },
-          select: { createdById: true, role: true },
-        });
-        if (!target || target.createdById !== currentUser.id || target.role !== UserRole.USER) {
-          return NextResponse.json({ success: false, error: '销售代表只能重置自己创建的普通用户密码' }, { status: 403 });
-        }
+      const target = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, level: true },
+      });
+      if (!target) {
+        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+      }
+      const scope = await getHierarchyScope(currentUser);
+      if (!scope.descendantIds.has(target.id) || target.level <= currentUser.level) {
+        return NextResponse.json({ success: false, error: '仅可重置下级用户密码' }, { status: 403 });
       }
 
       const hashedPassword = await hashPassword(password);

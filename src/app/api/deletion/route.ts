@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { DeletionStatus, ReceiptStatus, DetailStatus } from '@prisma/client';
 import { UserRole } from '@prisma/client';
 import { withAuth } from '@/lib/route-auth';
-import { canAccessOwnedResource, forbiddenOwnershipResponse } from '@/lib/ownership';
+import { canAccessOwnedResourceAsync, forbiddenOwnershipResponse } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { updateOrderBalance } from '@/lib/matching';
 
@@ -73,7 +73,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (!receipt) {
           return NextResponse.json({ success: false, error: '收据不存在' }, { status: 400 });
         }
-        if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+        if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
           return forbiddenOwnershipResponse('无权申请删除该收据');
         }
         if (receipt.status === ReceiptStatus.RECEIVED) {
@@ -89,7 +89,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (!detail) {
           return NextResponse.json({ success: false, error: '付款明细不存在' }, { status: 400 });
         }
-        if (!canAccessOwnedResource(detail.createdBy, currentUser)) {
+        if (!(await canAccessOwnedResourceAsync(detail.createdBy, currentUser))) {
           return forbiddenOwnershipResponse('无权申请删除该明细');
         }
         if (detail.status === DetailStatus.RECEIVED) {
@@ -105,7 +105,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (!swift) {
           return NextResponse.json({ success: false, error: 'SWIFT不存在' }, { status: 400 });
         }
-        if (!canAccessOwnedResource(swift.createdBy, currentUser)) {
+        if (!(await canAccessOwnedResourceAsync(swift.createdBy, currentUser))) {
           return forbiddenOwnershipResponse('无权申请删除该SWIFT');
         }
       } else {
@@ -234,7 +234,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
                 where: { detailId },
                 select: { amount: true },
               });
-              const totalAmount = remainItems.reduce((sum, item) => sum + item.amount, 0);
+              const totalAmount = remainItems.reduce((sum, item) => sum + Number(item.amount), 0);
               await tx.detail.update({
                 where: { id: detailId },
                 data: { totalAmount },
@@ -328,10 +328,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
                 where: { orderId },
                 _sum: { usd: true },
               });
-              const receiptSum = receiptAgg._sum.usd ?? 0;
+              const receiptSum = Number(receiptAgg._sum.usd ?? 0);
               await tx.order.update({
                 where: { id: orderId },
-                data: { orderBalance: order.amount - receiptSum },
+                data: { orderBalance: Number(order.amount) - receiptSum },
               });
             }
           }

@@ -5,12 +5,13 @@ import { recognizeDetail } from '@/lib/ocr';
 import { findMatchingReceipt, updateOrderBalance, findOrCreateOrder } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
-import { canAccessOwnedResource, forbiddenOwnershipResponse, isManager } from '@/lib/ownership';
+import { canAccessOwnedResourceAsync, forbiddenOwnershipResponse } from '@/lib/ownership';
 import { assertSearchLength, detailPayloadSchema, InputValidationError, parseJsonWithSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { toOcrDataUrl } from '@/lib/ocr-input';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -65,10 +66,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const minAmount = searchParams.get('minAmount');
     const maxAmount = searchParams.get('maxAmount');
 
-    const where: Record<string, unknown> = {};
-    if (!isManager(currentUser)) {
-      where.createdBy = currentUser.id;
-    }
+    const scope = await getHierarchyScope(currentUser);
+    const ownerIds = Array.from(scope.ownerVisibleIds);
+    const where: Record<string, unknown> = {
+      OR: [
+        { createdBy: { in: ownerIds } },
+        { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } },
+      ],
+    };
     
     if (status) where.status = status;
     if (search) {
@@ -199,7 +204,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           if (!receipt) {
             return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
           }
-          if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+          if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
             return forbiddenOwnershipResponse('无权关联该收据');
           }
           if (imagePath && !receipt.imageUrl) {
@@ -224,7 +229,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             if (!matchedReceipt) {
               return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
             }
-            if (!canAccessOwnedResource(matchedReceipt.createdBy, currentUser)) {
+            if (!(await canAccessOwnedResourceAsync(matchedReceipt.createdBy, currentUser))) {
               return forbiddenOwnershipResponse('无权关联该收据');
             }
             receiptId = autoMatchedReceiptId;
@@ -353,7 +358,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           if (!receipt) {
             return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
           }
-          if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+          if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
             return forbiddenOwnershipResponse('无权关联该收据');
           }
         }
@@ -368,7 +373,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             if (!matchedReceipt) {
               return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
             }
-            if (!canAccessOwnedResource(matchedReceipt.createdBy, currentUser)) {
+            if (!(await canAccessOwnedResourceAsync(matchedReceipt.createdBy, currentUser))) {
               return forbiddenOwnershipResponse('无权关联该收据');
             }
             receiptId = autoMatchedReceiptId;
@@ -472,7 +477,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       if (!existingDetail) {
         return NextResponse.json({ success: false, error: '明细不存在' }, { status: 400 });
       }
-      if (!canAccessOwnedResource(existingDetail.createdBy, currentUser)) {
+      if (!(await canAccessOwnedResourceAsync(existingDetail.createdBy, currentUser))) {
         return forbiddenOwnershipResponse('无权修改该明细');
       }
 
@@ -528,7 +533,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             if (!receipt) {
               return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
             }
-            if (!canAccessOwnedResource(receipt.createdBy, currentUser)) {
+            if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
               return forbiddenOwnershipResponse('无权关联该收据');
             }
           }
@@ -544,7 +549,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
               if (!matchedReceipt) {
                 return NextResponse.json({ success: false, error: '关联收据不存在' }, { status: 400 });
               }
-              if (!canAccessOwnedResource(matchedReceipt.createdBy, currentUser)) {
+              if (!(await canAccessOwnedResourceAsync(matchedReceipt.createdBy, currentUser))) {
                 return forbiddenOwnershipResponse('无权关联该收据');
               }
               receiptId = autoMatchedReceiptId;

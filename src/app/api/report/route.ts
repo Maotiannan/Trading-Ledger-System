@@ -44,8 +44,8 @@ async function exportExcel() {
   invoiceSheet.addRow(['Invoice No', 'Order Count', 'Amount', 'Received', 'Balance']);
   invoiceSheet.getRow(1).font = { bold: true };
   for (const invoice of invoices) {
-    const amount = invoice.orders.reduce((sum, o) => sum + o.amount, 0);
-    const received = invoice.orders.reduce((sum, o) => sum + o.receipts.reduce((s, r) => s + r.usd, 0), 0);
+    const amount = invoice.orders.reduce((sum, o) => sum + Number(o.amount), 0);
+    const received = invoice.orders.reduce((sum, o) => sum + o.receipts.reduce((s, r) => s + Number(r.usd), 0), 0);
     invoiceSheet.addRow([invoice.invNo, invoice.orders.length, amount, received, amount - received]);
   }
 
@@ -113,7 +113,7 @@ async function exportPdf() {
     if (y < 40) break;
     const date = receipt.createdAt.toISOString().slice(0, 10);
     page.drawText(
-      `${date} | ${receipt.orderNo || '-'} | ${receipt.status} | USD ${receipt.usd.toFixed(2)}`,
+      `${date} | ${receipt.orderNo || '-'} | ${receipt.status} | USD ${Number(receipt.usd).toFixed(2)}`,
       { x: 52, y, size: 10.5, font }
     );
     y -= 14;

@@ -5,12 +5,13 @@ import { recognizeReceipt } from '@/lib/ocr';
 import { createOrder, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
-import { canAccessOwnedResource, forbiddenOwnershipResponse, isManager } from '@/lib/ownership';
+import { canAccessOwnedResourceAsync, forbiddenOwnershipResponse } from '@/lib/ownership';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptPayloadSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { toOcrDataUrl } from '@/lib/ocr-input';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 function parseReceiptPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -36,10 +37,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const minUsd = searchParams.get('minUsd');
     const maxUsd = searchParams.get('maxUsd');
 
-    const where: Record<string, unknown> = {};
-    if (!isManager(currentUser)) {
-      where.createdBy = currentUser.id;
-    }
+    const scope = await getHierarchyScope(currentUser);
+    const ownerIds = Array.from(scope.ownerVisibleIds);
+    const where: Record<string, unknown> = {
+      OR: [
+        { createdBy: { in: ownerIds } },
+        { customer: { createdBy: { in: ownerIds } } },
+      ],
+    };
     
     if (status) where.status = status;
     if (search) {
@@ -186,6 +191,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             orderNo: normalizedOrderNo,
             amount: 0,
             orderBalance: -receiptData.usd,
+            createdBy: currentUser.id,
             customerId: customerResolution.customerId,
             customerMark: customerResolution.customerMark,
             customerName: customerResolution.customerName,
@@ -274,7 +280,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       if (!existingReceipt) {
         return NextResponse.json({ success: false, error: '收据不存在' }, { status: 400 });
       }
-      if (!canAccessOwnedResource(existingReceipt.createdBy, currentUser)) {
+      if (!(await canAccessOwnedResourceAsync(existingReceipt.createdBy, currentUser))) {
         return forbiddenOwnershipResponse('无权修改该收据');
       }
 

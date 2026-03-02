@@ -53,6 +53,7 @@ export async function createOrder(orderNo: string, userId: string): Promise<stri
         tokens: serializeOrderTokens(orderNo),
         amount: 0, // 初始金额为0，会随着收据累加
         orderBalance: 0,
+        createdBy: userId,
         needsCustomerFix: true,
       }
     });
@@ -234,10 +235,10 @@ export async function calculateOrderBalance(orderId: string): Promise<number> {
   if (!order) return 0;
 
   // 计算所有关联收据的金额总和
-  const receiptSum = order.receipts.reduce((sum, receipt) => sum + receipt.usd, 0);
+  const numericReceiptSum = order.receipts.reduce((sum, receipt) => sum + Number(receipt.usd), 0);
 
   // ORDER BALANCE = AMOUNT - 收据总额
-  return order.amount - receiptSum;
+  return Number(order.amount) - numericReceiptSum;
 }
 
 // 更新ORDER BALANCE
@@ -281,59 +282,48 @@ export async function findMatchingReceipt(
 ): Promise<string | null> {
   if (!orderNo) return null;
 
-  const normalizedOrderNo = orderNo.toLowerCase().trim();
-  if (!normalizedOrderNo) return null;
+  const targetKey = deriveOrderGroupKey(orderNo);
+  if (!targetKey) return null;
 
-  const selectFields = {
-    id: true,
-    orderNo: true,
-    createdAt: true,
-  } as const;
+  const toleranceSetting = await db.systemSetting.findUnique({
+    where: { key: 'DETAIL_RECEIPT_MATCH_TOLERANCE' },
+    select: { value: true },
+  });
+  const tolerance = Number(toleranceSetting?.value ?? '5');
+  const effectiveTolerance = Number.isFinite(tolerance) && tolerance >= 0 ? tolerance : 5;
 
-  const chooseBest = (
-    candidates: Array<{ id: string; orderNo: string | null }>,
-    threshold: number
-  ): string | null => {
-    let best: { id: string; score: number } | null = null;
-    for (const candidate of candidates) {
-      if (!candidate.orderNo) continue;
-      const score = calculateOrderSimilarity(normalizedOrderNo, candidate.orderNo);
-      if (!best || score > best.score) {
-        best = { id: candidate.id, score };
-      }
-    }
-    if (best && best.score >= threshold) {
-      return best.id;
-    }
-    return null;
-  };
-
-  // 先尝试精确匹配：ORDER和金额都匹配
-  const allReceipts = await db.receipt.findMany({
+  // 严格规则：
+  // 1) ORDER 必须是同一客组（按常见分隔符拆分后去掉最右元素，剩余元素100%一致）
+  // 2) 金额允许 ±5 浮动
+  const minAmount = amount - effectiveTolerance;
+  const maxAmount = amount + effectiveTolerance;
+  const candidates = await db.receipt.findMany({
     where: {
-      usd: amount,
-      status: ReceiptStatus.SR_Received
+      status: ReceiptStatus.SR_Received,
+      usd: { gte: minAmount, lte: maxAmount },
+      orderNo: { not: null },
     },
     orderBy: { createdAt: 'asc' },
-    select: selectFields
-  });
-
-  const exactMatch = chooseBest(allReceipts, 0.6);
-
-  if (exactMatch) return exactMatch;
-
-  // 如果没有精确匹配，尝试只匹配ORDER
-  const allMatchingReceipts = await db.receipt.findMany({
-    where: {
-      status: ReceiptStatus.SR_Received
+    select: {
+      id: true,
+      orderNo: true,
+      createdAt: true,
+      usd: true,
     },
-    orderBy: { createdAt: 'asc' },
-    select: selectFields
   });
 
-  const orderMatch = chooseBest(allMatchingReceipts, 0.72);
+  const sameGroupCandidates = candidates.filter((candidate) => deriveOrderGroupKey(candidate.orderNo) === targetKey);
+  if (sameGroupCandidates.length === 0) return null;
 
-  return orderMatch || null;
+  // 同客组内优先金额最接近，若并列取最早创建
+  sameGroupCandidates.sort((a, b) => {
+    const diffA = Math.abs(a.usd - amount);
+    const diffB = Math.abs(b.usd - amount);
+    if (diffA !== diffB) return diffA - diffB;
+    return a.createdAt.getTime() - b.createdAt.getTime();
+  });
+
+  return sameGroupCandidates[0].id;
 }
 
 // 验证金额容差

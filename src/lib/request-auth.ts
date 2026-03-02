@@ -8,6 +8,9 @@ export interface CurrentUser {
   email: string;
   name: string | null;
   role: UserRole;
+  level: number;
+  parentId: string | null;
+  createdById: string | null;
 }
 
 export async function getCurrentUser(request: NextRequest): Promise<CurrentUser | null> {
@@ -19,6 +22,6 @@ export async function getCurrentUser(request: NextRequest): Promise<CurrentUser 
 
   return db.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdById: true },
   });
 }

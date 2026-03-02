@@ -61,6 +61,8 @@ export async function createDefaultAdmin() {
         password: hashedPassword,
         name: 'Admin',
         role: UserRole.ADMIN,
+        level: 1,
+        parentId: null,
       }
     });
     console.log(`Default admin created: ${adminEmail}`);

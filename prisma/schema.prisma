@@ -60,14 +60,19 @@ model User {
   password     String
   name         String?
   role         UserRole @default(USER)
+  level        Int      @default(4)
+  parentId     String?
   createdById  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // 关联
+  parent            User?             @relation("UserParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children          User[]            @relation("UserParent")
   createdBy         User?            @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdUsers      User[]           @relation("UserCreatedBy")
   invoices          Invoice[]
+  orders            Order[]
   receipts          Receipt[]
   receiptHistories  ReceiptHistory[]
   details           Detail[]
@@ -79,7 +84,9 @@ model User {
   auditLogs         AuditLog[]
   systemSettings    SystemSetting[]   @relation("SystemSettingUpdatedBy")
 
+  @@index([parentId])
   @@index([createdById])
+  @@index([level])
 }
 
 // ==================== 账单表 (Invoice) ====================
@@ -103,8 +110,9 @@ model Order {
   invoiceId     String
   orderNo       String   // ORDER 客户单号
   tokens        String   @default("[]") @db.Text // 分词结果，JSON格式存储数组
-  amount        Float    // AMOUNT 单个ORDER总金额
-  orderBalance  Float    @default(0) // ORDER BALANCE 未付金额
+  amount        Decimal  @db.Decimal(18, 2) // AMOUNT 单个ORDER总金额
+  orderBalance  Decimal  @default(0) @db.Decimal(18, 2) // ORDER BALANCE 未付金额
+  createdBy     String?
   customerId    String?
   customerMark  String?
   customerName  String?
@@ -117,12 +125,14 @@ model Order {
   // 关联
   invoice         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  creator         User?            @relation(fields: [createdBy], references: [id])
   receipts        Receipt[]        @relation("ReceiptOrder")
   mergedReceipts  Receipt[]        @relation("MergedTo")
   balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
   balanceTransfersTo   BalanceTransfer[] @relation("TransferTo")
 
   @@index([invoiceId])
+  @@index([createdBy])
   @@index([orderNo])
   @@unique([invoiceId, orderNo])
 }
@@ -133,7 +143,7 @@ model Receipt {
   receiptNo    String?        // 收据号 NO.
   date         DateTime?      // 时间
   tel          String?        // 电话 Tel
-  usd          Float          // 付款金额 USD
+  usd          Decimal        @db.Decimal(18, 2) // 付款金额 USD
   invNo        String?        // 账单号 (L**MH开头)
   orderNo      String?        // 客户单号 ORDER
   payer        String?        @db.Text // 付款人 recu de M./Mme
@@ -176,7 +186,7 @@ model ReceiptHistory {
   receiptNo    String?
   date         DateTime?
   tel          String?
-  usd          Float
+  usd          Decimal        @db.Decimal(18, 2)
   invNo        String?
   orderNo      String?
   payer        String?   @db.Text
@@ -201,7 +211,7 @@ model Detail {
   status       DetailStatus  @default(Waiting_SWIFT)
   imageUrl     String?       @db.LongText // 图片路径
   imageName    String?       @db.Text // 图片原始名称
-  totalAmount  Float         @default(0) // 总金额
+  totalAmount  Decimal       @default(0) @db.Decimal(18, 2) // 总金额
   createdBy    String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -222,7 +232,7 @@ model DetailItem {
   detailId   String
   mark       String?  // 唛头
   orderNo    String?  // 单号
-  amount     Float    // 金额
+  amount     Decimal  @db.Decimal(18, 2) // 金额
   receiptId  String?  // 关联的Receipt
   note       String?  @db.Text // 备注
   createdAt  DateTime @default(now())
@@ -261,7 +271,7 @@ model Swift {
   id             String   @id @default(cuid())
   detailId       String   @unique // 一张SWIFT对应一张DETAIL
   status         SwiftStatus @default(Bank_Transfer)
-  amount         Float    // 汇款金额
+  amount         Decimal  @db.Decimal(18, 2) // 汇款金额
   date           DateTime? // 汇款日期
   senderName     String?  // 汇款人姓名
   senderAddress  String?  @db.Text // 汇款人地址
@@ -293,7 +303,7 @@ model Customer {
   city           String
   consignee      String
   companyName    String?
-  credit         Float?
+  credit         Decimal? @db.Decimal(18, 2)
   companyAddress String?
   createdBy      String
   createdAt      DateTime @default(now())
@@ -334,7 +344,7 @@ model BalanceTransfer {
   id              String   @id @default(cuid())
   fromOrderId     String
   toOrderId       String
-  amount          Float    // 转移金额
+  amount          Decimal  @db.Decimal(18, 2) // 转移金额
   note            String?  @db.Text // 转移备注
   createdBy       String
   createdAt       DateTime @default(now())

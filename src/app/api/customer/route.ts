@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 type CustomerPayload = {
   mark?: string;
@@ -114,7 +115,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     });
   }
 
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
   const where: Record<string, unknown> = {};
+  where.createdBy = { in: ownerIds };
   if (mark) {
     where.mark = { equals: mark };
   } else if (search) {

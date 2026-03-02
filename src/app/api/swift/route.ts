@@ -5,11 +5,12 @@ import { recognizeSwift } from '@/lib/ocr';
 import { validateAmountTolerance } from '@/lib/matching';
 import { withAuth } from '@/lib/route-auth';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
-import { canAccessOwnedResource, forbiddenOwnershipResponse, isManager } from '@/lib/ownership';
+import { canAccessOwnedResourceAsync, forbiddenOwnershipResponse } from '@/lib/ownership';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPayloadSchema } from '@/lib/validators';
 import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 import { toOcrDataUrl } from '@/lib/ocr-input';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 function parseSwiftPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -34,10 +35,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const maxAmount = searchParams.get('maxAmount');
     const hasError = searchParams.get('hasError');
 
-    const where: Record<string, unknown> = {};
-    if (!isManager(currentUser)) {
-      where.createdBy = currentUser.id;
-    }
+    const scope = await getHierarchyScope(currentUser);
+    const ownerIds = Array.from(scope.ownerVisibleIds);
+    const where: Record<string, unknown> = {
+      OR: [
+        { createdBy: { in: ownerIds } },
+        { detail: { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } } },
+      ],
+    };
     if (search) {
       assertSearchLength(search);
       where.OR = [
@@ -147,7 +152,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       if (!detail) {
         return NextResponse.json({ success: false, error: '关联的付款明细不存在' }, { status: 400 });
       }
-      if (!canAccessOwnedResource(detail.createdBy, currentUser)) {
+      if (!(await canAccessOwnedResourceAsync(detail.createdBy, currentUser))) {
         return forbiddenOwnershipResponse('无权关联该付款明细');
       }
 
@@ -159,7 +164,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: false, error: '该付款明细已创建SWIFT，请勿重复提交' }, { status: 400 });
       }
       if (existingSwift && existingSwift.hasError) {
-        if (!canAccessOwnedResource(existingSwift.createdBy, currentUser)) {
+        if (!(await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser))) {
           return forbiddenOwnershipResponse('无权覆盖该错误SWIFT记录');
         }
         await db.swift.delete({ where: { id: existingSwift.id } });
@@ -254,7 +259,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: false, error: 'SWIFT不存在' }, { status: 400 });
       }
       const canDeleteErrorSwiftDirectly =
-        existingSwift.hasError && canAccessOwnedResource(existingSwift.createdBy, currentUser);
+        existingSwift.hasError && (await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser));
       if (currentUser.role !== 'ADMIN' && !canDeleteErrorSwiftDirectly) {
         return NextResponse.json({ success: false, error: '只有管理员可以删除该SWIFT记录' }, { status: 403 });
       }

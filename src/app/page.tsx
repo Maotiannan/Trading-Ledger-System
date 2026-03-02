@@ -4287,6 +4287,10 @@ function SettingsManager() {
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [canEditConfig, setCanEditConfig] = useState(false);
+  const [canPurgeBranch, setCanPurgeBranch] = useState(false);
+  const [branchPurgeAdmins, setBranchPurgeAdmins] = useState<Array<{ id: string; email: string; name: string | null; level: number }>>([]);
+  const [purgingBranch, setPurgingBranch] = useState(false);
+  const [purgeForm, setPurgeForm] = useState({ targetAdminId: '', password: '' });
   const [pwd, setPwd] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
 
   const loadSettings = useCallback(async () => {
@@ -4297,6 +4301,13 @@ function SettingsManager() {
       if (result.success) {
         setConfig(result.data.settings || {});
         setCanEditConfig(Boolean(result.data.canEdit));
+        setCanPurgeBranch(Boolean(result.data.canPurgeBranch));
+        const admins = Array.isArray(result.data.branchPurgeAdmins) ? result.data.branchPurgeAdmins : [];
+        setBranchPurgeAdmins(admins);
+        setPurgeForm((prev) => ({
+          ...prev,
+          targetAdminId: admins.some((row) => row.id === prev.targetAdminId) ? prev.targetAdminId : (admins[0]?.id || ''),
+        }));
       }
     } catch (err) {
       if (err instanceof Error) setError(err.message);
@@ -4389,6 +4400,52 @@ function SettingsManager() {
     }
   };
 
+  const handlePurgeBranch = async () => {
+    if (!canPurgeBranch) return;
+    if (!purgeForm.targetAdminId || !purgeForm.password) {
+      setError(tx('请先选择管理员并填写密码', 'Please choose an admin and enter password'));
+      setMessage(null);
+      return;
+    }
+    const target = branchPurgeAdmins.find((row) => row.id === purgeForm.targetAdminId);
+    if (!target) {
+      setError(tx('目标管理员不存在', 'Target admin not found'));
+      setMessage(null);
+      return;
+    }
+    const confirmed = window.confirm(
+      tx(
+        `确认清空 ${target.email} 分支下所有业务数据？该操作不可恢复。`,
+        `Confirm purging all business data under ${target.email} branch? This cannot be undone.`
+      )
+    );
+    if (!confirmed) return;
+
+    setPurgingBranch(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await apiCall('settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'purge-branch-data',
+          targetAdminId: purgeForm.targetAdminId,
+          password: purgeForm.password,
+        }),
+      });
+      if (result.success) {
+        setMessage(result.message || tx('分支业务数据已清空', 'Branch business data has been purged'));
+        setPurgeForm((prev) => ({ ...prev, password: '' }));
+      } else {
+        setError(result.error || tx('清库失败', 'Purge failed'));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : tx('清库失败', 'Purge failed'));
+    } finally {
+      setPurgingBranch(false);
+    }
+  };
+
   const updateConfigField = (key: string, value: string) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
@@ -4435,6 +4492,60 @@ function SettingsManager() {
           </div>
         </CardContent>
       </Card>
+
+      {canManageUsers && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{tx('用户管理', 'User Management')}</CardTitle>
+            <CardDescription>{tx('用户管理已并入设置模块。', 'User management has been moved into Settings.')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UserManager />
+          </CardContent>
+        </Card>
+      )}
+
+      {canPurgeBranch && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{tx('分支业务清库', 'Branch Data Purge')}</CardTitle>
+            <CardDescription>
+              {tx('仅 admin@example.com 可用。仅清空业务数据，保留系统配置与用户账号。', 'Only admin@example.com can use this. Purges business data only, keeping system settings and user accounts.')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label>{tx('目标管理员', 'Target Admin')}</Label>
+              <select
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                value={purgeForm.targetAdminId}
+                onChange={(e) => setPurgeForm((prev) => ({ ...prev, targetAdminId: e.target.value }))}
+              >
+                {branchPurgeAdmins.map((admin) => (
+                  <option key={admin.id} value={admin.id}>
+                    {`${admin.email} (L${admin.level})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>{tx('确认密码', 'Confirm Password')}</Label>
+              <Input
+                type="password"
+                value={purgeForm.password}
+                onChange={(e) => setPurgeForm((prev) => ({ ...prev, password: e.target.value }))}
+                placeholder={tx('输入 admin@example.com 密码', 'Enter admin@example.com password')}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button variant="destructive" onClick={handlePurgeBranch} disabled={purgingBranch || !purgeForm.targetAdminId || !purgeForm.password}>
+                {purgingBranch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {tx('一键清空该分支业务数据', 'Purge Branch Business Data')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -4526,18 +4637,6 @@ function SettingsManager() {
           )}
         </CardContent>
       </Card>
-
-      {canManageUsers && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{tx('用户管理', 'User Management')}</CardTitle>
-            <CardDescription>{tx('用户管理已并入设置模块。', 'User management has been moved into Settings.')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UserManager />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

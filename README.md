@@ -622,6 +622,9 @@ src/
 
 ## 更新日志
 
+### v1.0.13 (2026-03-02)
+- 🧭 rematch 冲突预览收敛：`customer-group` 冲突仅在“同客组存在未匹配收据(orderId=null)”时才提示，避免不同订单被误判为需要冲突处理。
+
 ### v1.0.5 (2026-02-28)
 - 🗄️ 数据库切换为 NAS MariaDB（应用从 Mac 直连 NAS DB）
 - 🧹 新增管理员清库能力：保留用户、清空业务数据（`POST /api/settings action=purge-business-data`）

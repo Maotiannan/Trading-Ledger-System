@@ -612,6 +612,20 @@ async function listRematchConflictGroups(): Promise<RematchConflictGroup[]> {
   const normalized = (value: string) => value.trim().toLowerCase();
   const exactMap = new Map<string, typeof orders>();
   const groupMap = new Map<string, typeof orders>();
+  const unmatchedReceipts = await db.receipt.findMany({
+    where: {
+      orderId: null,
+      orderNo: { not: null },
+    },
+    select: { orderNo: true },
+  });
+  const unmatchedGroupCount = new Map<string, number>();
+  for (const receipt of unmatchedReceipts) {
+    const key = deriveOrderGroupKey(receipt.orderNo);
+    if (!key) continue;
+    unmatchedGroupCount.set(key, (unmatchedGroupCount.get(key) || 0) + 1);
+  }
+
   for (const order of orders) {
     const exactKey = normalized(order.orderNo);
     if (!exactMap.has(exactKey)) exactMap.set(exactKey, []);
@@ -646,6 +660,8 @@ async function listRematchConflictGroups(): Promise<RematchConflictGroup[]> {
     if (rows.length <= 1) continue;
     const uniqueOrderNos = new Set(rows.map((row) => normalized(row.orderNo)));
     if (uniqueOrderNos.size <= 1) continue;
+    // 仅当该客组存在“未匹配收据”时才提示冲突，避免把正常不同订单误判为冲突。
+    if (!unmatchedGroupCount.get(key)) continue;
     groups.push({
       groupId: `group:${key}`,
       groupType: 'customer-group',

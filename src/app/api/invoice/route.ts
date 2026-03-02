@@ -375,14 +375,35 @@ export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request:
   }
 }, '只有管理员和销售代表可以删除账单');
 
-// 重新匹配所有订单
-async function rematchAllOrders() {
+function buildOrderVisibilityWhere(ownerIds: string[]) {
+  return {
+    OR: [
+      { createdBy: { in: ownerIds } },
+      { customer: { createdBy: { in: ownerIds } } },
+    ],
+  };
+}
+
+function buildReceiptVisibilityWhere(ownerIds: string[]) {
+  return {
+    OR: [
+      { createdBy: { in: ownerIds } },
+      { customer: { createdBy: { in: ownerIds } } },
+    ],
+  };
+}
+
+// 重新匹配当前可见范围内订单
+async function rematchAllOrders(ownerIds: string[]) {
   console.log('[Rematch] Starting rematch all orders...');
 
   const normalizeOrderNo = (value: string | null | undefined) => (value || '').trim().toLowerCase();
+  const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
+  const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
 
-  // 获取所有订单
+  // 获取可见范围内订单
   const allOrders = await db.order.findMany({
+    where: orderVisibilityWhere,
     include: {
       invoice: true,
       receipts: true
@@ -437,8 +458,9 @@ async function rematchAllOrders() {
     await updateOrderBalance(targetOrder.id);
   }
 
-  // 基于“同一客人”分组，同步客户信息（按拆分元素去掉最右序号）
+  // 基于“同一客人”分组，同步可见范围内客户信息（按拆分元素去掉最右序号）
   const freshOrders = await db.order.findMany({
+    where: orderVisibilityWhere,
     select: {
       id: true,
       orderNo: true,
@@ -477,7 +499,10 @@ async function rematchAllOrders() {
     customerSyncedCount += touched.count;
 
     const receiptRows = await db.receipt.findMany({
-      where: { orderNo: { not: null } },
+      where: {
+        ...receiptVisibilityWhere,
+        orderNo: { not: null },
+      },
       select: { id: true, orderNo: true },
     });
     const targetReceiptIds = receiptRows
@@ -499,9 +524,10 @@ async function rematchAllOrders() {
     }
   }
 
-  // 重新匹配收据到订单（优先精确，再按拆分规则）
+  // 重新匹配可见范围内“未挂单收据”到可见订单（优先精确，再按拆分规则）
   const allReceipts = await db.receipt.findMany({
     where: {
+      ...receiptVisibilityWhere,
       orderId: null,
       orderNo: { not: null }
     }
@@ -511,11 +537,15 @@ async function rematchAllOrders() {
 
   for (const receipt of allReceipts) {
     if (!receipt.orderNo) continue;
-    
-    const normalizedOrderNo = normalizeOrderNo(receipt.orderNo);
+
     const sameOrder = await db.order.findFirst({
       where: {
+        AND: [
+          orderVisibilityWhere,
+          {
         orderNo: { equals: receipt.orderNo },
+          },
+        ],
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -532,6 +562,7 @@ async function rematchAllOrders() {
     const key = deriveOrderGroupKey(receipt.orderNo);
     if (!key) continue;
     const groupOrders = await db.order.findMany({
+      where: orderVisibilityWhere,
       orderBy: { createdAt: 'asc' },
     });
     const matchedByGroup = groupOrders.find((row) => deriveOrderGroupKey(row.orderNo) === key);
@@ -545,10 +576,14 @@ async function rematchAllOrders() {
     }
   }
 
-  // 删除空账单分支
-  const invoices = await db.invoice.findMany({
-    select: { id: true, invNo: true, _count: { select: { orders: true } } },
-  });
+  // 删除“本次处理触达范围”中的空账单
+  const touchedInvoiceIds = Array.from(new Set(allOrders.map((row) => row.invoiceId)));
+  const invoices = touchedInvoiceIds.length > 0
+    ? await db.invoice.findMany({
+        where: { id: { in: touchedInvoiceIds } },
+        select: { id: true, invNo: true, _count: { select: { orders: true } } },
+      })
+    : [];
   for (const invoice of invoices) {
     if (invoice._count.orders === 0) {
       await db.invoice.delete({ where: { id: invoice.id } });
@@ -556,17 +591,22 @@ async function rematchAllOrders() {
     }
   }
 
-  // 全量重算余额
-  const orderIds = await db.order.findMany({ select: { id: true } });
+  // 仅重算可见范围内订单余额
+  const orderIds = await db.order.findMany({ where: orderVisibilityWhere, select: { id: true } });
   for (const row of orderIds) {
     await updateOrderBalance(row.id);
   }
 
-  // 清理“金额=0 且 未收=0 且 无收据”的空订单
+  // 清理可见范围内“金额=0 且 未收=0 且 无收据”的空订单
   const zeroOrders = await db.order.findMany({
     where: {
-      amount: 0,
-      orderBalance: 0,
+      AND: [
+        orderVisibilityWhere,
+        {
+          amount: 0,
+          orderBalance: 0,
+        },
+      ],
     },
     include: {
       _count: { select: { receipts: true } },
@@ -600,8 +640,11 @@ type RematchConflictGroup = {
   }>;
 };
 
-async function listRematchConflictGroups(): Promise<RematchConflictGroup[]> {
+async function listRematchConflictGroupsByScope(ownerIds: string[]): Promise<RematchConflictGroup[]> {
+  const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
+  const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
   const orders = await db.order.findMany({
+    where: orderVisibilityWhere,
     include: {
       invoice: { select: { id: true, invNo: true } },
       _count: { select: { receipts: true } },
@@ -614,6 +657,7 @@ async function listRematchConflictGroups(): Promise<RematchConflictGroup[]> {
   const groupMap = new Map<string, typeof orders>();
   const unmatchedReceipts = await db.receipt.findMany({
     where: {
+      ...receiptVisibilityWhere,
       orderId: null,
       orderNo: { not: null },
     },
@@ -684,8 +728,10 @@ async function listRematchConflictGroups(): Promise<RematchConflictGroup[]> {
 }
 
 async function applyRematchConflicts(
-  resolutions: Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>
+  resolutions: Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>,
+  ownerIds: string[]
 ) {
+  const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
   let mergedCount = 0;
   for (const resolution of resolutions) {
     const uniqueOrderIds = Array.from(new Set(resolution.orderIds.filter(Boolean)));
@@ -693,7 +739,12 @@ async function applyRematchConflicts(
     if (!uniqueOrderIds.includes(resolution.keepOrderId)) continue;
 
     const rows = await db.order.findMany({
-      where: { id: { in: uniqueOrderIds } },
+      where: {
+        AND: [
+          { id: { in: uniqueOrderIds } },
+          orderVisibilityWhere,
+        ],
+      },
       include: { receipts: { select: { id: true } } },
     });
     if (rows.length <= 1) continue;
@@ -711,7 +762,7 @@ async function applyRematchConflicts(
         data: { orderId: keepRow.id },
       });
       if (resolution.mode === 'merge') {
-        incrementAmount += source.amount;
+        incrementAmount += Number(source.amount);
       }
       await db.order.delete({ where: { id: source.id } });
       mergedCount++;
@@ -737,27 +788,34 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
     // 刷新匹配
     if (action === 'rematch-preview') {
-      const groups = await listRematchConflictGroups();
+      const scope = await getHierarchyScope(currentUser);
+      const ownerIds = Array.from(scope.ownerVisibleIds);
+      const groups = await listRematchConflictGroupsByScope(ownerIds);
       return NextResponse.json({ success: true, data: groups });
     }
 
     if (action === 'rematch-apply') {
+      const scope = await getHierarchyScope(currentUser);
+      const ownerIds = Array.from(scope.ownerVisibleIds);
       const resolutions = Array.isArray(body.resolutions) ? body.resolutions : [];
       const applied = await applyRematchConflicts(
-        resolutions as Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>
+        resolutions as Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>,
+        ownerIds
       );
-      const result = await rematchAllOrders();
+      const result = await rematchAllOrders(ownerIds);
       return NextResponse.json({
         success: true,
-        message: `冲突处理完成：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`,
+        message: `冲突处理完成（当前可见范围）：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`,
       });
     }
 
     if (action === 'rematch') {
-      const result = await rematchAllOrders();
+      const scope = await getHierarchyScope(currentUser);
+      const ownerIds = Array.from(scope.ownerVisibleIds);
+      const result = await rematchAllOrders(ownerIds);
       return NextResponse.json({ 
         success: true, 
-        message: `重新匹配完成：合并重复订单 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}` 
+        message: `重新匹配完成（当前可见范围）：合并重复订单 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}` 
       });
     }
 
@@ -862,7 +920,9 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       // 如果订单号有变化，触发重新匹配
       if (incomingOrderNo !== order.orderNo) {
         console.log(`[UpdateOrder] OrderNo changed from "${order.orderNo}" to "${incomingOrderNo}", triggering rematch...`);
-        await rematchAllOrders();
+        const scope = await getHierarchyScope(currentUser);
+        const ownerIds = Array.from(scope.ownerVisibleIds);
+        await rematchAllOrders(ownerIds);
       }
 
       return NextResponse.json({ success: true, data: updated });

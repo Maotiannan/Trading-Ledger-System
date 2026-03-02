@@ -622,6 +622,10 @@ src/
 
 ## 更新日志
 
+### v1.0.16 (2026-03-02)
+- 🔐 账单“刷新匹配”权限收敛：`rematch-preview` / `rematch-apply` / `rematch` 仅在当前账号可见范围内执行，不再扫描或改动全库数据。
+- 🧭 `updateOrder` 触发的自动 rematch 同步改为当前账号可见范围内执行，避免跨账号影响。
+
 ### v1.0.15 (2026-03-02)
 - 🌐 i18n 修复：Customers 搜索框 placeholder 改为中英双语切换。
 - 🗓️ i18n 修复：Receipts / Payment Details / SWIFT 的日期筛选输入补充语言属性与中英标题，英文模式下不再出现中文筛选提示。

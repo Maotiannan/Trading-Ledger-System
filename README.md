@@ -223,7 +223,7 @@ DeletionRequest (删除申请)
 **主要功能：**
 - 创建用户
 - 编辑用户信息
-- 设置用户角色（ADMIN/USER）
+- 设置用户角色（ADMIN/SALES/USER）
 
 **数据结构：**
 ```
@@ -231,7 +231,7 @@ User (用户)
 ├── email: 邮箱
 ├── password: 密码
 ├── name: 姓名
-└── role: 角色 (ADMIN/USER)
+└── role: 角色 (ADMIN/SALES/USER)
 ```
 
 **权限说明：**
@@ -245,6 +245,11 @@ User (用户)
   - 查看所有数据
   - 上传收据和付款明细
   - 申请删除
+
+- **SALES (销售代表)**:
+  - 可创建账单和普通用户账户
+  - 可执行签收操作（同管理员）
+  - 不可审批删除申请、不可修改系统配置
 
 ---
 
@@ -380,9 +385,9 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 ## API 接口
 
 ### 系统测试接口 `/api/system/*`
-- `GET /api/system/health` - 服务健康检查（含 DB 连通性）
-- `GET /api/system/routes` - 全量 API 模块与 action 清单（便于测试）
-- `GET /api/system/config-template` - 配置占位模板与当前是否已设置
+- `GET /api/system/health` - 服务健康检查（含 DB 连通性，需登录）
+- `GET /api/system/routes` - 全量 API 模块与 action 清单（管理员）
+- `GET /api/system/config-template` - 配置占位模板与当前是否已设置（管理员）
 
 ### 账单接口 `/api/invoice`
 - `GET` - 获取账单列表
@@ -415,11 +420,13 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 
 ### 用户与认证接口 `/api/auth`
 - `POST(action=login|logout|me)` - 登录/登出/获取当前用户
-- `POST(action=list|create|delete|reset-password)` - 用户管理（管理员）
+- `POST(action=list|create|delete|reset-password)` - 用户管理（管理员/销售，受角色范围约束）
+- `POST(action=update-role)` - 修改用户角色（仅管理员）
 - `POST(action=change-password)` - 当前用户修改密码
 
 ### 设置接口 `/api/settings`
 - `GET` - 获取可编辑系统配置（含权限）
+- `POST(action=test-ocr)` - 测试 OCR 配置连通性（管理员）
 - `POST(action=update-config)` - 修改系统配置（管理员）
 - `POST(action=purge-business-data)` - 清空业务数据并保留用户（管理员）
 
@@ -512,6 +519,14 @@ OCR_OUTPUT_COST_PER_1K=0
 - OCR 入参在服务端增加图片边长上限压缩（最长边 1600），降低视觉模型推理延迟。
 - 前端 `MARK` 客户查询增加防抖与同值去重（含短时缓存），减少重复接口请求。
 
+### 关键修复（2026-03-02）
+
+- 修复 `ORDER BALANCE` 计算口径：已签收(`RECEIVED`)收据也计入已收金额，避免签收后余额回弹。
+- 修复删除审批中的数据一致性：删除收据后会重算关联 `Detail.totalAmount`，并回算关联订单余额。
+- SWIFT 创建新增重复保护：同一 `detailId` 重复创建返回明确业务错误，不再返回通用 500。
+- 系统探针接口最小暴露：`/api/system/health` 需登录，`/api/system/routes` 与 `/api/system/config-template` 仅管理员可访问。
+- 修正系统路由目录(`/api/system/routes`)中的 action-method 描述，和真实实现保持一致（`receipt/detail update` 为 `POST`，补充 `direct-create` 等 action）。
+
 ### 数据库迁移说明（MariaDB / MySQL）
 
 - 当前 Prisma 数据源为 MySQL（兼容 MariaDB，`prisma/schema.prisma`）。
@@ -576,10 +591,10 @@ src/
 │   ├── page.tsx          # 主页面（所有模块）
 │   └── api/              # API路由
 │       ├── invoice/      # 账单接口
+│       ├── customer/     # 客户接口
 │       ├── receipt/      # 收据接口
 │       ├── detail/       # 付款明细接口
 │       ├── swift/        # SWIFT接口
-│       ├── user/         # 用户接口
 │       ├── deletion/     # 删除审批接口
 │       └── auth/         # 认证接口
 ├── components/ui/        # shadcn/ui 组件
@@ -606,6 +621,13 @@ src/
 - 🧹 新增管理员清库能力：保留用户、清空业务数据（`POST /api/settings action=purge-business-data`）
 - 📥 账单管理新增 Excel 模板下载 + 批量导入（严格行级校验，不跳过业务逻辑）
 - 📥 客户管理新增 Excel 模板下载 + 批量导入（严格行级校验 + 权限规则继承）
+
+### v1.0.6 (2026-03-02)
+- 🧮 修复 `ORDER BALANCE` 计算口径：`RECEIVED` 收据也计入已收金额
+- 🔁 修复删除审批一致性：删除收据后重算 `Detail.totalAmount` 并回算订单余额
+- 🚫 SWIFT 重复创建保护：同一 `detailId` 重复创建返回业务错误（400）
+- 🔐 收紧系统探针权限：`/api/system/health` 需登录，`/api/system/routes` 与 `/api/system/config-template` 仅管理员可访问
+- 🧪 新增自动化测试：`matching` 余额口径测试、`api-catalog` 方法一致性测试
 
 ### v1.0.4 (2026-02-27)
 - 🔐 权限模型升级：普通用户仅可访问/修改自己创建的 Receipt、Detail、SWIFT 与删除申请目标资源

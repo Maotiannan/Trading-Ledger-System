@@ -5,6 +5,7 @@ import { UserRole } from '@prisma/client';
 import { withAuth } from '@/lib/route-auth';
 import { canAccessOwnedResource, forbiddenOwnershipResponse } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
+import { updateOrderBalance } from '@/lib/matching';
 
 // 获取删除申请列表
 export const GET = withAuth(async (_request: NextRequest, currentUser) => {
@@ -166,6 +167,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return NextResponse.json({ success: true, message: '申请已拒绝' });
       }
 
+      let affectedReceiptOrderId: string | null = null;
+
       await db.$transaction(async (tx) => {
         const requestInTx = await tx.deletionRequest.findUnique({
           where: { id: requestId }
@@ -180,6 +183,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         if (targetType === 'RECEIPT') {
           const receipt = await tx.receipt.findUnique({ where: { id: targetId } });
           if (receipt) {
+            affectedReceiptOrderId = receipt.orderId;
+            const affectedDetailItems = await tx.detailItem.findMany({
+              where: { receiptId: targetId },
+              select: { detailId: true },
+            });
+            const affectedDetailIds = Array.from(new Set(affectedDetailItems.map((row) => row.detailId)));
+
             await tx.receiptHistory.create({
               data: {
                 receiptId: targetId,
@@ -205,6 +215,18 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             await tx.receipt.delete({
               where: { id: targetId }
             });
+
+            for (const detailId of affectedDetailIds) {
+              const remainItems = await tx.detailItem.findMany({
+                where: { detailId },
+                select: { amount: true },
+              });
+              const totalAmount = remainItems.reduce((sum, item) => sum + item.amount, 0);
+              await tx.detail.update({
+                where: { id: detailId },
+                data: { totalAmount },
+              });
+            }
           }
         } else if (targetType === 'DETAIL') {
           const detail = await tx.detail.findUnique({
@@ -261,6 +283,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           }
         });
       });
+      if (affectedReceiptOrderId) {
+        await updateOrderBalance(affectedReceiptOrderId);
+      }
       await recordAuditEvent({
         action: 'DELETION_REQUEST_APPROVE',
         actorId: currentUser.id,

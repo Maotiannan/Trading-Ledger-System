@@ -11,6 +11,7 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   testPathIgnorePatterns: ['/node_modules/', '/.next/', '/tests/e2e/'],
+  modulePathIgnorePatterns: ['<rootDir>/.next/standalone/'],
 };
 
 export default createJestConfig(customJestConfig);

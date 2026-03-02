@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { apiCatalog } from '@/lib/api-catalog';
+import { UserRole } from '@prisma/client';
+import { withRole } from '@/lib/route-auth';
 
-export async function GET() {
+export const GET = withRole(UserRole.ADMIN, async () => {
   return NextResponse.json({
     success: true,
     data: {
@@ -10,4 +12,4 @@ export async function GET() {
       generatedAt: new Date().toISOString(),
     },
   });
-}
+});

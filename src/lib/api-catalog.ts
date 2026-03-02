@@ -47,8 +47,9 @@ export const apiCatalog: ApiModule[] = [
       { action: 'list', method: 'GET', description: 'List receipts' },
       { action: 'recognize', method: 'POST', description: 'OCR recognize receipt', bodyExample: { action: 'recognize', imageBase64: 'data:image/jpeg;base64,...' } },
       { action: 'confirm', method: 'POST', description: 'Confirm recognized receipt', bodyExample: { action: 'confirm', receipt: {} } },
-      { action: 'update', method: 'PUT', description: 'Update receipt', bodyExample: { action: 'update', id: 'receipt-id', updates: {} } },
-      { action: 'mark-received', method: 'PUT', description: 'Mark receipt as received (admin)', bodyExample: { action: 'mark-received', receiptId: 'receipt-id' } },
+      { action: 'direct-create', method: 'POST', description: 'Create receipt directly without OCR', bodyExample: { action: 'direct-create', usd: 100, orderNo: 'ORDER-001', customerMark: 'MAB-1' } },
+      { action: 'update', method: 'POST', description: 'Update receipt', bodyExample: { action: 'update', receiptId: 'receipt-id', data: '{}' } },
+      { action: 'mark-received', method: 'POST', description: 'Mark receipt as received (manager)', bodyExample: { action: 'mark-received', receiptId: 'receipt-id' } },
     ],
   },
   {
@@ -58,7 +59,8 @@ export const apiCatalog: ApiModule[] = [
       { action: 'list', method: 'GET', description: 'List details' },
       { action: 'recognize', method: 'POST', description: 'OCR recognize detail', bodyExample: { action: 'recognize', imageBase64: 'data:image/jpeg;base64,...' } },
       { action: 'confirm', method: 'POST', description: 'Confirm recognized detail', bodyExample: { action: 'confirm', detail: {} } },
-      { action: 'update', method: 'PUT', description: 'Update detail', bodyExample: { action: 'update', id: 'detail-id', updates: {} } },
+      { action: 'direct-create', method: 'POST', description: 'Create detail directly without OCR', bodyExample: { action: 'direct-create', items: [{ orderNo: 'ORDER-001', amount: 100 }] } },
+      { action: 'update', method: 'POST', description: 'Update detail', bodyExample: { action: 'update', detailId: 'detail-id', data: '{}' } },
     ],
   },
   {
@@ -68,6 +70,7 @@ export const apiCatalog: ApiModule[] = [
       { action: 'list', method: 'GET', description: 'List swifts' },
       { action: 'recognize', method: 'POST', description: 'OCR recognize swift', bodyExample: { action: 'recognize', imageBase64: 'data:image/jpeg;base64,...' } },
       { action: 'confirm', method: 'POST', description: 'Confirm recognized swift', bodyExample: { action: 'confirm', swift: {} } },
+      { action: 'direct-create', method: 'POST', description: 'Create swift directly without OCR', bodyExample: { action: 'direct-create', detailId: 'detail-id', amount: 100 } },
       { action: 'delete', method: 'POST', description: 'Delete swift (admin)', bodyExample: { action: 'delete', swiftId: 'swift-id' } },
     ],
   },
@@ -108,6 +111,8 @@ export const apiCatalog: ApiModule[] = [
     actions: [
       { action: 'list', method: 'GET', description: 'Get settings and permissions' },
       { action: 'update-config', method: 'POST', description: 'Update system config (admin)', bodyExample: { action: 'update-config', settings: { OCR_MODEL: 'gpt-4o-mini' } } },
+      { action: 'test-ocr', method: 'POST', description: 'Test OCR connectivity (admin)', bodyExample: { action: 'test-ocr' } },
+      { action: 'purge-business-data', method: 'POST', description: 'Purge business data but keep users (admin)', bodyExample: { action: 'purge-business-data' } },
     ],
   },
 ];

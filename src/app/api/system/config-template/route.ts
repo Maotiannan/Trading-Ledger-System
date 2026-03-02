@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { configTemplate } from '@/lib/api-catalog';
+import { UserRole } from '@prisma/client';
+import { withRole } from '@/lib/route-auth';
 
 function maskValue(value: string | undefined): string | null {
   if (!value) return null;
@@ -7,7 +9,7 @@ function maskValue(value: string | undefined): string | null {
   return `${value.slice(0, 3)}***${value.slice(-2)}`;
 }
 
-export async function GET() {
+export const GET = withRole(UserRole.ADMIN, async () => {
   const required = configTemplate.required.map((key) => ({
     key,
     isSet: Boolean(process.env[key]),
@@ -27,4 +29,4 @@ export async function GET() {
       note: 'Fill values in .env or compose env vars before production use.',
     },
   });
-}
+});

@@ -4,9 +4,9 @@ This project is fully API-driven. UI features map to API endpoints under `/api/*
 
 ## 1. System endpoints (for testing bootstrap)
 
-- `GET /api/system/health`
-- `GET /api/system/routes`
-- `GET /api/system/config-template`
+- `GET /api/system/health` (requires login)
+- `GET /api/system/routes` (admin only)
+- `GET /api/system/config-template` (admin only)
 - `GET /api/settings`
 
 Use these first to verify runtime status and config placeholders.
@@ -26,13 +26,13 @@ Copy `.env.example` and fill:
 ## 3. Common test flow (curl)
 
 ```bash
-# health
-curl -s http://127.0.0.1/api/system/health | jq
-
 # login
 curl -i -c cookie.txt -X POST http://127.0.0.1/api/auth \
   -H "Content-Type: application/json" \
   --data '{"action":"login","email":"admin@example.com","password":"YOUR_PASSWORD"}'
+
+# health (after login)
+curl -b cookie.txt -s http://127.0.0.1/api/system/health | jq
 
 # me
 curl -b cookie.txt -X POST http://127.0.0.1/api/auth \
@@ -59,6 +59,12 @@ curl -b cookie.txt http://127.0.0.1/api/swift
 # deletion list
 curl -b cookie.txt http://127.0.0.1/api/deletion
 
+# admin-only routes catalog
+curl -b cookie.txt -s http://127.0.0.1/api/system/routes | jq
+
+# admin-only config template
+curl -b cookie.txt -s http://127.0.0.1/api/system/config-template | jq
+
 # logout
 curl -b cookie.txt -X POST http://127.0.0.1/api/auth \
   -H "Content-Type: application/json" \
@@ -70,5 +76,5 @@ curl -b cookie.txt -X POST http://127.0.0.1/api/auth \
 For exact supported actions and body examples, call:
 
 ```bash
-curl -s http://127.0.0.1/api/system/routes | jq
+curl -b cookie.txt -s http://127.0.0.1/api/system/routes | jq
 ```

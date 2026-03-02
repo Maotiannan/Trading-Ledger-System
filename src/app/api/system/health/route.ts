@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { withAuth } from '@/lib/route-auth';
 
-export async function GET() {
+export const GET = withAuth(async () => {
   const startedAt = process.uptime();
   try {
     await db.$queryRaw`SELECT 1`;
@@ -29,4 +30,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+});

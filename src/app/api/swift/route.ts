@@ -151,6 +151,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         return forbiddenOwnershipResponse('无权关联该付款明细');
       }
 
+      const existingSwift = await db.swift.findUnique({
+        where: { detailId },
+        select: { id: true },
+      });
+      if (existingSwift) {
+        return NextResponse.json({ success: false, error: '该付款明细已创建SWIFT，请勿重复提交' }, { status: 400 });
+      }
+
       // 验证金额
       const validation = validateAmountTolerance(detail.totalAmount, amount);
 
@@ -283,6 +291,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
   } catch (error) {
     console.error('Swift API error:', error);
+    const prismaError = error as { code?: string };
+    if (prismaError?.code === 'P2002') {
+      return NextResponse.json({ success: false, error: '该付款明细已创建SWIFT，请刷新后查看' }, { status: 400 });
+    }
     if (error instanceof InputValidationError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }

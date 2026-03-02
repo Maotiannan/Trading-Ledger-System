@@ -43,11 +43,14 @@ check_code() {
   pass "$name"
 }
 
+check_code "system health unauthorized" "401" "GET" "/api/system/health"
+check_code "system routes unauthorized" "401" "GET" "/api/system/routes"
+check_code "config template unauthorized" "401" "GET" "/api/system/config-template"
+
+check_code "login" "200" "POST" "/api/auth" "{\"action\":\"login\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}"
 check_code "system health" "200" "GET" "/api/system/health"
 check_code "system routes" "200" "GET" "/api/system/routes"
 check_code "config template" "200" "GET" "/api/system/config-template"
-
-check_code "login" "200" "POST" "/api/auth" "{\"action\":\"login\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}"
 check_code "me" "200" "POST" "/api/auth" '{"action":"me"}'
 check_code "set locale" "200" "POST" "/api/locale" '{"locale":"zh"}'
 check_code "settings get" "200" "GET" "/api/settings"

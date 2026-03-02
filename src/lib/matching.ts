@@ -224,17 +224,11 @@ export function findSubsetSum(
 }
 
 // 计算ORDER BALANCE
-// ORDER BALANCE = AMOUNT + 该ORDER下所有已确认RECEIPT的(-USD)总和
+// ORDER BALANCE = AMOUNT - 该ORDER下所有收据金额之和
 export async function calculateOrderBalance(orderId: string): Promise<number> {
   const order = await db.order.findUnique({
     where: { id: orderId },
-    include: {
-      receipts: {
-        where: {
-          status: { not: 'RECEIVED' }
-        }
-      }
-    }
+    include: { receipts: true }
   });
 
   if (!order) return 0;

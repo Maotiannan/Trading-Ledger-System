@@ -560,7 +560,12 @@ npm run test:e2e
 
 - 已接入 `next-intl`，支持 `中文 / English` 双语切换。
 - 页面入口：侧栏语言切换按钮（会写入 `NEXT_LOCALE` cookie）。
-- 已国际化模块：登录页、侧栏、仪表盘（含导出相关文案）。
+- 已国际化模块：登录页、侧栏、仪表盘、账单/收据/明细/SWIFT/删除审批/用户/客户/设置等主页面核心文案。
+- 前端新增 i18n 工作区：
+  - `src/i18n/workspace/translator.ts`：统一 `tx(zh, en)` 文案选择器接口。
+  - `src/i18n/workspace/api-error-map.ts`：统一 API 错误文案中英映射，避免后端仍返回中文时英文界面出现中英文混杂。
+- 新增巡检脚本：`npm run i18n:audit`
+  - 用于扫描 `src` 下硬编码中文，便于持续治理新增文案。
 
 ### 权限与操作规则
 
@@ -602,6 +607,7 @@ src/
 │   ├── db.ts            # Prisma 客户端
 │   ├── store.ts         # Zustand 状态管理
 │   └── matching.ts      # 匹配逻辑
+├── i18n/workspace/      # 多语言工作区（页面文案选择 + API 错误映射）
 └── prisma/
     └── schema.prisma    # 数据库模型
 ```
@@ -628,6 +634,11 @@ src/
 - 🚫 SWIFT 重复创建保护：同一 `detailId` 重复创建返回业务错误（400）
 - 🔐 收紧系统探针权限：`/api/system/health` 需登录，`/api/system/routes` 与 `/api/system/config-template` 仅管理员可访问
 - 🧪 新增自动化测试：`matching` 余额口径测试、`api-catalog` 方法一致性测试
+
+### v1.0.7 (2026-03-02)
+- 🌐 扩展主页面多语言覆盖：账单/收据/明细/SWIFT/删除审批/用户/客户/设置模块补齐中英文案切换。
+- 🧱 新增 i18n 工作区封装：统一页面 `tx(zh, en)` 接口与 API 错误翻译映射。
+- 🔎 新增 i18n 巡检脚本：`npm run i18n:audit`，用于持续发现硬编码中文并跟踪治理。
 
 ### v1.0.4 (2026-02-27)
 - 🔐 权限模型升级：普通用户仅可访问/修改自己创建的 Receipt、Detail、SWIFT 与删除申请目标资源

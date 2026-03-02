@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocale, useTranslations } from 'next-intl';
+import { translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,9 +37,13 @@ async function apiCall(endpoint: string, options: RequestInit = {}) {
 
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const locale =
+      typeof document !== 'undefined' && document.documentElement.lang
+        ? document.documentElement.lang
+        : 'zh';
     const message =
       typeof json?.error === 'string' ? json.error : `HTTP ${response.status}`;
-    throw new Error(message);
+    throw new Error(locale.startsWith('en') ? translateApiErrorMessage(message) : message);
   }
 
   return json;
@@ -86,6 +91,11 @@ async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mar
   }
 
   return null;
+}
+
+function useUiText() {
+  const locale = useLocale();
+  return useCallback((zh: string, en: string) => (locale === 'en' ? en : zh), [locale]);
 }
 
 type CustomerCandidate = {
@@ -223,6 +233,7 @@ function LoginPage() {
 function Sidebar() {
   const t = useTranslations('sidebar');
   const tCommon = useTranslations('common');
+  const tx = useUiText();
   const locale = useLocale();
   const { user, currentView, setCurrentView, setUser } = useStore();
   const [switchingLocale, setSwitchingLocale] = useState(false);
@@ -243,7 +254,7 @@ function Sidebar() {
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
     { id: 'deletions' as const, label: t('deletions'), icon: Trash2, managerOnly: true },
     { id: 'users' as const, label: t('users'), icon: Users, managerOnly: true },
-    { id: 'customers' as const, label: '客户管理', icon: Users, managerOnly: true },
+    { id: 'customers' as const, label: tx('客户管理', 'Customers'), icon: Users, managerOnly: true },
     { id: 'settings' as const, label: t('settings'), icon: Settings },
   ];
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
@@ -279,7 +290,7 @@ function Sidebar() {
         <p className="text-xs text-gray-500 mb-2">{t('language')}</p>
         <div className="grid grid-cols-2 gap-2">
           <Button size="sm" variant={locale === 'zh' ? 'default' : 'outline'} onClick={() => switchLocale('zh')} disabled={switchingLocale}>
-            中文
+            {tx('中文', 'Chinese')}
           </Button>
           <Button size="sm" variant={locale === 'en' ? 'default' : 'outline'} onClick={() => switchLocale('en')} disabled={switchingLocale}>
             English
@@ -315,13 +326,14 @@ function Sidebar() {
 // 仪表盘
 function Dashboard() {
   const t = useTranslations('dashboard');
+  const tx = useUiText();
   const { invoices, receipts, details, deletionRequests } = useStore();
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const normalInvoices = invoices.filter((i) => i.invNo !== 'Un_Associated' && i.invNo !== 'DEPOSIT_POOL');
   const unpaidTotal = normalInvoices.reduce((sum, inv) => sum + Math.max(inv.invBalance, 0), 0);
   
   const stats = [
-    { label: `账单总数 (${normalInvoices.length})`, value: `$${unpaidTotal.toFixed(2)}`, color: 'text-blue-600' },
+    { label: tx(`账单总数 (${normalInvoices.length})`, `Invoice Balance (${normalInvoices.length})`), value: `$${unpaidTotal.toFixed(2)}`, color: 'text-blue-600' },
     { label: t('pendingReceipts'), value: receipts.filter(r => r.status === 'SR_Received').length, color: 'text-yellow-600' },
     { label: t('waitingSwift'), value: details.filter(d => d.status === 'Waiting_SWIFT').length, color: 'text-orange-600' },
     { label: t('pendingDeletion'), value: deletionRequests.filter(d => d.status === 'PENDING').length, color: 'text-red-600' },
@@ -440,6 +452,7 @@ function Dashboard() {
 
 // 账单管理
 function InvoiceManager() {
+  const tx = useUiText();
   const { invoices, setInvoices, loading, setLoading, user } = useStore();
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
@@ -517,7 +530,7 @@ function InvoiceManager() {
         method: 'GET',
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('模板下载失败');
+      if (!response.ok) throw new Error(tx('模板下载失败', 'Failed to download template'));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -526,7 +539,7 @@ function InvoiceManager() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert(error instanceof Error ? error.message : '模板下载失败');
+      alert(error instanceof Error ? error.message : tx('模板下载失败', 'Failed to download template'));
     }
   };
 
@@ -544,12 +557,12 @@ function InvoiceManager() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || '导入失败'}${details}`);
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      alert(result.message || '导入成功');
+      alert(result.message || tx('导入成功', 'Import successful'));
       await loadInvoices();
     } catch (error) {
-      alert(error instanceof Error ? error.message : '导入失败');
+      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
     } finally {
       setInvoiceImporting(false);
       if (invoiceImportInputRef.current) invoiceImportInputRef.current.value = '';
@@ -627,7 +640,7 @@ function InvoiceManager() {
         setOrderHistoryOpen(true);
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : '加载付款记录失败');
+      alert(err instanceof Error ? err.message : tx('加载付款记录失败', 'Failed to load payment records'));
     }
   };
 
@@ -641,13 +654,13 @@ function InvoiceManager() {
       });
       
       if (result.success) {
-        alert(result.message || '刷新成功');
+        alert(result.message || tx('刷新成功', 'Rematch completed'));
         await loadInvoices();
       } else {
-        alert(result.error || '刷新失败');
+        alert(result.error || tx('刷新失败', 'Rematch failed'));
       }
     } catch (err) {
-      alert('网络错误，请重试');
+      alert(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     } finally {
       setRefreshing(false);
@@ -668,11 +681,11 @@ function InvoiceManager() {
     setFormError('');
     
     if (!invNo.trim()) {
-      setFormError('请输入账单号');
+      setFormError(tx('请输入账单号', 'Please enter invoice number.'));
       return;
     }
     if (orders.some((o) => !o.orderNo.trim() || !o.amount || !o.customerMark.trim())) {
-      setFormError('请填写所有订单的客户单号、金额和MARK');
+      setFormError(tx('请填写所有订单的客户单号、金额和MARK', 'Please fill ORDER, amount and MARK for all rows.'));
       return;
     }
 
@@ -703,10 +716,10 @@ function InvoiceManager() {
         }
         loadInvoices();
       } else {
-        setFormError(result.error || '创建失败');
+        setFormError(result.error || tx('创建失败', 'Create failed'));
       }
     } catch (err) {
-      setFormError('网络错误，请重试');
+      setFormError(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -718,12 +731,12 @@ function InvoiceManager() {
     setOrderFormError('');
     
     if (!editingOrder.orderNo.trim()) {
-      setOrderFormError('请输入客户单号');
+      setOrderFormError(tx('请输入客户单号', 'Please enter order number.'));
       return;
     }
     
     if (!Number.isFinite(editingOrder.amount) || editingOrder.amount < 0) {
-      setOrderFormError('请输入有效金额(>=0)');
+      setOrderFormError(tx('请输入有效金额(>=0)', 'Please enter a valid amount (>=0).'));
       return;
     }
 
@@ -750,10 +763,10 @@ function InvoiceManager() {
         setEditingOrder(null);
         loadInvoices();
       } else {
-        setOrderFormError(result.error || '修改失败');
+        setOrderFormError(result.error || tx('修改失败', 'Update failed'));
       }
     } catch (err) {
-      setOrderFormError('网络错误，请重试');
+      setOrderFormError(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -761,7 +774,7 @@ function InvoiceManager() {
   };
 
   const handleDeleteOrder = async (orderId: string) => {
-    if (!confirm('确定要删除这个订单吗？')) return;
+    if (!confirm(tx('确定要删除这个订单吗？', 'Delete this order?'))) return;
     
     try {
       const result = await apiCall('invoice', {
@@ -775,10 +788,10 @@ function InvoiceManager() {
       if (result.success) {
         loadInvoices();
       } else {
-        alert(result.error || '删除失败');
+        alert(result.error || tx('删除失败', 'Delete failed'));
       }
     } catch (err) {
-      alert('网络错误，请重试');
+      alert(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     }
   };
@@ -788,16 +801,16 @@ function InvoiceManager() {
     setAddError('');
     
     if (!newOrderNo.trim()) {
-      setAddError('请输入客户单号');
+      setAddError(tx('请输入客户单号', 'Please enter order number.'));
       return;
     }
     
     if (!newOrderAmount || parseFloat(newOrderAmount) <= 0) {
-      setAddError('请输入有效金额');
+      setAddError(tx('请输入有效金额', 'Please enter a valid amount.'));
       return;
     }
     if (!newOrderCustomerMark.trim()) {
-      setAddError('请输入客户MARK');
+      setAddError(tx('请输入客户MARK', 'Please enter customer MARK.'));
       return;
     }
 
@@ -827,10 +840,10 @@ function InvoiceManager() {
         setNewOrderCustomerCandidates([]);
         loadInvoices();
       } else {
-        setAddError(result.error || '添加失败');
+        setAddError(result.error || tx('添加失败', 'Add failed'));
       }
     } catch (err) {
-      setAddError('网络错误，请重试');
+      setAddError(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -840,13 +853,13 @@ function InvoiceManager() {
   // 转移余额
   const handleTransferBalance = async () => {
     if (!transferFromOrder || !transferToOrderNo || !transferAmount) {
-      setTransferError('请填写完整信息');
+      setTransferError(tx('请填写完整信息', 'Please complete all required fields.'));
       return;
     }
 
     const amount = parseFloat(transferAmount);
     if (isNaN(amount) || amount <= 0) {
-      setTransferError('请输入有效金额');
+      setTransferError(tx('请输入有效金额', 'Please enter a valid amount.'));
       return;
     }
 
@@ -872,10 +885,10 @@ function InvoiceManager() {
         setTransferAmount('');
         loadInvoices();
       } else {
-        setTransferError(result.error || '转移失败');
+        setTransferError(result.error || tx('转移失败', 'Transfer failed'));
       }
     } catch (err) {
-      setTransferError('网络错误，请重试');
+      setTransferError(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -970,7 +983,7 @@ function InvoiceManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">账单管理</h2>
+        <h2 className="text-2xl font-bold">{tx('账单管理', 'Invoice Management')}</h2>
         <div className="flex gap-2">
           {isManager && (
             <>
@@ -985,7 +998,7 @@ function InvoiceManager() {
                 }}
               />
               <Button variant="outline" onClick={downloadInvoiceImportTemplate}>
-                下载账单模板
+                {tx('下载账单模板', 'Download Invoice Template')}
               </Button>
               <Button
                 variant="outline"
@@ -993,7 +1006,7 @@ function InvoiceManager() {
                 onClick={() => invoiceImportInputRef.current?.click()}
               >
                 {invoiceImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                批量上传账单
+                {tx('批量上传账单', 'Bulk Import Invoices')}
               </Button>
               <Button 
                 variant="outline" 
@@ -1005,11 +1018,11 @@ function InvoiceManager() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                刷新匹配
+                {tx('刷新匹配', 'Rematch')}
               </Button>
               <Button onClick={() => setShowDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                直接创建账单
+                {tx('直接创建账单', 'Create Invoice')}
               </Button>
             </>
           )}
@@ -1019,14 +1032,14 @@ function InvoiceManager() {
       <Card>
         <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
           <Input
-            placeholder="搜索 INV NO / ORDER"
+            placeholder={tx('搜索 INV NO / ORDER', 'Search INV NO / ORDER')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <div />
           <div className="flex justify-end">
             <Button variant="outline" onClick={() => setSearch('')}>
-              重置筛选
+              {tx('重置筛选', 'Reset Filters')}
             </Button>
           </div>
         </CardContent>
@@ -1049,17 +1062,17 @@ function InvoiceManager() {
                   <div>
                     <CardTitle className="text-lg">{invoice.invNo}</CardTitle>
                     <CardDescription>
-                      {invoice.orders.length} 个订单 | 创建于 {new Date(invoice.createdAt).toLocaleDateString()}
+                      {tx(`${invoice.orders.length} 个订单 | 创建于 ${new Date(invoice.createdAt).toLocaleDateString()}`, `${invoice.orders.length} orders | Created ${new Date(invoice.createdAt).toLocaleDateString()}`)}
                     </CardDescription>
                   </div>
                 </div>
                 <div className="flex items-center gap-6 text-sm">
                   <div className="text-right">
-                    <div className="text-gray-500">总金额</div>
+                    <div className="text-gray-500">{tx('总金额', 'Total Amount')}</div>
                     <div className="font-semibold">${invoice.invAmount.toFixed(2)}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-gray-500">未收金额</div>
+                    <div className="text-gray-500">{tx('未收金额', 'Outstanding')}</div>
                     <div className={`font-semibold ${invoice.invBalance > 0 ? 'text-red-500' : 'text-green-500'}`}>
                       ${invoice.invBalance.toFixed(2)}
                     </div>
@@ -1071,7 +1084,7 @@ function InvoiceManager() {
             {expandedInvoices.has(invoice.id) && (
               <CardContent className="border-t pt-4">
                 <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-medium">订单明细</h4>
+                  <h4 className="font-medium">{tx('订单明细', 'Order Details')}</h4>
                   {isManager && (
                     <Button 
                       size="sm" 
@@ -1079,7 +1092,7 @@ function InvoiceManager() {
                       onClick={() => setAddingOrderToInvoice(invoice.id)}
                     >
                       <Plus className="h-4 w-4 mr-1" />
-                      添加订单
+                      {tx('添加订单', 'Add Order')}
                     </Button>
                   )}
                 </div>
@@ -1087,11 +1100,11 @@ function InvoiceManager() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>客户单号 (ORDER)</TableHead>
+                      <TableHead>{tx('客户单号 (ORDER)', 'Order No. (ORDER)')}</TableHead>
                       <TableHead>MARK</TableHead>
-                      <TableHead>金额 (AMOUNT)</TableHead>
-                      <TableHead>未收金额</TableHead>
-                      {isManager && <TableHead className="text-right">操作</TableHead>}
+                      <TableHead>{tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}</TableHead>
+                      <TableHead>{tx('未收金额', 'Outstanding')}</TableHead>
+                      {isManager && <TableHead className="text-right">{tx('操作', 'Actions')}</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1118,7 +1131,7 @@ function InvoiceManager() {
                           </TableCell>
                           <TableCell className={order.orderBalance > 0 ? 'text-red-500' : 'text-green-500'}>
                             ${Math.abs(order.orderBalance).toFixed(2)}
-                            {order.orderBalance < 0 && <span className="ml-1 text-xs">(多付)</span>}
+                            {order.orderBalance < 0 && <span className="ml-1 text-xs">{tx('(多付)', '(Overpaid)')}</span>}
                           </TableCell>
                           {isManager && (
                             <TableCell className="text-right">
@@ -1135,7 +1148,7 @@ function InvoiceManager() {
                                     setTransferAmount(Math.abs(order.orderBalance).toFixed(2));
                                     setShowTransferDialog(true);
                                   }}
-                                  title="转移多付金额"
+                                  title={tx('转移多付金额', 'Transfer Overpayment')}
                                   className="text-blue-600 hover:text-blue-700"
                                 >
                                   <ArrowRight className="h-4 w-4" />
@@ -1187,7 +1200,7 @@ function InvoiceManager() {
                     {invoice.orders.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={isManager ? 5 : 4} className="text-center py-4 text-gray-500">
-                          暂无订单
+                          {tx('暂无订单', 'No orders')}
                         </TableCell>
                       </TableRow>
                     )}
@@ -1197,7 +1210,7 @@ function InvoiceManager() {
                 {/* 添加订单表单 */}
                 {addingOrderToInvoice === invoice.id && (
                   <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <h5 className="font-medium mb-3">添加新订单</h5>
+                    <h5 className="font-medium mb-3">{tx('添加新订单', 'Add New Order')}</h5>
                     {addError && (
                       <Alert variant="destructive" className="mb-3">
                         <AlertDescription>{addError}</AlertDescription>
@@ -1205,7 +1218,7 @@ function InvoiceManager() {
                     )}
                     <div className="flex gap-3">
                       <Input
-                        placeholder="客户单号"
+                        placeholder={tx('客户单号', 'Order number')}
                         value={newOrderNo}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -1228,14 +1241,14 @@ function InvoiceManager() {
                         className="flex-1"
                       />
                       <Input
-                        placeholder="金额"
+                        placeholder={tx('金额', 'Amount')}
                         type="number"
                         value={newOrderAmount}
                         onChange={(e) => setNewOrderAmount(e.target.value)}
                         className="w-32"
                       />
                       <Input
-                        placeholder="客户MARK(必填)"
+                        placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
                         value={newOrderCustomerMark}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -1262,7 +1275,7 @@ function InvoiceManager() {
                             setNewOrderCustomerName(selected?.orderName || '');
                           }}
                         >
-                          <option value="">选择客户</option>
+                          <option value="">{tx('选择客户', 'Select customer')}</option>
                           {newOrderCustomerCandidates.map((candidate) => (
                             <option key={candidate.id} value={candidate.id}>{candidate.mark}/{candidate.orderName}</option>
                           ))}
@@ -1270,7 +1283,7 @@ function InvoiceManager() {
                       )}
                       <Button onClick={handleAddOrder} disabled={submitting}>
                         {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-                        添加
+                        {tx('添加', 'Add')}
                       </Button>
                       <Button 
                         variant="outline" 
@@ -1285,7 +1298,7 @@ function InvoiceManager() {
                           setAddError('');
                         }}
                       >
-                        取消
+                        {tx('取消', 'Cancel')}
                       </Button>
                     </div>
                   </div>
@@ -1298,7 +1311,7 @@ function InvoiceManager() {
         {invoices.length === 0 && (
           <Card>
             <CardContent className="py-12 text-center text-gray-500">
-              暂无账单
+              {tx('暂无账单', 'No invoices')}
             </CardContent>
           </Card>
         )}
@@ -1308,8 +1321,8 @@ function InvoiceManager() {
       <Dialog open={showDialog} onOpenChange={(open) => { setShowDialog(open); if (!open) setFormError(''); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>创建账单</DialogTitle>
-            <DialogDescription>创建新账单并添加订单</DialogDescription>
+            <DialogTitle>{tx('创建账单', 'Create Invoice')}</DialogTitle>
+            <DialogDescription>{tx('创建新账单并添加订单', 'Create a new invoice and add orders')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {formError && (
@@ -1318,29 +1331,29 @@ function InvoiceManager() {
               </Alert>
             )}
             <div className="space-y-2">
-              <Label>账单号 (INV NO)</Label>
-              <Input value={invNo} onChange={(e) => setInvNo(e.target.value)} placeholder="如: L25MH090125" />
+              <Label>{tx('账单号 (INV NO)', 'Invoice No. (INV NO)')}</Label>
+              <Input value={invNo} onChange={(e) => setInvNo(e.target.value)} placeholder={tx('如: L25MH090125', 'e.g. L25MH090125')} />
             </div>
             <div className="space-y-2">
-              <Label>订单列表</Label>
+              <Label>{tx('订单列表', 'Order List')}</Label>
               {orders.map((order, index) => (
                 <div key={index} className="space-y-2 border rounded-md p-2">
                   <div className="flex gap-2">
                   <Input
-                    placeholder="客户单号 (ORDER)"
+                    placeholder={tx('客户单号 (ORDER)', 'Order No. (ORDER)')}
                     value={order.orderNo}
                     onChange={(e) => updateOrder(index, 'orderNo', e.target.value)}
                     className="flex-1"
                   />
                   <Input
-                    placeholder="金额 (AMOUNT)"
+                    placeholder={tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}
                     type="number"
                     value={order.amount}
                     onChange={(e) => updateOrder(index, 'amount', e.target.value)}
                     className="w-32"
                   />
                     <Input
-                      placeholder="客户MARK(必填)"
+                      placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
                       value={order.customerMark}
                       onChange={(e) => updateOrder(index, 'customerMark', e.target.value)}
                       className="w-44"
@@ -1368,7 +1381,7 @@ function InvoiceManager() {
                         });
                       }}
                     >
-                      <option value="">请选择准确客户(MARK+ORDER_NAME)</option>
+                      <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
                       {order.customerCandidates.map((candidate) => (
                         <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                       ))}
@@ -1377,15 +1390,15 @@ function InvoiceManager() {
                 </div>
               ))}
               <Button variant="outline" onClick={addOrderRow} className="w-full">
-                <Plus className="h-4 w-4 mr-2" /> 添加订单
+                <Plus className="h-4 w-4 mr-2" /> {tx('添加订单', 'Add Order')}
               </Button>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)} disabled={submitting}>取消</Button>
+            <Button variant="outline" onClick={() => setShowDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleCreateInvoice} disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              创建
+              {tx('创建', 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1395,8 +1408,8 @@ function InvoiceManager() {
       <Dialog open={showOrderDialog} onOpenChange={(open) => { setShowOrderDialog(open); if (!open) { setEditingOrder(null); setOrderFormError(''); }}}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>编辑订单</DialogTitle>
-            <DialogDescription>修改订单信息</DialogDescription>
+            <DialogTitle>{tx('编辑订单', 'Edit Order')}</DialogTitle>
+            <DialogDescription>{tx('修改订单信息', 'Update order information')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {orderFormError && (
@@ -1405,14 +1418,14 @@ function InvoiceManager() {
               </Alert>
             )}
             <div className="space-y-2">
-              <Label>客户单号 (ORDER)</Label>
+              <Label>{tx('客户单号 (ORDER)', 'Order No. (ORDER)')}</Label>
               <Input 
                 value={editingOrder?.orderNo || ''} 
                 onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, orderNo: e.target.value })} 
               />
             </div>
             <div className="space-y-2">
-              <Label>金额 (AMOUNT)</Label>
+              <Label>{tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}</Label>
               <Input 
                 type="number"
                 value={editingOrder?.amount || ''} 
@@ -1420,7 +1433,7 @@ function InvoiceManager() {
               />
             </div>
             <div className="space-y-2">
-              <Label>客户MARK</Label>
+              <Label>{tx('客户MARK', 'Customer MARK')}</Label>
               <Input
                 value={editingOrder?.customerMark || ''}
                 onChange={(e) => {
@@ -1440,7 +1453,7 @@ function InvoiceManager() {
             </div>
             {editingOrderCandidates.length > 1 && (
               <div className="space-y-2">
-                <Label>选择客户</Label>
+                <Label>{tx('选择客户', 'Select Customer')}</Label>
                 <select
                   className="w-full border rounded-md px-3 py-2 text-sm"
                   value={editingOrder?.customerId || ''}
@@ -1456,7 +1469,7 @@ function InvoiceManager() {
                     }) : prev);
                   }}
                 >
-                  <option value="">请选择准确客户(MARK+ORDER_NAME)</option>
+                  <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
                   {editingOrderCandidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                   ))}
@@ -1464,21 +1477,21 @@ function InvoiceManager() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>客户ORDER_NAME</Label>
+              <Label>{tx('客户ORDER_NAME', 'Customer ORDER_NAME')}</Label>
               <Input
                 value={editingOrder?.customerName || ''}
                 onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerName: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>客户PHONE</Label>
+              <Label>{tx('客户PHONE', 'Customer PHONE')}</Label>
               <Input
                 value={editingOrder?.customerPhone || ''}
                 onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerPhone: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>客户CITY</Label>
+              <Label>{tx('客户CITY', 'Customer CITY')}</Label>
               <Input
                 value={editingOrder?.customerCity || ''}
                 onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerCity: e.target.value })}
@@ -1486,10 +1499,10 @@ function InvoiceManager() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowOrderDialog(false)} disabled={submitting}>取消</Button>
+            <Button variant="outline" onClick={() => setShowOrderDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleUpdateOrder} disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              保存
+              {tx('保存', 'Save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1499,9 +1512,9 @@ function InvoiceManager() {
       <Dialog open={showTransferDialog} onOpenChange={(open) => { setShowTransferDialog(open); if (!open) { setTransferFromOrder(null); setTransferToOrderNo(''); setTransferAmount(''); setTransferError(''); }}}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>转移多付余额</DialogTitle>
+            <DialogTitle>{tx('转移多付余额', 'Transfer Overpayment')}</DialogTitle>
             <DialogDescription>
-              将订单 <strong>{transferFromOrder?.orderNo}</strong> 的多付金额转移到其他订单
+              {tx('将订单', 'Transfer overpayment from order')} <strong>{transferFromOrder?.orderNo}</strong> {tx('的多付金额转移到其他订单', 'to another order')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1511,22 +1524,22 @@ function InvoiceManager() {
               </Alert>
             )}
             <div className="space-y-2">
-              <Label>当前多付金额</Label>
+              <Label>{tx('当前多付金额', 'Current overpayment')}</Label>
               <div className="text-green-600 font-bold text-lg">
                 ${Math.abs(transferFromOrder?.balance || 0).toFixed(2)}
               </div>
             </div>
             <div className="space-y-2">
-              <Label>目标订单号</Label>
+              <Label>{tx('目标订单号', 'Target order number')}</Label>
               <Input 
-                placeholder="输入目标订单号"
+                placeholder={tx('输入目标订单号', 'Enter target order number')}
                 value={transferToOrderNo} 
                 onChange={(e) => setTransferToOrderNo(e.target.value)} 
               />
-              <p className="text-xs text-gray-500">如果订单不存在，将创建到 Un_Associated 账单</p>
+              <p className="text-xs text-gray-500">{tx('如果订单不存在，将创建到 Un_Associated 账单', 'If target order does not exist, it will be created under Un_Associated invoice.')}</p>
             </div>
             <div className="space-y-2">
-              <Label>转移金额</Label>
+              <Label>{tx('转移金额', 'Transfer amount')}</Label>
               <Input 
                 type="number"
                 step="0.01"
@@ -1536,10 +1549,10 @@ function InvoiceManager() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowTransferDialog(false)} disabled={submitting}>取消</Button>
+            <Button variant="outline" onClick={() => setShowTransferDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleTransferBalance} disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              确认转移
+              {tx('确认转移', 'Confirm Transfer')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1548,18 +1561,18 @@ function InvoiceManager() {
       <Dialog open={orderHistoryOpen} onOpenChange={setOrderHistoryOpen}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>ORDER 付款记录</DialogTitle>
+            <DialogTitle>{tx('ORDER 付款记录', 'ORDER Payment Records')}</DialogTitle>
             <DialogDescription>{orderHistoryTitle}</DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>收据号</TableHead>
-                  <TableHead>金额</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>日期</TableHead>
-                  <TableHead>创建时间</TableHead>
+                  <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>
+                  <TableHead>{tx('金额', 'Amount')}</TableHead>
+                  <TableHead>{tx('状态', 'Status')}</TableHead>
+                  <TableHead>{tx('日期', 'Date')}</TableHead>
+                  <TableHead>{tx('创建时间', 'Created At')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1574,7 +1587,7 @@ function InvoiceManager() {
                 ))}
                 {orderHistoryRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-gray-500">暂无付款记录</TableCell>
+                    <TableCell colSpan={5} className="text-center text-gray-500">{tx('暂无付款记录', 'No payment records')}</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -1588,6 +1601,7 @@ function InvoiceManager() {
 
 // 收据管理
 function ReceiptManager() {
+  const tx = useUiText();
   const { receipts, setReceipts, loading, setLoading, user } = useStore();
   const [showUpload, setShowUpload] = useState(false);
   const [showDirectCreate, setShowDirectCreate] = useState(false);
@@ -1785,12 +1799,12 @@ function ReceiptManager() {
         setSavedImagePath(result.data.image || null);
       } else {
         setSavedImagePath(null);
-        setError(result.error || 'AI识别失败，请重试');
+        setError(result.error || tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
       }
     } catch (err) {
       console.error('OCR error:', err);
       setSavedImagePath(null);
-      setError('网络错误，请重试');
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
     }
     setUploading(false);
   };
@@ -1798,7 +1812,7 @@ function ReceiptManager() {
   const handleConfirm = async () => {
     if (!selectedFile || !ocrResult) return;
     if (!ocrCustomerMark.trim()) {
-      setError('客户MARK不能为空');
+      setError(tx('客户MARK不能为空', 'Customer MARK is required.'));
       return;
     }
 
@@ -1835,18 +1849,18 @@ function ReceiptManager() {
         setSavedImagePath(null);
         loadReceipts();
       } else {
-        setError(result.error || '创建失败，请重试');
+        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
       }
     } catch (err) {
       console.error('Confirm error:', err);
-      setError('网络错误，请重试');
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleMarkReceived = async (receiptId: string) => {
-    if (!confirm('确定要标记此收据为已签收吗？')) return;
+    if (!confirm(tx('确定要标记此收据为已签收吗？', 'Mark this receipt as received?'))) return;
     
     try {
       const result = await fetch('/api/receipt', {
@@ -1861,10 +1875,10 @@ function ReceiptManager() {
       if (result.success) {
         loadReceipts();
       } else {
-        alert(result.error || '操作失败');
+        alert(result.error || tx('操作失败', 'Operation failed'));
       }
     } catch (err) {
-      alert('网络错误，请重试');
+      alert(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     }
   };
@@ -1872,7 +1886,7 @@ function ReceiptManager() {
   const handleDirectCreate = async () => {
     setError(null);
     if (!directForm.customerMark.trim()) {
-      setError('客户MARK不能为空');
+      setError(tx('客户MARK不能为空', 'Customer MARK is required.'));
       return;
     }
     try {
@@ -1911,10 +1925,10 @@ function ReceiptManager() {
         setDirectCustomerCandidates([]);
         loadReceipts();
       } else {
-        setError(result.error || '创建失败，请重试');
+        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建失败，请重试');
+      setError(err instanceof Error ? err.message : tx('创建失败，请重试', 'Create failed, please retry.'));
     }
   };
 
@@ -1929,7 +1943,7 @@ function ReceiptManager() {
   };
 
   const handleDeleteReceipt = async (receiptId: string) => {
-    if (!confirm('确定要申请删除这条收据吗？删除需要管理员审批。')) return;
+    if (!confirm(tx('确定要申请删除这条收据吗？删除需要管理员审批。', 'Submit a deletion request for this receipt? Admin approval is required.'))) return;
     
     const result = await apiCall('deletion', {
       method: 'POST',
@@ -1941,10 +1955,10 @@ function ReceiptManager() {
     });
 
     if (result.success) {
-      alert('删除申请已提交，等待管理员审批');
+      alert(tx('删除申请已提交，等待管理员审批', 'Deletion request submitted. Waiting for admin approval.'));
       loadReceipts();
     } else {
-      alert(result.error || '申请失败');
+      alert(result.error || tx('申请失败', 'Request failed'));
     }
   };
 
@@ -1953,24 +1967,24 @@ function ReceiptManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">收据管理</h2>
+        <h2 className="text-2xl font-bold">{tx('收据管理', 'Receipt Management')}</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            直接创建
+            {tx('直接创建', 'Create Directly')}
           </Button>
           <Button onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4 mr-2" />
-            上传收据
+            {tx('上传收据', 'Upload Receipt')}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Input placeholder="搜索收据号/单号/付款人" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">全部状态</option>
+            <option value="">{tx('全部状态', 'All statuses')}</option>
             <option value="SR_Received">SR_Received</option>
             <option value="Waiting_SWIFT">Waiting_SWIFT</option>
             <option value="Bank_Transfer">Bank_Transfer</option>
@@ -1978,8 +1992,8 @@ function ReceiptManager() {
           </select>
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Input type="number" placeholder="最小金额" value={minUsd} onChange={(e) => setMinUsd(e.target.value)} />
-          <Input type="number" placeholder="最大金额" value={maxUsd} onChange={(e) => setMaxUsd(e.target.value)} />
+          <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => setMinUsd(e.target.value)} />
+          <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => setMaxUsd(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
             <Button
               variant="outline"
@@ -1992,7 +2006,7 @@ function ReceiptManager() {
                 setMaxUsd('');
               }}
             >
-              重置筛选
+              {tx('重置筛选', 'Reset Filters')}
             </Button>
           </div>
         </CardContent>
@@ -2003,14 +2017,14 @@ function ReceiptManager() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>收据号</TableHead>
-                <TableHead>客户单号</TableHead>
+                <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>
+                <TableHead>{tx('客户单号', 'Order No.')}</TableHead>
                 <TableHead>MARK</TableHead>
-                <TableHead>付款金额</TableHead>
-                <TableHead>付款人</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>创建时间</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead>{tx('付款金额', 'Amount')}</TableHead>
+                <TableHead>{tx('付款人', 'Payer')}</TableHead>
+                <TableHead>{tx('状态', 'Status')}</TableHead>
+                <TableHead>{tx('创建时间', 'Created At')}</TableHead>
+                <TableHead>{tx('操作', 'Actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -2032,8 +2046,8 @@ function ReceiptManager() {
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          onClick={() => setViewingImage({ url: receipt.imageUrl!, name: receipt.imageName || '收据图片' })}
-                          title="查看图片"
+                          onClick={() => setViewingImage({ url: receipt.imageUrl!, name: receipt.imageName || tx('收据图片', 'Receipt image') })}
+                          title={tx('查看图片', 'View image')}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -2043,7 +2057,7 @@ function ReceiptManager() {
                           size="sm" 
                           variant="ghost" 
                           onClick={() => handleMarkReceived(receipt.id)}
-                          title="签收归档"
+                          title={tx('签收归档', 'Mark as received')}
                           className="text-green-600 hover:text-green-700"
                         >
                           <Check className="h-4 w-4" />
@@ -2054,7 +2068,7 @@ function ReceiptManager() {
                           size="sm" 
                           variant="ghost" 
                           onClick={() => handleDeleteReceipt(receipt.id)}
-                          title="申请删除"
+                          title={tx('申请删除', 'Request deletion')}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
@@ -2066,7 +2080,7 @@ function ReceiptManager() {
               {receipts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    暂无收据
+                    {tx('暂无收据', 'No receipts')}
                   </TableCell>
                 </TableRow>
               )}
@@ -2082,10 +2096,10 @@ function ReceiptManager() {
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
               >
-                上一页
+                {tx('上一页', 'Previous')}
               </Button>
               <span className="text-sm text-gray-600">
-                第 {currentPage} / {totalPages} 页 (共 {receipts.length} 条)
+                {tx(`第 ${currentPage} / ${totalPages} 页 (共 ${receipts.length} 条)`, `Page ${currentPage} / ${totalPages} (Total ${receipts.length})`)}
               </span>
               <Button 
                 variant="outline" 
@@ -2093,7 +2107,7 @@ function ReceiptManager() {
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
               >
-                下一页
+                {tx('下一页', 'Next')}
               </Button>
             </div>
           )}
@@ -2104,8 +2118,8 @@ function ReceiptManager() {
       <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setSavedImagePath(null); setOcrCustomerMark(''); setOcrCustomerName(''); setOcrCustomerId(''); setOcrCustomerCandidates([]); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>上传收据</DialogTitle>
-            <DialogDescription>上传收据图片，AI将自动识别内容</DialogDescription>
+            <DialogTitle>{tx('上传收据', 'Upload Receipt')}</DialogTitle>
+            <DialogDescription>{tx('上传收据图片，AI将自动识别内容', 'Upload a receipt image and let AI recognize fields automatically')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {error && (
@@ -2120,7 +2134,7 @@ function ReceiptManager() {
             {uploading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">AI识别中...</span>
+                <span className="ml-2">{tx('AI识别中...', 'AI recognizing...')}</span>
               </div>
             )}
 
@@ -2132,24 +2146,24 @@ function ReceiptManager() {
 
             {ocrResult && (
               <div className="space-y-3 border rounded-lg p-4">
-                <h4 className="font-medium">识别结果</h4>
+                <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-sm text-gray-500">收据号</Label>
+                    <Label className="text-sm text-gray-500">{tx('收据号', 'Receipt No.')}</Label>
                     <Input 
                       value={(ocrResult.receiptNo as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, receiptNo: e.target.value})}
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">日期</Label>
+                    <Label className="text-sm text-gray-500">{tx('日期', 'Date')}</Label>
                     <Input 
                       value={(ocrResult.date as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">付款金额 (USD)</Label>
+                    <Label className="text-sm text-gray-500">{tx('付款金额 (USD)', 'Amount (USD)')}</Label>
                     <Input 
                       type="number"
                       value={(ocrResult.usd as number) || ''} 
@@ -2157,28 +2171,28 @@ function ReceiptManager() {
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">客户单号</Label>
+                    <Label className="text-sm text-gray-500">{tx('客户单号', 'Order No.')}</Label>
                     <Input 
                       value={(ocrResult.orderNo as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, orderNo: e.target.value})}
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">账单号</Label>
+                    <Label className="text-sm text-gray-500">{tx('账单号', 'Invoice No.')}</Label>
                     <Input 
                       value={(ocrResult.invNo as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, invNo: e.target.value})}
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">付款人</Label>
+                    <Label className="text-sm text-gray-500">{tx('付款人', 'Payer')}</Label>
                     <Input 
                       value={(ocrResult.payer as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, payer: e.target.value})}
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label className="text-sm text-gray-500">客户MARK（必填）</Label>
+                    <Label className="text-sm text-gray-500">{tx('客户MARK（必填）', 'Customer MARK (required)')}</Label>
                     <Input
                       value={ocrCustomerMark}
                       onChange={(e) => {
@@ -2192,7 +2206,7 @@ function ReceiptManager() {
                   </div>
                   {ocrCustomerCandidates.length > 1 && (
                     <div className="col-span-2">
-                      <Label className="text-sm text-gray-500">选择准确客户(MARK+ORDER_NAME)</Label>
+                      <Label className="text-sm text-gray-500">{tx('选择准确客户(MARK+ORDER_NAME)', 'Select exact customer (MARK+ORDER_NAME)')}</Label>
                       <select
                         className="w-full border rounded-md px-3 py-2 text-sm"
                         value={ocrCustomerId}
@@ -2203,7 +2217,7 @@ function ReceiptManager() {
                           setOcrCustomerName(selected?.orderName || '');
                         }}
                       >
-                        <option value="">请选择</option>
+                        <option value="">{tx('请选择', 'Please select')}</option>
                         {ocrCustomerCandidates.map((candidate) => (
                           <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                         ))}
@@ -2217,7 +2231,7 @@ function ReceiptManager() {
                         checked={ocrResult.isDeposit as boolean} 
                         onChange={(e) => setOcrResult({...ocrResult, isDeposit: e.target.checked})}
                       />
-                      这是定金 (DEPOSIT)
+                      {tx('这是定金 (DEPOSIT)', 'This is a deposit (DEPOSIT)')}
                     </Label>
                   </div>
                 </div>
@@ -2229,16 +2243,16 @@ function ReceiptManager() {
               setShowUpload(false);
               setOcrResult(null);
               setImagePreview(null);
-            }} disabled={submitting}>取消</Button>
+            }} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleConfirm} disabled={!ocrResult || submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  处理中...
+                  {tx('处理中...', 'Processing...')}
                 </>
               ) : (
                 <>
-                  <Check className="h-4 w-4 mr-2" /> 确认创建
+                  <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
                 </>
               )}
             </Button>
@@ -2249,19 +2263,19 @@ function ReceiptManager() {
       <Dialog open={showDirectCreate} onOpenChange={(open) => { setShowDirectCreate(open); if (!open) { setError(null); setDirectCustomerCandidates([]); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>直接创建收据</DialogTitle>
-            <DialogDescription>跳过AI识别，手动录入收据信息</DialogDescription>
+            <DialogTitle>{tx('直接创建收据', 'Create Receipt Directly')}</DialogTitle>
+            <DialogDescription>{tx('跳过AI识别，手动录入收据信息', 'Skip AI and enter receipt information manually')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <Input placeholder="收据号" value={directForm.receiptNo} onChange={(e) => setDirectForm((p) => ({ ...p, receiptNo: e.target.value }))} />
-            <Input type="date" placeholder="日期" value={directForm.date} onChange={(e) => setDirectForm((p) => ({ ...p, date: e.target.value }))} />
-            <Input placeholder="电话" value={directForm.tel} onChange={(e) => setDirectForm((p) => ({ ...p, tel: e.target.value }))} />
-            <Input type="number" placeholder="付款金额(USD)" value={directForm.usd} onChange={(e) => setDirectForm((p) => ({ ...p, usd: e.target.value }))} />
-            <Input placeholder="账单号(invNo)" value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
-            <Input placeholder="客户单号(orderNo)" value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
-            <Input placeholder="付款人" value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
+            <Input placeholder={tx('收据号', 'Receipt No.')} value={directForm.receiptNo} onChange={(e) => setDirectForm((p) => ({ ...p, receiptNo: e.target.value }))} />
+            <Input type="date" placeholder={tx('日期', 'Date')} value={directForm.date} onChange={(e) => setDirectForm((p) => ({ ...p, date: e.target.value }))} />
+            <Input placeholder={tx('电话', 'Phone')} value={directForm.tel} onChange={(e) => setDirectForm((p) => ({ ...p, tel: e.target.value }))} />
+            <Input type="number" placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={directForm.usd} onChange={(e) => setDirectForm((p) => ({ ...p, usd: e.target.value }))} />
+            <Input placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')} value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
+            <Input placeholder={tx('客户单号(orderNo)', 'Order No. (orderNo)')} value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
+            <Input placeholder={tx('付款人', 'Payer')} value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
             <Input
-              placeholder="客户MARK(必填)"
+              placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
               value={directForm.customerMark}
               onChange={(e) => {
                 const value = e.target.value;
@@ -2284,7 +2298,7 @@ function ReceiptManager() {
                   setDirectForm((p) => ({ ...p, customerId: id, customerName: selected?.orderName || '' }));
                 }}
               >
-                <option value="">请选择准确客户(MARK+ORDER_NAME)</option>
+                <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
                 {directCustomerCandidates.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
                 ))}
@@ -2292,14 +2306,14 @@ function ReceiptManager() {
             )}
             <Label className="flex items-center gap-2">
               <input type="checkbox" checked={directForm.isDeposit} onChange={(e) => setDirectForm((p) => ({ ...p, isDeposit: e.target.checked }))} />
-              定金
+              {tx('定金', 'Deposit')}
             </Label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>取消</Button>
+            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleDirectCreate}>
               <Check className="h-4 w-4 mr-2" />
-              创建
+              {tx('创建', 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2328,6 +2342,7 @@ function ReceiptManager() {
 
 // 付款明细管理
 function DetailManager() {
+  const tx = useUiText();
   const { details, setDetails } = useStore();
   const [showUpload, setShowUpload] = useState(false);
   const [showDirectCreate, setShowDirectCreate] = useState(false);
@@ -2414,11 +2429,11 @@ function DetailManager() {
           setSavedImagePath(result.data.image);
         }
       } else {
-        setError(result.error || 'AI识别失败，请重试');
+        setError(result.error || tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
       }
     } catch (err) {
       console.error('OCR error:', err);
-      setError('网络错误，请重试');
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
     }
     setUploading(false);
   };
@@ -2451,18 +2466,18 @@ function DetailManager() {
         setSavedImagePath(null);
         loadDetails();
       } else {
-        setError(result.error || '创建失败，请重试');
+        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
       }
     } catch (err) {
       console.error('Confirm error:', err);
-      setError('网络错误，请重试');
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteDetail = async (detailId: string) => {
-    if (!confirm('确定要申请删除这条付款明细吗？删除需要管理员审批。')) return;
+    if (!confirm(tx('确定要申请删除这条付款明细吗？删除需要管理员审批。', 'Submit a deletion request for this payment detail? Admin approval is required.'))) return;
     
     const result = await apiCall('deletion', {
       method: 'POST',
@@ -2474,10 +2489,10 @@ function DetailManager() {
     });
 
     if (result.success) {
-      alert('删除申请已提交，等待管理员审批');
+      alert(tx('删除申请已提交，等待管理员审批', 'Deletion request submitted. Waiting for admin approval.'));
       loadDetails();
     } else {
-      alert(result.error || '申请失败');
+      alert(result.error || tx('申请失败', 'Request failed'));
     }
   };
 
@@ -2507,34 +2522,34 @@ function DetailManager() {
         setDirectItems([{ mark: '', orderNo: '', amount: '' }]);
         loadDetails();
       } else {
-        setError(result.error || '创建失败');
+        setError(result.error || tx('创建失败', 'Create failed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建失败');
+      setError(err instanceof Error ? err.message : tx('创建失败', 'Create failed'));
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">付款明细管理</h2>
+        <h2 className="text-2xl font-bold">{tx('付款明细管理', 'Payment Detail Management')}</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            直接创建
+            {tx('直接创建', 'Create Directly')}
           </Button>
           <Button onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4 mr-2" />
-            上传付款明细
+            {tx('上传付款明细', 'Upload Payment Detail')}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Input placeholder="搜索唛头/单号" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder={tx('搜索唛头/单号', 'Search mark/order no.')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">全部状态</option>
+            <option value="">{tx('全部状态', 'All statuses')}</option>
             <option value="Waiting_SWIFT">Waiting_SWIFT</option>
             <option value="Bank_Transfer">Bank_Transfer</option>
             <option value="RECEIVED">RECEIVED</option>
@@ -2542,8 +2557,8 @@ function DetailManager() {
           </select>
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Input type="number" placeholder="最小总金额" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-          <Input type="number" placeholder="最大总金额" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+          <Input type="number" placeholder={tx('最小总金额', 'Min total amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+          <Input type="number" placeholder={tx('最大总金额', 'Max total amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
             <Button
               variant="outline"
@@ -2556,7 +2571,7 @@ function DetailManager() {
                 setMaxAmount('');
               }}
             >
-              重置筛选
+              {tx('重置筛选', 'Reset Filters')}
             </Button>
           </div>
         </CardContent>
@@ -2578,10 +2593,10 @@ function DetailManager() {
                   )}
                   <div>
                     <CardTitle className="text-lg">
-                      付款明细 - {detail.date ? new Date(detail.date).toLocaleDateString() : '日期未知'}
+                      {tx('付款明细', 'Payment Detail')} - {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
                     </CardTitle>
                     <CardDescription>
-                      {detail.items.length} 笔 | 总计: ${detail.totalAmount.toFixed(2)}
+                      {tx(`${detail.items.length} 笔 | 总计: $${detail.totalAmount.toFixed(2)}`, `${detail.items.length} items | Total: $${detail.totalAmount.toFixed(2)}`)}
                     </CardDescription>
                   </div>
                 </div>
@@ -2595,9 +2610,9 @@ function DetailManager() {
                       variant="ghost" 
                       onClick={(e) => { 
                         e.stopPropagation(); 
-                        setViewingImage({ url: detail.imageUrl!, name: detail.imageName || '付款明细图片' }); 
+                        setViewingImage({ url: detail.imageUrl!, name: detail.imageName || tx('付款明细图片', 'Payment detail image') }); 
                       }}
-                      title="查看图片"
+                      title={tx('查看图片', 'View image')}
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -2606,7 +2621,7 @@ function DetailManager() {
                     size="sm" 
                     variant="ghost" 
                     onClick={(e) => { e.stopPropagation(); handleDeleteDetail(detail.id); }}
-                    title="申请删除"
+                    title={tx('申请删除', 'Request deletion')}
                   >
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
@@ -2619,10 +2634,10 @@ function DetailManager() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>唛头</TableHead>
-                      <TableHead>单号</TableHead>
-                      <TableHead>金额</TableHead>
-                      <TableHead>关联收据</TableHead>
+                      <TableHead>{tx('唛头', 'Mark')}</TableHead>
+                      <TableHead>{tx('单号', 'Order No.')}</TableHead>
+                      <TableHead>{tx('金额', 'Amount')}</TableHead>
+                      <TableHead>{tx('关联收据', 'Linked Receipt')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2635,7 +2650,7 @@ function DetailManager() {
                           {item.receipt ? (
                             <Badge variant="outline">{item.receipt.orderNo}</Badge>
                           ) : (
-                            <span className="text-gray-400">未匹配</span>
+                            <span className="text-gray-400">{tx('未匹配', 'Unmatched')}</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -2649,7 +2664,7 @@ function DetailManager() {
         {details.length === 0 && (
           <Card>
             <CardContent className="py-12 text-center text-gray-500">
-              暂无付款明细
+              {tx('暂无付款明细', 'No payment details')}
             </CardContent>
           </Card>
         )}
@@ -2658,8 +2673,8 @@ function DetailManager() {
       <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>上传付款明细</DialogTitle>
-            <DialogDescription>上传付款明细图片，AI将自动识别内容</DialogDescription>
+            <DialogTitle>{tx('上传付款明细', 'Upload Payment Detail')}</DialogTitle>
+            <DialogDescription>{tx('上传付款明细图片，AI将自动识别内容', 'Upload payment detail image and let AI recognize content')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {error && (
@@ -2674,7 +2689,7 @@ function DetailManager() {
             {uploading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">AI识别中...</span>
+                <span className="ml-2">{tx('AI识别中...', 'AI recognizing...')}</span>
               </div>
             )}
 
@@ -2686,20 +2701,20 @@ function DetailManager() {
 
             {ocrResult && (
               <div className="space-y-3 border rounded-lg p-4">
-                <h4 className="font-medium">识别结果</h4>
+                <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
                 <div>
-                  <Label className="text-sm text-gray-500">日期</Label>
+                  <Label className="text-sm text-gray-500">{tx('日期', 'Date')}</Label>
                   <Input 
                     value={ocrResult.date || ''} 
                     onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm text-gray-500">明细项目</Label>
+                  <Label className="text-sm text-gray-500">{tx('明细项目', 'Detail Items')}</Label>
                   {ocrResult.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-3 gap-2">
                       <Input 
-                        placeholder="唛头"
+                        placeholder={tx('唛头', 'Mark')}
                         value={item.mark || ''} 
                         onChange={(e) => {
                           const newItems = [...ocrResult.items];
@@ -2708,7 +2723,7 @@ function DetailManager() {
                         }}
                       />
                       <Input 
-                        placeholder="单号"
+                        placeholder={tx('单号', 'Order No.')}
                         value={item.orderNo || ''} 
                         onChange={(e) => {
                           const newItems = [...ocrResult.items];
@@ -2717,7 +2732,7 @@ function DetailManager() {
                         }}
                       />
                       <Input 
-                        placeholder="金额"
+                        placeholder={tx('金额', 'Amount')}
                         type="number"
                         value={item.amount || ''} 
                         onChange={(e) => {
@@ -2737,16 +2752,16 @@ function DetailManager() {
               setShowUpload(false);
               setOcrResult(null);
               setImagePreview(null);
-            }} disabled={submitting}>取消</Button>
+            }} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleConfirm} disabled={!ocrResult || submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  处理中...
+                  {tx('处理中...', 'Processing...')}
                 </>
               ) : (
                 <>
-                  <Check className="h-4 w-4 mr-2" /> 确认创建
+                  <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
                 </>
               )}
             </Button>
@@ -2757,26 +2772,26 @@ function DetailManager() {
       <Dialog open={showDirectCreate} onOpenChange={setShowDirectCreate}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>直接创建付款明细</DialogTitle>
-            <DialogDescription>跳过AI识别，手动录入明细行</DialogDescription>
+            <DialogTitle>{tx('直接创建付款明细', 'Create Payment Detail Directly')}</DialogTitle>
+            <DialogDescription>{tx('跳过AI识别，手动录入明细行', 'Skip AI and enter detail rows manually')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <Input type="date" value={directDate} onChange={(e) => setDirectDate(e.target.value)} />
             {directItems.map((item, idx) => (
               <div key={idx} className="grid grid-cols-3 gap-2">
                 <Input
-                  placeholder="唛头"
+                  placeholder={tx('唛头', 'Mark')}
                   value={item.mark}
                   onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, mark: e.target.value } : row)))}
                 />
                 <Input
-                  placeholder="单号"
+                  placeholder={tx('单号', 'Order No.')}
                   value={item.orderNo}
                   onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, orderNo: e.target.value } : row)))}
                 />
                 <Input
                   type="number"
-                  placeholder="金额"
+                  placeholder={tx('金额', 'Amount')}
                   value={item.amount}
                   onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))}
                 />
@@ -2784,14 +2799,14 @@ function DetailManager() {
             ))}
             <Button variant="outline" onClick={() => setDirectItems((prev) => [...prev, { mark: '', orderNo: '', amount: '' }])}>
               <Plus className="h-4 w-4 mr-2" />
-              增加明细行
+              {tx('增加明细行', 'Add Detail Row')}
             </Button>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>取消</Button>
+            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleDirectCreate}>
               <Check className="h-4 w-4 mr-2" />
-              创建
+              {tx('创建', 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2820,6 +2835,7 @@ function DetailManager() {
 
 // SWIFT管理
 function SwiftManager() {
+  const tx = useUiText();
   const { swifts, setSwifts, details } = useStore();
   const [showUpload, setShowUpload] = useState(false);
   const [showDirectCreate, setShowDirectCreate] = useState(false);
@@ -2904,19 +2920,19 @@ function SwiftManager() {
         setSavedImagePath(result.data.image || null);
       } else {
         setSavedImagePath(null);
-        setError(result.error || 'AI识别失败，请重试');
+        setError(result.error || tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
       }
     } catch (err) {
       console.error('OCR error:', err);
       setSavedImagePath(null);
-      setError('网络错误，请重试');
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
     }
     setUploading(false);
   };
 
   const handleConfirm = async () => {
     if (!selectedFile || !ocrResult || !selectedDetailId) {
-      setError('请选择付款明细');
+      setError(tx('请选择付款明细', 'Please select a payment detail.'));
       return;
     }
 
@@ -2945,18 +2961,18 @@ function SwiftManager() {
         setSelectedDetailId('');
         loadSwifts();
       } else {
-        setError(result.error || '创建失败，请重试');
+        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
       }
     } catch (err) {
       console.error('Confirm error:', err);
-      setError('网络错误，请重试');
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteSwift = async (swiftId: string) => {
-    if (!confirm('确定要申请删除这条SWIFT水单吗？删除需要管理员审批。')) return;
+    if (!confirm(tx('确定要申请删除这条SWIFT水单吗？删除需要管理员审批。', 'Submit a deletion request for this SWIFT record? Admin approval is required.'))) return;
     
     const result = await apiCall('deletion', {
       method: 'POST',
@@ -2968,10 +2984,10 @@ function SwiftManager() {
     });
 
     if (result.success) {
-      alert('删除申请已提交，等待管理员审批');
+      alert(tx('删除申请已提交，等待管理员审批', 'Deletion request submitted. Waiting for admin approval.'));
       loadSwifts();
     } else {
-      alert(result.error || '申请失败');
+      alert(result.error || tx('申请失败', 'Request failed'));
     }
   };
 
@@ -3004,41 +3020,41 @@ function SwiftManager() {
         });
         loadSwifts();
       } else {
-        setError(result.error || '创建失败');
+        setError(result.error || tx('创建失败', 'Create failed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建失败');
+      setError(err instanceof Error ? err.message : tx('创建失败', 'Create failed'));
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">SWIFT水单管理</h2>
+        <h2 className="text-2xl font-bold">{tx('SWIFT水单管理', 'SWIFT Management')}</h2>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            直接创建
+            {tx('直接创建', 'Create Directly')}
           </Button>
           <Button onClick={() => setShowUpload(true)}>
             <Upload className="h-4 w-4 mr-2" />
-            上传SWIFT
+            {tx('上传SWIFT', 'Upload SWIFT')}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Input placeholder="搜索汇款人/收款人/账号" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input placeholder={tx('搜索汇款人/收款人/账号', 'Search sender/receiver/account')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="border rounded-md px-3 py-2 text-sm" value={hasErrorFilter} onChange={(e) => setHasErrorFilter(e.target.value)}>
-            <option value="">全部状态</option>
-            <option value="true">仅异常</option>
-            <option value="false">仅正常</option>
+            <option value="">{tx('全部状态', 'All statuses')}</option>
+            <option value="true">{tx('仅异常', 'Errors only')}</option>
+            <option value="false">{tx('仅正常', 'Normal only')}</option>
           </select>
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Input type="number" placeholder="最小金额" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-          <Input type="number" placeholder="最大金额" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+          <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+          <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
             <Button
               variant="outline"
@@ -3051,7 +3067,7 @@ function SwiftManager() {
                 setHasErrorFilter('');
               }}
             >
-              重置筛选
+              {tx('重置筛选', 'Reset Filters')}
             </Button>
           </div>
         </CardContent>
@@ -3064,10 +3080,10 @@ function SwiftManager() {
               <div className="flex justify-between items-start">
                 <div>
                   <CardTitle className="text-lg">
-                    SWIFT - {swift.date ? new Date(swift.date).toLocaleDateString() : '日期未知'}
+                    SWIFT - {swift.date ? new Date(swift.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
                   </CardTitle>
                   <CardDescription>
-                    汇款金额: ${swift.amount.toFixed(2)} | 汇款人: {swift.senderName || '-'}
+                    {tx(`汇款金额: $${swift.amount.toFixed(2)} | 汇款人: ${swift.senderName || '-'}`, `Amount: $${swift.amount.toFixed(2)} | Sender: ${swift.senderName || '-'}`)}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -3081,7 +3097,7 @@ function SwiftManager() {
                     size="sm" 
                     variant="ghost" 
                     onClick={() => handleDeleteSwift(swift.id)}
-                    title="申请删除"
+                    title={tx('申请删除', 'Request deletion')}
                   >
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
@@ -3095,10 +3111,10 @@ function SwiftManager() {
                 </Alert>
               )}
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-gray-500">汇款人:</span> {swift.senderName}</div>
-                <div><span className="text-gray-500">汇款人地址:</span> {swift.senderAddress || '-'}</div>
-                <div><span className="text-gray-500">收款人:</span> {swift.receiverName || '-'}</div>
-                <div><span className="text-gray-500">收款账号:</span> {swift.receiverAccount || '-'}</div>
+                <div><span className="text-gray-500">{tx('汇款人:', 'Sender:')}</span> {swift.senderName}</div>
+                <div><span className="text-gray-500">{tx('汇款人地址:', 'Sender Address:')}</span> {swift.senderAddress || '-'}</div>
+                <div><span className="text-gray-500">{tx('收款人:', 'Receiver:')}</span> {swift.receiverName || '-'}</div>
+                <div><span className="text-gray-500">{tx('收款账号:', 'Receiver Account:')}</span> {swift.receiverAccount || '-'}</div>
               </div>
             </CardContent>
           </Card>
@@ -3106,7 +3122,7 @@ function SwiftManager() {
         {swifts.length === 0 && (
           <Card>
             <CardContent className="py-12 text-center text-gray-500">
-              暂无SWIFT水单
+              {tx('暂无SWIFT水单', 'No SWIFT records')}
             </CardContent>
           </Card>
         )}
@@ -3115,8 +3131,8 @@ function SwiftManager() {
       <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setSavedImagePath(null); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>上传SWIFT水单</DialogTitle>
-            <DialogDescription>上传SWIFT水单图片，AI将自动识别内容</DialogDescription>
+            <DialogTitle>{tx('上传SWIFT水单', 'Upload SWIFT Record')}</DialogTitle>
+            <DialogDescription>{tx('上传SWIFT水单图片，AI将自动识别内容', 'Upload SWIFT image and let AI recognize content')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             {error && (
@@ -3125,16 +3141,16 @@ function SwiftManager() {
               </Alert>
             )}
             <div>
-              <Label>选择付款明细</Label>
+              <Label>{tx('选择付款明细', 'Select Payment Detail')}</Label>
               <select 
                 className="w-full mt-1 border rounded-md p-2"
                 value={selectedDetailId}
                 onChange={(e) => setSelectedDetailId(e.target.value)}
               >
-                <option value="">请选择...</option>
+                <option value="">{tx('请选择...', 'Please select...')}</option>
                 {waitingDetails.map((detail) => (
                   <option key={detail.id} value={detail.id}>
-                    {detail.date ? new Date(detail.date).toLocaleDateString() : '日期未知'} - ${detail.totalAmount.toFixed(2)}
+                    {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - ${detail.totalAmount.toFixed(2)}
                   </option>
                 ))}
               </select>
@@ -3147,7 +3163,7 @@ function SwiftManager() {
             {uploading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">AI识别中...</span>
+                <span className="ml-2">{tx('AI识别中...', 'AI recognizing...')}</span>
               </div>
             )}
 
@@ -3159,10 +3175,10 @@ function SwiftManager() {
 
             {ocrResult && (
               <div className="space-y-3 border rounded-lg p-4">
-                <h4 className="font-medium">识别结果</h4>
+                <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-sm text-gray-500">汇款金额</Label>
+                    <Label className="text-sm text-gray-500">{tx('汇款金额', 'Amount')}</Label>
                     <Input 
                       type="number"
                       value={(ocrResult.amount as number) || ''} 
@@ -3170,21 +3186,21 @@ function SwiftManager() {
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">汇款日期</Label>
+                    <Label className="text-sm text-gray-500">{tx('汇款日期', 'Transfer Date')}</Label>
                     <Input 
                       value={(ocrResult.date as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">汇款人姓名</Label>
+                    <Label className="text-sm text-gray-500">{tx('汇款人姓名', 'Sender Name')}</Label>
                     <Input 
                       value={(ocrResult.senderName as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, senderName: e.target.value})}
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-500">收款人姓名</Label>
+                    <Label className="text-sm text-gray-500">{tx('收款人姓名', 'Receiver Name')}</Label>
                     <Input 
                       value={(ocrResult.receiverName as string) || ''} 
                       onChange={(e) => setOcrResult({...ocrResult, receiverName: e.target.value})}
@@ -3199,16 +3215,16 @@ function SwiftManager() {
               setShowUpload(false);
               setOcrResult(null);
               setImagePreview(null);
-            }} disabled={submitting}>取消</Button>
+            }} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleConfirm} disabled={!ocrResult || !selectedDetailId || submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  处理中...
+                  {tx('处理中...', 'Processing...')}
                 </>
               ) : (
                 <>
-                  <Check className="h-4 w-4 mr-2" /> 确认创建
+                  <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
                 </>
               )}
             </Button>
@@ -3219,37 +3235,37 @@ function SwiftManager() {
       <Dialog open={showDirectCreate} onOpenChange={setShowDirectCreate}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>直接创建SWIFT</DialogTitle>
-            <DialogDescription>跳过AI识别，手动录入SWIFT信息</DialogDescription>
+            <DialogTitle>{tx('直接创建SWIFT', 'Create SWIFT Directly')}</DialogTitle>
+            <DialogDescription>{tx('跳过AI识别，手动录入SWIFT信息', 'Skip AI and enter SWIFT information manually')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label>关联付款明细</Label>
+              <Label>{tx('关联付款明细', 'Linked Payment Detail')}</Label>
               <select
                 className="w-full mt-1 border rounded-md p-2"
                 value={directForm.detailId}
                 onChange={(e) => setDirectForm((prev) => ({ ...prev, detailId: e.target.value }))}
               >
-                <option value="">请选择...</option>
+                <option value="">{tx('请选择...', 'Please select...')}</option>
                 {waitingDetails.map((detail) => (
                   <option key={detail.id} value={detail.id}>
-                    {detail.date ? new Date(detail.date).toLocaleDateString() : '日期未知'} - ${detail.totalAmount.toFixed(2)}
+                    {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - ${detail.totalAmount.toFixed(2)}
                   </option>
                 ))}
               </select>
             </div>
-            <Input type="number" placeholder="汇款金额" value={directForm.amount} onChange={(e) => setDirectForm((prev) => ({ ...prev, amount: e.target.value }))} />
-            <Input type="date" placeholder="汇款日期" value={directForm.date} onChange={(e) => setDirectForm((prev) => ({ ...prev, date: e.target.value }))} />
-            <Input placeholder="汇款人姓名" value={directForm.senderName} onChange={(e) => setDirectForm((prev) => ({ ...prev, senderName: e.target.value }))} />
-            <Input placeholder="汇款人地址" value={directForm.senderAddress} onChange={(e) => setDirectForm((prev) => ({ ...prev, senderAddress: e.target.value }))} />
-            <Input placeholder="收款人姓名" value={directForm.receiverName} onChange={(e) => setDirectForm((prev) => ({ ...prev, receiverName: e.target.value }))} />
-            <Input placeholder="收款账号" value={directForm.receiverAccount} onChange={(e) => setDirectForm((prev) => ({ ...prev, receiverAccount: e.target.value }))} />
+            <Input type="number" placeholder={tx('汇款金额', 'Amount')} value={directForm.amount} onChange={(e) => setDirectForm((prev) => ({ ...prev, amount: e.target.value }))} />
+            <Input type="date" placeholder={tx('汇款日期', 'Transfer Date')} value={directForm.date} onChange={(e) => setDirectForm((prev) => ({ ...prev, date: e.target.value }))} />
+            <Input placeholder={tx('汇款人姓名', 'Sender Name')} value={directForm.senderName} onChange={(e) => setDirectForm((prev) => ({ ...prev, senderName: e.target.value }))} />
+            <Input placeholder={tx('汇款人地址', 'Sender Address')} value={directForm.senderAddress} onChange={(e) => setDirectForm((prev) => ({ ...prev, senderAddress: e.target.value }))} />
+            <Input placeholder={tx('收款人姓名', 'Receiver Name')} value={directForm.receiverName} onChange={(e) => setDirectForm((prev) => ({ ...prev, receiverName: e.target.value }))} />
+            <Input placeholder={tx('收款账号', 'Receiver Account')} value={directForm.receiverAccount} onChange={(e) => setDirectForm((prev) => ({ ...prev, receiverAccount: e.target.value }))} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>取消</Button>
+            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleDirectCreate}>
               <Check className="h-4 w-4 mr-2" />
-              创建
+              {tx('创建', 'Create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3260,6 +3276,7 @@ function SwiftManager() {
 
 // 删除审批
 function DeletionManager() {
+  const tx = useUiText();
   const { deletionRequests, setDeletionRequests, user } = useStore();
   const canApprove = user?.role === 'ADMIN';
 
@@ -3301,19 +3318,19 @@ function DeletionManager() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">删除审批</h2>
+      <h2 className="text-2xl font-bold">{tx('删除审批', 'Deletion Approval')}</h2>
 
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>类型</TableHead>
-                <TableHead>申请人</TableHead>
-                <TableHead>原因</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>创建时间</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead>{tx('类型', 'Type')}</TableHead>
+                <TableHead>{tx('申请人', 'Requester')}</TableHead>
+                <TableHead>{tx('原因', 'Reason')}</TableHead>
+                <TableHead>{tx('状态', 'Status')}</TableHead>
+                <TableHead>{tx('创建时间', 'Created At')}</TableHead>
+                <TableHead>{tx('操作', 'Actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -3341,7 +3358,7 @@ function DeletionManager() {
               {deletionRequests.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    暂无删除申请
+                    {tx('暂无删除申请', 'No deletion requests')}
                   </TableCell>
                 </TableRow>
               )}
@@ -3355,6 +3372,7 @@ function DeletionManager() {
 
 // 用户管理
 function UserManager() {
+  const tx = useUiText();
   const { users, setUsers, user } = useStore();
   const [showCreate, setShowCreate] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'USER' as 'USER' | 'ADMIN' | 'SALES' });
@@ -3394,21 +3412,21 @@ function UserManager() {
   };
 
   const handleResetPassword = async (userId: string) => {
-    const password = window.prompt('请输入新密码（至少8位）');
+    const password = window.prompt(tx('请输入新密码（至少8位）', 'Please enter a new password (at least 8 characters).'));
     if (!password) return;
     const result = await apiCall('auth', {
       method: 'POST',
       body: JSON.stringify({ action: 'reset-password', userId, password }),
     });
     if (!result.success) {
-      alert(result.error || '重置失败');
+      alert(result.error || tx('重置失败', 'Reset failed'));
     } else {
-      alert('密码已重置');
+      alert(tx('密码已重置', 'Password has been reset.'));
     }
   };
 
   const handleDelete = async (userId: string) => {
-    if (confirm('确定要删除此用户吗？')) {
+    if (confirm(tx('确定要删除此用户吗？', 'Delete this user?'))) {
       await apiCall('auth', {
         method: 'POST',
         body: JSON.stringify({ action: 'delete', userId }),
@@ -3423,7 +3441,7 @@ function UserManager() {
       body: JSON.stringify({ action: 'update-role', userId, role }),
     });
     if (!result.success) {
-      alert(result.error || '角色更新失败');
+      alert(result.error || tx('角色更新失败', 'Failed to update role'));
       return;
     }
     loadUsers();
@@ -3432,10 +3450,10 @@ function UserManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">用户管理</h2>
+        <h2 className="text-2xl font-bold">{tx('用户管理', 'User Management')}</h2>
         <Button onClick={() => setShowCreate(true)}>
           <UserPlus className="h-4 w-4 mr-2" />
-          创建用户
+          {tx('创建用户', 'Create User')}
         </Button>
       </div>
 
@@ -3444,11 +3462,11 @@ function UserManager() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>邮箱</TableHead>
-                <TableHead>姓名</TableHead>
-                <TableHead>角色</TableHead>
-                <TableHead>创建时间</TableHead>
-                <TableHead>操作</TableHead>
+                <TableHead>{tx('邮箱', 'Email')}</TableHead>
+                <TableHead>{tx('姓名', 'Name')}</TableHead>
+                <TableHead>{tx('角色', 'Role')}</TableHead>
+                <TableHead>{tx('创建时间', 'Created At')}</TableHead>
+                <TableHead>{tx('操作', 'Actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -3472,16 +3490,16 @@ function UserManager() {
                       </select>
                     ) : (
                       <Badge variant={user.role === 'ADMIN' ? 'default' : (user.role === 'SALES' ? 'outline' : 'secondary')}>
-                        {user.role === 'ADMIN' ? '管理员' : user.role === 'SALES' ? '销售代表' : '用户'}
+                        {user.role === 'ADMIN' ? tx('管理员', 'Admin') : user.role === 'SALES' ? tx('销售代表', 'Sales') : tx('用户', 'User')}
                       </Badge>
                     )}
                     {isAdmin && isProtectedPrimaryAdmin(user) && (
-                      <div className="text-xs text-gray-500 mt-1">唯一管理员不可修改</div>
+                      <div className="text-xs text-gray-500 mt-1">{tx('唯一管理员不可修改', 'Primary admin role cannot be changed')}</div>
                     )}
                   </TableCell>
                   <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <Button size="sm" variant="ghost" onClick={() => handleResetPassword(user.id)} title="重置密码">
+                    <Button size="sm" variant="ghost" onClick={() => handleResetPassword(user.id)} title={tx('重置密码', 'Reset password')}>
                       <Key className="h-4 w-4" />
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => handleDelete(user.id)}>
@@ -3498,25 +3516,25 @@ function UserManager() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>创建用户</DialogTitle>
+            <DialogTitle>{tx('创建用户', 'Create User')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label>邮箱</Label>
+              <Label>{tx('邮箱', 'Email')}</Label>
               <Input 
                 value={newUser.email} 
                 onChange={(e) => setNewUser({...newUser, email: e.target.value})}
               />
             </div>
             <div>
-              <Label>姓名</Label>
+              <Label>{tx('姓名', 'Name')}</Label>
               <Input 
                 value={newUser.name} 
                 onChange={(e) => setNewUser({...newUser, name: e.target.value})}
               />
             </div>
             <div>
-              <Label>密码</Label>
+              <Label>{tx('密码', 'Password')}</Label>
               <Input 
                 type="password"
                 value={newUser.password} 
@@ -3525,7 +3543,7 @@ function UserManager() {
             </div>
             {user?.role === 'ADMIN' && (
               <div>
-                <Label>角色</Label>
+                <Label>{tx('角色', 'Role')}</Label>
                 <select
                   className="w-full border rounded-md px-3 py-2 text-sm"
                   value={newUser.role}
@@ -3539,8 +3557,8 @@ function UserManager() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
-            <Button onClick={handleCreate}>创建</Button>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>{tx('取消', 'Cancel')}</Button>
+            <Button onClick={handleCreate}>{tx('创建', 'Create')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3549,6 +3567,7 @@ function UserManager() {
 }
 
 function CustomerManager() {
+  const tx = useUiText();
   const { user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
   const [customers, setCustomers] = useState<Array<Record<string, unknown>>>([]);
@@ -3621,7 +3640,7 @@ function CustomerManager() {
     };
     const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
-      alert(result.error || '保存失败');
+      alert(result.error || tx('保存失败', 'Save failed'));
       return;
     }
     setShowCreate(false);
@@ -3632,10 +3651,10 @@ function CustomerManager() {
 
   const handleDelete = async (id: string) => {
     if (!isAdmin) return;
-    if (!confirm('确定删除该客户吗？')) return;
+    if (!confirm(tx('确定删除该客户吗？', 'Delete this customer?'))) return;
     const result = await apiCall('customer', { method: 'POST', body: JSON.stringify({ action: 'delete', id }) });
     if (!result.success) {
-      alert(result.error || '删除失败');
+      alert(result.error || tx('删除失败', 'Delete failed'));
       return;
     }
     loadCustomers();
@@ -3689,7 +3708,7 @@ function CustomerManager() {
     };
     const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
-      alert(result.error || '修复失败');
+      alert(result.error || tx('修复失败', 'Fix failed'));
       return;
     }
     setFixingTarget(null);
@@ -3706,7 +3725,7 @@ function CustomerManager() {
         method: 'GET',
         credentials: 'include',
       });
-      if (!response.ok) throw new Error('模板下载失败');
+      if (!response.ok) throw new Error(tx('模板下载失败', 'Failed to download template'));
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -3715,7 +3734,7 @@ function CustomerManager() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert(error instanceof Error ? error.message : '模板下载失败');
+      alert(error instanceof Error ? error.message : tx('模板下载失败', 'Failed to download template'));
     }
   };
 
@@ -3733,12 +3752,12 @@ function CustomerManager() {
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || '导入失败'}${details}`);
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      alert(result.message || '导入成功');
+      alert(result.message || tx('导入成功', 'Import successful'));
       await loadCustomers();
     } catch (error) {
-      alert(error instanceof Error ? error.message : '导入失败');
+      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
     } finally {
       setCustomerImporting(false);
       if (customerImportInputRef.current) customerImportInputRef.current.value = '';
@@ -3748,7 +3767,7 @@ function CustomerManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">客户管理</h2>
+        <h2 className="text-2xl font-bold">{tx('客户管理', 'Customer Management')}</h2>
         <div className="flex gap-2">
           <input
             ref={customerImportInputRef}
@@ -3762,7 +3781,7 @@ function CustomerManager() {
           />
           <Input placeholder="搜索 mark/order_name/name/phone/city" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
           <Button variant="outline" onClick={downloadCustomerImportTemplate}>
-            下载客户模板
+            {tx('下载客户模板', 'Download Customer Template')}
           </Button>
           <Button
             variant="outline"
@@ -3770,19 +3789,19 @@ function CustomerManager() {
             onClick={() => customerImportInputRef.current?.click()}
           >
             {customerImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            批量上传客户
+            {tx('批量上传客户', 'Bulk Import Customers')}
           </Button>
           <Button onClick={() => { setEditing(null); resetForm(); setShowCreate(true); }}>
             <Plus className="h-4 w-4 mr-2" />
-            新建客户
+            {tx('新建客户', 'New Customer')}
           </Button>
         </div>
       </div>
 
       <Tabs defaultValue="customers">
         <TabsList>
-          <TabsTrigger value="customers">客户列表</TabsTrigger>
-          <TabsTrigger value="fixes">待修复客户信息</TabsTrigger>
+          <TabsTrigger value="customers">{tx('客户列表', 'Customer List')}</TabsTrigger>
+          <TabsTrigger value="fixes">{tx('待修复客户信息', 'Customer Fix Queue')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="customers">
@@ -3800,7 +3819,7 @@ function CustomerManager() {
                     {canSeeExtended && <TableHead>COMPANY_NAME</TableHead>}
                     {canSeeExtended && <TableHead>CREDIT</TableHead>}
                     {canSeeExtended && <TableHead>COMPANY_ADDRESS</TableHead>}
-                    <TableHead>操作</TableHead>
+                    <TableHead>{tx('操作', 'Actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -3837,7 +3856,7 @@ function CustomerManager() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle>待修复 ORDER</CardTitle>
+                <CardTitle>{tx('待修复 ORDER', 'Orders To Fix')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {fixOrders.map((row) => (
@@ -3846,16 +3865,16 @@ function CustomerManager() {
                       <div className="font-medium">{String(row.orderNo || '-')}</div>
                       <div className="text-xs text-red-500">please modify guest information</div>
                     </div>
-                    <Button size="sm" onClick={() => openFix('order', row)}>修复</Button>
+                    <Button size="sm" onClick={() => openFix('order', row)}>{tx('修复', 'Fix')}</Button>
                   </div>
                 ))}
-                {fixOrders.length === 0 && <p className="text-sm text-gray-500">暂无</p>}
+                {fixOrders.length === 0 && <p className="text-sm text-gray-500">{tx('暂无', 'None')}</p>}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>待修复 RECEIPT</CardTitle>
+                <CardTitle>{tx('待修复 RECEIPT', 'Receipts To Fix')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {fixReceipts.map((row) => (
@@ -3864,10 +3883,10 @@ function CustomerManager() {
                       <div className="font-medium">{String(row.receiptNo || row.orderNo || '-')}</div>
                       <div className="text-xs text-red-500">please modify guest information</div>
                     </div>
-                    <Button size="sm" onClick={() => openFix('receipt', row)}>修复</Button>
+                    <Button size="sm" onClick={() => openFix('receipt', row)}>{tx('修复', 'Fix')}</Button>
                   </div>
                 ))}
-                {fixReceipts.length === 0 && <p className="text-sm text-gray-500">暂无</p>}
+                {fixReceipts.length === 0 && <p className="text-sm text-gray-500">{tx('暂无', 'None')}</p>}
               </CardContent>
             </Card>
           </div>
@@ -3877,7 +3896,7 @@ function CustomerManager() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editing ? '编辑客户' : '创建客户'}</DialogTitle>
+            <DialogTitle>{editing ? tx('编辑客户', 'Edit Customer') : tx('创建客户', 'Create Customer')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
@@ -3895,8 +3914,8 @@ function CustomerManager() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
-            <Button onClick={handleCreateOrUpdate}>保存</Button>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>{tx('取消', 'Cancel')}</Button>
+            <Button onClick={handleCreateOrUpdate}>{tx('保存', 'Save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3904,7 +3923,7 @@ function CustomerManager() {
       <Dialog open={!!fixingTarget} onOpenChange={(open) => { if (!open) setFixingTarget(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>修复客户信息并加入客户库</DialogTitle>
+            <DialogTitle>{tx('修复客户信息并加入客户库', 'Fix Customer Info And Save')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
@@ -3922,8 +3941,8 @@ function CustomerManager() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFixingTarget(null)}>取消</Button>
-            <Button onClick={submitFix}>修复并保存</Button>
+            <Button variant="outline" onClick={() => setFixingTarget(null)}>{tx('取消', 'Cancel')}</Button>
+            <Button onClick={submitFix}>{tx('修复并保存', 'Fix And Save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3932,6 +3951,7 @@ function CustomerManager() {
 }
 
 function SettingsManager() {
+  const tx = useUiText();
   const { user } = useStore();
   const [loading, setLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -3974,12 +3994,12 @@ function SettingsManager() {
         body: JSON.stringify({ action: 'update-config', settings: config }),
       });
       if (result.success) {
-        setMessage(result.message || '配置已保存');
+        setMessage(result.message || tx('配置已保存', 'Configuration saved'));
       } else {
-        setError(result.error || '保存失败');
+        setError(result.error || tx('保存失败', 'Save failed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败');
+      setError(err instanceof Error ? err.message : tx('保存失败', 'Save failed'));
     } finally {
       setSavingConfig(false);
     }
@@ -3997,13 +4017,13 @@ function SettingsManager() {
       });
       if (result.success) {
         const detail = typeof result.detail === 'string' && result.detail ? ` | ${result.detail}` : '';
-        setMessage(`${result.message || 'OCR 测试成功'}${detail}`);
+        setMessage(`${result.message || tx('OCR 测试成功', 'OCR test succeeded')}${detail}`);
       } else {
         const detail = typeof result.detail === 'string' && result.detail ? ` | ${result.detail}` : '';
-        setError(`${result.error || 'OCR 测试失败'}${detail}`);
+        setError(`${result.error || tx('OCR 测试失败', 'OCR test failed')}${detail}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'OCR 测试失败');
+      setError(err instanceof Error ? err.message : tx('OCR 测试失败', 'OCR test failed'));
     } finally {
       setTestingConfig(false);
     }
@@ -4013,11 +4033,11 @@ function SettingsManager() {
     setError(null);
     setMessage(null);
     if (!pwd.oldPassword || !pwd.newPassword || !pwd.confirmPassword) {
-      setError('请填写完整密码信息');
+      setError(tx('请填写完整密码信息', 'Please complete all password fields.'));
       return;
     }
     if (pwd.newPassword !== pwd.confirmPassword) {
-      setError('两次输入的新密码不一致');
+      setError(tx('两次输入的新密码不一致', 'The new passwords do not match.'));
       return;
     }
     setPasswordLoading(true);
@@ -4032,12 +4052,12 @@ function SettingsManager() {
       });
       if (result.success) {
         setPwd({ oldPassword: '', newPassword: '', confirmPassword: '' });
-        setMessage(result.message || '密码修改成功');
+        setMessage(result.message || tx('密码修改成功', 'Password updated successfully'));
       } else {
-        setError(result.error || '密码修改失败');
+        setError(result.error || tx('密码修改失败', 'Password update failed'));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '密码修改失败');
+      setError(err instanceof Error ? err.message : tx('密码修改失败', 'Password update failed'));
     } finally {
       setPasswordLoading(false);
     }
@@ -4049,7 +4069,7 @@ function SettingsManager() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">设置</h2>
+      <h2 className="text-2xl font-bold">{tx('设置', 'Settings')}</h2>
       {(error || message) && (
         <Alert variant={error ? 'destructive' : 'default'}>
           <AlertDescription>{error || message}</AlertDescription>
@@ -4058,25 +4078,25 @@ function SettingsManager() {
 
       <Card>
         <CardHeader>
-          <CardTitle>修改密码</CardTitle>
-          <CardDescription>当前账号：{user?.email}</CardDescription>
+          <CardTitle>{tx('修改密码', 'Change Password')}</CardTitle>
+          <CardDescription>{tx('当前账号：', 'Current Account: ')}{user?.email}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
             type="password"
-            placeholder="旧密码"
+            placeholder={tx('旧密码', 'Current password')}
             value={pwd.oldPassword}
             onChange={(e) => setPwd((prev) => ({ ...prev, oldPassword: e.target.value }))}
           />
           <Input
             type="password"
-            placeholder="新密码（至少8位）"
+            placeholder={tx('新密码（至少8位）', 'New password (at least 8 chars)')}
             value={pwd.newPassword}
             onChange={(e) => setPwd((prev) => ({ ...prev, newPassword: e.target.value }))}
           />
           <Input
             type="password"
-            placeholder="确认新密码"
+            placeholder={tx('确认新密码', 'Confirm new password')}
             value={pwd.confirmPassword}
             onChange={(e) => setPwd((prev) => ({ ...prev, confirmPassword: e.target.value }))}
           />
@@ -4084,7 +4104,7 @@ function SettingsManager() {
             <Button onClick={handleChangePassword} disabled={passwordLoading}>
               {passwordLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Key className="h-4 w-4 mr-2" />
-              保存新密码
+              {tx('保存新密码', 'Save Password')}
             </Button>
           </div>
         </CardContent>
@@ -4092,8 +4112,8 @@ function SettingsManager() {
 
       <Card>
         <CardHeader>
-          <CardTitle>系统配置</CardTitle>
-          <CardDescription>配置通过设置按钮修改，保存后立即生效（管理员权限）</CardDescription>
+          <CardTitle>{tx('系统配置', 'System Configuration')}</CardTitle>
+          <CardDescription>{tx('配置通过设置按钮修改，保存后立即生效（管理员权限）', 'Configuration changes are applied immediately (admin only).')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {loading ? (
@@ -4163,15 +4183,15 @@ function SettingsManager() {
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={handleTestOcrConfig} disabled={!canEditConfig || testingConfig}>
                   {testingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  测试OCR连通
+                  {tx('测试OCR连通', 'Test OCR Connection')}
                 </Button>
                 <Button onClick={handleSaveConfig} disabled={!canEditConfig || savingConfig}>
                   {savingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   <Save className="h-4 w-4 mr-2" />
-                  保存系统配置
+                  {tx('保存系统配置', 'Save Configuration')}
                 </Button>
               </div>
-              {!canEditConfig && <p className="text-sm text-gray-500">仅管理员可编辑系统配置。</p>}
+              {!canEditConfig && <p className="text-sm text-gray-500">{tx('仅管理员可编辑系统配置。', 'Only admins can edit system configuration.')}</p>}
             </>
           )}
         </CardContent>

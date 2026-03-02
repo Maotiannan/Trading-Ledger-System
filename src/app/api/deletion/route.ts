@@ -7,6 +7,8 @@ import { canAccessOwnedResource, forbiddenOwnershipResponse } from '@/lib/owners
 import { recordAuditEvent } from '@/lib/audit';
 import { updateOrderBalance } from '@/lib/matching';
 
+const AUTO_DETAIL_RECEIPT_NOTES = new Set(['由付款明细自动创建', '由付款明细直接创建']);
+
 // 获取删除申请列表
 export const GET = withAuth(async (_request: NextRequest, currentUser) => {
   try {
@@ -49,6 +51,17 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     if (action === 'request') {
       if (!targetType || !targetId) {
         return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
+      }
+
+      const existingRequest = await db.deletionRequest.findFirst({
+        where: { targetType, targetId },
+        select: { id: true, status: true },
+      });
+      if (existingRequest) {
+        return NextResponse.json(
+          { success: false, error: `该记录已存在删除申请（${existingRequest.status}），不可重复申请` },
+          { status: 400 }
+        );
       }
 
       // 检查目标是否存在
@@ -231,9 +244,24 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         } else if (targetType === 'DETAIL') {
           const detail = await tx.detail.findUnique({
             where: { id: targetId },
-            include: { items: true }
+            include: { items: true, swift: true }
           });
           if (detail) {
+            const receiptIds = Array.from(
+              new Set(detail.items.map((item) => item.receiptId).filter((id): id is string => Boolean(id)))
+            );
+            const receipts = receiptIds.length > 0
+              ? await tx.receipt.findMany({
+                  where: { id: { in: receiptIds } },
+                  select: {
+                    id: true,
+                    note: true,
+                    orderId: true,
+                    createdBy: true,
+                  },
+                })
+              : [];
+
             for (const item of detail.items) {
               if (item.receiptId) {
                 await tx.receipt.update({
@@ -245,6 +273,67 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
             await tx.detailItem.deleteMany({ where: { detailId: targetId } });
             await tx.detail.delete({ where: { id: targetId } });
+
+            const affectedOrderIds = new Set<string>();
+            const autoOrderCandidates = new Set<string>();
+            for (const receipt of receipts) {
+              if (receipt.orderId) {
+                affectedOrderIds.add(receipt.orderId);
+              }
+
+              const isAutoCreatedByDetail =
+                AUTO_DETAIL_RECEIPT_NOTES.has(String(receipt.note || '')) &&
+                receipt.createdBy === detail.createdBy;
+              if (!isAutoCreatedByDetail) {
+                continue;
+              }
+
+              const stillLinkedCount = await tx.detailItem.count({
+                where: { receiptId: receipt.id },
+              });
+              if (stillLinkedCount > 0) {
+                continue;
+              }
+
+              await tx.receipt.delete({ where: { id: receipt.id } });
+              if (receipt.orderId) {
+                autoOrderCandidates.add(receipt.orderId);
+              }
+            }
+
+            for (const orderId of autoOrderCandidates) {
+              const order = await tx.order.findUnique({
+                where: { id: orderId },
+                include: {
+                  invoice: { select: { invNo: true } },
+                  _count: { select: { receipts: true } },
+                },
+              });
+              if (!order) continue;
+              if (order.invoice.invNo !== 'Un_Associated') continue;
+              if (order.amount !== 0) continue;
+              if (order._count.receipts > 0) continue;
+
+              await tx.order.delete({ where: { id: orderId } });
+              affectedOrderIds.delete(orderId);
+            }
+
+            for (const orderId of affectedOrderIds) {
+              const order = await tx.order.findUnique({
+                where: { id: orderId },
+                select: { amount: true },
+              });
+              if (!order) continue;
+              const receiptAgg = await tx.receipt.aggregate({
+                where: { orderId },
+                _sum: { usd: true },
+              });
+              const receiptSum = receiptAgg._sum.usd ?? 0;
+              await tx.order.update({
+                where: { id: orderId },
+                data: { orderBalance: order.amount - receiptSum },
+              });
+            }
           }
         } else if (targetType === 'SWIFT') {
           const swift = await tx.swift.findUnique({ where: { id: targetId } });

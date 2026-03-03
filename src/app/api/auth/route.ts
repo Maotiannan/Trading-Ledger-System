@@ -280,7 +280,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: '仅可删除下级用户' }, { status: 403 });
       }
 
-      await db.user.delete({ where: { id: userId } });
+      await db.$transaction(async (tx) => {
+        // Reassign creator ownership to current operator before deleting user
+        // to avoid foreign key violations on createdBy fields.
+        await tx.invoice.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.order.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.receipt.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.receiptHistory.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.detail.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.detailHistory.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.swift.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.customer.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.deletionRequest.updateMany({ where: { requestedBy: userId }, data: { requestedBy: currentUser.id } });
+        await tx.auditLog.updateMany({ where: { actorId: userId }, data: { actorId: currentUser.id } });
+        await tx.user.delete({ where: { id: userId } });
+      });
       return NextResponse.json({ success: true, message: '用户已删除' });
     }
 

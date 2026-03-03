@@ -622,6 +622,10 @@ src/
 
 ## 更新日志
 
+### v1.0.17 (2026-03-03)
+- 🧯 修复管理员删除用户 500：删除前自动重挂该用户创建的业务数据 `createdBy` 到当前操作者，再执行删除，避免外键约束 (`P2003`) 失败。
+- ✅ 用户删除链路稳定化：覆盖 `Invoice/Order/Receipt/Detail/SWIFT/Customer/History/DeletionRequest/AuditLog` 的创建者重挂。
+
 ### v1.0.16 (2026-03-02)
 - 🔐 账单“刷新匹配”权限收敛：`rematch-preview` / `rematch-apply` / `rematch` 仅在当前账号可见范围内执行，不再扫描或改动全库数据。
 - 🧭 `updateOrder` 触发的自动 rematch 同步改为当前账号可见范围内执行，避免跨账号影响。

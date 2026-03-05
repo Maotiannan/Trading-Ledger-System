@@ -11,6 +11,7 @@ import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
+import { customerAccessWhere } from '@/lib/customer-scope';
 
 function parseDateInput(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -301,10 +302,40 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         return NextResponse.json({ success: false, error: `模板缺少列: ${missing.join(', ')}` }, { status: 400 });
       }
 
+      const scope = await getHierarchyScope(currentUser);
+      const ownerIds = Array.from(scope.ownerVisibleIds);
+      const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
+      const customerVisibilityWhere = customerAccessWhere(currentUser);
+      const visibleOrders = await db.order.findMany({
+        where: orderVisibilityWhere,
+        select: {
+          id: true,
+          orderNo: true,
+          customerId: true,
+          customerMark: true,
+          customerName: true,
+        },
+      });
+      const orderById = new Map(visibleOrders.map((row) => [row.id, row]));
+      const groupMarkMap = new Map<string, Array<{ customerMark: string; customerName: string | null; customerId: string | null }>>();
+      for (const row of visibleOrders) {
+        const groupKey = deriveOrderGroupKey(row.orderNo);
+        if (!groupKey || !row.customerMark) continue;
+        if (!groupMarkMap.has(groupKey)) groupMarkMap.set(groupKey, []);
+        groupMarkMap.get(groupKey)!.push({
+          customerMark: row.customerMark,
+          customerName: row.customerName || null,
+          customerId: row.customerId || null,
+        });
+      }
+      const customerByMarkCache = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
+      const inferCache = new Map<string, { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string }>();
+
       const grouped = new Map<string, {
         shipDate: Date | null | undefined;
         releaseDate: Date | null | undefined;
         rows: Array<{ orderNo: string; amount: number; customerMark: string; customerName?: string; customerId?: string }>;
+        rowNos: number[];
       }>();
       const errors: string[] = [];
 
@@ -315,11 +346,11 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         const releaseDateRaw = headerMap.get('RELEASE_DATE') ? String(row.getCell(headerMap.get('RELEASE_DATE')!).value || '').trim() : '';
         const orderNo = String(row.getCell(headerMap.get('ORDER_NO')!).value || '').trim();
         const amountRaw = String(row.getCell(headerMap.get('AMOUNT')!).value || '').trim();
-        const customerMark = String(row.getCell(headerMap.get('CUSTOMER_MARK')!).value || '').trim();
+        let customerMark = String(row.getCell(headerMap.get('CUSTOMER_MARK')!).value || '').trim();
         const customerOrderNameCol = headerMap.get('CUSTOMER_ORDER_NAME');
         const customerIdCol = headerMap.get('CUSTOMER_ID');
-        const customerName = customerOrderNameCol ? String(row.getCell(customerOrderNameCol).value || '').trim() : '';
-        const customerId = customerIdCol ? String(row.getCell(customerIdCol).value || '').trim() : '';
+        let customerName = customerOrderNameCol ? String(row.getCell(customerOrderNameCol).value || '').trim() : '';
+        let customerId = customerIdCol ? String(row.getCell(customerIdCol).value || '').trim() : '';
 
         if (!invNo && !orderNo && !amountRaw && !customerMark && !shipDateRaw && !releaseDateRaw) continue;
 
@@ -329,10 +360,84 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         const releaseDate = releaseDateRaw ? parseDateInput(releaseDateRaw) : undefined;
         if (!invNo) rowErrors.push(`第${rowNo}行 INV_NO 不能为空`);
         if (!orderNo) rowErrors.push(`第${rowNo}行 ORDER_NO 不能为空`);
-        if (!customerMark) rowErrors.push(`第${rowNo}行 CUSTOMER_MARK 不能为空`);
         if (!Number.isFinite(amount) || amount <= 0) rowErrors.push(`第${rowNo}行 AMOUNT 必须大于0`);
         if (shipDateRaw && shipDate === undefined) rowErrors.push(`第${rowNo}行 SHIP_DATE 格式错误，应为 YYYY-MM-DD`);
         if (releaseDateRaw && releaseDate === undefined) rowErrors.push(`第${rowNo}行 RELEASE_DATE 格式错误，应为 YYYY-MM-DD`);
+        if (!customerMark && orderNo) {
+          const cacheKey = orderNo.toLowerCase();
+          if (!inferCache.has(cacheKey)) {
+            const inferResult: { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string } = { matched: false };
+            const matchedOrderId = await findOrderIdByNoOrAlias(orderNo, orderVisibilityWhere);
+            if (matchedOrderId) {
+              const matchedOrder = orderById.get(matchedOrderId);
+              if (matchedOrder?.customerMark) {
+                inferResult.matched = true;
+                inferResult.customerMark = matchedOrder.customerMark;
+                inferResult.customerName = matchedOrder.customerName || '';
+                inferResult.customerId = matchedOrder.customerId || '';
+              }
+            }
+            if (!inferResult.matched) {
+              const groupKey = deriveOrderGroupKey(orderNo);
+              if (groupKey) {
+                const groupedMarks = groupMarkMap.get(groupKey) || [];
+                const uniq = new Map<string, { customerMark: string; customerName: string | null; customerId: string | null }>();
+                for (const candidate of groupedMarks) {
+                  if (!candidate.customerMark) continue;
+                  const key = candidate.customerMark.toLowerCase();
+                  if (!uniq.has(key)) uniq.set(key, candidate);
+                }
+                if (uniq.size === 1) {
+                  const selected = Array.from(uniq.values())[0];
+                  inferResult.matched = true;
+                  inferResult.customerMark = selected.customerMark;
+                  inferResult.customerName = selected.customerName || '';
+                  inferResult.customerId = selected.customerId || '';
+                } else if (uniq.size > 1) {
+                  inferResult.reason = `第${rowNo}行 ORDER_NO=${orderNo} 无法自动匹配MARK：同组存在多个MARK`;
+                } else {
+                  const markKey = groupKey.toLowerCase();
+                  if (!customerByMarkCache.has(markKey)) {
+                    const customers = await db.customer.findMany({
+                      where: {
+                        AND: [
+                          customerVisibilityWhere,
+                          { mark: { equals: groupKey } },
+                        ],
+                      },
+                      select: { id: true, mark: true, orderName: true },
+                    });
+                    customerByMarkCache.set(markKey, customers);
+                  }
+                  const customers = customerByMarkCache.get(markKey) || [];
+                  if (customers.length === 1) {
+                    const selected = customers[0];
+                    inferResult.matched = true;
+                    inferResult.customerMark = selected.mark;
+                    inferResult.customerName = selected.orderName || '';
+                    inferResult.customerId = selected.id;
+                  } else if (customers.length > 1) {
+                    inferResult.reason = `第${rowNo}行 ORDER_NO=${orderNo} 无法自动匹配MARK：客户库同MARK存在多条`;
+                  } else {
+                    inferResult.reason = `第${rowNo}行 ORDER_NO=${orderNo} 无法自动匹配MARK：客户库无匹配`;
+                  }
+                }
+              } else {
+                inferResult.reason = `第${rowNo}行 ORDER_NO=${orderNo} 无法自动匹配MARK：ORDER格式不支持分组匹配`;
+              }
+            }
+            inferCache.set(cacheKey, inferResult);
+          }
+
+          const inferred = inferCache.get(cacheKey)!;
+          if (inferred.matched && inferred.customerMark) {
+            customerMark = inferred.customerMark;
+            if (!customerName && inferred.customerName) customerName = inferred.customerName;
+            if (!customerId && inferred.customerId) customerId = inferred.customerId;
+          } else {
+            rowErrors.push(inferred.reason || `第${rowNo}行 CUSTOMER_MARK 为空且无法自动匹配`);
+          }
+        }
         if (rowErrors.length > 0) {
           errors.push(...rowErrors);
           continue;
@@ -343,6 +448,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
             shipDate,
             releaseDate,
             rows: [],
+            rowNos: [],
           });
         }
         const bucket = grouped.get(invNo)!;
@@ -355,16 +461,20 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
           customerName: customerName || undefined,
           customerId: customerId || undefined,
         });
+        bucket.rowNos.push(rowNo);
       }
 
-      if (errors.length > 0) {
-        return NextResponse.json({ success: false, error: 'Excel校验失败', details: errors.slice(0, 200) }, { status: 400 });
-      }
       if (grouped.size === 0) {
-        return NextResponse.json({ success: false, error: '没有可导入的数据行' }, { status: 400 });
+        return NextResponse.json({
+          success: false,
+          error: '没有可导入的数据行',
+          details: errors.slice(0, 200),
+        }, { status: 400 });
       }
 
       const messages: string[] = [];
+      const importErrors: string[] = [];
+      let successCount = 0;
       for (const [invNo, group] of grouped.entries()) {
         const saved = await saveInvoiceWithOrders({
           invNo,
@@ -374,11 +484,28 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
           releaseDate: group.releaseDate,
         });
         if (!saved.ok) {
-          return NextResponse.json({ success: false, error: `导入失败(INV_NO=${invNo}): ${saved.error}` }, { status: saved.status });
+          importErrors.push(`INV_NO=${invNo} 导入失败（行${group.rowNos.join(',')}）：${saved.error}`);
+          continue;
         }
         messages.push(`${invNo}: ${saved.message}`);
+        successCount++;
       }
-      return NextResponse.json({ success: true, message: `导入完成，共 ${grouped.size} 个账单`, details: messages });
+
+      const allErrors = [...errors, ...importErrors];
+      if (successCount === 0) {
+        return NextResponse.json({
+          success: false,
+          error: '导入失败：没有成功导入的账单',
+          details: allErrors.slice(0, 200),
+        }, { status: 400 });
+      }
+
+      const summary = `导入完成：成功 ${successCount} 个账单，失败 ${allErrors.length} 行/项`;
+      return NextResponse.json({
+        success: true,
+        message: summary,
+        details: allErrors.length > 0 ? allErrors.slice(0, 200) : messages,
+      });
     }
 
     const body = await request.json();

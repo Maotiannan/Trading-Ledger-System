@@ -630,7 +630,10 @@ function InvoiceManager() {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      alert(result.message || tx('导入成功', 'Import successful'));
+      const details = Array.isArray(result?.details) && result.details.length > 0
+        ? `\n${result.details.join('\n')}`
+        : '';
+      alert(`${result.message || tx('导入成功', 'Import successful')}${details}`);
       await loadInvoices();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));

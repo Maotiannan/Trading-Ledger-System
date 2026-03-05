@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.18  
+> 当前版本：v1.0.19  
 > 最后更新：2026-03-05
 
 ## P0（本周必须完成）
@@ -38,6 +38,9 @@
 - [x] 组合 ORDER（如 `IB-31A/IB-32/IB-33B`）支持子订单匹配统一结算 ✅ 2026-03-05
 - [x] 收据/付款明细 direct-create 默认日期改为服务器当日 ✅ 2026-03-05
 - [x] i18n 补齐：客户占位文案、客户修复提示与 API 错误中译英映射增强 ✅ 2026-03-05
+- [x] 客户归属隔离：新增 `ownerId` 绑定，`ADMIN` 全量可见，`SALES` 仅可见并维护自身绑定客户池 ✅ 2026-03-05
+- [x] 客户唯一性规则调整：取消 `name` 全局唯一，改为同池 `ORDER_NAME/PHONE/COMPANY_NAME` 去重，跨池允许重复 ✅ 2026-03-05
+- [x] 客户批量导入升级：逐行容错 + 同池自动 upsert（新增/更新/失败统计）✅ 2026-03-05
 - [ ] 增加请求体大小限制（Next.js + Caddy 双层，防 DoS）
 - [ ] 对高风险写接口增加速率限制（登录、上传、删除审批）
 
@@ -46,6 +49,7 @@
 - [x] 新增 `api-catalog` 一致性测试 ✅ 2026-03-02
 - [x] 更新 API 冒烟脚本（补未登录鉴权检查）✅ 2026-03-02
 - [x] 新增 `i18n:audit` 巡检脚本（扫描硬编码中文）✅ 2026-03-02
+- [x] 新增 `customer` 归属/去重 API 自动化脚本（`scripts/test-customer-scope-api.sh`）✅ 2026-03-05
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -85,6 +89,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.19（2026-03-05）：Customer 引入 owner 绑定隔离；取消 name 唯一并改为同池 ORDER_NAME/PHONE/COMPANY_NAME 去重；批量导入改为逐行容错 upsert；新增 customer scope API 自动化脚本
 - v1.0.18（2026-03-05）：客户导入/新建规则修复（consignee 可空、credit=0、长文本支持），INV 新增 SHIP/RELEASE 日期，组合 ORDER 子单号匹配统一结算，direct-create 默认服务器日期
 - v1.0.17（2026-03-03）：修复删除用户外键冲突（createdBy 重挂后再删除），消除 `/api/auth` 删除 500
 - v1.0.16（2026-03-02）：rematch 仅在当前账号可见范围执行，避免跨账号影响

@@ -622,6 +622,14 @@ src/
 
 ## 更新日志
 
+### v1.0.19 (2026-03-05)
+- 👤 客户归属模型升级：`Customer` 新增 `ownerId` 绑定（默认绑定当前创建者），用于隔离 customer 可见/可编辑范围；`ADMIN` 可查看全部，`SALES` 仅可查看并维护自己绑定池。
+- 🧱 客户唯一性规则重构：`Customer.name` 取消唯一限制；改为同一绑定池内 `ORDER_NAME/PHONE/COMPANY_NAME` 不允许重复，不同绑定池允许重复。
+- 📥 批量导入健壮性增强：客户 Excel 导入改为逐行容错处理，支持按同池唯一键自动“更新已存在客户”而非整批失败；返回新增/更新/失败统计与失败明细。
+- 🛠️ 客户写接口稳定化：`create/update/customer-fixes` 统一接入同池冲突校验与 Prisma 错误映射，避免直接暴露底层数据库报错。
+- 🧾 客户字段兼容升级：`name/companyName/companyAddress` 升级为 `TEXT`，降低长文本导入触发列长度报错风险。
+- 🧪 新增 API 自动化用例：`scripts/test-customer-scope-api.sh` 覆盖 customer 同池去重、跨池可重复、导入 upsert 与 sales 可见性验证。
+
 ### v1.0.18 (2026-03-05)
 - 👥 客户管理规则调整：`CONSIGNEE` 改为可空，`CREDIT` 支持 `0`（禁止负数）；修复批量导入/新建客户时 `consignee` 长度超限导致的 Prisma 列类型报错。
 - 🧾 INV 字段增强：新增 `SHIP_DATE` 与 `RELEASE_DATE`（非必填，支持创建与 Excel 导入可空），账单管理展示由“创建时间”改为显示 SHIP/RELEASE。

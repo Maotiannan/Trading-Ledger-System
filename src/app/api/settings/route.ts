@@ -166,7 +166,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         select: { id: true },
       }),
       db.customer.findMany({
-        where: { createdBy: { in: branchUserIds } },
+        where: {
+          OR: [
+            { createdBy: { in: branchUserIds } },
+            { ownerId: { in: branchUserIds } },
+          ],
+        },
         select: { id: true },
       }),
     ]);
@@ -223,7 +228,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       await tx.detail.deleteMany({ where: { createdBy: { in: branchUserIds } } });
       await tx.receipt.deleteMany({ where: { createdBy: { in: branchUserIds } } });
       await tx.order.deleteMany({ where: { createdBy: { in: branchUserIds } } });
-      await tx.customer.deleteMany({ where: { createdBy: { in: branchUserIds } } });
+      await tx.customer.deleteMany({
+        where: {
+          OR: [
+            { createdBy: { in: branchUserIds } },
+            { ownerId: { in: branchUserIds } },
+          ],
+        },
+      });
 
       if (touchedInvoiceIds.length > 0) {
         await tx.invoice.deleteMany({

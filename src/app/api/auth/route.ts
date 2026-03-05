@@ -291,6 +291,7 @@ export async function POST(request: NextRequest) {
         await tx.detailHistory.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
         await tx.swift.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
         await tx.customer.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
+        await tx.customer.updateMany({ where: { ownerId: userId }, data: { ownerId: currentUser.id } });
         await tx.deletionRequest.updateMany({ where: { requestedBy: userId }, data: { requestedBy: currentUser.id } });
         await tx.auditLog.updateMany({ where: { actorId: userId }, data: { actorId: currentUser.id } });
         await tx.user.delete({ where: { id: userId } });

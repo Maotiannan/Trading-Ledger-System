@@ -78,7 +78,8 @@ model User {
   details           Detail[]
   detailHistories   DetailHistory[]
   swifts            Swift[]
-  customers         Customer[]
+  createdCustomers  Customer[]        @relation("CustomerCreatedBy")
+  ownedCustomers    Customer[]        @relation("CustomerOwner")
   deletionRequests  DeletionRequest[]
   deletionApprovals DeletionRequest[] @relation("ApprovedBy")
   auditLogs         AuditLog[]
@@ -313,23 +314,26 @@ model Customer {
   id             String   @id @default(cuid())
   mark           String
   orderName      String   @map("order_name")
-  name           String   @unique
+  name           String   @db.Text
   phone          String
   city           String
   consignee      String?  @db.Text
-  companyName    String?
+  companyName    String?  @db.Text
   credit         Decimal? @db.Decimal(18, 2)
-  companyAddress String?
+  companyAddress String?  @db.Text
   createdBy      String
+  ownerId        String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  creator User @relation("CustomerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  owner   User @relation("CustomerOwner", fields: [ownerId], references: [id])
   orders  Order[]
   receipts Receipt[]
 
   @@index([mark])
   @@index([orderName])
+  @@index([ownerId])
 }
 
 // ==================== 删除申请表 ====================

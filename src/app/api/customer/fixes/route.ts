@@ -4,6 +4,12 @@ import { db } from '@/lib/db';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
 import { deriveOrderGroupKey } from '@/lib/order-group';
+import {
+  assertNoCustomerScopeConflict,
+  mapPrismaWriteError,
+  resolveCustomerOwnerId,
+  resolveCustomerUpsertTargetId,
+} from '@/lib/customer-scope';
 
 function trimStr(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -53,18 +59,28 @@ function parsePayload(body: Record<string, unknown>): FixCustomerPayload | { err
   return { mark, orderName, name, phone, city, consignee, companyName, companyAddress, credit };
 }
 
-async function upsertCustomer(currentUserId: string, role: UserRole, payload: FixCustomerPayload) {
-  const existing = await db.customer.findFirst({
-      where: {
-        mark: { equals: payload.mark },
-      orderName: { equals: payload.orderName },
-      },
+async function upsertCustomer(currentUserId: string, role: UserRole, payload: FixCustomerPayload, ownerId: string) {
+  const allowExtended = role === UserRole.ADMIN || (await salesCanEditExtended());
+  const scopedCompanyName = allowExtended ? payload.companyName : null;
+
+  const targetId = await resolveCustomerUpsertTargetId(ownerId, {
+    orderName: payload.orderName,
+    phone: payload.phone,
+    companyName: scopedCompanyName,
   });
 
-  const allowExtended = role === UserRole.ADMIN || (await salesCanEditExtended());
-
-  if (!existing) {
-    return db.customer.create({
+  if (targetId) {
+    await assertNoCustomerScopeConflict(
+      ownerId,
+      {
+        orderName: payload.orderName,
+        phone: payload.phone,
+        companyName: scopedCompanyName,
+      },
+      targetId
+    );
+    return db.customer.update({
+      where: { id: targetId },
       data: {
         mark: payload.mark,
         orderName: payload.orderName,
@@ -72,41 +88,50 @@ async function upsertCustomer(currentUserId: string, role: UserRole, payload: Fi
         phone: payload.phone,
         city: payload.city,
         consignee: payload.consignee,
-        companyName: allowExtended ? payload.companyName : null,
-        companyAddress: allowExtended ? payload.companyAddress : null,
-        credit: allowExtended ? payload.credit : null,
-        createdBy: currentUserId,
+        ownerId,
+        ...(allowExtended
+          ? {
+              companyName: payload.companyName,
+              companyAddress: payload.companyAddress,
+              credit: payload.credit,
+            }
+          : {}),
       },
     });
   }
 
-  return db.customer.update({
-    where: { id: existing.id },
+  await assertNoCustomerScopeConflict(ownerId, {
+    orderName: payload.orderName,
+    phone: payload.phone,
+    companyName: scopedCompanyName,
+  });
+  return db.customer.create({
     data: {
+      mark: payload.mark,
+      orderName: payload.orderName,
       name: payload.name,
       phone: payload.phone,
       city: payload.city,
-      orderName: payload.orderName,
       consignee: payload.consignee,
-      ...(allowExtended
-        ? {
-            companyName: payload.companyName,
-            companyAddress: payload.companyAddress,
-            credit: payload.credit,
-          }
-        : {}),
+      companyName: allowExtended ? payload.companyName : null,
+      companyAddress: allowExtended ? payload.companyAddress : null,
+      credit: allowExtended ? payload.credit : null,
+      createdBy: currentUserId,
+      ownerId,
     },
   });
 }
 
 async function syncSameGroupCustomer(
   baseOrderNo: string | null | undefined,
-  customer: { id: string; mark: string; name: string; orderName: string; phone: string; city: string }
+  customer: { id: string; mark: string; name: string; orderName: string; phone: string; city: string },
+  ownerId?: string
 ) {
   const groupKey = deriveOrderGroupKey(baseOrderNo);
   if (!groupKey) return 0;
 
   const allOrders = await db.order.findMany({
+    where: ownerId ? { createdBy: ownerId } : undefined,
     select: { id: true, orderNo: true },
   });
   const targetOrderIds = allOrders
@@ -139,6 +164,7 @@ async function syncSameGroupCustomer(
   const receiptCandidates = await db.receipt.findMany({
     where: {
       orderNo: { not: null },
+      ...(ownerId ? { createdBy: ownerId } : {}),
     },
     select: { id: true, orderNo: true },
   });
@@ -168,7 +194,10 @@ export const GET = withAuth(async (_request: NextRequest, currentUser) => {
 
   const [orders, receipts] = await Promise.all([
     db.order.findMany({
-      where: { needsCustomerFix: true },
+      where: {
+        needsCustomerFix: true,
+        ...(currentUser.role === UserRole.SALES ? { createdBy: currentUser.id } : {}),
+      },
       include: {
         invoice: { select: { id: true, invNo: true } },
       },
@@ -176,7 +205,10 @@ export const GET = withAuth(async (_request: NextRequest, currentUser) => {
       take: 200,
     }),
     db.receipt.findMany({
-      where: { needsCustomerFix: true },
+      where: {
+        needsCustomerFix: true,
+        ...(currentUser.role === UserRole.SALES ? { createdBy: currentUser.id } : {}),
+      },
       select: {
         id: true,
         receiptNo: true,
@@ -215,11 +247,32 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
   }
 
-  const customer = await upsertCustomer(currentUser.id, currentUser.role as UserRole, parsed);
+  let ownerId: string;
+  try {
+    ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
+  } catch (error) {
+    return NextResponse.json({ success: false, error: mapPrismaWriteError(error) }, { status: 400 });
+  }
+
+  let customer;
+  try {
+    customer = await upsertCustomer(currentUser.id, currentUser.role as UserRole, parsed, ownerId);
+  } catch (error) {
+    return NextResponse.json({ success: false, error: mapPrismaWriteError(error) }, { status: 400 });
+  }
 
   if (action === 'resolve-order') {
     const orderId = trimStr(body.orderId);
     if (!orderId) return NextResponse.json({ success: false, error: 'orderId不能为空' }, { status: 400 });
+
+    const existingOrder = await db.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, createdBy: true },
+    });
+    if (!existingOrder) return NextResponse.json({ success: false, error: '订单不存在' }, { status: 404 });
+    if (currentUser.role === UserRole.SALES && existingOrder.createdBy !== currentUser.id) {
+      return NextResponse.json({ success: false, error: '无权修复该订单' }, { status: 403 });
+    }
 
     const order = await db.order.update({
       where: { id: orderId },
@@ -234,13 +287,22 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       select: { orderNo: true },
     });
 
-    await syncSameGroupCustomer(order.orderNo, customer);
+    await syncSameGroupCustomer(order.orderNo, customer, currentUser.role === UserRole.SALES ? currentUser.id : undefined);
 
     return NextResponse.json({ success: true, message: '订单客户信息已修复', data: customer });
   }
 
   const receiptId = trimStr(body.receiptId);
   if (!receiptId) return NextResponse.json({ success: false, error: 'receiptId不能为空' }, { status: 400 });
+
+  const existingReceipt = await db.receipt.findUnique({
+    where: { id: receiptId },
+    select: { id: true, createdBy: true },
+  });
+  if (!existingReceipt) return NextResponse.json({ success: false, error: '收据不存在' }, { status: 404 });
+  if (currentUser.role === UserRole.SALES && existingReceipt.createdBy !== currentUser.id) {
+    return NextResponse.json({ success: false, error: '无权修复该收据' }, { status: 403 });
+  }
 
   const receipt = await db.receipt.update({
     where: { id: receiptId },
@@ -269,7 +331,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     });
   }
 
-  await syncSameGroupCustomer(receipt.orderNo, customer);
+  await syncSameGroupCustomer(receipt.orderNo, customer, currentUser.role === UserRole.SALES ? currentUser.id : undefined);
 
   return NextResponse.json({ success: true, message: '收据客户信息已修复', data: customer });
 });

@@ -4,7 +4,14 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
-import { getHierarchyScope } from '@/lib/user-hierarchy';
+import {
+  assertNoCustomerScopeConflict,
+  canMutateCustomer,
+  customerAccessWhere,
+  mapPrismaWriteError,
+  resolveCustomerOwnerId,
+  resolveCustomerUpsertTargetId,
+} from '@/lib/customer-scope';
 
 type CustomerPayload = {
   mark?: string;
@@ -16,6 +23,11 @@ type CustomerPayload = {
   companyName?: string | null;
   credit?: number | null;
   companyAddress?: string | null;
+};
+
+type ImportRow = {
+  rowNo: number;
+  payload: CustomerPayload;
 };
 
 function trimStr(value: unknown): string {
@@ -53,6 +65,10 @@ function validateRequired(payload: CustomerPayload): string | null {
   if (!payload.name) return 'NAME不能为空';
   if (!payload.phone) return 'PHONE不能为空';
   if (!payload.city) return 'CITY不能为空';
+  if ((payload.mark?.length || 0) > 191) return 'MARK长度不能超过191';
+  if ((payload.orderName?.length || 0) > 191) return 'ORDER_NAME长度不能超过191';
+  if ((payload.phone?.length || 0) > 191) return 'PHONE长度不能超过191';
+  if ((payload.city?.length || 0) > 191) return 'CITY长度不能超过191';
   if (payload.credit !== null && payload.credit !== undefined) {
     if (!Number.isFinite(payload.credit) || payload.credit < 0) return 'CREDIT必须为大于等于0的数字';
   }
@@ -114,17 +130,16 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     });
   }
 
-  const scope = await getHierarchyScope(currentUser);
-  const ownerIds = Array.from(scope.ownerVisibleIds);
-  const where: Record<string, unknown> = {};
-  where.createdBy = { in: ownerIds };
+  const where: Record<string, unknown> = {
+    ...customerAccessWhere(currentUser),
+  };
   if (mark) {
     where.mark = { equals: mark };
   } else if (search) {
-      where.OR = [
-        { mark: { contains: search } },
-        { orderName: { contains: search } },
-        { name: { contains: search } },
+    where.OR = [
+      { mark: { contains: search } },
+      { orderName: { contains: search } },
+      { name: { contains: search } },
       { phone: { contains: search } },
       { city: { contains: search } },
       { consignee: { contains: search } },
@@ -141,14 +156,12 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   }
 
   const showExtended = await canSalesEditExtendedFields();
-  return NextResponse.json({ success: true, data: rows.map((row) => toSalesView(row, showExtended)) });
+  return NextResponse.json({ success: true, data: rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)) });
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   const denied = managerOnly(currentUser.role as UserRole);
   if (denied) return denied;
-  const scope = await getHierarchyScope(currentUser);
-  const ownerIds = Array.from(scope.ownerVisibleIds);
 
   const contentType = request.headers.get('content-type') || '';
   if (contentType.includes('multipart/form-data')) {
@@ -161,6 +174,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const file = formData.get('file');
     if (!(file instanceof File)) {
       return NextResponse.json({ success: false, error: '请上传Excel文件' }, { status: 400 });
+    }
+
+    let ownerId: string;
+    try {
+      ownerId = await resolveCustomerOwnerId(currentUser, trimStr(formData.get('ownerId')) || null);
+    } catch (error) {
+      return NextResponse.json({ success: false, error: mapPrismaWriteError(error) }, { status: 400 });
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -183,7 +203,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       return NextResponse.json({ success: false, error: `模板缺少列: ${missing.join(', ')}` }, { status: 400 });
     }
 
-    const rows: CustomerPayload[] = [];
+    const rows: ImportRow[] = [];
     const rowErrors: string[] = [];
     for (let rowNo = 2; rowNo <= sheet.rowCount; rowNo++) {
       const row = sheet.getRow(rowNo);
@@ -193,7 +213,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         name: trimStr(row.getCell(headerMap.get('NAME')!).value),
         phone: trimStr(row.getCell(headerMap.get('PHONE')!).value),
         city: trimStr(row.getCell(headerMap.get('CITY')!).value),
-        consignee: trimStr(row.getCell(headerMap.get('CONSIGNEE')!).value),
+        consignee: trimStr(row.getCell(headerMap.get('CONSIGNEE')!).value) || null,
         companyName: headerMap.has('COMPANY_NAME') ? trimStr(row.getCell(headerMap.get('COMPANY_NAME')!).value) || null : null,
         companyAddress: headerMap.has('COMPANY_ADDRESS') ? trimStr(row.getCell(headerMap.get('COMPANY_ADDRESS')!).value) || null : null,
         credit: headerMap.has('CREDIT')
@@ -212,7 +232,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         rowErrors.push(`第${rowNo}行: ${err}`);
         continue;
       }
-      rows.push(payload);
+      rows.push({ rowNo, payload });
     }
 
     if (rowErrors.length > 0) {
@@ -223,33 +243,98 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
-    let importedCount = 0;
+    let createdCount = 0;
+    let updatedCount = 0;
+    const failedRows: string[] = [];
+
     for (const row of rows) {
+      const payload = row.payload;
       try {
+        const targetId = await resolveCustomerUpsertTargetId(ownerId, {
+          orderName: payload.orderName!,
+          phone: payload.phone!,
+          companyName: showExtended ? payload.companyName || null : null,
+        });
+
+        if (targetId) {
+          await assertNoCustomerScopeConflict(
+            ownerId,
+            {
+              orderName: payload.orderName!,
+              phone: payload.phone!,
+              companyName: showExtended ? payload.companyName || null : null,
+            },
+            targetId
+          );
+
+          await db.customer.update({
+            where: { id: targetId },
+            data: {
+              mark: payload.mark!,
+              orderName: payload.orderName!,
+              name: payload.name!,
+              phone: payload.phone!,
+              city: payload.city!,
+              consignee: payload.consignee || null,
+              ownerId,
+              ...(showExtended
+                ? {
+                    companyName: payload.companyName || null,
+                    companyAddress: payload.companyAddress || null,
+                    credit: payload.credit ?? null,
+                  }
+                : {}),
+            },
+          });
+          updatedCount++;
+          continue;
+        }
+
+        await assertNoCustomerScopeConflict(ownerId, {
+          orderName: payload.orderName!,
+          phone: payload.phone!,
+          companyName: showExtended ? payload.companyName || null : null,
+        });
+
         await db.customer.create({
           data: {
-            mark: row.mark!,
-            orderName: row.orderName!,
-            name: row.name!,
-            phone: row.phone!,
-            city: row.city!,
-            consignee: row.consignee || null,
-            companyName: showExtended ? row.companyName || null : null,
-            companyAddress: showExtended ? row.companyAddress || null : null,
-            credit: showExtended ? row.credit ?? null : null,
+            mark: payload.mark!,
+            orderName: payload.orderName!,
+            name: payload.name!,
+            phone: payload.phone!,
+            city: payload.city!,
+            consignee: payload.consignee || null,
+            companyName: showExtended ? payload.companyName || null : null,
+            companyAddress: showExtended ? payload.companyAddress || null : null,
+            credit: showExtended ? payload.credit ?? null : null,
             createdBy: currentUser.id,
+            ownerId,
           },
         });
-        importedCount++;
+        createdCount++;
       } catch (error) {
-        return NextResponse.json(
-          { success: false, error: `导入失败(NAME=${row.name}): ${error instanceof Error ? error.message : '数据库错误'}` },
-          { status: 400 }
-        );
+        failedRows.push(`第${row.rowNo}行(NAME=${payload.name || '-'})：${mapPrismaWriteError(error)}`);
       }
     }
 
-    return NextResponse.json({ success: true, message: `成功导入 ${importedCount} 条客户` });
+    const totalSuccess = createdCount + updatedCount;
+    if (totalSuccess === 0) {
+      return NextResponse.json(
+        { success: false, error: '导入失败：所有行均未成功', details: failedRows.slice(0, 200) },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，失败 ${failedRows.length}`,
+      data: {
+        createdCount,
+        updatedCount,
+        failedCount: failedRows.length,
+        failedRows: failedRows.slice(0, 200),
+      },
+    });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -262,38 +347,56 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
 
-    const created = await db.customer.create({
-      data: {
-        mark: payload.mark!,
+    let ownerId: string;
+    try {
+      ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
+      await assertNoCustomerScopeConflict(ownerId, {
         orderName: payload.orderName!,
-        name: payload.name!,
         phone: payload.phone!,
-        city: payload.city!,
-        consignee: payload.consignee || null,
-        companyName: showExtended ? payload.companyName : null,
-        companyAddress: showExtended ? payload.companyAddress : null,
-        credit: showExtended ? payload.credit : null,
-        createdBy: currentUser.id,
-      },
-    });
-
-    if (currentUser.role === UserRole.ADMIN) {
-      return NextResponse.json({ success: true, data: created });
+        companyName: showExtended ? payload.companyName || null : null,
+      });
+    } catch (innerError) {
+      return NextResponse.json({ success: false, error: mapPrismaWriteError(innerError) }, { status: 400 });
     }
-    return NextResponse.json({ success: true, data: toSalesView(created as Record<string, unknown>, showExtended) });
+
+    try {
+      const created = await db.customer.create({
+        data: {
+          mark: payload.mark!,
+          orderName: payload.orderName!,
+          name: payload.name!,
+          phone: payload.phone!,
+          city: payload.city!,
+          consignee: payload.consignee || null,
+          companyName: showExtended ? payload.companyName : null,
+          companyAddress: showExtended ? payload.companyAddress : null,
+          credit: showExtended ? payload.credit : null,
+          createdBy: currentUser.id,
+          ownerId,
+        },
+      });
+
+      if (currentUser.role === UserRole.ADMIN) {
+        return NextResponse.json({ success: true, data: created });
+      }
+      return NextResponse.json({ success: true, data: toSalesView(created as Record<string, unknown>, showExtended) });
+    } catch (createError) {
+      return NextResponse.json({ success: false, error: mapPrismaWriteError(createError) }, { status: 400 });
+    }
   }
 
   if (action === 'update') {
     const id = trimStr(body.id);
     if (!id) return NextResponse.json({ success: false, error: '客户ID不能为空' }, { status: 400 });
-    const accessible = await db.customer.findFirst({
-      where: {
-        id,
-        createdBy: { in: ownerIds },
-      },
-      select: { id: true },
+
+    const existing = await db.customer.findUnique({
+      where: { id },
+      select: { id: true, ownerId: true },
     });
-    if (!accessible) {
+    if (!existing) {
+      return NextResponse.json({ success: false, error: '客户不存在' }, { status: 404 });
+    }
+    if (!canMutateCustomer(currentUser, existing.ownerId)) {
       return NextResponse.json({ success: false, error: '无权修改该客户' }, { status: 403 });
     }
 
@@ -303,29 +406,50 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
 
-    const updated = await db.customer.update({
-      where: { id },
-      data: {
-        mark: payload.mark!,
-        orderName: payload.orderName!,
-        name: payload.name!,
-        phone: payload.phone!,
-        city: payload.city!,
-        consignee: payload.consignee || null,
-        ...(showExtended
-          ? {
-              companyName: payload.companyName,
-              companyAddress: payload.companyAddress,
-              credit: payload.credit,
-            }
-          : {}),
-      },
-    });
-
-    if (currentUser.role === UserRole.ADMIN) {
-      return NextResponse.json({ success: true, data: updated });
+    let ownerId = existing.ownerId;
+    try {
+      ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || existing.ownerId);
+      await assertNoCustomerScopeConflict(
+        ownerId,
+        {
+          orderName: payload.orderName!,
+          phone: payload.phone!,
+          companyName: showExtended ? payload.companyName || null : null,
+        },
+        id
+      );
+    } catch (innerError) {
+      return NextResponse.json({ success: false, error: mapPrismaWriteError(innerError) }, { status: 400 });
     }
-    return NextResponse.json({ success: true, data: toSalesView(updated as Record<string, unknown>, showExtended) });
+
+    try {
+      const updated = await db.customer.update({
+        where: { id },
+        data: {
+          mark: payload.mark!,
+          orderName: payload.orderName!,
+          name: payload.name!,
+          phone: payload.phone!,
+          city: payload.city!,
+          consignee: payload.consignee || null,
+          ownerId,
+          ...(showExtended
+            ? {
+                companyName: payload.companyName,
+                companyAddress: payload.companyAddress,
+                credit: payload.credit,
+              }
+            : {}),
+        },
+      });
+
+      if (currentUser.role === UserRole.ADMIN) {
+        return NextResponse.json({ success: true, data: updated });
+      }
+      return NextResponse.json({ success: true, data: toSalesView(updated as Record<string, unknown>, showExtended) });
+    } catch (updateError) {
+      return NextResponse.json({ success: false, error: mapPrismaWriteError(updateError) }, { status: 400 });
+    }
   }
 
   if (action === 'delete') {
@@ -334,15 +458,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
     const id = trimStr(body.id);
     if (!id) return NextResponse.json({ success: false, error: '客户ID不能为空' }, { status: 400 });
-    const accessible = await db.customer.findFirst({
-      where: {
-        id,
-        createdBy: { in: ownerIds },
-      },
-      select: { id: true },
-    });
-    if (!accessible) {
-      return NextResponse.json({ success: false, error: '无权删除该客户' }, { status: 403 });
+
+    const existing = await db.customer.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: '客户不存在' }, { status: 404 });
     }
 
     await db.customer.delete({ where: { id } });

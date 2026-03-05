@@ -56,11 +56,18 @@ export async function resolveCustomerOwnerId(currentUser: CurrentUser, requested
   return owner.id;
 }
 
-async function findScopeCollisions(ownerId: string, input: CustomerUniqueInput, excludeId?: string): Promise<CustomerCollision[]> {
+async function findScopeCollisions(
+  ownerId: string,
+  input: CustomerUniqueInput,
+  excludeId?: string,
+  options?: { includePhone?: boolean }
+): Promise<CustomerCollision[]> {
   const conditions: Prisma.CustomerWhereInput[] = [
     { orderName: { equals: input.orderName } },
-    { phone: { equals: input.phone } },
   ];
+  if (options?.includePhone !== false) {
+    conditions.push({ phone: { equals: input.phone } });
+  }
   if (input.companyName) {
     conditions.push({ companyName: { equals: input.companyName } });
   }
@@ -82,26 +89,25 @@ async function findScopeCollisions(ownerId: string, input: CustomerUniqueInput, 
 
 export async function assertNoCustomerScopeConflict(ownerId: string, input: CustomerUniqueInput, excludeId?: string): Promise<void> {
   const companyName = normalizeCompanyName(input.companyName);
-  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, excludeId);
+  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, excludeId, { includePhone: false });
   if (collisions.length === 0) return;
 
   const duplicatedFields = new Set<string>();
   for (const row of collisions) {
     if (row.orderName === input.orderName) duplicatedFields.add('ORDER_NAME');
-    if (row.phone === input.phone) duplicatedFields.add('PHONE');
     if (companyName && row.companyName === companyName) duplicatedFields.add('COMPANY_NAME');
   }
 
   const fields = Array.from(duplicatedFields);
   if (fields.length === 0) {
-    throw new Error('客户数据冲突，请检查 ORDER_NAME/PHONE/COMPANY_NAME');
+    throw new Error('客户数据冲突，请检查 ORDER_NAME/COMPANY_NAME');
   }
   throw new Error(`同一绑定池内 ${fields.join('/')} 不允许重复`);
 }
 
 export async function resolveCustomerUpsertTargetId(ownerId: string, input: CustomerUniqueInput): Promise<string | null> {
   const companyName = normalizeCompanyName(input.companyName);
-  const collisions = await findScopeCollisions(ownerId, { ...input, companyName });
+  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, undefined, { includePhone: true });
   if (collisions.length === 0) return null;
 
   const byId = new Map<string, CustomerCollision>();

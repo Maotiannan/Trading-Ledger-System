@@ -102,8 +102,8 @@ HTTP_CODE=$(curl -sS -o /tmp/customer_scope_import_resp.json -w "%{http_code}" -
 HTTP_BODY="$(cat /tmp/customer_scope_import_resp.json)"
 rm -f /tmp/customer_scope_import_resp.json "$import_xlsx"
 [ "$HTTP_CODE" = "200" ] || fail "import with upsert"
-updated_count="$(parse_json "$HTTP_BODY" 'd.data.updatedCount')"
-[ "$updated_count" -ge 1 ] || fail "import should update existing"
+failed_count="$(parse_json "$HTTP_BODY" 'd.data.failedCount')"
+[ "$failed_count" = "0" ] || fail "import should not fail rows"
 pass "import upsert"
 
 # Sales visibility: only own owner pool

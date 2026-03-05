@@ -290,6 +290,7 @@ async function processCustomerImportRows(
 
   let createdCount = 0;
   let updatedCount = 0;
+  let unchangedCount = 0;
   const createdRows: string[] = [];
   const updatedRows: string[] = [];
 
@@ -317,17 +318,11 @@ async function processCustomerImportRows(
       const phoneTokens = splitPhoneCandidates(payload.phone || '');
       const inputMark = normalizeMarkForMatch(payload.mark || '');
       const inputName = normalizeNameForMatch(payload.name || '');
+      const inputOrderName = trimStr(payload.orderName).toLowerCase();
       const canUseMarkName = hasMeaningfulContent(payload.mark) && hasMeaningfulContent(payload.name);
 
-      const phoneMatchedIds = new Set<string>();
       const markNameMatchedIds = new Set<string>();
       for (const existing of ownerCustomers) {
-        if (phoneTokens.length > 0) {
-          const existingPhoneTokens = splitPhoneCandidates(existing.phone || '');
-          if (existingPhoneTokens.some((token) => phoneTokens.includes(token))) {
-            phoneMatchedIds.add(existing.id);
-          }
-        }
         if (canUseMarkName) {
           const existingMark = normalizeMarkForMatch(existing.mark || '');
           const existingName = normalizeNameForMatch(existing.name || '');
@@ -337,13 +332,40 @@ async function processCustomerImportRows(
         }
       }
 
-      const matchedIds = new Set<string>([...phoneMatchedIds, ...markNameMatchedIds]);
-      if (matchedIds.size > 1) {
-        issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（PHONE 或 MARK+NAME），请人工处理后重试'));
+      if (markNameMatchedIds.size > 1) {
+        issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（MARK+NAME），请人工处理后重试'));
         continue;
       }
 
-      const targetId = matchedIds.size === 1 ? Array.from(matchedIds)[0] : null;
+      let targetId: string | null = markNameMatchedIds.size === 1 ? Array.from(markNameMatchedIds)[0] : null;
+      if (!targetId) {
+        const phoneMatchedIds = new Set<string>();
+        for (const existing of ownerCustomers) {
+          if (phoneTokens.length === 0) continue;
+          const existingPhoneTokens = splitPhoneCandidates(existing.phone || '');
+          if (!existingPhoneTokens.some((token) => phoneTokens.includes(token))) continue;
+          if (!canUseMarkName) {
+            phoneMatchedIds.add(existing.id);
+            continue;
+          }
+          const existingMark = normalizeMarkForMatch(existing.mark || '');
+          const existingName = normalizeNameForMatch(existing.name || '');
+          const existingOrderName = trimStr(existing.orderName).toLowerCase();
+          const existingHasMeaningful = hasMeaningfulContent(existing.mark) && hasMeaningfulContent(existing.name);
+          const sameMarkName = existingHasMeaningful && existingMark === inputMark && existingName === inputName;
+          const sameOrderName = !!inputOrderName && inputOrderName === existingOrderName;
+          const existingIsPlaceholder = !existingHasMeaningful;
+          if (sameMarkName || sameOrderName || existingIsPlaceholder) {
+            phoneMatchedIds.add(existing.id);
+          }
+        }
+        if (phoneMatchedIds.size > 1) {
+          issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（PHONE），请人工处理后重试'));
+          continue;
+        }
+        targetId = phoneMatchedIds.size === 1 ? Array.from(phoneMatchedIds)[0] : null;
+      }
+
       if (targetId) {
         const target = ownerCustomers.find((item) => item.id === targetId);
         if (!target) {
@@ -372,9 +394,11 @@ async function processCustomerImportRows(
               ...updateData,
             };
           }
+          updatedCount++;
+          updatedRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
+        } else {
+          unchangedCount++;
         }
-        updatedCount++;
-        updatedRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
         continue;
       }
 
@@ -408,7 +432,7 @@ async function processCustomerImportRows(
   }
 
   const totalSuccess = createdCount + updatedCount;
-  if (totalSuccess === 0) {
+  if (totalSuccess === 0 && issueRows.length > 0) {
     return {
       success: false,
       status: 400,
@@ -425,7 +449,7 @@ async function processCustomerImportRows(
   return {
     success: true,
     status: 200,
-    message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，失败 ${issueRows.length}`,
+    message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，无变更 ${unchangedCount}，失败 ${issueRows.length}`,
     details: issueRows.map((row) => `第${row.rowNo}行(NAME=${row.name || '-'})：${row.reason}`),
     issueRows,
     createdCount,

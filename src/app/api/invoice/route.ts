@@ -100,6 +100,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
   }
 
   const customerByMarkCache = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
+  const customerByOrderNameCache = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
   const inferCache = new Map<string, { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string }>();
   const importedOrderNos = new Set<string>();
   const batchOrderSet = new Set<string>();
@@ -170,7 +171,43 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
             } else if (customers.length > 1) {
               inferResult.reason = '客户库同MARK存在多条';
             } else {
-              inferResult.reason = '客户库无匹配';
+              if (!customerByOrderNameCache.has(markKey)) {
+                const customersByOrderName = await db.customer.findMany({
+                  where: {
+                    AND: [
+                      customerVisibilityWhere,
+                      { orderName: { equals: groupKey } },
+                    ],
+                  },
+                  select: { id: true, mark: true, orderName: true },
+                });
+                customerByOrderNameCache.set(markKey, customersByOrderName);
+              }
+              const customersByOrderName = customerByOrderNameCache.get(markKey) || [];
+              if (customersByOrderName.length === 1) {
+                const selected = customersByOrderName[0];
+                inferResult.matched = true;
+                inferResult.customerMark = selected.mark;
+                inferResult.customerName = selected.orderName || '';
+                inferResult.customerId = selected.id;
+              } else if (customersByOrderName.length > 1) {
+                const normalizedGroup = groupKey.toLowerCase();
+                const byMarkPrefix = customersByOrderName.filter((row) => {
+                  const mark = (row.mark || '').trim().toLowerCase();
+                  return mark === normalizedGroup || mark.startsWith(`${normalizedGroup}-`);
+                });
+                if (byMarkPrefix.length === 1) {
+                  const selected = byMarkPrefix[0];
+                  inferResult.matched = true;
+                  inferResult.customerMark = selected.mark;
+                  inferResult.customerName = selected.orderName || '';
+                  inferResult.customerId = selected.id;
+                } else {
+                  inferResult.reason = '客户库同ORDER_NAME存在多条';
+                }
+              } else {
+                inferResult.reason = '客户库无匹配';
+              }
             }
           }
         } else {

@@ -168,6 +168,34 @@ type CustomerMarkApiRow = {
   city?: string | null;
 };
 
+type InvoiceImportIssueRow = {
+  rowNo: number;
+  invNo: string;
+  shipDate: string;
+  releaseDate: string;
+  orderNo: string;
+  amount: string;
+  customerMark: string;
+  customerName: string;
+  customerId: string;
+  reason: string;
+};
+
+type CustomerImportIssueRow = {
+  rowNo: number;
+  mark: string;
+  orderName: string;
+  name: string;
+  phone: string;
+  city: string;
+  consignee: string;
+  companyName: string;
+  credit: string;
+  companyAddress: string;
+  ownerEmail: string;
+  reason: string;
+};
+
 const CUSTOMER_MARK_CACHE_TTL_MS = 10_000;
 const customerMarkCache = new Map<string, { timestamp: number; data: CustomerMarkApiRow[] }>();
 const customerMarkInflight = new Map<string, Promise<{ success: boolean; data: CustomerMarkApiRow[] }>>();
@@ -581,6 +609,10 @@ function InvoiceManager() {
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
   const [editingOrderCandidates, setEditingOrderCandidates] = useState<CustomerCandidate[]>([]);
   const [invoiceImporting, setInvoiceImporting] = useState(false);
+  const [invoiceImportIssues, setInvoiceImportIssues] = useState<InvoiceImportIssueRow[]>([]);
+  const [showInvoiceImportIssues, setShowInvoiceImportIssues] = useState(false);
+  const [invoiceIssueSubmitting, setInvoiceIssueSubmitting] = useState(false);
+  const [invoiceImportMessage, setInvoiceImportMessage] = useState('');
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
   const invoiceCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -626,6 +658,26 @@ function InvoiceManager() {
         body: formData,
       });
       const result = await response.json().catch(() => ({}));
+      const issueRows = Array.isArray(result?.issueRows) ? result.issueRows : [];
+      if (issueRows.length > 0) {
+        setInvoiceImportIssues(issueRows.map((row: Record<string, unknown>) => ({
+          rowNo: Number(row.rowNo) || 0,
+          invNo: String(row.invNo || ''),
+          shipDate: String(row.shipDate || ''),
+          releaseDate: String(row.releaseDate || ''),
+          orderNo: String(row.orderNo || ''),
+          amount: String(row.amount || ''),
+          customerMark: String(row.customerMark || ''),
+          customerName: String(row.customerName || ''),
+          customerId: String(row.customerId || ''),
+          reason: String(row.reason || ''),
+        })));
+        setInvoiceImportMessage(String(result?.message || result?.error || tx('发现问题行，请补充后重试', 'Issue rows found. Please edit and retry.')));
+        setShowInvoiceImportIssues(true);
+        await loadInvoices();
+        return;
+      }
+
       if (!response.ok || !result.success) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
@@ -640,6 +692,73 @@ function InvoiceManager() {
     } finally {
       setInvoiceImporting(false);
       if (invoiceImportInputRef.current) invoiceImportInputRef.current.value = '';
+    }
+  };
+
+  const updateInvoiceImportIssue = (index: number, field: keyof InvoiceImportIssueRow, value: string) => {
+    setInvoiceImportIssues((prev) => {
+      const copy = [...prev];
+      if (!copy[index]) return prev;
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const retryInvoiceIssueRows = async () => {
+    if (invoiceImportIssues.length === 0) return;
+    setInvoiceIssueSubmitting(true);
+    try {
+      const response = await fetch('/api/invoice', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'import-rows',
+          rows: invoiceImportIssues.map((row) => ({
+            rowNo: row.rowNo,
+            invNo: row.invNo,
+            shipDate: row.shipDate,
+            releaseDate: row.releaseDate,
+            orderNo: row.orderNo,
+            amount: row.amount,
+            customerMark: row.customerMark,
+            customerName: row.customerName,
+            customerId: row.customerId,
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      const nextIssues = Array.isArray(result?.issueRows) ? result.issueRows : [];
+      if (nextIssues.length > 0) {
+        setInvoiceImportIssues(nextIssues.map((row: Record<string, unknown>) => ({
+          rowNo: Number(row.rowNo) || 0,
+          invNo: String(row.invNo || ''),
+          shipDate: String(row.shipDate || ''),
+          releaseDate: String(row.releaseDate || ''),
+          orderNo: String(row.orderNo || ''),
+          amount: String(row.amount || ''),
+          customerMark: String(row.customerMark || ''),
+          customerName: String(row.customerName || ''),
+          customerId: String(row.customerId || ''),
+          reason: String(row.reason || ''),
+        })));
+        setInvoiceImportMessage(String(result?.message || tx('仍有问题行，请继续修正', 'There are still issue rows. Please continue editing.')));
+      } else {
+        if (!response.ok || !result.success) {
+          const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+          throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        }
+        setShowInvoiceImportIssues(false);
+        setInvoiceImportIssues([]);
+        setInvoiceImportMessage('');
+        alert(result.message || tx('问题行导入成功', 'Issue rows imported successfully'));
+      }
+      await loadInvoices();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
+    } finally {
+      setInvoiceIssueSubmitting(false);
     }
   };
 
@@ -1732,6 +1851,70 @@ function InvoiceManager() {
               </TableBody>
             </Table>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showInvoiceImportIssues} onOpenChange={setShowInvoiceImportIssues}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{tx('账单导入问题行处理', 'Invoice Import Issue Rows')}</DialogTitle>
+            <DialogDescription>
+              {invoiceImportMessage || tx('请补充问题行后继续导入，仅重试当前问题行。', 'Edit issue rows and retry import. Only current issue rows will be retried.')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>INV_NO</TableHead>
+                  <TableHead>ORDER_NO</TableHead>
+                  <TableHead>AMOUNT</TableHead>
+                  <TableHead>CUSTOMER_MARK</TableHead>
+                  <TableHead>CUSTOMER_ORDER_NAME</TableHead>
+                  <TableHead>SHIP_DATE</TableHead>
+                  <TableHead>RELEASE_DATE</TableHead>
+                  <TableHead>{tx('原因', 'Reason')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoiceImportIssues.map((row, index) => (
+                  <TableRow key={`${row.rowNo}-${index}`}>
+                    <TableCell>{row.rowNo || index + 1}</TableCell>
+                    <TableCell><Input value={row.invNo} onChange={(e) => updateInvoiceImportIssue(index, 'invNo', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.orderNo} onChange={(e) => updateInvoiceImportIssue(index, 'orderNo', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.amount} onChange={(e) => updateInvoiceImportIssue(index, 'amount', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.customerMark} onChange={(e) => updateInvoiceImportIssue(index, 'customerMark', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.customerName} onChange={(e) => updateInvoiceImportIssue(index, 'customerName', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.shipDate} onChange={(e) => updateInvoiceImportIssue(index, 'shipDate', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.releaseDate} onChange={(e) => updateInvoiceImportIssue(index, 'releaseDate', e.target.value)} /></TableCell>
+                    <TableCell className="text-xs text-red-600">{row.reason || '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {invoiceImportIssues.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center text-gray-500">{tx('暂无问题行', 'No issue rows')}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowInvoiceImportIssues(false);
+                setInvoiceImportIssues([]);
+                setInvoiceImportMessage('');
+              }}
+            >
+              {tx('取消', 'Cancel')}
+            </Button>
+            <Button onClick={retryInvoiceIssueRows} disabled={invoiceIssueSubmitting || invoiceImportIssues.length === 0}>
+              {invoiceIssueSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {tx('仅导入当前问题行', 'Import Current Issue Rows')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -3966,6 +4149,10 @@ function CustomerManager() {
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [fixingTarget, setFixingTarget] = useState<{ type: 'order' | 'receipt'; id: string } | null>(null);
   const [customerImporting, setCustomerImporting] = useState(false);
+  const [customerImportIssues, setCustomerImportIssues] = useState<CustomerImportIssueRow[]>([]);
+  const [showCustomerImportIssues, setShowCustomerImportIssues] = useState(false);
+  const [customerIssueSubmitting, setCustomerIssueSubmitting] = useState(false);
+  const [customerImportMessage, setCustomerImportMessage] = useState('');
   const customerImportInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
     mark: '',
@@ -4172,6 +4359,28 @@ function CustomerManager() {
         body: formData,
       });
       const result = await response.json().catch(() => ({}));
+      const issueRows = Array.isArray(result?.issueRows) ? result.issueRows : [];
+      if (issueRows.length > 0) {
+        setCustomerImportIssues(issueRows.map((row: Record<string, unknown>) => ({
+          rowNo: Number(row.rowNo) || 0,
+          mark: String(row.mark || ''),
+          orderName: String(row.orderName || ''),
+          name: String(row.name || ''),
+          phone: String(row.phone || ''),
+          city: String(row.city || ''),
+          consignee: String(row.consignee || ''),
+          companyName: String(row.companyName || ''),
+          credit: String(row.credit || ''),
+          companyAddress: String(row.companyAddress || ''),
+          ownerEmail: String(row.ownerEmail || ''),
+          reason: String(row.reason || ''),
+        })));
+        setCustomerImportMessage(String(result?.message || result?.error || tx('发现问题行，请补充后重试', 'Issue rows found. Please edit and retry.')));
+        setShowCustomerImportIssues(true);
+        await loadCustomers();
+        return;
+      }
+
       if (!response.ok || !result.success) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
@@ -4183,6 +4392,77 @@ function CustomerManager() {
     } finally {
       setCustomerImporting(false);
       if (customerImportInputRef.current) customerImportInputRef.current.value = '';
+    }
+  };
+
+  const updateCustomerImportIssue = (index: number, field: keyof CustomerImportIssueRow, value: string) => {
+    setCustomerImportIssues((prev) => {
+      const copy = [...prev];
+      if (!copy[index]) return prev;
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const retryCustomerIssueRows = async () => {
+    if (customerImportIssues.length === 0) return;
+    setCustomerIssueSubmitting(true);
+    try {
+      const response = await fetch('/api/customer', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'import-rows',
+          ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
+          rows: customerImportIssues.map((row) => ({
+            rowNo: row.rowNo,
+            mark: row.mark,
+            orderName: row.orderName,
+            name: row.name,
+            phone: row.phone,
+            city: row.city,
+            consignee: row.consignee,
+            companyName: row.companyName,
+            credit: row.credit,
+            companyAddress: row.companyAddress,
+            ownerEmail: row.ownerEmail,
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      const nextIssues = Array.isArray(result?.issueRows) ? result.issueRows : [];
+      if (nextIssues.length > 0) {
+        setCustomerImportIssues(nextIssues.map((row: Record<string, unknown>) => ({
+          rowNo: Number(row.rowNo) || 0,
+          mark: String(row.mark || ''),
+          orderName: String(row.orderName || ''),
+          name: String(row.name || ''),
+          phone: String(row.phone || ''),
+          city: String(row.city || ''),
+          consignee: String(row.consignee || ''),
+          companyName: String(row.companyName || ''),
+          credit: String(row.credit || ''),
+          companyAddress: String(row.companyAddress || ''),
+          ownerEmail: String(row.ownerEmail || ''),
+          reason: String(row.reason || ''),
+        })));
+        setCustomerImportMessage(String(result?.message || tx('仍有问题行，请继续修正', 'There are still issue rows. Please continue editing.')));
+      } else {
+        if (!response.ok || !result.success) {
+          const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+          throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        }
+        setShowCustomerImportIssues(false);
+        setCustomerImportIssues([]);
+        setCustomerImportMessage('');
+        alert(result.message || tx('问题行导入成功', 'Issue rows imported successfully'));
+      }
+      await loadCustomers();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
+    } finally {
+      setCustomerIssueSubmitting(false);
     }
   };
 
@@ -4410,6 +4690,76 @@ function CustomerManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showCustomerImportIssues} onOpenChange={setShowCustomerImportIssues}>
+        <DialogContent className="max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{tx('客户导入问题行处理', 'Customer Import Issue Rows')}</DialogTitle>
+            <DialogDescription>
+              {customerImportMessage || tx('请修改冲突行后重试，仅重试当前问题行。', 'Please edit issue rows and retry. Only current issue rows will be retried.')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>MARK</TableHead>
+                  <TableHead>ORDER_NAME</TableHead>
+                  <TableHead>NAME</TableHead>
+                  <TableHead>PHONE</TableHead>
+                  <TableHead>CITY</TableHead>
+                  <TableHead>CONSIGNEE</TableHead>
+                  <TableHead>COMPANY_NAME</TableHead>
+                  <TableHead>CREDIT</TableHead>
+                  <TableHead>COMPANY_ADDRESS</TableHead>
+                  <TableHead>SALES_EMAIL</TableHead>
+                  <TableHead>{tx('原因', 'Reason')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {customerImportIssues.map((row, index) => (
+                  <TableRow key={`${row.rowNo}-${index}`}>
+                    <TableCell>{row.rowNo || index + 1}</TableCell>
+                    <TableCell><Input value={row.mark} onChange={(e) => updateCustomerImportIssue(index, 'mark', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.orderName} onChange={(e) => updateCustomerImportIssue(index, 'orderName', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.name} onChange={(e) => updateCustomerImportIssue(index, 'name', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.phone} onChange={(e) => updateCustomerImportIssue(index, 'phone', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.city} onChange={(e) => updateCustomerImportIssue(index, 'city', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.consignee} onChange={(e) => updateCustomerImportIssue(index, 'consignee', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.companyName} onChange={(e) => updateCustomerImportIssue(index, 'companyName', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.credit} onChange={(e) => updateCustomerImportIssue(index, 'credit', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.companyAddress} onChange={(e) => updateCustomerImportIssue(index, 'companyAddress', e.target.value)} /></TableCell>
+                    <TableCell><Input value={row.ownerEmail} onChange={(e) => updateCustomerImportIssue(index, 'ownerEmail', e.target.value)} /></TableCell>
+                    <TableCell className="text-xs text-red-600">{row.reason || '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {customerImportIssues.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={12} className="text-center text-gray-500">{tx('暂无问题行', 'No issue rows')}</TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCustomerImportIssues(false);
+                setCustomerImportIssues([]);
+                setCustomerImportMessage('');
+              }}
+            >
+              {tx('取消', 'Cancel')}
+            </Button>
+            <Button onClick={retryCustomerIssueRows} disabled={customerIssueSubmitting || customerImportIssues.length === 0}>
+              {customerIssueSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {tx('仅导入当前问题行', 'Import Current Issue Rows')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -4427,9 +4777,14 @@ function SettingsManager() {
   const [config, setConfig] = useState<Record<string, string>>({});
   const [canEditConfig, setCanEditConfig] = useState(false);
   const [canPurgeBranch, setCanPurgeBranch] = useState(false);
-  const [branchPurgeAdmins, setBranchPurgeAdmins] = useState<Array<{ id: string; email: string; name: string | null; level: number }>>([]);
+  const [branchPurgeTargets, setBranchPurgeTargets] = useState<Array<{ id: string; email: string; name: string | null; level: number; role: string; parentId: string | null }>>([]);
+  const [purgeModuleKeys, setPurgeModuleKeys] = useState<string[]>([]);
   const [purgingBranch, setPurgingBranch] = useState(false);
-  const [purgeForm, setPurgeForm] = useState({ targetAdminId: '', password: '' });
+  const [purgeForm, setPurgeForm] = useState<{ targetUserId: string; password: string; modules: string[] }>({
+    targetUserId: '',
+    password: '',
+    modules: ['all'],
+  });
   const [pwd, setPwd] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
 
   const loadSettings = useCallback(async () => {
@@ -4441,11 +4796,12 @@ function SettingsManager() {
         setConfig(result.data.settings || {});
         setCanEditConfig(Boolean(result.data.canEdit));
         setCanPurgeBranch(Boolean(result.data.canPurgeBranch));
-        const admins = Array.isArray(result.data.branchPurgeAdmins) ? result.data.branchPurgeAdmins : [];
-        setBranchPurgeAdmins(admins);
+        const targets = Array.isArray(result.data.branchPurgeTargets) ? result.data.branchPurgeTargets : [];
+        setBranchPurgeTargets(targets);
+        setPurgeModuleKeys(Array.isArray(result.data.purgeModuleKeys) ? result.data.purgeModuleKeys : []);
         setPurgeForm((prev) => ({
           ...prev,
-          targetAdminId: admins.some((row) => row.id === prev.targetAdminId) ? prev.targetAdminId : (admins[0]?.id || ''),
+          targetUserId: targets.some((row) => row.id === prev.targetUserId) ? prev.targetUserId : (targets[0]?.id || ''),
         }));
       }
     } catch (err) {
@@ -4541,21 +4897,35 @@ function SettingsManager() {
 
   const handlePurgeBranch = async () => {
     if (!canPurgeBranch) return;
-    if (!purgeForm.targetAdminId || !purgeForm.password) {
-      setError(tx('请先选择管理员并填写密码', 'Please choose an admin and enter password'));
+    if (!purgeForm.targetUserId || !purgeForm.password) {
+      setError(tx('请先选择账号并填写管理员密码', 'Please choose an account and enter admin password'));
       setMessage(null);
       return;
     }
-    const target = branchPurgeAdmins.find((row) => row.id === purgeForm.targetAdminId);
+    if (!Array.isArray(purgeForm.modules) || purgeForm.modules.length === 0) {
+      setError(tx('请至少选择一个清理模块', 'Please choose at least one purge module'));
+      setMessage(null);
+      return;
+    }
+    const target = branchPurgeTargets.find((row) => row.id === purgeForm.targetUserId);
     if (!target) {
-      setError(tx('目标管理员不存在', 'Target admin not found'));
+      setError(tx('目标账号不存在', 'Target account not found'));
       setMessage(null);
       return;
     }
+    const moduleLabelMap: Record<string, string> = {
+      invoice: 'invoice',
+      receipt: 'receipt',
+      detail: 'detail',
+      swift: 'swift',
+      customer: 'customer',
+      all: 'all',
+    };
+    const moduleText = purgeForm.modules.map((key) => moduleLabelMap[key] || key).join(', ');
     const confirmed = window.confirm(
       tx(
-        `确认清空 ${target.email} 分支下所有业务数据？该操作不可恢复。`,
-        `Confirm purging all business data under ${target.email} branch? This cannot be undone.`
+        `确认清空 ${target.email} 分支数据？模块: ${moduleText}。该操作不可恢复。`,
+        `Confirm purging ${target.email}'s branch data? Modules: ${moduleText}. This cannot be undone.`
       )
     );
     if (!confirmed) return;
@@ -4568,8 +4938,9 @@ function SettingsManager() {
         method: 'POST',
         body: JSON.stringify({
           action: 'purge-branch-data',
-          targetAdminId: purgeForm.targetAdminId,
+          targetUserId: purgeForm.targetUserId,
           password: purgeForm.password,
+          modules: purgeForm.modules,
         }),
       });
       if (result.success) {
@@ -4587,6 +4958,21 @@ function SettingsManager() {
 
   const updateConfigField = (key: string, value: string) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const togglePurgeModule = (moduleKey: string, checked: boolean) => {
+    setPurgeForm((prev) => {
+      if (moduleKey === 'all') {
+        return {
+          ...prev,
+          modules: checked ? ['all'] : [],
+        };
+      }
+      const next = new Set(prev.modules.filter((row) => row !== 'all'));
+      if (checked) next.add(moduleKey);
+      else next.delete(moduleKey);
+      return { ...prev, modules: Array.from(next) };
+    });
   };
 
   return (
@@ -4649,23 +5035,49 @@ function SettingsManager() {
           <CardHeader>
             <CardTitle>{tx('分支业务清库', 'Branch Data Purge')}</CardTitle>
             <CardDescription>
-              {tx('仅 admin@example.com 可用。仅清空业务数据，保留系统配置与用户账号。', 'Only admin@example.com can use this. Purges business data only, keeping system settings and user accounts.')}
+              {tx('输入当前管理员密码后，可按模块清理任意账号分支的业务数据（保留系统配置与用户配置）。', 'Enter current admin password to purge selected business modules under any account branch (system/user settings are preserved).')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <Label>{tx('目标管理员', 'Target Admin')}</Label>
+              <Label>{tx('目标账号', 'Target Account')}</Label>
               <select
                 className="w-full border rounded-md px-3 py-2 text-sm"
-                value={purgeForm.targetAdminId}
-                onChange={(e) => setPurgeForm((prev) => ({ ...prev, targetAdminId: e.target.value }))}
+                value={purgeForm.targetUserId}
+                onChange={(e) => setPurgeForm((prev) => ({ ...prev, targetUserId: e.target.value }))}
               >
-                {branchPurgeAdmins.map((admin) => (
-                  <option key={admin.id} value={admin.id}>
-                    {`${admin.email} (L${admin.level})`}
+                {branchPurgeTargets.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {`${target.email} (${target.role}, L${target.level})`}
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <Label>{tx('清理模块', 'Purge Modules')}</Label>
+              <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-2">
+                {(purgeModuleKeys.length > 0 ? purgeModuleKeys : ['all', 'invoice', 'receipt', 'detail', 'swift', 'customer']).map((moduleKey) => {
+                  const checked = purgeForm.modules.includes(moduleKey);
+                  const labelMap: Record<string, string> = {
+                    all: tx('全部', 'All'),
+                    invoice: tx('账单', 'Invoice'),
+                    receipt: tx('收据', 'Receipt'),
+                    detail: tx('明细', 'Detail'),
+                    swift: 'SWIFT',
+                    customer: tx('客户', 'Customer'),
+                  };
+                  return (
+                    <label key={moduleKey} className="flex items-center gap-2 border rounded-md px-2 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => togglePurgeModule(moduleKey, e.target.checked)}
+                      />
+                      <span>{labelMap[moduleKey] || moduleKey}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
             <div>
               <Label>{tx('确认密码', 'Confirm Password')}</Label>
@@ -4673,13 +5085,13 @@ function SettingsManager() {
                 type="password"
                 value={purgeForm.password}
                 onChange={(e) => setPurgeForm((prev) => ({ ...prev, password: e.target.value }))}
-                placeholder={tx('输入 admin@example.com 密码', 'Enter admin@example.com password')}
+                placeholder={tx('输入当前管理员密码', 'Enter current admin password')}
               />
             </div>
             <div className="flex justify-end">
-              <Button variant="destructive" onClick={handlePurgeBranch} disabled={purgingBranch || !purgeForm.targetAdminId || !purgeForm.password}>
+              <Button variant="destructive" onClick={handlePurgeBranch} disabled={purgingBranch || !purgeForm.targetUserId || !purgeForm.password || purgeForm.modules.length === 0}>
                 {purgingBranch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {tx('一键清空该分支业务数据', 'Purge Branch Business Data')}
+                {tx('执行分支清库', 'Run Branch Purge')}
               </Button>
             </div>
           </CardContent>

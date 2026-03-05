@@ -394,6 +394,7 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 - `GET?action=import-template` - 下载账单批量导入模板（Excel）
 - `POST` - 创建账单
 - `POST(multipart action=import-excel)` - 批量导入账单（Excel）
+- `POST(action=import-rows)` - 导入“问题行重试”数据（仅重试当前补录行）
 - `PUT` - 更新订单/添加订单/删除订单/转移余额/刷新匹配
 - `DELETE` - 删除账单
 
@@ -402,6 +403,7 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 - `GET?action=import-template` - 下载客户批量导入模板（Excel）
 - `POST(action=create|update|delete)` - 客户管理
 - `POST(multipart action=import-excel)` - 批量导入客户（Excel）
+- `POST(action=import-rows)` - 导入“问题行重试”数据（仅重试当前补录行）
 
 ### 收据接口 `/api/receipt`
 - `GET` - 获取收据列表
@@ -429,6 +431,7 @@ User ─┬─< Invoice >──< Order >──< Receipt >
 - `POST(action=test-ocr)` - 测试 OCR 配置连通性（管理员）
 - `POST(action=update-config)` - 修改系统配置（管理员）
 - `POST(action=purge-business-data)` - 清空业务数据并保留用户（管理员）
+- `POST(action=purge-branch-data)` - 按账号分支清库（管理员密码确认 + 模块选择 + 依赖级联删除）
 
 ### 删除审批接口 `/api/deletion`
 - `GET` - 获取删除申请列表
@@ -527,6 +530,12 @@ OCR_OUTPUT_COST_PER_1K=0
 - 系统探针接口最小暴露：`/api/system/health` 需登录，`/api/system/routes` 与 `/api/system/config-template` 仅管理员可访问。
 - 修正系统路由目录(`/api/system/routes`)中的 action-method 描述，和真实实现保持一致（`receipt/detail update` 为 `POST`，补充 `direct-create` 等 action）。
 
+### 关键修复（2026-03-05）
+
+- 账单批量导入新增“问题行编辑重试”闭环：首轮导入先写入可成功行，失败行通过弹窗编辑后调用 `POST /api/invoice (action=import-rows)` 继续导入。
+- 客户批量导入新增“问题行编辑重试”闭环：冲突/校验失败行在弹窗内修正后调用 `POST /api/customer (action=import-rows)` 重试，且仅导入当前问题行。
+- 设置页“分支业务清库”升级为管理员通用能力：可选任意目标账号与清理模块（账单/收据/明细/SWIFT/客户/全部），后端按依赖关系执行级联清理并保留系统配置与用户配置。
+
 ### 数据库迁移说明（MariaDB / MySQL）
 
 - 当前 Prisma 数据源为 MySQL（兼容 MariaDB，`prisma/schema.prisma`）。
@@ -621,6 +630,12 @@ src/
 ---
 
 ## 更新日志
+
+### v1.0.22 (2026-03-05)
+- 🧾 账单批量导入新增“问题行补录重试”闭环：后端返回 `issueRows`，前端弹窗可逐行编辑并调用 `POST /api/invoice (action=import-rows)` 仅重试当前问题行。
+- 👥 客户批量导入新增“问题行补录重试”闭环：冲突/校验失败行在弹窗内修改后调用 `POST /api/customer (action=import-rows)` 重试，且仅导入当前问题行。
+- 🧹 分支业务清库能力升级：`POST /api/settings (action=purge-branch-data)` 支持管理员对任意账号分支按模块清理（`invoice/receipt/detail/swift/customer/all`），并按依赖关系级联删除。
+- ⚙️ 设置页清库面板升级：目标账号从“仅 ADMIN”扩展到“任意账号”，新增模块多选与管理员密码确认，保留系统配置与用户配置。
 
 ### v1.0.21 (2026-03-05)
 - 📥 账单批量导入增强：`CUSTOMER_MARK` 允许留空，系统会按 `ORDER_NO` 的客组规则自动回查可见客户库/历史订单推断 MARK。

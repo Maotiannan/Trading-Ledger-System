@@ -20,8 +20,20 @@ const settingDefaults: Record<string, string> = {
   DETAIL_RECEIPT_MATCH_TOLERANCE: process.env.DETAIL_RECEIPT_MATCH_TOLERANCE ?? '5',
 };
 
-function isPrimaryAdmin(email: string | null | undefined): boolean {
-  return String(email || '').trim().toLowerCase() === 'admin@example.com';
+const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'all'] as const;
+type PurgeModuleKey = typeof purgeModuleKeys[number];
+
+function normalizePurgeModules(value: unknown): Set<Exclude<PurgeModuleKey, 'all'>> {
+  const raw = Array.isArray(value) ? value : [];
+  const normalized = new Set<PurgeModuleKey>();
+  for (const item of raw) {
+    const v = String(item || '').trim().toLowerCase() as PurgeModuleKey;
+    if (purgeModuleKeys.includes(v)) normalized.add(v);
+  }
+  if (normalized.has('all')) {
+    return new Set<Exclude<PurgeModuleKey, 'all'>>(['invoice', 'receipt', 'detail', 'swift', 'customer']);
+  }
+  return new Set(Array.from(normalized).filter((key): key is Exclude<PurgeModuleKey, 'all'> => key !== 'all'));
 }
 
 async function getBranchUserIds(rootUserId: string): Promise<string[]> {
@@ -56,14 +68,12 @@ export const GET = withAuth(async (_request, currentUser) => {
     keys.map((key) => [key, overrides[key] ?? settingDefaults[key] ?? ''])
   );
 
-  let branchPurgeAdmins: Array<{ id: string; email: string; name: string | null; level: number }> = [];
-  if (currentUser.role === UserRole.ADMIN && isPrimaryAdmin(currentUser.email)) {
-    const admins = await db.user.findMany({
-      where: { role: UserRole.ADMIN },
-      select: { id: true, email: true, name: true, level: true },
-      orderBy: [{ level: 'asc' }, { createdAt: 'asc' }],
+  let branchPurgeTargets: Array<{ id: string; email: string; name: string | null; level: number; role: UserRole; parentId: string | null }> = [];
+  if (currentUser.role === UserRole.ADMIN) {
+    branchPurgeTargets = await db.user.findMany({
+      select: { id: true, email: true, name: true, level: true, role: true, parentId: true },
+      orderBy: [{ level: 'asc' }, { role: 'asc' }, { createdAt: 'asc' }],
     });
-    branchPurgeAdmins = admins;
   }
 
   return NextResponse.json({
@@ -72,8 +82,9 @@ export const GET = withAuth(async (_request, currentUser) => {
       settings,
       editableKeys: keys,
       canEdit: currentUser.role === UserRole.ADMIN,
-      branchPurgeAdmins,
-      canPurgeBranch: currentUser.role === UserRole.ADMIN && isPrimaryAdmin(currentUser.email),
+      branchPurgeTargets,
+      canPurgeBranch: currentUser.role === UserRole.ADMIN,
+      purgeModuleKeys,
     },
   });
 });
@@ -120,14 +131,20 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   }
 
   if (action === 'purge-branch-data') {
-    if (currentUser.role !== UserRole.ADMIN || !isPrimaryAdmin(currentUser.email)) {
-      return NextResponse.json({ success: false, error: '只有主管理员可执行分支清库' }, { status: 403 });
+    if (currentUser.role !== UserRole.ADMIN) {
+      return NextResponse.json({ success: false, error: '只有管理员可执行分支清库' }, { status: 403 });
     }
 
-    const targetAdminId = typeof body?.targetAdminId === 'string' ? body.targetAdminId.trim() : '';
+    const targetUserId = typeof body?.targetUserId === 'string'
+      ? body.targetUserId.trim()
+      : (typeof body?.targetAdminId === 'string' ? body.targetAdminId.trim() : '');
     const password = typeof body?.password === 'string' ? body.password : '';
-    if (!targetAdminId || !password) {
-      return NextResponse.json({ success: false, error: '缺少目标管理员或密码' }, { status: 400 });
+    const selectedModules = normalizePurgeModules(body?.modules);
+    if (!targetUserId || !password) {
+      return NextResponse.json({ success: false, error: '缺少目标账号或密码' }, { status: 400 });
+    }
+    if (selectedModules.size === 0) {
+      return NextResponse.json({ success: false, error: '至少选择一个清理模块' }, { status: 400 });
     }
 
     const currentWithPassword = await db.user.findUnique({
@@ -138,20 +155,24 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       return NextResponse.json({ success: false, error: '密码错误' }, { status: 400 });
     }
 
-    const targetAdmin = await db.user.findUnique({
-      where: { id: targetAdminId },
-      select: { id: true, role: true, email: true, name: true },
+    const targetUser = await db.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, role: true, email: true, name: true, level: true },
     });
-    if (!targetAdmin || targetAdmin.role !== UserRole.ADMIN) {
-      return NextResponse.json({ success: false, error: '目标账户不是管理员' }, { status: 400 });
+    if (!targetUser) {
+      return NextResponse.json({ success: false, error: '目标账户不存在' }, { status: 400 });
     }
 
-    const branchUserIds = await getBranchUserIds(targetAdmin.id);
+    const branchUserIds = await getBranchUserIds(targetUser.id);
 
-    const [orders, receipts, details, swifts, customers] = await Promise.all([
+    const [orders, invoices, receipts, details, swifts, customers] = await Promise.all([
       db.order.findMany({
         where: { createdBy: { in: branchUserIds } },
         select: { id: true, invoiceId: true },
+      }),
+      db.invoice.findMany({
+        where: { createdBy: { in: branchUserIds } },
+        select: { id: true },
       }),
       db.receipt.findMany({
         where: { createdBy: { in: branchUserIds } },
@@ -179,71 +200,87 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const orderIds = orders.map((row) => row.id);
     const receiptIds = receipts.map((row) => row.id);
     const detailIds = details.map((row) => row.id);
-    const swiftIds = swifts.map((row) => row.id);
+    const swiftIdsCreatedByBranch = swifts.map((row) => row.id);
     const customerIds = customers.map((row) => row.id);
-    const touchedInvoiceIds = Array.from(new Set(orders.map((row) => row.invoiceId)));
+
+    const modules = {
+      invoice: selectedModules.has('invoice'),
+      receipt: selectedModules.has('receipt'),
+      detail: selectedModules.has('detail'),
+      swift: selectedModules.has('swift'),
+      customer: selectedModules.has('customer'),
+    };
+
+    const selectedOrderIds = modules.invoice ? orderIds : [];
+    const selectedReceiptIds = modules.receipt ? receiptIds : [];
+    const selectedDetailIds = modules.detail ? detailIds : [];
+    const selectedDetailIdSet = new Set(selectedDetailIds);
+    const selectedSwiftIds = Array.from(new Set([
+      ...(modules.swift ? swiftIdsCreatedByBranch : []),
+      ...(modules.detail ? swifts.filter((row) => selectedDetailIdSet.has(row.detailId)).map((row) => row.id) : []),
+    ]));
+    const selectedCustomerIds = modules.customer ? customerIds : [];
+    const selectedInvoiceIds = modules.invoice
+      ? Array.from(new Set([...invoices.map((row) => row.id), ...orders.map((row) => row.invoiceId)]))
+      : [];
 
     await db.$transaction(async (tx) => {
-      if (receiptIds.length > 0) {
+      if (selectedReceiptIds.length > 0) {
         await tx.detailItem.updateMany({
-          where: { receiptId: { in: receiptIds } },
+          where: { receiptId: { in: selectedReceiptIds } },
           data: { receiptId: null },
         });
       }
 
-      if (orderIds.length > 0) {
+      if (selectedOrderIds.length > 0) {
+        await tx.receipt.updateMany({
+          where: { orderId: { in: selectedOrderIds } },
+          data: { orderId: null },
+        });
         await tx.balanceTransfer.deleteMany({
           where: {
             OR: [
-              { fromOrderId: { in: orderIds } },
-              { toOrderId: { in: orderIds } },
+              { fromOrderId: { in: selectedOrderIds } },
+              { toOrderId: { in: selectedOrderIds } },
             ],
           },
         });
       }
 
-      if (detailIds.length > 0) {
+      if (selectedDetailIds.length > 0) {
         await tx.detailHistory.deleteMany({
-          where: {
-            OR: [
-              { createdBy: { in: branchUserIds } },
-              { detailId: { in: detailIds } },
-            ],
-          },
+          where: { detailId: { in: selectedDetailIds } },
         });
       }
 
-      if (receiptIds.length > 0) {
+      if (selectedReceiptIds.length > 0) {
         await tx.receiptHistory.deleteMany({
-          where: {
-            OR: [
-              { createdBy: { in: branchUserIds } },
-              { receiptId: { in: receiptIds } },
-            ],
-          },
+          where: { receiptId: { in: selectedReceiptIds } },
         });
       }
 
-      await tx.swift.deleteMany({ where: { createdBy: { in: branchUserIds } } });
-      await tx.detail.deleteMany({ where: { createdBy: { in: branchUserIds } } });
-      await tx.receipt.deleteMany({ where: { createdBy: { in: branchUserIds } } });
-      await tx.order.deleteMany({ where: { createdBy: { in: branchUserIds } } });
-      await tx.customer.deleteMany({
-        where: {
-          OR: [
-            { createdBy: { in: branchUserIds } },
-            { ownerId: { in: branchUserIds } },
-          ],
-        },
-      });
-
-      if (touchedInvoiceIds.length > 0) {
+      if (selectedSwiftIds.length > 0) {
+        await tx.swift.deleteMany({ where: { id: { in: selectedSwiftIds } } });
+      }
+      if (selectedDetailIds.length > 0) {
+        await tx.detail.deleteMany({ where: { id: { in: selectedDetailIds } } });
+      }
+      if (selectedReceiptIds.length > 0) {
+        await tx.receipt.deleteMany({ where: { id: { in: selectedReceiptIds } } });
+      }
+      if (selectedOrderIds.length > 0) {
+        await tx.order.deleteMany({ where: { id: { in: selectedOrderIds } } });
+      }
+      if (selectedInvoiceIds.length > 0) {
         await tx.invoice.deleteMany({
           where: {
-            id: { in: touchedInvoiceIds },
+            id: { in: selectedInvoiceIds },
             orders: { none: {} },
           },
         });
+      }
+      if (selectedCustomerIds.length > 0) {
+        await tx.customer.deleteMany({ where: { id: { in: selectedCustomerIds } } });
       }
 
       await tx.deletionRequest.deleteMany({
@@ -251,9 +288,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           OR: [
             { requestedBy: { in: branchUserIds } },
             { approvedBy: { in: branchUserIds } },
-            ...(receiptIds.length > 0 ? [{ targetType: 'RECEIPT', targetId: { in: receiptIds } }] : []),
-            ...(detailIds.length > 0 ? [{ targetType: 'DETAIL', targetId: { in: detailIds } }] : []),
-            ...(swiftIds.length > 0 ? [{ targetType: 'SWIFT', targetId: { in: swiftIds } }] : []),
+            ...(selectedReceiptIds.length > 0 ? [{ targetType: 'RECEIPT', targetId: { in: selectedReceiptIds } }] : []),
+            ...(selectedDetailIds.length > 0 ? [{ targetType: 'DETAIL', targetId: { in: selectedDetailIds } }] : []),
+            ...(selectedSwiftIds.length > 0 ? [{ targetType: 'SWIFT', targetId: { in: selectedSwiftIds } }] : []),
           ],
         },
       });
@@ -265,14 +302,18 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     return NextResponse.json({
       success: true,
-      message: `已清空管理员 ${targetAdmin.email} 分支业务数据（用户/系统配置保留）`,
+      message: `已清空账号 ${targetUser.email} 分支业务数据（系统配置/用户配置保留）`,
       data: {
+        targetUser: targetUser.email,
+        targetRole: targetUser.role,
         branchUsers: branchUserIds.length,
-        deletedOrders: orderIds.length,
-        deletedReceipts: receiptIds.length,
-        deletedDetails: detailIds.length,
-        deletedSwifts: swiftIds.length,
-        deletedCustomers: customerIds.length,
+        modules: Array.from(selectedModules),
+        deletedOrders: selectedOrderIds.length,
+        deletedInvoices: selectedInvoiceIds.length,
+        deletedReceipts: selectedReceiptIds.length,
+        deletedDetails: selectedDetailIds.length,
+        deletedSwifts: selectedSwiftIds.length,
+        deletedCustomers: selectedCustomerIds.length,
       },
     });
   }

@@ -32,6 +32,8 @@ export const apiCatalog: ApiModule[] = [
     actions: [
       { action: 'list', method: 'GET', description: 'List invoices' },
       { action: 'create', method: 'POST', description: 'Create invoice and orders', bodyExample: { invNo: 'L001MH', orders: [{ orderNo: 'ABC-1', tokens: 100, amount: 100 }] } },
+      { action: 'import-excel', method: 'POST', description: 'Bulk import invoices from Excel (multipart form)' },
+      { action: 'import-rows', method: 'POST', description: 'Retry import issue rows only', bodyExample: { action: 'import-rows', rows: [{ rowNo: 2, invNo: 'L001MH', orderNo: 'ABC-1', amount: '100', customerMark: 'MAB-1' }] } },
       { action: 'updateOrder', method: 'PUT', description: 'Update order', bodyExample: { action: 'updateOrder', orderId: 'order-id', tokens: 120, amount: 120 } },
       { action: 'addOrder', method: 'PUT', description: 'Add order to invoice', bodyExample: { action: 'addOrder', invoiceId: 'invoice-id', orderNo: 'ABC-2', tokens: 50, amount: 50 } },
       { action: 'deleteOrder', method: 'PUT', description: 'Delete order', bodyExample: { action: 'deleteOrder', orderId: 'order-id' } },
@@ -113,6 +115,7 @@ export const apiCatalog: ApiModule[] = [
       { action: 'update-config', method: 'POST', description: 'Update system config (admin)', bodyExample: { action: 'update-config', settings: { OCR_MODEL: 'gpt-4o-mini' } } },
       { action: 'test-ocr', method: 'POST', description: 'Test OCR connectivity (admin)', bodyExample: { action: 'test-ocr' } },
       { action: 'purge-business-data', method: 'POST', description: 'Purge business data but keep users (admin)', bodyExample: { action: 'purge-business-data' } },
+      { action: 'purge-branch-data', method: 'POST', description: 'Purge selected branch modules with dependency cascade (admin)', bodyExample: { action: 'purge-branch-data', targetUserId: 'user-id', modules: ['all'], password: '***' } },
     ],
   },
 ];

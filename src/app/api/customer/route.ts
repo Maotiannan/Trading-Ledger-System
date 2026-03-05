@@ -31,6 +31,31 @@ type ImportRow = {
   ownerEmail?: string | null;
 };
 
+type CustomerImportIssueRow = {
+  rowNo: number;
+  mark: string;
+  orderName: string;
+  name: string;
+  phone: string;
+  city: string;
+  consignee: string;
+  companyName: string;
+  credit: string;
+  companyAddress: string;
+  ownerEmail: string;
+  reason: string;
+};
+
+type CustomerImportProcessResult = {
+  success: boolean;
+  status: number;
+  message: string;
+  details: string[];
+  issueRows: CustomerImportIssueRow[];
+  createdCount: number;
+  updatedCount: number;
+};
+
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
@@ -106,6 +131,169 @@ async function listCustomerOwnerOptions(currentUser: { id: string; role: UserRol
     select: { id: true, email: true, name: true, role: true, level: true },
   });
   return self ? [self] : [];
+}
+
+function toCustomerImportIssueRow(row: ImportRow, reason: string): CustomerImportIssueRow {
+  const payload = row.payload;
+  return {
+    rowNo: row.rowNo,
+    mark: trimStr(payload.mark),
+    orderName: trimStr(payload.orderName),
+    name: trimStr(payload.name),
+    phone: trimStr(payload.phone),
+    city: trimStr(payload.city),
+    consignee: trimStr(payload.consignee),
+    companyName: trimStr(payload.companyName),
+    credit: payload.credit === null || payload.credit === undefined || Number.isNaN(payload.credit) ? '' : String(payload.credit),
+    companyAddress: trimStr(payload.companyAddress),
+    ownerEmail: trimStr(row.ownerEmail || ''),
+    reason,
+  };
+}
+
+async function processCustomerImportRows(
+  rows: ImportRow[],
+  currentUser: { id: string; role: UserRole },
+  ownerIdFallback: string,
+  showExtended: boolean
+): Promise<CustomerImportProcessResult> {
+  const issueRows: CustomerImportIssueRow[] = [];
+  if (rows.length === 0) {
+    return {
+      success: false,
+      status: 400,
+      message: '没有可导入的数据行',
+      details: [],
+      issueRows: [],
+      createdCount: 0,
+      updatedCount: 0,
+    };
+  }
+
+  const ownerEmailToId = new Map<string, string>();
+  if (currentUser.role === UserRole.ADMIN && rows.some((row) => !!row.ownerEmail)) {
+    const ownerEmails = Array.from(new Set(rows.map((row) => (row.ownerEmail || '').trim().toLowerCase()).filter(Boolean)));
+    const ownerUsers = await db.user.findMany({
+      where: {
+        role: UserRole.SALES,
+        email: { in: ownerEmails },
+      },
+      select: { id: true, email: true },
+    });
+    for (const owner of ownerUsers) ownerEmailToId.set(owner.email.toLowerCase(), owner.id);
+  }
+
+  let createdCount = 0;
+  let updatedCount = 0;
+
+  for (const row of rows) {
+    const payload = row.payload;
+    const requiredError = validateRequired(payload);
+    if (requiredError) {
+      issueRows.push(toCustomerImportIssueRow(row, requiredError));
+      continue;
+    }
+
+    const rowOwnerId = row.ownerEmail
+      ? ownerEmailToId.get((row.ownerEmail || '').toLowerCase()) || null
+      : ownerIdFallback;
+
+    if (row.ownerEmail && currentUser.role === UserRole.ADMIN && !rowOwnerId) {
+      issueRows.push(toCustomerImportIssueRow(row, `SALES_EMAIL不存在或不是销售账号: ${row.ownerEmail}`));
+      continue;
+    }
+
+    const effectiveOwnerId = rowOwnerId || ownerIdFallback;
+
+    try {
+      const targetId = await resolveCustomerUpsertTargetId(effectiveOwnerId, {
+        orderName: payload.orderName!,
+        phone: payload.phone!,
+        companyName: showExtended ? payload.companyName || null : null,
+      });
+
+      if (targetId) {
+        await assertNoCustomerScopeConflict(
+          effectiveOwnerId,
+          {
+            orderName: payload.orderName!,
+            phone: payload.phone!,
+            companyName: showExtended ? payload.companyName || null : null,
+          },
+          targetId
+        );
+        await db.customer.update({
+          where: { id: targetId },
+          data: {
+            mark: payload.mark!,
+            orderName: payload.orderName!,
+            name: payload.name!,
+            phone: payload.phone!,
+            city: payload.city!,
+            consignee: payload.consignee || null,
+            ownerId: effectiveOwnerId,
+            ...(showExtended
+              ? {
+                  companyName: payload.companyName || null,
+                  companyAddress: payload.companyAddress || null,
+                  credit: payload.credit ?? null,
+                }
+              : {}),
+          },
+        });
+        updatedCount++;
+        continue;
+      }
+
+      await assertNoCustomerScopeConflict(effectiveOwnerId, {
+        orderName: payload.orderName!,
+        phone: payload.phone!,
+        companyName: showExtended ? payload.companyName || null : null,
+      });
+
+      await db.customer.create({
+        data: {
+          mark: payload.mark!,
+          orderName: payload.orderName!,
+          name: payload.name!,
+          phone: payload.phone!,
+          city: payload.city!,
+          consignee: payload.consignee || null,
+          companyName: showExtended ? payload.companyName || null : null,
+          companyAddress: showExtended ? payload.companyAddress || null : null,
+          credit: showExtended ? payload.credit ?? null : null,
+          createdBy: currentUser.id,
+          ownerId: effectiveOwnerId,
+        },
+      });
+      createdCount++;
+    } catch (error) {
+      issueRows.push(toCustomerImportIssueRow(row, mapPrismaWriteError(error)));
+    }
+  }
+
+  const totalSuccess = createdCount + updatedCount;
+  if (totalSuccess === 0) {
+    return {
+      success: false,
+      status: 400,
+      message: '导入失败：所有行均未成功',
+      details: issueRows.map((row) => `第${row.rowNo}行(NAME=${row.name || '-'})：${row.reason}`),
+      issueRows,
+      createdCount,
+      updatedCount,
+    };
+  }
+
+  return {
+    success: true,
+    status: 200,
+    message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，失败 ${issueRows.length}`,
+    details: issueRows.map((row) => `第${row.rowNo}行(NAME=${row.name || '-'})：${row.reason}`),
+    issueRows,
+    createdCount,
+    updatedCount,
+  };
 }
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -245,7 +433,6 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     const rows: ImportRow[] = [];
-    const rowErrors: string[] = [];
     for (let rowNo = 2; rowNo <= sheet.rowCount; rowNo++) {
       const row = sheet.getRow(rowNo);
       const payload: CustomerPayload = {
@@ -268,11 +455,6 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       };
 
       if (!payload.mark && !payload.orderName && !payload.name && !payload.phone && !payload.city && !payload.consignee) continue;
-      const err = validateRequired(payload);
-      if (err) {
-        rowErrors.push(`第${rowNo}行: ${err}`);
-        continue;
-      }
       rows.push({
         rowNo,
         payload,
@@ -280,134 +462,82 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       });
     }
 
-    if (rowErrors.length > 0) {
-      return NextResponse.json({ success: false, error: 'Excel校验失败', details: rowErrors.slice(0, 200) }, { status: 400 });
-    }
     if (rows.length === 0) {
       return NextResponse.json({ success: false, error: '没有可导入的数据行' }, { status: 400 });
     }
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
-    const ownerEmailToId = new Map<string, string>();
-    if (currentUser.role === UserRole.ADMIN && rows.some((row) => !!row.ownerEmail)) {
-      const ownerEmails = Array.from(new Set(rows.map((row) => row.ownerEmail || '').filter(Boolean)));
-      const ownerUsers = await db.user.findMany({
-        where: {
-          role: UserRole.SALES,
-          email: { in: ownerEmails },
+    const processed = await processCustomerImportRows(rows, currentUser as { id: string; role: UserRole }, ownerId, showExtended);
+    return NextResponse.json(
+      {
+        success: processed.success,
+        message: processed.message,
+        error: processed.success ? undefined : processed.message,
+        details: processed.details.slice(0, 200),
+        issueRows: processed.issueRows.slice(0, 200),
+        data: {
+          createdCount: processed.createdCount,
+          updatedCount: processed.updatedCount,
+          failedCount: processed.issueRows.length,
         },
-        select: { id: true, email: true },
-      });
-      for (const owner of ownerUsers) {
-        ownerEmailToId.set(owner.email.toLowerCase(), owner.id);
-      }
-    }
-
-    let createdCount = 0;
-    let updatedCount = 0;
-    const failedRows: string[] = [];
-
-    for (const row of rows) {
-      const payload = row.payload;
-      const rowOwnerId = row.ownerEmail
-        ? ownerEmailToId.get(row.ownerEmail) || null
-        : ownerId;
-      try {
-        if (row.ownerEmail && currentUser.role === UserRole.ADMIN && !rowOwnerId) {
-          throw new Error(`SALES_EMAIL不存在或不是销售账号: ${row.ownerEmail}`);
-        }
-
-        const effectiveOwnerId = rowOwnerId || ownerId;
-
-        const targetId = await resolveCustomerUpsertTargetId(effectiveOwnerId, {
-          orderName: payload.orderName!,
-          phone: payload.phone!,
-          companyName: showExtended ? payload.companyName || null : null,
-        });
-
-        if (targetId) {
-          await assertNoCustomerScopeConflict(
-            effectiveOwnerId,
-            {
-              orderName: payload.orderName!,
-              phone: payload.phone!,
-              companyName: showExtended ? payload.companyName || null : null,
-            },
-            targetId
-          );
-
-          await db.customer.update({
-            where: { id: targetId },
-            data: {
-              mark: payload.mark!,
-              orderName: payload.orderName!,
-              name: payload.name!,
-              phone: payload.phone!,
-              city: payload.city!,
-              consignee: payload.consignee || null,
-              ownerId: effectiveOwnerId,
-              ...(showExtended
-                ? {
-                    companyName: payload.companyName || null,
-                    companyAddress: payload.companyAddress || null,
-                    credit: payload.credit ?? null,
-                  }
-                : {}),
-            },
-          });
-          updatedCount++;
-          continue;
-        }
-
-        await assertNoCustomerScopeConflict(effectiveOwnerId, {
-          orderName: payload.orderName!,
-          phone: payload.phone!,
-          companyName: showExtended ? payload.companyName || null : null,
-        });
-
-        await db.customer.create({
-          data: {
-            mark: payload.mark!,
-            orderName: payload.orderName!,
-            name: payload.name!,
-            phone: payload.phone!,
-            city: payload.city!,
-            consignee: payload.consignee || null,
-            companyName: showExtended ? payload.companyName || null : null,
-            companyAddress: showExtended ? payload.companyAddress || null : null,
-            credit: showExtended ? payload.credit ?? null : null,
-            createdBy: currentUser.id,
-            ownerId: effectiveOwnerId,
-          },
-        });
-        createdCount++;
-      } catch (error) {
-        failedRows.push(`第${row.rowNo}行(NAME=${payload.name || '-'})：${mapPrismaWriteError(error)}`);
-      }
-    }
-
-    const totalSuccess = createdCount + updatedCount;
-    if (totalSuccess === 0) {
-      return NextResponse.json(
-        { success: false, error: '导入失败：所有行均未成功', details: failedRows.slice(0, 200) },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，失败 ${failedRows.length}`,
-      data: {
-        createdCount,
-        updatedCount,
-        failedCount: failedRows.length,
-        failedRows: failedRows.slice(0, 200),
       },
-    });
+      { status: processed.status }
+    );
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = trimStr(body.action);
+
+  if (action === 'import-rows') {
+    const rowsInput = Array.isArray(body.rows) ? body.rows : [];
+    const rows: ImportRow[] = rowsInput.map((raw, index) => {
+      const row = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
+      const creditRaw = trimStr(row.credit);
+      const credit = creditRaw === '' ? null : Number(creditRaw);
+      return {
+        rowNo: Number(row.rowNo) || index + 1,
+        ownerEmail: trimStr(row.ownerEmail).toLowerCase() || null,
+        payload: {
+          mark: trimStr(row.mark),
+          orderName: trimStr(row.orderName),
+          name: trimStr(row.name),
+          phone: trimStr(row.phone),
+          city: trimStr(row.city),
+          consignee: trimStr(row.consignee) || null,
+          companyName: trimStr(row.companyName) || null,
+          companyAddress: trimStr(row.companyAddress) || null,
+          credit: creditRaw === '' ? null : (Number.isFinite(credit) ? credit : Number.NaN),
+        },
+      };
+    });
+    if (rows.length === 0) {
+      return NextResponse.json({ success: false, error: '没有可导入的数据行' }, { status: 400 });
+    }
+
+    let ownerId: string;
+    try {
+      ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
+    } catch (innerError) {
+      return NextResponse.json({ success: false, error: mapPrismaWriteError(innerError) }, { status: 400 });
+    }
+    const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
+    const processed = await processCustomerImportRows(rows, currentUser as { id: string; role: UserRole }, ownerId, showExtended);
+    return NextResponse.json(
+      {
+        success: processed.success,
+        message: processed.message,
+        error: processed.success ? undefined : processed.message,
+        details: processed.details.slice(0, 200),
+        issueRows: processed.issueRows.slice(0, 200),
+        data: {
+          createdCount: processed.createdCount,
+          updatedCount: processed.updatedCount,
+          failedCount: processed.issueRows.length,
+        },
+      },
+      { status: processed.status }
+    );
+  }
 
   if (action === 'create') {
     const payload = parsePayload(body);

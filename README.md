@@ -673,7 +673,7 @@ src/
 - ☎️ 客户手机号规则调整：同绑定池允许同手机号多客户并存，避免 `SDT/SDT2` 这类数据被误覆盖或误拦截。
 - 🎯 客户导入匹配优化：优先 `MARK+NAME`，其次 `PHONE`（同 `ORDER_NAME` 或占位客户时允许回填），降低同手机号误更新。
 - 🧩 账单自动识别增强：`CUSTOMER_MARK` 为空时，新增 `ORDER_NAME` 回退匹配；多命中时增加 `MARK 前缀` 进一步判定。
-- 🧪 回归脚本更新：`customer/import` 与 `invoice/date` API 脚本同步适配新规则并全部通过。
+- 🧪 回归验证更新：`customer/import` 与 `invoice/date` API 场景已完成自动化验证并通过。
 
 ### v1.0.23 (2026-03-05)
 - 🧾 客户导入匹配规则升级：按 `PHONE` 或 `MARK+NAME` 命中更新；若同一行命中多条客户则进入问题行，不再误更新。

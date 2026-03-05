@@ -224,81 +224,92 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       ? Array.from(new Set([...invoices.map((row) => row.id), ...orders.map((row) => row.invoiceId)]))
       : [];
 
-    await db.$transaction(async (tx) => {
-      if (selectedReceiptIds.length > 0) {
-        await tx.detailItem.updateMany({
-          where: { receiptId: { in: selectedReceiptIds } },
-          data: { receiptId: null },
-        });
-      }
+    try {
+      await db.$transaction(async (tx) => {
+        if (selectedReceiptIds.length > 0) {
+          await tx.detailItem.updateMany({
+            where: { receiptId: { in: selectedReceiptIds } },
+            data: { receiptId: null },
+          });
+        }
 
-      if (selectedOrderIds.length > 0) {
-        await tx.receipt.updateMany({
-          where: { orderId: { in: selectedOrderIds } },
-          data: { orderId: null },
-        });
-        await tx.balanceTransfer.deleteMany({
+        if (selectedOrderIds.length > 0) {
+          await tx.receipt.updateMany({
+            where: { orderId: { in: selectedOrderIds } },
+            data: { orderId: null },
+          });
+          await tx.balanceTransfer.deleteMany({
+            where: {
+              OR: [
+                { fromOrderId: { in: selectedOrderIds } },
+                { toOrderId: { in: selectedOrderIds } },
+              ],
+            },
+          });
+        }
+
+        if (selectedDetailIds.length > 0) {
+          await tx.detailHistory.deleteMany({
+            where: { detailId: { in: selectedDetailIds } },
+          });
+        }
+
+        if (selectedReceiptIds.length > 0) {
+          await tx.receiptHistory.deleteMany({
+            where: { receiptId: { in: selectedReceiptIds } },
+          });
+        }
+
+        if (selectedSwiftIds.length > 0) {
+          await tx.swift.deleteMany({ where: { id: { in: selectedSwiftIds } } });
+        }
+        if (selectedDetailIds.length > 0) {
+          await tx.detail.deleteMany({ where: { id: { in: selectedDetailIds } } });
+        }
+        if (selectedReceiptIds.length > 0) {
+          await tx.receipt.deleteMany({ where: { id: { in: selectedReceiptIds } } });
+        }
+        if (selectedOrderIds.length > 0) {
+          await tx.order.deleteMany({ where: { id: { in: selectedOrderIds } } });
+        }
+        if (selectedInvoiceIds.length > 0) {
+          await tx.invoice.deleteMany({
+            where: {
+              id: { in: selectedInvoiceIds },
+              orders: { none: {} },
+            },
+          });
+        }
+        if (selectedCustomerIds.length > 0) {
+          await tx.customer.deleteMany({ where: { id: { in: selectedCustomerIds } } });
+        }
+
+        await tx.deletionRequest.deleteMany({
           where: {
             OR: [
-              { fromOrderId: { in: selectedOrderIds } },
-              { toOrderId: { in: selectedOrderIds } },
+              { requestedBy: { in: branchUserIds } },
+              { approvedBy: { in: branchUserIds } },
+              ...(selectedReceiptIds.length > 0 ? [{ targetType: 'RECEIPT', targetId: { in: selectedReceiptIds } }] : []),
+              ...(selectedDetailIds.length > 0 ? [{ targetType: 'DETAIL', targetId: { in: selectedDetailIds } }] : []),
+              ...(selectedSwiftIds.length > 0 ? [{ targetType: 'SWIFT', targetId: { in: selectedSwiftIds } }] : []),
             ],
           },
         });
-      }
 
-      if (selectedDetailIds.length > 0) {
-        await tx.detailHistory.deleteMany({
-          where: { detailId: { in: selectedDetailIds } },
+        await tx.auditLog.deleteMany({
+          where: { actorId: { in: branchUserIds } },
         });
-      }
-
-      if (selectedReceiptIds.length > 0) {
-        await tx.receiptHistory.deleteMany({
-          where: { receiptId: { in: selectedReceiptIds } },
-        });
-      }
-
-      if (selectedSwiftIds.length > 0) {
-        await tx.swift.deleteMany({ where: { id: { in: selectedSwiftIds } } });
-      }
-      if (selectedDetailIds.length > 0) {
-        await tx.detail.deleteMany({ where: { id: { in: selectedDetailIds } } });
-      }
-      if (selectedReceiptIds.length > 0) {
-        await tx.receipt.deleteMany({ where: { id: { in: selectedReceiptIds } } });
-      }
-      if (selectedOrderIds.length > 0) {
-        await tx.order.deleteMany({ where: { id: { in: selectedOrderIds } } });
-      }
-      if (selectedInvoiceIds.length > 0) {
-        await tx.invoice.deleteMany({
-          where: {
-            id: { in: selectedInvoiceIds },
-            orders: { none: {} },
-          },
-        });
-      }
-      if (selectedCustomerIds.length > 0) {
-        await tx.customer.deleteMany({ where: { id: { in: selectedCustomerIds } } });
-      }
-
-      await tx.deletionRequest.deleteMany({
-        where: {
-          OR: [
-            { requestedBy: { in: branchUserIds } },
-            { approvedBy: { in: branchUserIds } },
-            ...(selectedReceiptIds.length > 0 ? [{ targetType: 'RECEIPT', targetId: { in: selectedReceiptIds } }] : []),
-            ...(selectedDetailIds.length > 0 ? [{ targetType: 'DETAIL', targetId: { in: selectedDetailIds } }] : []),
-            ...(selectedSwiftIds.length > 0 ? [{ targetType: 'SWIFT', targetId: { in: selectedSwiftIds } }] : []),
-          ],
-        },
       });
-
-      await tx.auditLog.deleteMany({
-        where: { actorId: { in: branchUserIds } },
+    } catch (error) {
+      console.error('[purge-branch-data] failed', {
+        targetUserId: targetUser.id,
+        targetEmail: targetUser.email,
+        modules: Array.from(selectedModules),
+        error,
       });
-    });
+      const message = error instanceof Error ? error.message : '未知错误';
+      return NextResponse.json({ success: false, error: `分支清库失败：${message}` }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,

@@ -87,20 +87,19 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
     },
   });
   const orderById = new Map(visibleOrders.map((row) => [row.id, row]));
-  const groupMarkMap = new Map<string, Array<{ customerMark: string; customerName: string | null; customerId: string | null }>>();
-  for (const row of visibleOrders) {
-    const groupKey = deriveOrderGroupKey(row.orderNo);
-    if (!groupKey || !row.customerMark) continue;
-    if (!groupMarkMap.has(groupKey)) groupMarkMap.set(groupKey, []);
-    groupMarkMap.get(groupKey)!.push({
-      customerMark: row.customerMark,
-      customerName: row.customerName || null,
-      customerId: row.customerId || null,
-    });
+  const visibleCustomers = await db.customer.findMany({
+    where: customerVisibilityWhere,
+    select: { id: true, mark: true, orderName: true },
+  });
+  const normalizeOrderNameForMatch = (value: string | null | undefined): string =>
+    String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const customerByOrderNameMap = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
+  for (const customer of visibleCustomers) {
+    const key = normalizeOrderNameForMatch(customer.orderName);
+    if (!key) continue;
+    if (!customerByOrderNameMap.has(key)) customerByOrderNameMap.set(key, []);
+    customerByOrderNameMap.get(key)!.push(customer);
   }
-
-  const customerByMarkCache = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
-  const customerByOrderNameCache = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
   const inferCache = new Map<string, { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string }>();
   const importedOrderNos = new Set<string>();
   const batchOrderSet = new Set<string>();
@@ -113,6 +112,14 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
   }>();
   const issueRows: InvoiceImportIssueRow[] = [];
   const successMessages: string[] = [];
+
+  const extractOrderNameFromOrderNo = (singleOrderNo: string): string | null => {
+    const normalized = String(singleOrderNo || '').trim();
+    const lastDashIndex = normalized.lastIndexOf('-');
+    if (lastDashIndex <= 0 || lastDashIndex >= normalized.length - 1) return null;
+    const left = normalized.slice(0, lastDashIndex).trim().replace(/\s+/g, ' ');
+    return left || null;
+  };
 
   const inferCustomerBySingleOrderNo = async (singleOrderNo: string) => {
     const cacheKey = singleOrderNo.toLowerCase();
@@ -130,88 +137,23 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       }
 
       if (!inferResult.matched) {
-        const groupKey = deriveOrderGroupKey(singleOrderNo);
-        if (groupKey) {
-          const groupedMarks = groupMarkMap.get(groupKey) || [];
-          const uniq = new Map<string, { customerMark: string; customerName: string | null; customerId: string | null }>();
-          for (const candidate of groupedMarks) {
-            if (!candidate.customerMark) continue;
-            const key = candidate.customerMark.toLowerCase();
-            if (!uniq.has(key)) uniq.set(key, candidate);
-          }
-          if (uniq.size === 1) {
-            const selected = Array.from(uniq.values())[0];
-            inferResult.matched = true;
-            inferResult.customerMark = selected.customerMark;
-            inferResult.customerName = selected.customerName || '';
-            inferResult.customerId = selected.customerId || '';
-          } else if (uniq.size > 1) {
-            inferResult.reason = '同组存在多个MARK';
-          } else {
-            const markKey = groupKey.toLowerCase();
-            if (!customerByMarkCache.has(markKey)) {
-              const customers = await db.customer.findMany({
-                where: {
-                  AND: [
-                    customerVisibilityWhere,
-                    { mark: { equals: groupKey } },
-                  ],
-                },
-                select: { id: true, mark: true, orderName: true },
-              });
-              customerByMarkCache.set(markKey, customers);
-            }
-            const customers = customerByMarkCache.get(markKey) || [];
-            if (customers.length === 1) {
-              const selected = customers[0];
-              inferResult.matched = true;
-              inferResult.customerMark = selected.mark;
-              inferResult.customerName = selected.orderName || '';
-              inferResult.customerId = selected.id;
-            } else if (customers.length > 1) {
-              inferResult.reason = '客户库同MARK存在多条';
-            } else {
-              if (!customerByOrderNameCache.has(markKey)) {
-                const customersByOrderName = await db.customer.findMany({
-                  where: {
-                    AND: [
-                      customerVisibilityWhere,
-                      { orderName: { equals: groupKey } },
-                    ],
-                  },
-                  select: { id: true, mark: true, orderName: true },
-                });
-                customerByOrderNameCache.set(markKey, customersByOrderName);
-              }
-              const customersByOrderName = customerByOrderNameCache.get(markKey) || [];
-              if (customersByOrderName.length === 1) {
-                const selected = customersByOrderName[0];
-                inferResult.matched = true;
-                inferResult.customerMark = selected.mark;
-                inferResult.customerName = selected.orderName || '';
-                inferResult.customerId = selected.id;
-              } else if (customersByOrderName.length > 1) {
-                const normalizedGroup = groupKey.toLowerCase();
-                const byMarkPrefix = customersByOrderName.filter((row) => {
-                  const mark = (row.mark || '').trim().toLowerCase();
-                  return mark === normalizedGroup || mark.startsWith(`${normalizedGroup}-`);
-                });
-                if (byMarkPrefix.length === 1) {
-                  const selected = byMarkPrefix[0];
-                  inferResult.matched = true;
-                  inferResult.customerMark = selected.mark;
-                  inferResult.customerName = selected.orderName || '';
-                  inferResult.customerId = selected.id;
-                } else {
-                  inferResult.reason = '客户库同ORDER_NAME存在多条';
-                }
-              } else {
-                inferResult.reason = '客户库无匹配';
-              }
-            }
-          }
+        const orderName = extractOrderNameFromOrderNo(singleOrderNo);
+        if (!orderName) {
+          inferResult.reason = '应该含‘-’的ORDER格式';
         } else {
-          inferResult.reason = 'ORDER格式不支持分组匹配';
+          const key = normalizeOrderNameForMatch(orderName);
+          const matchedCustomers = customerByOrderNameMap.get(key) || [];
+          if (matchedCustomers.length === 1) {
+            const selected = matchedCustomers[0];
+            inferResult.matched = true;
+            inferResult.customerMark = selected.mark;
+            inferResult.customerName = selected.orderName || '';
+            inferResult.customerId = selected.id;
+          } else if (matchedCustomers.length > 1) {
+            inferResult.reason = '同一ORDER_NAME命中多客户';
+          } else {
+            inferResult.reason = '客户库无匹配';
+          }
         }
       }
       inferCache.set(cacheKey, inferResult);

@@ -75,11 +75,11 @@ function isEmptyOrPlaceholder(value: string | null | undefined): boolean {
 }
 
 function normalizeMarkForMatch(value: string | null | undefined): string {
-  return trimStr(value).toLowerCase();
+  return trimStr(value).replace(/\s+/g, ' ').toLowerCase();
 }
 
 function normalizeNameForMatch(value: string | null | undefined): string {
-  return trimStr(value).toLowerCase();
+  return trimStr(value).replace(/\s+/g, ' ').toLowerCase();
 }
 
 function normalizePhoneToken(value: string | null | undefined): string {
@@ -128,10 +128,10 @@ function buildCustomerUpdateDataForImport(
   if (isEmptyOrPlaceholder(existing.name) && hasMeaningfulContent(payload.name)) updateData.name = payload.name;
   if (isEmptyOrPlaceholder(existing.phone) && hasMeaningfulContent(payload.phone)) updateData.phone = payload.phone;
   if (isEmptyOrPlaceholder(existing.city) && hasMeaningfulContent(payload.city)) updateData.city = payload.city;
-  if (isEmptyOrPlaceholder(existing.consignee) && trimStr(payload.consignee)) updateData.consignee = payload.consignee;
+  if (isEmptyOrPlaceholder(existing.consignee) && hasMeaningfulContent(payload.consignee)) updateData.consignee = payload.consignee;
   if (showExtended) {
-    if (isEmptyOrPlaceholder(existing.companyName) && trimStr(payload.companyName)) updateData.companyName = payload.companyName;
-    if (isEmptyOrPlaceholder(existing.companyAddress) && trimStr(payload.companyAddress)) updateData.companyAddress = payload.companyAddress;
+    if (isEmptyOrPlaceholder(existing.companyName) && hasMeaningfulContent(payload.companyName)) updateData.companyName = payload.companyName;
+    if (isEmptyOrPlaceholder(existing.companyAddress) && hasMeaningfulContent(payload.companyAddress)) updateData.companyAddress = payload.companyAddress;
     if ((existing.credit === null || existing.credit === undefined) && payload.credit !== null && payload.credit !== undefined) {
       updateData.credit = payload.credit;
     }
@@ -318,7 +318,6 @@ async function processCustomerImportRows(
       const phoneTokens = splitPhoneCandidates(payload.phone || '');
       const inputMark = normalizeMarkForMatch(payload.mark || '');
       const inputName = normalizeNameForMatch(payload.name || '');
-      const inputOrderName = trimStr(payload.orderName).toLowerCase();
       const canUseMarkName = hasMeaningfulContent(payload.mark) && hasMeaningfulContent(payload.name);
 
       const markNameMatchedIds = new Set<string>();
@@ -337,34 +336,26 @@ async function processCustomerImportRows(
         continue;
       }
 
-      let targetId: string | null = markNameMatchedIds.size === 1 ? Array.from(markNameMatchedIds)[0] : null;
-      if (!targetId) {
-        const phoneMatchedIds = new Set<string>();
+      const phoneMatchedIds = new Set<string>();
+      if (phoneTokens.length > 0) {
         for (const existing of ownerCustomers) {
-          if (phoneTokens.length === 0) continue;
           const existingPhoneTokens = splitPhoneCandidates(existing.phone || '');
-          if (!existingPhoneTokens.some((token) => phoneTokens.includes(token))) continue;
-          if (!canUseMarkName) {
-            phoneMatchedIds.add(existing.id);
-            continue;
-          }
-          const existingMark = normalizeMarkForMatch(existing.mark || '');
-          const existingName = normalizeNameForMatch(existing.name || '');
-          const existingOrderName = trimStr(existing.orderName).toLowerCase();
-          const existingHasMeaningful = hasMeaningfulContent(existing.mark) && hasMeaningfulContent(existing.name);
-          const sameMarkName = existingHasMeaningful && existingMark === inputMark && existingName === inputName;
-          const sameOrderName = !!inputOrderName && inputOrderName === existingOrderName;
-          const existingIsPlaceholder = !existingHasMeaningful;
-          if (sameMarkName || sameOrderName || existingIsPlaceholder) {
+          if (existingPhoneTokens.some((token) => phoneTokens.includes(token))) {
             phoneMatchedIds.add(existing.id);
           }
         }
-        if (phoneMatchedIds.size > 1) {
-          issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（PHONE），请人工处理后重试'));
-          continue;
-        }
-        targetId = phoneMatchedIds.size === 1 ? Array.from(phoneMatchedIds)[0] : null;
       }
+      if (phoneMatchedIds.size > 1) {
+        issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（PHONE），请人工处理后重试'));
+        continue;
+      }
+
+      const mergedMatchedIds = new Set<string>([...markNameMatchedIds, ...phoneMatchedIds]);
+      if (mergedMatchedIds.size > 1) {
+        issueRows.push(toCustomerImportIssueRow(row, '同一行同时命中不同客户，请人工处理后重试'));
+        continue;
+      }
+      const targetId = mergedMatchedIds.size === 1 ? Array.from(mergedMatchedIds)[0] : null;
 
       if (targetId) {
         const target = ownerCustomers.find((item) => item.id === targetId);

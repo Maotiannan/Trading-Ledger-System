@@ -1972,40 +1972,40 @@ function InvoiceManager() {
       </Dialog>
 
       <Dialog open={showInvoiceImportIssues} onOpenChange={setShowInvoiceImportIssues}>
-        <DialogContent className="max-w-6xl">
+        <DialogContent className="w-[96vw] max-w-[96vw]">
           <DialogHeader>
             <DialogTitle>{tx('账单导入问题行处理', 'Invoice Import Issue Rows')}</DialogTitle>
             <DialogDescription className="whitespace-pre-wrap break-words">
               {invoiceImportMessage || tx('请补充问题行后继续导入，仅重试当前问题行。', 'Edit issue rows and retry import. Only current issue rows will be retried.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-auto border rounded-md">
-            <Table>
+          <div className="max-h-[65vh] overflow-auto border rounded-md">
+            <Table className="min-w-[2200px] table-auto">
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
-                  <TableHead>INV_NO</TableHead>
-                  <TableHead>ORDER_NO</TableHead>
-                  <TableHead>AMOUNT</TableHead>
-                  <TableHead>CUSTOMER_MARK</TableHead>
-                  <TableHead>CUSTOMER_ORDER_NAME</TableHead>
-                  <TableHead>SHIP_DATE</TableHead>
-                  <TableHead>RELEASE_DATE</TableHead>
-                  <TableHead>{tx('原因', 'Reason')}</TableHead>
+                  <TableHead className="min-w-[220px]">INV_NO</TableHead>
+                  <TableHead className="min-w-[300px]">ORDER_NO</TableHead>
+                  <TableHead className="min-w-[140px]">AMOUNT</TableHead>
+                  <TableHead className="min-w-[280px]">CUSTOMER_MARK</TableHead>
+                  <TableHead className="min-w-[320px]">CUSTOMER_ORDER_NAME</TableHead>
+                  <TableHead className="min-w-[180px]">SHIP_DATE</TableHead>
+                  <TableHead className="min-w-[180px]">RELEASE_DATE</TableHead>
+                  <TableHead className="min-w-[540px]">{tx('原因', 'Reason')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {invoiceImportIssues.map((row, index) => (
                   <TableRow key={`${row.rowNo}-${index}`}>
                     <TableCell>{row.rowNo || index + 1}</TableCell>
-                    <TableCell><Input value={row.invNo} onChange={(e) => updateInvoiceImportIssue(index, 'invNo', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.orderNo} onChange={(e) => updateInvoiceImportIssue(index, 'orderNo', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.amount} onChange={(e) => updateInvoiceImportIssue(index, 'amount', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.customerMark} onChange={(e) => updateInvoiceImportIssue(index, 'customerMark', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.customerName} onChange={(e) => updateInvoiceImportIssue(index, 'customerName', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.shipDate} onChange={(e) => updateInvoiceImportIssue(index, 'shipDate', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.releaseDate} onChange={(e) => updateInvoiceImportIssue(index, 'releaseDate', e.target.value)} /></TableCell>
-                    <TableCell className="max-w-[360px] whitespace-pre-wrap break-words text-xs text-red-600">{row.reason || '-'}</TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.invNo} onChange={(e) => updateInvoiceImportIssue(index, 'invNo', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[300px]" value={row.orderNo} onChange={(e) => updateInvoiceImportIssue(index, 'orderNo', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[140px]" value={row.amount} onChange={(e) => updateInvoiceImportIssue(index, 'amount', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[280px]" value={row.customerMark} onChange={(e) => updateInvoiceImportIssue(index, 'customerMark', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[320px]" value={row.customerName} onChange={(e) => updateInvoiceImportIssue(index, 'customerName', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[180px]" value={row.shipDate} onChange={(e) => updateInvoiceImportIssue(index, 'shipDate', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[180px]" value={row.releaseDate} onChange={(e) => updateInvoiceImportIssue(index, 'releaseDate', e.target.value)} /></TableCell>
+                    <TableCell className="min-w-[540px] whitespace-pre-wrap break-words text-xs text-red-600">{row.reason || '-'}</TableCell>
                   </TableRow>
                 ))}
                 {invoiceImportIssues.length === 0 && (
@@ -4270,6 +4270,7 @@ function CustomerManager() {
   const [showCustomerImportIssues, setShowCustomerImportIssues] = useState(false);
   const [customerIssueSubmitting, setCustomerIssueSubmitting] = useState(false);
   const [customerImportMessage, setCustomerImportMessage] = useState('');
+  const [customerLongTextPreview, setCustomerLongTextPreview] = useState<{ label: string; value: string } | null>(null);
   const customerImportInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
     mark: '',
@@ -4440,6 +4441,12 @@ function CustomerManager() {
     const ownerRole = owner && typeof owner.role === 'string' ? owner.role : '';
     if (ownerEmail) return `${ownerEmail}${ownerRole ? ` (${ownerRole})` : ''}`;
     return String(row.ownerId || '-');
+  };
+  const truncateLongText = (value: string, maxLength = 20) => {
+    const normalized = value.trim();
+    if (!normalized) return '-';
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength)}...`;
   };
 
   const downloadCustomerImportTemplate = async () => {
@@ -4667,16 +4674,45 @@ function CustomerManager() {
                 <TableBody>
                   {customers.map((row) => (
                     <TableRow key={String(row.id)}>
+                      {(() => {
+                        const consigneeFull = String(row.consignee || '').trim();
+                        const addressFull = String(row.companyAddress || '').trim();
+                        return (
+                          <>
                       <TableCell>{String(row.mark || '-')}</TableCell>
                       <TableCell>{String(row.orderName || '-')}</TableCell>
                       <TableCell>{String(row.name || '-')}</TableCell>
                       <TableCell>{String(row.phone || '-')}</TableCell>
                       <TableCell>{String(row.city || '-')}</TableCell>
-                      <TableCell>{String(row.consignee || '-')}</TableCell>
+                      <TableCell>
+                        {consigneeFull ? (
+                          <button
+                            type="button"
+                            className="max-w-[220px] truncate text-left hover:underline"
+                            title={consigneeFull}
+                            onClick={() => setCustomerLongTextPreview({ label: 'CONSIGNEE', value: consigneeFull })}
+                          >
+                            {truncateLongText(consigneeFull)}
+                          </button>
+                        ) : '-'}
+                      </TableCell>
                       <TableCell>{formatOwnerLabel(row)}</TableCell>
                       {canSeeExtended && <TableCell>{String(row.companyName || '-')}</TableCell>}
                       {canSeeExtended && <TableCell>{row.credit !== null && row.credit !== undefined ? String(row.credit) : '-'}</TableCell>}
-                      {canSeeExtended && <TableCell>{String(row.companyAddress || '-')}</TableCell>}
+                      {canSeeExtended && (
+                        <TableCell>
+                          {addressFull ? (
+                            <button
+                              type="button"
+                              className="max-w-[260px] truncate text-left hover:underline"
+                              title={addressFull}
+                              onClick={() => setCustomerLongTextPreview({ label: 'COMPANY_ADDRESS', value: addressFull })}
+                            >
+                              {truncateLongText(addressFull)}
+                            </button>
+                          ) : '-'}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>
                           <Pencil className="h-4 w-4" />
@@ -4687,6 +4723,9 @@ function CustomerManager() {
                           </Button>
                         )}
                       </TableCell>
+                          </>
+                        );
+                      })()}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -4883,6 +4922,17 @@ function CustomerManager() {
               {tx('仅导入当前问题行', 'Import Current Issue Rows')}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!customerLongTextPreview} onOpenChange={(open) => { if (!open) setCustomerLongTextPreview(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{customerLongTextPreview?.label || 'Text'}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[50vh] overflow-auto rounded-md border p-3 whitespace-pre-wrap break-words text-sm">
+            {customerLongTextPreview?.value || '-'}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

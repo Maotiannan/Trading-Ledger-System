@@ -619,6 +619,9 @@ function InvoiceManager() {
     try {
       const formData = new FormData();
       formData.append('action', 'import-excel');
+      if (isAdmin && (importOwnerId || defaultOwnerId)) {
+        formData.append('ownerId', importOwnerId || defaultOwnerId);
+      }
       formData.append('file', file);
       const response = await fetch('/api/invoice', {
         method: 'POST',
@@ -3952,7 +3955,10 @@ function CustomerManager() {
   const tx = useUiText();
   const { user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
+  const defaultOwnerId = isAdmin ? (user?.id || '') : (user?.id || '');
   const [customers, setCustomers] = useState<Array<Record<string, unknown>>>([]);
+  const [ownerOptions, setOwnerOptions] = useState<Array<{ id: string; email: string; name: string | null; role: string; level: number }>>([]);
+  const [importOwnerId, setImportOwnerId] = useState('');
   const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
   const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
   const [search, setSearch] = useState('');
@@ -3971,6 +3977,7 @@ function CustomerManager() {
     companyName: '',
     credit: '',
     companyAddress: '',
+    ownerId: defaultOwnerId,
   });
 
   const resetForm = () => {
@@ -3984,6 +3991,7 @@ function CustomerManager() {
       companyName: '',
       credit: '',
       companyAddress: '',
+      ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
     });
   };
 
@@ -4000,12 +4008,30 @@ function CustomerManager() {
     }
   }, []);
 
+  const loadOwnerOptions = useCallback(async () => {
+    const result = await apiCall('customer?action=owner-options');
+    if (!result.success) return;
+    const options = Array.isArray(result.data) ? result.data : [];
+    setOwnerOptions(options);
+
+    if (isAdmin) {
+      const preferredSales = options.find((row) => row && row.role === 'SALES');
+      const fallback = preferredSales?.id || options[0]?.id || defaultOwnerId;
+      setImportOwnerId((prev) => prev || fallback);
+      setForm((prev) => ({ ...prev, ownerId: prev.ownerId || fallback }));
+    } else {
+      setImportOwnerId(defaultOwnerId);
+      setForm((prev) => ({ ...prev, ownerId: defaultOwnerId }));
+    }
+  }, [defaultOwnerId, isAdmin]);
+
   useEffect(() => {
     void Promise.resolve().then(() => {
       void loadCustomers();
       void loadFixes();
+      void loadOwnerOptions();
     });
-  }, [loadCustomers, loadFixes]);
+  }, [loadCustomers, loadFixes, loadOwnerOptions]);
 
   const handleCreateOrUpdate = async () => {
     const payload = {
@@ -4019,6 +4045,7 @@ function CustomerManager() {
       companyName: form.companyName || null,
       companyAddress: form.companyAddress || null,
       credit: form.credit === '' ? null : Number(form.credit),
+      ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
     };
     const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
@@ -4054,6 +4081,7 @@ function CustomerManager() {
       companyName: String(row.companyName || ''),
       credit: row.credit === null || row.credit === undefined ? '' : String(row.credit),
       companyAddress: String(row.companyAddress || ''),
+      ownerId: String(row.ownerId || importOwnerId || defaultOwnerId),
     });
     setShowCreate(true);
   };
@@ -4070,6 +4098,7 @@ function CustomerManager() {
       companyName: '',
       credit: '',
       companyAddress: '',
+      ownerId: importOwnerId || defaultOwnerId,
     });
   };
 
@@ -4087,6 +4116,7 @@ function CustomerManager() {
       companyName: form.companyName || null,
       companyAddress: form.companyAddress || null,
       credit: form.credit === '' ? null : Number(form.credit),
+      ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
     };
     const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
@@ -4100,6 +4130,13 @@ function CustomerManager() {
   };
 
   const canSeeExtended = isAdmin || customers.some((row) => row.companyName !== null || row.companyAddress !== null || row.credit !== null);
+  const formatOwnerLabel = (row: Record<string, unknown>) => {
+    const owner = (row.owner && typeof row.owner === 'object') ? (row.owner as Record<string, unknown>) : null;
+    const ownerEmail = owner && typeof owner.email === 'string' ? owner.email : '';
+    const ownerRole = owner && typeof owner.role === 'string' ? owner.role : '';
+    if (ownerEmail) return `${ownerEmail}${ownerRole ? ` (${ownerRole})` : ''}`;
+    return String(row.ownerId || '-');
+  };
 
   const downloadCustomerImportTemplate = async () => {
     try {
@@ -4162,6 +4199,20 @@ function CustomerManager() {
             }}
           />
           <Input placeholder={tx('搜索 mark/order_name/name/phone/city', 'Search mark/order_name/name/phone/city')} value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
+          {isAdmin && (
+            <select
+              className="h-10 border rounded-md px-3 text-sm bg-white"
+              value={importOwnerId}
+              onChange={(e) => setImportOwnerId(e.target.value)}
+              title={tx('批量导入默认绑定Sales', 'Default sales binding for import')}
+            >
+              {ownerOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {`${option.email} (${option.role})`}
+                </option>
+              ))}
+            </select>
+          )}
           <Button variant="outline" onClick={downloadCustomerImportTemplate}>
             {tx('下载客户模板', 'Download Customer Template')}
           </Button>
@@ -4198,6 +4249,7 @@ function CustomerManager() {
                     <TableHead>PHONE</TableHead>
                     <TableHead>CITY</TableHead>
                     <TableHead>CONSIGNEE</TableHead>
+                    <TableHead>{tx('绑定账户', 'Binding')}</TableHead>
                     {canSeeExtended && <TableHead>COMPANY_NAME</TableHead>}
                     {canSeeExtended && <TableHead>CREDIT</TableHead>}
                     {canSeeExtended && <TableHead>COMPANY_ADDRESS</TableHead>}
@@ -4213,6 +4265,7 @@ function CustomerManager() {
                       <TableCell>{String(row.phone || '-')}</TableCell>
                       <TableCell>{String(row.city || '-')}</TableCell>
                       <TableCell>{String(row.consignee || '-')}</TableCell>
+                      <TableCell>{formatOwnerLabel(row)}</TableCell>
                       {canSeeExtended && <TableCell>{String(row.companyName || '-')}</TableCell>}
                       {canSeeExtended && <TableCell>{row.credit !== null && row.credit !== undefined ? String(row.credit) : '-'}</TableCell>}
                       {canSeeExtended && <TableCell>{String(row.companyAddress || '-')}</TableCell>}
@@ -4288,6 +4341,19 @@ function CustomerManager() {
             <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
             <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
             {isAdmin && (
+              <select
+                className="h-10 border rounded-md px-3 text-sm bg-white"
+                value={form.ownerId}
+                onChange={(e) => setForm((p) => ({ ...p, ownerId: e.target.value }))}
+              >
+                {ownerOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {`${option.email} (${option.role})`}
+                  </option>
+                ))}
+              </select>
+            )}
+            {isAdmin && (
               <>
                 <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
                 <Input placeholder="CREDIT" type="number" min="0" step="0.01" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
@@ -4314,6 +4380,19 @@ function CustomerManager() {
             <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
             <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
             <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
+            {isAdmin && (
+              <select
+                className="h-10 border rounded-md px-3 text-sm bg-white"
+                value={form.ownerId}
+                onChange={(e) => setForm((p) => ({ ...p, ownerId: e.target.value }))}
+              >
+                {ownerOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {`${option.email} (${option.role})`}
+                  </option>
+                ))}
+              </select>
+            )}
             {isAdmin && (
               <>
                 <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />

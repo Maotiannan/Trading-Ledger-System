@@ -28,6 +28,7 @@ type CustomerPayload = {
 type ImportRow = {
   rowNo: number;
   payload: CustomerPayload;
+  ownerEmail?: string | null;
 };
 
 function trimStr(value: unknown): string {
@@ -85,6 +86,28 @@ function toSalesView<T extends Record<string, unknown>>(row: T, showExtended: bo
   };
 }
 
+async function listCustomerOwnerOptions(currentUser: { id: string; role: UserRole }) {
+  if (currentUser.role === UserRole.ADMIN) {
+    const rows = await db.user.findMany({
+      where: {
+        OR: [
+          { id: currentUser.id },
+          { role: UserRole.SALES },
+        ],
+      },
+      select: { id: true, email: true, name: true, role: true, level: true },
+      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+    });
+    return rows;
+  }
+
+  const self = await db.user.findUnique({
+    where: { id: currentUser.id },
+    select: { id: true, email: true, name: true, role: true, level: true },
+  });
+  return self ? [self] : [];
+}
+
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const denied = managerOnly(currentUser.role as UserRole);
   if (denied) return denied;
@@ -93,6 +116,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const action = trimStr(searchParams.get('action'));
   const mark = trimStr(searchParams.get('mark'));
   const search = trimStr(searchParams.get('search'));
+
+  if (action === 'owner-options') {
+    const options = await listCustomerOwnerOptions({ id: currentUser.id, role: currentUser.role as UserRole });
+    return NextResponse.json({ success: true, data: options });
+  }
 
   if (action === 'import-template') {
     const workbook = new ExcelJS.Workbook();
@@ -107,6 +135,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       { header: 'COMPANY_NAME', key: 'companyName', width: 24 },
       { header: 'CREDIT', key: 'credit', width: 12 },
       { header: 'COMPANY_ADDRESS', key: 'companyAddress', width: 30 },
+      { header: 'SALES_EMAIL', key: 'salesEmail', width: 28 },
     ];
     sheet.addRow({
       mark: 'MAB-1',
@@ -118,6 +147,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       companyName: 'MAB Co.,Ltd',
       credit: 30000,
       companyAddress: 'Conakry, Guinea',
+      salesEmail: '',
     });
     sheet.getRow(1).font = { bold: true };
     const buffer = await workbook.xlsx.writeBuffer();
@@ -148,6 +178,17 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
   const rows = await db.customer.findMany({
     where,
+    include: {
+      owner: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          level: true,
+        },
+      },
+    },
     orderBy: [{ mark: 'asc' }, { createdAt: 'desc' }],
   });
 
@@ -232,7 +273,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         rowErrors.push(`第${rowNo}行: ${err}`);
         continue;
       }
-      rows.push({ rowNo, payload });
+      rows.push({
+        rowNo,
+        payload,
+        ownerEmail: headerMap.has('SALES_EMAIL') ? trimStr(row.getCell(headerMap.get('SALES_EMAIL')!).value).toLowerCase() || null : null,
+      });
     }
 
     if (rowErrors.length > 0) {
@@ -243,14 +288,38 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
+    const ownerEmailToId = new Map<string, string>();
+    if (currentUser.role === UserRole.ADMIN && rows.some((row) => !!row.ownerEmail)) {
+      const ownerEmails = Array.from(new Set(rows.map((row) => row.ownerEmail || '').filter(Boolean)));
+      const ownerUsers = await db.user.findMany({
+        where: {
+          role: UserRole.SALES,
+          email: { in: ownerEmails },
+        },
+        select: { id: true, email: true },
+      });
+      for (const owner of ownerUsers) {
+        ownerEmailToId.set(owner.email.toLowerCase(), owner.id);
+      }
+    }
+
     let createdCount = 0;
     let updatedCount = 0;
     const failedRows: string[] = [];
 
     for (const row of rows) {
       const payload = row.payload;
+      const rowOwnerId = row.ownerEmail
+        ? ownerEmailToId.get(row.ownerEmail) || null
+        : ownerId;
       try {
-        const targetId = await resolveCustomerUpsertTargetId(ownerId, {
+        if (row.ownerEmail && currentUser.role === UserRole.ADMIN && !rowOwnerId) {
+          throw new Error(`SALES_EMAIL不存在或不是销售账号: ${row.ownerEmail}`);
+        }
+
+        const effectiveOwnerId = rowOwnerId || ownerId;
+
+        const targetId = await resolveCustomerUpsertTargetId(effectiveOwnerId, {
           orderName: payload.orderName!,
           phone: payload.phone!,
           companyName: showExtended ? payload.companyName || null : null,
@@ -258,7 +327,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
         if (targetId) {
           await assertNoCustomerScopeConflict(
-            ownerId,
+            effectiveOwnerId,
             {
               orderName: payload.orderName!,
               phone: payload.phone!,
@@ -276,7 +345,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
               phone: payload.phone!,
               city: payload.city!,
               consignee: payload.consignee || null,
-              ownerId,
+              ownerId: effectiveOwnerId,
               ...(showExtended
                 ? {
                     companyName: payload.companyName || null,
@@ -290,7 +359,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           continue;
         }
 
-        await assertNoCustomerScopeConflict(ownerId, {
+        await assertNoCustomerScopeConflict(effectiveOwnerId, {
           orderName: payload.orderName!,
           phone: payload.phone!,
           companyName: showExtended ? payload.companyName || null : null,
@@ -308,7 +377,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             companyAddress: showExtended ? payload.companyAddress || null : null,
             credit: showExtended ? payload.credit ?? null : null,
             createdBy: currentUser.id,
-            ownerId,
+            ownerId: effectiveOwnerId,
           },
         });
         createdCount++;

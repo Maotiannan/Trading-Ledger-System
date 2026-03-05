@@ -45,12 +45,29 @@ type CustomerImportIssueRow = {
   reason: string;
 };
 
+type CustomerImportRowResult = {
+  rowNo: number;
+  mark: string;
+  orderName: string;
+  name: string;
+  phone: string;
+  city: string;
+  consignee: string;
+  companyName: string;
+  credit: string;
+  companyAddress: string;
+  ownerEmail: string;
+  status: 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'FAILED';
+  reason: string;
+};
+
 type CustomerImportProcessResult = {
   success: boolean;
   status: number;
   message: string;
   details: string[];
   issueRows: CustomerImportIssueRow[];
+  rowResults: CustomerImportRowResult[];
   createdCount: number;
   updatedCount: number;
   createdRows: string[];
@@ -230,6 +247,29 @@ function toCustomerImportIssueRow(row: ImportRow, reason: string): CustomerImpor
   };
 }
 
+function toCustomerImportRowResult(
+  row: ImportRow,
+  status: 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'FAILED',
+  reason: string
+): CustomerImportRowResult {
+  const payload = row.payload;
+  return {
+    rowNo: row.rowNo,
+    mark: trimStr(payload.mark),
+    orderName: trimStr(payload.orderName),
+    name: trimStr(payload.name),
+    phone: trimStr(payload.phone),
+    city: trimStr(payload.city),
+    consignee: trimStr(payload.consignee),
+    companyName: trimStr(payload.companyName),
+    credit: payload.credit === null || payload.credit === undefined || Number.isNaN(payload.credit) ? '' : String(payload.credit),
+    companyAddress: trimStr(payload.companyAddress),
+    ownerEmail: trimStr(row.ownerEmail || ''),
+    status,
+    reason,
+  };
+}
+
 async function processCustomerImportRows(
   rows: ImportRow[],
   currentUser: { id: string; role: UserRole },
@@ -237,6 +277,7 @@ async function processCustomerImportRows(
   showExtended: boolean
 ): Promise<CustomerImportProcessResult> {
   const issueRows: CustomerImportIssueRow[] = [];
+  const rowResults: CustomerImportRowResult[] = [];
   if (rows.length === 0) {
     return {
       success: false,
@@ -244,6 +285,7 @@ async function processCustomerImportRows(
       message: '没有可导入的数据行',
       details: [],
       issueRows: [],
+      rowResults: [],
       createdCount: 0,
       updatedCount: 0,
       createdRows: [],
@@ -299,6 +341,7 @@ async function processCustomerImportRows(
     const requiredError = validateRequired(payload);
     if (requiredError) {
       issueRows.push(toCustomerImportIssueRow(row, requiredError));
+      rowResults.push(toCustomerImportRowResult(row, 'FAILED', requiredError));
       continue;
     }
 
@@ -307,7 +350,9 @@ async function processCustomerImportRows(
       : ownerIdFallback;
 
     if (row.ownerEmail && currentUser.role === UserRole.ADMIN && !rowOwnerId) {
-      issueRows.push(toCustomerImportIssueRow(row, `SALES_EMAIL不存在或不是销售账号: ${row.ownerEmail}`));
+      const reason = `SALES_EMAIL不存在或不是销售账号: ${row.ownerEmail}`;
+      issueRows.push(toCustomerImportIssueRow(row, reason));
+      rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
       continue;
     }
 
@@ -332,7 +377,9 @@ async function processCustomerImportRows(
       }
 
       if (markNameMatchedIds.size > 1) {
-        issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（MARK+NAME），请人工处理后重试'));
+        const reason = '同一行命中多条客户（MARK+NAME），请人工处理后重试';
+        issueRows.push(toCustomerImportIssueRow(row, reason));
+        rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
         continue;
       }
 
@@ -346,13 +393,17 @@ async function processCustomerImportRows(
         }
       }
       if (phoneMatchedIds.size > 1) {
-        issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（PHONE），请人工处理后重试'));
+        const reason = '同一行命中多条客户（PHONE），请人工处理后重试';
+        issueRows.push(toCustomerImportIssueRow(row, reason));
+        rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
         continue;
       }
 
       const mergedMatchedIds = new Set<string>([...markNameMatchedIds, ...phoneMatchedIds]);
       if (mergedMatchedIds.size > 1) {
-        issueRows.push(toCustomerImportIssueRow(row, '同一行同时命中不同客户，请人工处理后重试'));
+        const reason = '同一行同时命中不同客户，请人工处理后重试';
+        issueRows.push(toCustomerImportIssueRow(row, reason));
+        rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
         continue;
       }
       const targetId = mergedMatchedIds.size === 1 ? Array.from(mergedMatchedIds)[0] : null;
@@ -360,7 +411,9 @@ async function processCustomerImportRows(
       if (targetId) {
         const target = ownerCustomers.find((item) => item.id === targetId);
         if (!target) {
-          issueRows.push(toCustomerImportIssueRow(row, '命中客户后读取失败，请重试'));
+          const reason = '命中客户后读取失败，请重试';
+          issueRows.push(toCustomerImportIssueRow(row, reason));
+          rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
           continue;
         }
         await assertNoCustomerScopeConflict(
@@ -387,8 +440,10 @@ async function processCustomerImportRows(
           }
           updatedCount++;
           updatedRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
+          rowResults.push(toCustomerImportRowResult(row, 'UPDATED', ''));
         } else {
           unchangedCount++;
+          rowResults.push(toCustomerImportRowResult(row, 'UNCHANGED', ''));
         }
         continue;
       }
@@ -417,8 +472,11 @@ async function processCustomerImportRows(
       ownerCustomerCache.delete(effectiveOwnerId);
       createdCount++;
       createdRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
+      rowResults.push(toCustomerImportRowResult(row, 'CREATED', ''));
     } catch (error) {
-      issueRows.push(toCustomerImportIssueRow(row, mapPrismaWriteError(error)));
+      const reason = mapPrismaWriteError(error);
+      issueRows.push(toCustomerImportIssueRow(row, reason));
+      rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
     }
   }
 
@@ -430,6 +488,7 @@ async function processCustomerImportRows(
       message: '导入失败：所有行均未成功',
       details: issueRows.map((row) => `第${row.rowNo}行(NAME=${row.name || '-'})：${row.reason}`),
       issueRows,
+      rowResults: rowResults.sort((a, b) => a.rowNo - b.rowNo),
       createdCount,
       updatedCount,
       createdRows,
@@ -443,6 +502,7 @@ async function processCustomerImportRows(
     message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，无变更 ${unchangedCount}，失败 ${issueRows.length}`,
     details: issueRows.map((row) => `第${row.rowNo}行(NAME=${row.name || '-'})：${row.reason}`),
     issueRows,
+    rowResults: rowResults.sort((a, b) => a.rowNo - b.rowNo),
     createdCount,
     updatedCount,
     createdRows,
@@ -629,6 +689,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         error: processed.success ? undefined : processed.message,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
+        rowResults: processed.rowResults,
         data: {
           createdCount: processed.createdCount,
           updatedCount: processed.updatedCount,
@@ -685,6 +746,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         error: processed.success ? undefined : processed.message,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
+        rowResults: processed.rowResults,
         data: {
           createdCount: processed.createdCount,
           updatedCount: processed.updatedCount,

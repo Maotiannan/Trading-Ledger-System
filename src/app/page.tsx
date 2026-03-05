@@ -108,6 +108,256 @@ function summarizeRowsForAlert(rows: unknown, limit = 20): string {
   return `\n${shown.join('\n')}${suffix}`;
 }
 
+const IMPORT_RESULT_PAGE_SIZE = 50;
+
+function toInvoiceImportRowResults(raw: unknown): InvoiceImportRowResult[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) => {
+    const item = (row && typeof row === 'object') ? (row as Record<string, unknown>) : {};
+    return {
+      rowNo: Number(item.rowNo) || 0,
+      invNo: String(item.invNo || ''),
+      shipDate: String(item.shipDate || ''),
+      releaseDate: String(item.releaseDate || ''),
+      orderNo: String(item.orderNo || ''),
+      amount: String(item.amount || ''),
+      customerMark: String(item.customerMark || ''),
+      customerName: String(item.customerName || ''),
+      customerId: String(item.customerId || ''),
+      status: String(item.status || '').toUpperCase() === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
+      reason: String(item.reason || ''),
+    };
+  });
+}
+
+function toInvoiceImportRowResultsFromIssues(raw: unknown): InvoiceImportRowResult[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) => {
+    const item = (row && typeof row === 'object') ? (row as Record<string, unknown>) : {};
+    return {
+      rowNo: Number(item.rowNo) || 0,
+      invNo: String(item.invNo || ''),
+      shipDate: String(item.shipDate || ''),
+      releaseDate: String(item.releaseDate || ''),
+      orderNo: String(item.orderNo || ''),
+      amount: String(item.amount || ''),
+      customerMark: String(item.customerMark || ''),
+      customerName: String(item.customerName || ''),
+      customerId: String(item.customerId || ''),
+      status: 'FAILED',
+      reason: String(item.reason || ''),
+    };
+  });
+}
+
+function initInvoiceImportRowViews(results: InvoiceImportRowResult[]): InvoiceImportRowView[] {
+  return results
+    .sort((a, b) => a.rowNo - b.rowNo)
+    .map((row) => ({
+      rowNo: row.rowNo,
+      invNo: row.invNo,
+      shipDate: row.shipDate,
+      releaseDate: row.releaseDate,
+      orderNo: row.orderNo,
+      amount: row.amount,
+      customerMark: row.customerMark,
+      customerName: row.customerName,
+      customerId: row.customerId,
+      latestStatus: row.status,
+      latestReason: row.reason,
+      attempts: [{ status: row.status, reason: row.reason }],
+    }));
+}
+
+function mergeInvoiceImportRowViews(
+  prev: InvoiceImportRowView[],
+  retryResults: InvoiceImportRowResult[]
+): InvoiceImportRowView[] {
+  const byRowNo = new Map<number, InvoiceImportRowResult>();
+  for (const row of retryResults) byRowNo.set(row.rowNo, row);
+
+  const merged = prev.map((row) => {
+    const next = byRowNo.get(row.rowNo);
+    if (next) {
+      return {
+        rowNo: next.rowNo,
+        invNo: next.invNo,
+        shipDate: next.shipDate,
+        releaseDate: next.releaseDate,
+        orderNo: next.orderNo,
+        amount: next.amount,
+        customerMark: next.customerMark,
+        customerName: next.customerName,
+        customerId: next.customerId,
+        latestStatus: next.status,
+        latestReason: next.reason,
+        attempts: [...row.attempts, { status: next.status, reason: next.reason }],
+      };
+    }
+    const carryStatus = row.latestStatus === 'SUCCESS' ? 'SUCCEED' : 'NOT_RETRIED';
+    return {
+      ...row,
+      attempts: [...row.attempts, { status: carryStatus, reason: row.latestReason }],
+    };
+  });
+
+  const prevRowNos = new Set(prev.map((row) => row.rowNo));
+  const attemptLength = merged[0]?.attempts.length || 1;
+  for (const next of retryResults) {
+    if (prevRowNos.has(next.rowNo)) continue;
+    const fillerCount = Math.max(0, attemptLength - 1);
+    merged.push({
+      rowNo: next.rowNo,
+      invNo: next.invNo,
+      shipDate: next.shipDate,
+      releaseDate: next.releaseDate,
+      orderNo: next.orderNo,
+      amount: next.amount,
+      customerMark: next.customerMark,
+      customerName: next.customerName,
+      customerId: next.customerId,
+      latestStatus: next.status,
+      latestReason: next.reason,
+      attempts: [
+        ...Array.from({ length: fillerCount }, () => ({ status: 'SUCCEED', reason: '' })),
+        { status: next.status, reason: next.reason },
+      ],
+    });
+  }
+  return merged.sort((a, b) => a.rowNo - b.rowNo);
+}
+
+function toCustomerImportRowResults(raw: unknown): CustomerImportRowResult[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) => {
+    const item = (row && typeof row === 'object') ? (row as Record<string, unknown>) : {};
+    const statusRaw = String(item.status || '').toUpperCase();
+    const status = statusRaw === 'CREATED' || statusRaw === 'UPDATED' || statusRaw === 'UNCHANGED' || statusRaw === 'FAILED'
+      ? statusRaw
+      : 'FAILED';
+    return {
+      rowNo: Number(item.rowNo) || 0,
+      mark: String(item.mark || ''),
+      orderName: String(item.orderName || ''),
+      name: String(item.name || ''),
+      phone: String(item.phone || ''),
+      city: String(item.city || ''),
+      consignee: String(item.consignee || ''),
+      companyName: String(item.companyName || ''),
+      credit: String(item.credit || ''),
+      companyAddress: String(item.companyAddress || ''),
+      ownerEmail: String(item.ownerEmail || ''),
+      status: status as CustomerImportRowResult['status'],
+      reason: String(item.reason || ''),
+    };
+  });
+}
+
+function toCustomerImportRowResultsFromIssues(raw: unknown): CustomerImportRowResult[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) => {
+    const item = (row && typeof row === 'object') ? (row as Record<string, unknown>) : {};
+    return {
+      rowNo: Number(item.rowNo) || 0,
+      mark: String(item.mark || ''),
+      orderName: String(item.orderName || ''),
+      name: String(item.name || ''),
+      phone: String(item.phone || ''),
+      city: String(item.city || ''),
+      consignee: String(item.consignee || ''),
+      companyName: String(item.companyName || ''),
+      credit: String(item.credit || ''),
+      companyAddress: String(item.companyAddress || ''),
+      ownerEmail: String(item.ownerEmail || ''),
+      status: 'FAILED',
+      reason: String(item.reason || ''),
+    };
+  });
+}
+
+function initCustomerImportRowViews(results: CustomerImportRowResult[]): CustomerImportRowView[] {
+  return results
+    .sort((a, b) => a.rowNo - b.rowNo)
+    .map((row) => ({
+      rowNo: row.rowNo,
+      mark: row.mark,
+      orderName: row.orderName,
+      name: row.name,
+      phone: row.phone,
+      city: row.city,
+      consignee: row.consignee,
+      companyName: row.companyName,
+      credit: row.credit,
+      companyAddress: row.companyAddress,
+      ownerEmail: row.ownerEmail,
+      latestStatus: row.status,
+      latestReason: row.reason,
+      attempts: [{ status: row.status, reason: row.reason }],
+    }));
+}
+
+function mergeCustomerImportRowViews(
+  prev: CustomerImportRowView[],
+  retryResults: CustomerImportRowResult[]
+): CustomerImportRowView[] {
+  const byRowNo = new Map<number, CustomerImportRowResult>();
+  for (const row of retryResults) byRowNo.set(row.rowNo, row);
+
+  const merged = prev.map((row) => {
+    const next = byRowNo.get(row.rowNo);
+    if (next) {
+      return {
+        rowNo: next.rowNo,
+        mark: next.mark,
+        orderName: next.orderName,
+        name: next.name,
+        phone: next.phone,
+        city: next.city,
+        consignee: next.consignee,
+        companyName: next.companyName,
+        credit: next.credit,
+        companyAddress: next.companyAddress,
+        ownerEmail: next.ownerEmail,
+        latestStatus: next.status,
+        latestReason: next.reason,
+        attempts: [...row.attempts, { status: next.status, reason: next.reason }],
+      };
+    }
+    const carryStatus = row.latestStatus !== 'FAILED' ? 'SUCCEED' : 'NOT_RETRIED';
+    return {
+      ...row,
+      attempts: [...row.attempts, { status: carryStatus, reason: row.latestReason }],
+    };
+  });
+
+  const prevRowNos = new Set(prev.map((row) => row.rowNo));
+  const attemptLength = merged[0]?.attempts.length || 1;
+  for (const next of retryResults) {
+    if (prevRowNos.has(next.rowNo)) continue;
+    const fillerCount = Math.max(0, attemptLength - 1);
+    merged.push({
+      rowNo: next.rowNo,
+      mark: next.mark,
+      orderName: next.orderName,
+      name: next.name,
+      phone: next.phone,
+      city: next.city,
+      consignee: next.consignee,
+      companyName: next.companyName,
+      credit: next.credit,
+      companyAddress: next.companyAddress,
+      ownerEmail: next.ownerEmail,
+      latestStatus: next.status,
+      latestReason: next.reason,
+      attempts: [
+        ...Array.from({ length: fillerCount }, () => ({ status: 'SUCCEED', reason: '' })),
+        { status: next.status, reason: next.reason },
+      ],
+    });
+  }
+  return merged.sort((a, b) => a.rowNo - b.rowNo);
+}
+
 async function fetchServerDate(): Promise<string> {
   try {
     const result = await apiCall('system/health');
@@ -199,6 +449,17 @@ type InvoiceImportIssueRow = {
   reason: string;
 };
 
+type InvoiceImportRowResult = Omit<InvoiceImportIssueRow, 'reason'> & {
+  status: 'SUCCESS' | 'FAILED';
+  reason: string;
+};
+
+type InvoiceImportRowView = Omit<InvoiceImportIssueRow, 'reason'> & {
+  latestStatus: 'SUCCESS' | 'FAILED';
+  latestReason: string;
+  attempts: Array<{ status: string; reason: string }>;
+};
+
 type CustomerImportIssueRow = {
   rowNo: number;
   mark: string;
@@ -212,6 +473,17 @@ type CustomerImportIssueRow = {
   companyAddress: string;
   ownerEmail: string;
   reason: string;
+};
+
+type CustomerImportRowResult = Omit<CustomerImportIssueRow, 'reason'> & {
+  status: 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'FAILED';
+  reason: string;
+};
+
+type CustomerImportRowView = Omit<CustomerImportIssueRow, 'reason'> & {
+  latestStatus: 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'FAILED';
+  latestReason: string;
+  attempts: Array<{ status: string; reason: string }>;
 };
 
 const CUSTOMER_MARK_CACHE_TTL_MS = 10_000;
@@ -627,10 +899,12 @@ function InvoiceManager() {
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
   const [editingOrderCandidates, setEditingOrderCandidates] = useState<CustomerCandidate[]>([]);
   const [invoiceImporting, setInvoiceImporting] = useState(false);
-  const [invoiceImportIssues, setInvoiceImportIssues] = useState<InvoiceImportIssueRow[]>([]);
+  const [invoiceImportRows, setInvoiceImportRows] = useState<InvoiceImportRowView[]>([]);
   const [showInvoiceImportIssues, setShowInvoiceImportIssues] = useState(false);
   const [invoiceIssueSubmitting, setInvoiceIssueSubmitting] = useState(false);
   const [invoiceImportMessage, setInvoiceImportMessage] = useState('');
+  const [invoiceImportFilter, setInvoiceImportFilter] = useState<'failed' | 'all'>('failed');
+  const [invoiceImportPage, setInvoiceImportPage] = useState(1);
   const [editingInvoiceDateId, setEditingInvoiceDateId] = useState<string | null>(null);
   const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
   const [editingInvoiceReleaseDate, setEditingInvoiceReleaseDate] = useState('');
@@ -680,34 +954,22 @@ function InvoiceManager() {
         body: formData,
       });
       const result = await response.json().catch(() => ({}));
-      const issueRows = Array.isArray(result?.issueRows) ? result.issueRows : [];
-      if (issueRows.length > 0) {
-        setInvoiceImportIssues(issueRows.map((row: Record<string, unknown>) => ({
-          rowNo: Number(row.rowNo) || 0,
-          invNo: String(row.invNo || ''),
-          shipDate: String(row.shipDate || ''),
-          releaseDate: String(row.releaseDate || ''),
-          orderNo: String(row.orderNo || ''),
-          amount: String(row.amount || ''),
-          customerMark: String(row.customerMark || ''),
-          customerName: String(row.customerName || ''),
-          customerId: String(row.customerId || ''),
-          reason: String(row.reason || ''),
-        })));
-        setInvoiceImportMessage(String(result?.message || result?.error || tx('发现问题行，请补充后重试', 'Issue rows found. Please edit and retry.')));
-        setShowInvoiceImportIssues(true);
-        await loadInvoices();
-        return;
-      }
-
-      if (!response.ok || !result.success) {
+      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      const importedOrderNos = summarizeRowsForAlert(result?.data?.importedOrderNos, 40);
-      const details = Array.isArray(result?.details) && result.details.length > 0 ? `\n${result.details.join('\n')}` : '';
-      const importedBlock = importedOrderNos ? `\n${tx('已导入ORDER：', 'Imported ORDERs:')}${importedOrderNos}` : '';
-      alert(`${result.message || tx('导入成功', 'Import successful')}${importedBlock}${details}`);
+
+      const rowResults = toInvoiceImportRowResults(result?.rowResults);
+      const fallbackResults = rowResults.length > 0 ? rowResults : toInvoiceImportRowResultsFromIssues(result?.issueRows);
+      if (fallbackResults.length === 0) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+      }
+      setInvoiceImportRows(initInvoiceImportRowViews(fallbackResults));
+      setInvoiceImportFilter('failed');
+      setInvoiceImportPage(1);
+      setInvoiceImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
+      setShowInvoiceImportIssues(true);
       await loadInvoices();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
@@ -717,17 +979,43 @@ function InvoiceManager() {
     }
   };
 
-  const updateInvoiceImportIssue = (index: number, field: keyof InvoiceImportIssueRow, value: string) => {
-    setInvoiceImportIssues((prev) => {
-      const copy = [...prev];
-      if (!copy[index]) return prev;
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
+  const updateInvoiceImportIssue = (rowNo: number, field: keyof Omit<InvoiceImportRowView, 'latestStatus' | 'latestReason' | 'attempts'>, value: string) => {
+    setInvoiceImportRows((prev) => prev.map((row) => {
+      if (row.rowNo !== rowNo || row.latestStatus !== 'FAILED') return row;
+      return { ...row, [field]: value };
+    }));
   };
 
+  const latestFailedInvoiceRows = useMemo(
+    () => invoiceImportRows.filter((row) => row.latestStatus === 'FAILED'),
+    [invoiceImportRows]
+  );
+  const invoiceAttemptCount = useMemo(
+    () => invoiceImportRows.reduce((max, row) => Math.max(max, row.attempts.length), 0),
+    [invoiceImportRows]
+  );
+  const visibleInvoiceImportRows = useMemo(() => {
+    if (invoiceImportFilter === 'failed') return latestFailedInvoiceRows;
+    return invoiceImportRows;
+  }, [invoiceImportFilter, latestFailedInvoiceRows, invoiceImportRows]);
+  const invoiceImportTotalPages = Math.max(1, Math.ceil(visibleInvoiceImportRows.length / IMPORT_RESULT_PAGE_SIZE));
+  const pagedInvoiceImportRows = useMemo(() => {
+    const start = (invoiceImportPage - 1) * IMPORT_RESULT_PAGE_SIZE;
+    return visibleInvoiceImportRows.slice(start, start + IMPORT_RESULT_PAGE_SIZE);
+  }, [visibleInvoiceImportRows, invoiceImportPage]);
+
+  useEffect(() => {
+    if (invoiceImportPage > invoiceImportTotalPages) {
+      setInvoiceImportPage(invoiceImportTotalPages);
+    }
+  }, [invoiceImportPage, invoiceImportTotalPages]);
+
+  useEffect(() => {
+    setInvoiceImportPage(1);
+  }, [invoiceImportFilter]);
+
   const retryInvoiceIssueRows = async () => {
-    if (invoiceImportIssues.length === 0) return;
+    if (latestFailedInvoiceRows.length === 0) return;
     setInvoiceIssueSubmitting(true);
     try {
       const response = await fetch('/api/invoice', {
@@ -736,7 +1024,7 @@ function InvoiceManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'import-rows',
-          rows: invoiceImportIssues.map((row) => ({
+          rows: latestFailedInvoiceRows.map((row) => ({
             rowNo: row.rowNo,
             invNo: row.invNo,
             shipDate: row.shipDate,
@@ -750,40 +1038,32 @@ function InvoiceManager() {
         }),
       });
       const result = await response.json().catch(() => ({}));
-
-      const nextIssues = Array.isArray(result?.issueRows) ? result.issueRows : [];
-      if (nextIssues.length > 0) {
-        setInvoiceImportIssues(nextIssues.map((row: Record<string, unknown>) => ({
-          rowNo: Number(row.rowNo) || 0,
-          invNo: String(row.invNo || ''),
-          shipDate: String(row.shipDate || ''),
-          releaseDate: String(row.releaseDate || ''),
-          orderNo: String(row.orderNo || ''),
-          amount: String(row.amount || ''),
-          customerMark: String(row.customerMark || ''),
-          customerName: String(row.customerName || ''),
-          customerId: String(row.customerId || ''),
-          reason: String(row.reason || ''),
-        })));
-        setInvoiceImportMessage(String(result?.message || tx('仍有问题行，请继续修正', 'There are still issue rows. Please continue editing.')));
-      } else {
-        if (!response.ok || !result.success) {
-          const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-          throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-        }
-        setShowInvoiceImportIssues(false);
-        setInvoiceImportIssues([]);
-        setInvoiceImportMessage('');
-        const importedOrderNos = summarizeRowsForAlert(result?.data?.importedOrderNos, 40);
-        const importedBlock = importedOrderNos ? `\n${tx('已导入ORDER：', 'Imported ORDERs:')}${importedOrderNos}` : '';
-        alert(`${result.message || tx('问题行导入成功', 'Issue rows imported successfully')}${importedBlock}`);
+      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
+      const rowResults = toInvoiceImportRowResults(result?.rowResults);
+      const fallbackResults = rowResults.length > 0 ? rowResults : toInvoiceImportRowResultsFromIssues(result?.issueRows);
+      if (fallbackResults.length === 0) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+      }
+      setInvoiceImportRows((prev) => mergeInvoiceImportRowViews(prev, fallbackResults));
+      setInvoiceImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
       await loadInvoices();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
     } finally {
       setInvoiceIssueSubmitting(false);
     }
+  };
+
+  const closeInvoiceImportDialog = () => {
+    setShowInvoiceImportIssues(false);
+    setInvoiceImportRows([]);
+    setInvoiceImportMessage('');
+    setInvoiceImportFilter('failed');
+    setInvoiceImportPage(1);
   };
 
   const openInvoiceDateEditor = (invoiceId: string, currentShipDate?: string | null, currentReleaseDate?: string | null) => {
@@ -1971,16 +2251,31 @@ function InvoiceManager() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showInvoiceImportIssues} onOpenChange={setShowInvoiceImportIssues}>
-        <DialogContent className="w-[96vw] max-w-[96vw]">
+      <Dialog open={showInvoiceImportIssues} onOpenChange={(open) => { if (!open) closeInvoiceImportDialog(); else setShowInvoiceImportIssues(true); }}>
+        <DialogContent className="w-[calc(100vw-10px)] max-w-none h-[calc(100vh-10px)] flex flex-col">
           <DialogHeader>
             <DialogTitle>{tx('账单导入问题行处理', 'Invoice Import Issue Rows')}</DialogTitle>
             <DialogDescription className="whitespace-pre-wrap break-words">
-              {invoiceImportMessage || tx('请补充问题行后继续导入，仅重试当前问题行。', 'Edit issue rows and retry import. Only current issue rows will be retried.')}
+              {invoiceImportMessage || tx('请查看导入结果，失败行可编辑后重试。', 'Check import results. Failed rows can be edited and retried.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[65vh] overflow-auto border rounded-md">
-            <Table className="min-w-[2200px] table-auto">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <div className="text-gray-600">
+              {tx('默认仅看最新失败行，可切换查看全部。', 'Default view shows latest failed rows. Switch to view all rows.')}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="h-9 border rounded-md px-2 bg-white"
+                value={invoiceImportFilter}
+                onChange={(e) => setInvoiceImportFilter(e.target.value === 'all' ? 'all' : 'failed')}
+              >
+                <option value="failed">{tx('仅看失败', 'Failed Only')}</option>
+                <option value="all">{tx('查看全部', 'All Rows')}</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto border rounded-md">
+            <Table className="min-w-[2600px] table-auto">
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
@@ -1991,45 +2286,82 @@ function InvoiceManager() {
                   <TableHead className="min-w-[320px]">CUSTOMER_ORDER_NAME</TableHead>
                   <TableHead className="min-w-[180px]">SHIP_DATE</TableHead>
                   <TableHead className="min-w-[180px]">RELEASE_DATE</TableHead>
-                  <TableHead className="min-w-[540px]">{tx('原因', 'Reason')}</TableHead>
+                  <TableHead className="min-w-[180px]">{tx('最新状态', 'Latest Status')}</TableHead>
+                  <TableHead className="min-w-[540px]">{tx('最新原因', 'Latest Reason')}</TableHead>
+                  {Array.from({ length: invoiceAttemptCount }).map((_, idx) => (
+                    <TableHead key={`invoice-attempt-${idx}`} className="min-w-[140px]">
+                      {`Result#${idx + 1}`}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoiceImportIssues.map((row, index) => (
+                {pagedInvoiceImportRows.map((row, index) => {
+                  const canEdit = row.latestStatus === 'FAILED';
+                  return (
                   <TableRow key={`${row.rowNo}-${index}`}>
                     <TableCell>{row.rowNo || index + 1}</TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.invNo} onChange={(e) => updateInvoiceImportIssue(index, 'invNo', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[300px]" value={row.orderNo} onChange={(e) => updateInvoiceImportIssue(index, 'orderNo', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[140px]" value={row.amount} onChange={(e) => updateInvoiceImportIssue(index, 'amount', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[280px]" value={row.customerMark} onChange={(e) => updateInvoiceImportIssue(index, 'customerMark', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[320px]" value={row.customerName} onChange={(e) => updateInvoiceImportIssue(index, 'customerName', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[180px]" value={row.shipDate} onChange={(e) => updateInvoiceImportIssue(index, 'shipDate', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[180px]" value={row.releaseDate} onChange={(e) => updateInvoiceImportIssue(index, 'releaseDate', e.target.value)} /></TableCell>
-                    <TableCell className="min-w-[540px] whitespace-pre-wrap break-words text-xs text-red-600">{row.reason || '-'}</TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.invNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'invNo', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[300px]" value={row.orderNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'orderNo', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[140px]" value={row.amount} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'amount', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[280px]" value={row.customerMark} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerMark', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[320px]" value={row.customerName} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerName', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[180px]" value={row.shipDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'shipDate', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[180px]" value={row.releaseDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'releaseDate', e.target.value)} /></TableCell>
+                    <TableCell className={row.latestStatus === 'FAILED' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
+                      {row.latestStatus}
+                    </TableCell>
+                    <TableCell className="min-w-[540px] whitespace-pre-wrap break-words text-xs">
+                      {row.latestReason || '-'}
+                    </TableCell>
+                    {Array.from({ length: invoiceAttemptCount }).map((_, idx) => (
+                      <TableCell key={`invoice-row-${row.rowNo}-attempt-${idx}`} className="text-xs">
+                        {row.attempts[idx]?.status || '-'}
+                      </TableCell>
+                    ))}
                   </TableRow>
-                ))}
-                {invoiceImportIssues.length === 0 && (
+                  );
+                })}
+                {pagedInvoiceImportRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-gray-500">{tx('暂无问题行', 'No issue rows')}</TableCell>
+                    <TableCell colSpan={10 + invoiceAttemptCount} className="text-center text-gray-500">
+                      {invoiceImportFilter === 'failed'
+                        ? tx('当前没有最新失败行，可切换“查看全部”', 'No latest failed rows. Switch to "All Rows".')
+                        : tx('暂无导入结果', 'No import results')}
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-gray-600">
+              {tx('每页 50 行', '50 rows per page')} · {tx('第', 'Page')} {invoiceImportPage} / {invoiceImportTotalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setInvoiceImportPage((p) => Math.max(1, p - 1))}
+                disabled={invoiceImportPage <= 1}
+              >
+                {tx('上一页', 'Prev')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setInvoiceImportPage((p) => Math.min(invoiceImportTotalPages, p + 1))}
+                disabled={invoiceImportPage >= invoiceImportTotalPages}
+              >
+                {tx('下一页', 'Next')}
+              </Button>
+            </div>
+          </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowInvoiceImportIssues(false);
-                setInvoiceImportIssues([]);
-                setInvoiceImportMessage('');
-              }}
-            >
-              {tx('取消', 'Cancel')}
+            <Button variant="outline" onClick={closeInvoiceImportDialog}>
+              {tx('关闭', 'Close')}
             </Button>
-            <Button onClick={retryInvoiceIssueRows} disabled={invoiceIssueSubmitting || invoiceImportIssues.length === 0}>
+            <Button onClick={retryInvoiceIssueRows} disabled={invoiceIssueSubmitting || latestFailedInvoiceRows.length === 0}>
               {invoiceIssueSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {tx('仅导入当前问题行', 'Import Current Issue Rows')}
+              {tx('仅重试失败行', 'Retry Failed Rows')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4266,10 +4598,12 @@ function CustomerManager() {
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [fixingTarget, setFixingTarget] = useState<{ type: 'order' | 'receipt'; id: string } | null>(null);
   const [customerImporting, setCustomerImporting] = useState(false);
-  const [customerImportIssues, setCustomerImportIssues] = useState<CustomerImportIssueRow[]>([]);
+  const [customerImportRows, setCustomerImportRows] = useState<CustomerImportRowView[]>([]);
   const [showCustomerImportIssues, setShowCustomerImportIssues] = useState(false);
   const [customerIssueSubmitting, setCustomerIssueSubmitting] = useState(false);
   const [customerImportMessage, setCustomerImportMessage] = useState('');
+  const [customerImportFilter, setCustomerImportFilter] = useState<'failed' | 'all'>('failed');
+  const [customerImportPage, setCustomerImportPage] = useState(1);
   const [customerLongTextPreview, setCustomerLongTextPreview] = useState<{ label: string; value: string } | null>(null);
   const customerImportInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
@@ -4483,37 +4817,22 @@ function CustomerManager() {
         body: formData,
       });
       const result = await response.json().catch(() => ({}));
-      const issueRows = Array.isArray(result?.issueRows) ? result.issueRows : [];
-      if (issueRows.length > 0) {
-        setCustomerImportIssues(issueRows.map((row: Record<string, unknown>) => ({
-          rowNo: Number(row.rowNo) || 0,
-          mark: String(row.mark || ''),
-          orderName: String(row.orderName || ''),
-          name: String(row.name || ''),
-          phone: String(row.phone || ''),
-          city: String(row.city || ''),
-          consignee: String(row.consignee || ''),
-          companyName: String(row.companyName || ''),
-          credit: String(row.credit || ''),
-          companyAddress: String(row.companyAddress || ''),
-          ownerEmail: String(row.ownerEmail || ''),
-          reason: String(row.reason || ''),
-        })));
-        setCustomerImportMessage(String(result?.message || result?.error || tx('发现问题行，请补充后重试', 'Issue rows found. Please edit and retry.')));
-        setShowCustomerImportIssues(true);
-        await loadCustomers();
-        return;
-      }
-
-      if (!response.ok || !result.success) {
+      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      const createdRows = summarizeRowsForAlert(result?.data?.createdRows, 30);
-      const updatedRows = summarizeRowsForAlert(result?.data?.updatedRows, 30);
-      const createdBlock = createdRows ? `\n${tx('新增：', 'Created:')}${createdRows}` : '';
-      const updatedBlock = updatedRows ? `\n${tx('更新：', 'Updated:')}${updatedRows}` : '';
-      alert(`${result.message || tx('导入成功', 'Import successful')}${createdBlock}${updatedBlock}`);
+
+      const rowResults = toCustomerImportRowResults(result?.rowResults);
+      const fallbackResults = rowResults.length > 0 ? rowResults : toCustomerImportRowResultsFromIssues(result?.issueRows);
+      if (fallbackResults.length === 0) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+      }
+      setCustomerImportRows(initCustomerImportRowViews(fallbackResults));
+      setCustomerImportFilter('failed');
+      setCustomerImportPage(1);
+      setCustomerImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
+      setShowCustomerImportIssues(true);
       await loadCustomers();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
@@ -4523,17 +4842,43 @@ function CustomerManager() {
     }
   };
 
-  const updateCustomerImportIssue = (index: number, field: keyof CustomerImportIssueRow, value: string) => {
-    setCustomerImportIssues((prev) => {
-      const copy = [...prev];
-      if (!copy[index]) return prev;
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
+  const updateCustomerImportIssue = (rowNo: number, field: keyof Omit<CustomerImportRowView, 'latestStatus' | 'latestReason' | 'attempts'>, value: string) => {
+    setCustomerImportRows((prev) => prev.map((row) => {
+      if (row.rowNo !== rowNo || row.latestStatus !== 'FAILED') return row;
+      return { ...row, [field]: value };
+    }));
   };
 
+  const latestFailedCustomerRows = useMemo(
+    () => customerImportRows.filter((row) => row.latestStatus === 'FAILED'),
+    [customerImportRows]
+  );
+  const customerAttemptCount = useMemo(
+    () => customerImportRows.reduce((max, row) => Math.max(max, row.attempts.length), 0),
+    [customerImportRows]
+  );
+  const visibleCustomerImportRows = useMemo(() => {
+    if (customerImportFilter === 'failed') return latestFailedCustomerRows;
+    return customerImportRows;
+  }, [customerImportFilter, latestFailedCustomerRows, customerImportRows]);
+  const customerImportTotalPages = Math.max(1, Math.ceil(visibleCustomerImportRows.length / IMPORT_RESULT_PAGE_SIZE));
+  const pagedCustomerImportRows = useMemo(() => {
+    const start = (customerImportPage - 1) * IMPORT_RESULT_PAGE_SIZE;
+    return visibleCustomerImportRows.slice(start, start + IMPORT_RESULT_PAGE_SIZE);
+  }, [visibleCustomerImportRows, customerImportPage]);
+
+  useEffect(() => {
+    if (customerImportPage > customerImportTotalPages) {
+      setCustomerImportPage(customerImportTotalPages);
+    }
+  }, [customerImportPage, customerImportTotalPages]);
+
+  useEffect(() => {
+    setCustomerImportPage(1);
+  }, [customerImportFilter]);
+
   const retryCustomerIssueRows = async () => {
-    if (customerImportIssues.length === 0) return;
+    if (latestFailedCustomerRows.length === 0) return;
     setCustomerIssueSubmitting(true);
     try {
       const response = await fetch('/api/customer', {
@@ -4543,7 +4888,7 @@ function CustomerManager() {
         body: JSON.stringify({
           action: 'import-rows',
           ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
-          rows: customerImportIssues.map((row) => ({
+          rows: latestFailedCustomerRows.map((row) => ({
             rowNo: row.rowNo,
             mark: row.mark,
             orderName: row.orderName,
@@ -4559,43 +4904,32 @@ function CustomerManager() {
         }),
       });
       const result = await response.json().catch(() => ({}));
-      const nextIssues = Array.isArray(result?.issueRows) ? result.issueRows : [];
-      if (nextIssues.length > 0) {
-        setCustomerImportIssues(nextIssues.map((row: Record<string, unknown>) => ({
-          rowNo: Number(row.rowNo) || 0,
-          mark: String(row.mark || ''),
-          orderName: String(row.orderName || ''),
-          name: String(row.name || ''),
-          phone: String(row.phone || ''),
-          city: String(row.city || ''),
-          consignee: String(row.consignee || ''),
-          companyName: String(row.companyName || ''),
-          credit: String(row.credit || ''),
-          companyAddress: String(row.companyAddress || ''),
-          ownerEmail: String(row.ownerEmail || ''),
-          reason: String(row.reason || ''),
-        })));
-        setCustomerImportMessage(String(result?.message || tx('仍有问题行，请继续修正', 'There are still issue rows. Please continue editing.')));
-      } else {
-        if (!response.ok || !result.success) {
-          const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-          throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-        }
-        setShowCustomerImportIssues(false);
-        setCustomerImportIssues([]);
-        setCustomerImportMessage('');
-        const createdRows = summarizeRowsForAlert(result?.data?.createdRows, 30);
-        const updatedRows = summarizeRowsForAlert(result?.data?.updatedRows, 30);
-        const createdBlock = createdRows ? `\n${tx('新增：', 'Created:')}${createdRows}` : '';
-        const updatedBlock = updatedRows ? `\n${tx('更新：', 'Updated:')}${updatedRows}` : '';
-        alert(`${result.message || tx('问题行导入成功', 'Issue rows imported successfully')}${createdBlock}${updatedBlock}`);
+      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
+      const rowResults = toCustomerImportRowResults(result?.rowResults);
+      const fallbackResults = rowResults.length > 0 ? rowResults : toCustomerImportRowResultsFromIssues(result?.issueRows);
+      if (fallbackResults.length === 0) {
+        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
+        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+      }
+      setCustomerImportRows((prev) => mergeCustomerImportRowViews(prev, fallbackResults));
+      setCustomerImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
       await loadCustomers();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
     } finally {
       setCustomerIssueSubmitting(false);
     }
+  };
+
+  const closeCustomerImportDialog = () => {
+    setShowCustomerImportIssues(false);
+    setCustomerImportRows([]);
+    setCustomerImportMessage('');
+    setCustomerImportFilter('failed');
+    setCustomerImportPage(1);
   };
 
   return (
@@ -4855,16 +5189,31 @@ function CustomerManager() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCustomerImportIssues} onOpenChange={setShowCustomerImportIssues}>
-        <DialogContent className="max-w-6xl">
+      <Dialog open={showCustomerImportIssues} onOpenChange={(open) => { if (!open) closeCustomerImportDialog(); else setShowCustomerImportIssues(true); }}>
+        <DialogContent className="w-[calc(100vw-10px)] max-w-none h-[calc(100vh-10px)] flex flex-col">
           <DialogHeader>
             <DialogTitle>{tx('客户导入问题行处理', 'Customer Import Issue Rows')}</DialogTitle>
             <DialogDescription className="whitespace-pre-wrap break-words">
-              {customerImportMessage || tx('请修改冲突行后重试，仅重试当前问题行。', 'Please edit issue rows and retry. Only current issue rows will be retried.')}
+              {customerImportMessage || tx('请查看导入结果，失败行可编辑后重试。', 'Check import results. Failed rows can be edited and retried.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-auto border rounded-md">
-            <Table>
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <div className="text-gray-600">
+              {tx('默认仅看最新失败行，可切换查看全部。', 'Default view shows latest failed rows. Switch to view all rows.')}
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="h-9 border rounded-md px-2 bg-white"
+                value={customerImportFilter}
+                onChange={(e) => setCustomerImportFilter(e.target.value === 'all' ? 'all' : 'failed')}
+              >
+                <option value="failed">{tx('仅看失败', 'Failed Only')}</option>
+                <option value="all">{tx('查看全部', 'All Rows')}</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto border rounded-md">
+            <Table className="min-w-[3200px] table-auto">
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
@@ -4878,48 +5227,83 @@ function CustomerManager() {
                   <TableHead>CREDIT</TableHead>
                   <TableHead>COMPANY_ADDRESS</TableHead>
                   <TableHead>SALES_EMAIL</TableHead>
-                  <TableHead>{tx('原因', 'Reason')}</TableHead>
+                  <TableHead className="min-w-[180px]">{tx('最新状态', 'Latest Status')}</TableHead>
+                  <TableHead className="min-w-[540px]">{tx('最新原因', 'Latest Reason')}</TableHead>
+                  {Array.from({ length: customerAttemptCount }).map((_, idx) => (
+                    <TableHead key={`customer-attempt-${idx}`} className="min-w-[140px]">
+                      {`Result#${idx + 1}`}
+                    </TableHead>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customerImportIssues.map((row, index) => (
+                {pagedCustomerImportRows.map((row, index) => {
+                  const canEdit = row.latestStatus === 'FAILED';
+                  return (
                   <TableRow key={`${row.rowNo}-${index}`}>
                     <TableCell>{row.rowNo || index + 1}</TableCell>
-                    <TableCell><Input value={row.mark} onChange={(e) => updateCustomerImportIssue(index, 'mark', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.orderName} onChange={(e) => updateCustomerImportIssue(index, 'orderName', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.name} onChange={(e) => updateCustomerImportIssue(index, 'name', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.phone} onChange={(e) => updateCustomerImportIssue(index, 'phone', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.city} onChange={(e) => updateCustomerImportIssue(index, 'city', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.consignee} onChange={(e) => updateCustomerImportIssue(index, 'consignee', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.companyName} onChange={(e) => updateCustomerImportIssue(index, 'companyName', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.credit} onChange={(e) => updateCustomerImportIssue(index, 'credit', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.companyAddress} onChange={(e) => updateCustomerImportIssue(index, 'companyAddress', e.target.value)} /></TableCell>
-                    <TableCell><Input value={row.ownerEmail} onChange={(e) => updateCustomerImportIssue(index, 'ownerEmail', e.target.value)} /></TableCell>
-                    <TableCell className="max-w-[360px] whitespace-pre-wrap break-words text-xs text-red-600">{row.reason || '-'}</TableCell>
+                    <TableCell><Input className="min-w-[180px]" value={row.mark} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'mark', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.orderName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'orderName', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.name} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'name', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[180px]" value={row.phone} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'phone', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[160px]" value={row.city} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'city', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.consignee} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'consignee', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.companyName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyName', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[140px]" value={row.credit} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'credit', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[320px]" value={row.companyAddress} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyAddress', e.target.value)} /></TableCell>
+                    <TableCell><Input className="min-w-[220px]" value={row.ownerEmail} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'ownerEmail', e.target.value)} /></TableCell>
+                    <TableCell className={row.latestStatus === 'FAILED' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
+                      {row.latestStatus}
+                    </TableCell>
+                    <TableCell className="min-w-[540px] whitespace-pre-wrap break-words text-xs">{row.latestReason || '-'}</TableCell>
+                    {Array.from({ length: customerAttemptCount }).map((_, idx) => (
+                      <TableCell key={`customer-row-${row.rowNo}-attempt-${idx}`} className="text-xs">
+                        {row.attempts[idx]?.status || '-'}
+                      </TableCell>
+                    ))}
                   </TableRow>
-                ))}
-                {customerImportIssues.length === 0 && (
+                  );
+                })}
+                {pagedCustomerImportRows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center text-gray-500">{tx('暂无问题行', 'No issue rows')}</TableCell>
+                    <TableCell colSpan={13 + customerAttemptCount} className="text-center text-gray-500">
+                      {customerImportFilter === 'failed'
+                        ? tx('当前没有最新失败行，可切换“查看全部”', 'No latest failed rows. Switch to "All Rows".')
+                        : tx('暂无导入结果', 'No import results')}
+                    </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-gray-600">
+              {tx('每页 50 行', '50 rows per page')} · {tx('第', 'Page')} {customerImportPage} / {customerImportTotalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setCustomerImportPage((p) => Math.max(1, p - 1))}
+                disabled={customerImportPage <= 1}
+              >
+                {tx('上一页', 'Prev')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setCustomerImportPage((p) => Math.min(customerImportTotalPages, p + 1))}
+                disabled={customerImportPage >= customerImportTotalPages}
+              >
+                {tx('下一页', 'Next')}
+              </Button>
+            </div>
+          </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowCustomerImportIssues(false);
-                setCustomerImportIssues([]);
-                setCustomerImportMessage('');
-              }}
-            >
-              {tx('取消', 'Cancel')}
+            <Button variant="outline" onClick={closeCustomerImportDialog}>
+              {tx('关闭', 'Close')}
             </Button>
-            <Button onClick={retryCustomerIssueRows} disabled={customerIssueSubmitting || customerImportIssues.length === 0}>
+            <Button onClick={retryCustomerIssueRows} disabled={customerIssueSubmitting || latestFailedCustomerRows.length === 0}>
               {customerIssueSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {tx('仅导入当前问题行', 'Import Current Issue Rows')}
+              {tx('仅重试失败行', 'Retry Failed Rows')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -46,6 +46,20 @@ type InvoiceImportIssueRow = {
   reason: string;
 };
 
+type InvoiceImportRowResult = {
+  rowNo: number;
+  invNo: string;
+  shipDate: string;
+  releaseDate: string;
+  orderNo: string;
+  amount: string;
+  customerMark: string;
+  customerName: string;
+  customerId: string;
+  status: 'SUCCESS' | 'FAILED';
+  reason: string;
+};
+
 type InvoiceImportProcessResult = {
   success: boolean;
   status: number;
@@ -53,6 +67,7 @@ type InvoiceImportProcessResult = {
   details: string[];
   issueRows: InvoiceImportIssueRow[];
   importedOrderNos: string[];
+  rowResults: InvoiceImportRowResult[];
 };
 
 function toInvoiceIssueRow(row: InvoiceImportInputRow, reason: string): InvoiceImportIssueRow {
@@ -66,6 +81,26 @@ function toInvoiceIssueRow(row: InvoiceImportInputRow, reason: string): InvoiceI
     customerMark: row.customerMark,
     customerName: row.customerName,
     customerId: row.customerId,
+    reason,
+  };
+}
+
+function toInvoiceRowResult(
+  row: InvoiceImportInputRow,
+  status: 'SUCCESS' | 'FAILED',
+  reason: string
+): InvoiceImportRowResult {
+  return {
+    rowNo: row.rowNo,
+    invNo: row.invNo,
+    shipDate: row.shipDateRaw,
+    releaseDate: row.releaseDateRaw,
+    orderNo: row.orderNo,
+    amount: row.amountRaw,
+    customerMark: row.customerMark,
+    customerName: row.customerName,
+    customerId: row.customerId,
+    status,
     reason,
   };
 }
@@ -111,6 +146,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
     sourceRows: InvoiceImportInputRow[];
   }>();
   const issueRows: InvoiceImportIssueRow[] = [];
+  const rowResults: InvoiceImportRowResult[] = [];
   const successMessages: string[] = [];
 
   const extractOrderNameFromOrderNo = (singleOrderNo: string): string | null => {
@@ -242,7 +278,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
     }
 
     if (rowErrors.length > 0) {
-      issueRows.push(toInvoiceIssueRow({
+      const failedRow = {
         ...input,
         invNo,
         shipDateRaw,
@@ -252,7 +288,10 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
         customerMark,
         customerName,
         customerId,
-      }, rowErrors.join('；')));
+      };
+      const reason = rowErrors.join('；');
+      issueRows.push(toInvoiceIssueRow(failedRow, reason));
+      rowResults.push(toInvoiceRowResult(failedRow, 'FAILED', reason));
       continue;
     }
 
@@ -295,6 +334,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       details: issueRows.map((row) => `第${row.rowNo}行 ${row.reason}`),
       issueRows,
       importedOrderNos: [],
+      rowResults: rowResults.sort((a, b) => a.rowNo - b.rowNo),
     };
   }
 
@@ -309,12 +349,17 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
     });
     if (!saved.ok) {
       for (const row of group.sourceRows) {
-        issueRows.push(toInvoiceIssueRow(row, `INV_NO=${invNo} 导入失败：${saved.error}`));
+        const reason = `INV_NO=${invNo} 导入失败：${saved.error}`;
+        issueRows.push(toInvoiceIssueRow(row, reason));
+        rowResults.push(toInvoiceRowResult(row, 'FAILED', reason));
       }
       continue;
     }
     successCount++;
     for (const row of group.rows) importedOrderNos.add(row.orderNo);
+    for (const row of group.sourceRows) {
+      rowResults.push(toInvoiceRowResult(row, 'SUCCESS', ''));
+    }
     successMessages.push(`${invNo}: ${saved.message}`);
   }
 
@@ -326,6 +371,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       details: issueRows.map((row) => `第${row.rowNo}行 ${row.reason}`),
       issueRows,
       importedOrderNos: [],
+      rowResults: rowResults.sort((a, b) => a.rowNo - b.rowNo),
     };
   }
 
@@ -338,6 +384,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       : successMessages,
     issueRows,
     importedOrderNos: Array.from(importedOrderNos),
+    rowResults: rowResults.sort((a, b) => a.rowNo - b.rowNo),
   };
 }
 
@@ -657,6 +704,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         error: processed.success ? undefined : processed.message,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
+        rowResults: processed.rowResults,
         data: {
           importedOrderNos: processed.importedOrderNos.slice(0, 500),
         },
@@ -684,6 +732,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         error: processed.success ? undefined : processed.message,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
+        rowResults: processed.rowResults,
         data: {
           importedOrderNos: processed.importedOrderNos.slice(0, 500),
         },

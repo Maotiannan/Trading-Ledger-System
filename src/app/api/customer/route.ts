@@ -10,7 +10,6 @@ import {
   customerAccessWhere,
   mapPrismaWriteError,
   resolveCustomerOwnerId,
-  resolveCustomerUpsertTargetId,
 } from '@/lib/customer-scope';
 
 type CustomerPayload = {
@@ -54,11 +53,91 @@ type CustomerImportProcessResult = {
   issueRows: CustomerImportIssueRow[];
   createdCount: number;
   updatedCount: number;
+  createdRows: string[];
+  updatedRows: string[];
 };
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
+}
+
+function hasMeaningfulContent(value: string | null | undefined): boolean {
+  const normalized = trimStr(value);
+  if (!normalized) return false;
+  return /[A-Za-z0-9\u4e00-\u9fff]/.test(normalized);
+}
+
+function isEmptyOrPlaceholder(value: string | null | undefined): boolean {
+  const normalized = trimStr(value);
+  if (!normalized) return true;
+  return !hasMeaningfulContent(normalized);
+}
+
+function normalizeMarkForMatch(value: string | null | undefined): string {
+  return trimStr(value).toLowerCase();
+}
+
+function normalizeNameForMatch(value: string | null | undefined): string {
+  return trimStr(value).toLowerCase();
+}
+
+function normalizePhoneToken(value: string | null | undefined): string {
+  const normalized = trimStr(value).toLowerCase();
+  if (!normalized) return '';
+  return normalized.replace(/[^a-z0-9]/g, '');
+}
+
+function splitPhoneCandidates(value: string | null | undefined): string[] {
+  const raw = trimStr(value);
+  if (!raw) return [];
+  const parts = raw
+    .split('/')
+    .map((item) => normalizePhoneToken(item))
+    .filter(Boolean);
+  return Array.from(new Set(parts));
+}
+
+function formatCustomerSummary(name: string | null | undefined, mark: string | null | undefined, phone: string | null | undefined): string {
+  return `${trimStr(name) || '-'} / ${trimStr(mark) || '-'} / ${trimStr(phone) || '-'}`;
+}
+
+type ImportExistingCustomer = {
+  id: string;
+  mark: string;
+  orderName: string;
+  name: string;
+  phone: string;
+  city: string;
+  consignee: string | null;
+  companyName: string | null;
+  credit: unknown;
+  companyAddress: string | null;
+  ownerId: string;
+};
+
+function buildCustomerUpdateDataForImport(
+  existing: ImportExistingCustomer,
+  payload: CustomerPayload,
+  showExtended: boolean,
+  ownerId: string
+): Record<string, unknown> {
+  const updateData: Record<string, unknown> = {};
+  if (isEmptyOrPlaceholder(existing.mark) && hasMeaningfulContent(payload.mark)) updateData.mark = payload.mark;
+  if (isEmptyOrPlaceholder(existing.orderName) && hasMeaningfulContent(payload.orderName)) updateData.orderName = payload.orderName;
+  if (isEmptyOrPlaceholder(existing.name) && hasMeaningfulContent(payload.name)) updateData.name = payload.name;
+  if (isEmptyOrPlaceholder(existing.phone) && hasMeaningfulContent(payload.phone)) updateData.phone = payload.phone;
+  if (isEmptyOrPlaceholder(existing.city) && hasMeaningfulContent(payload.city)) updateData.city = payload.city;
+  if (isEmptyOrPlaceholder(existing.consignee) && trimStr(payload.consignee)) updateData.consignee = payload.consignee;
+  if (showExtended) {
+    if (isEmptyOrPlaceholder(existing.companyName) && trimStr(payload.companyName)) updateData.companyName = payload.companyName;
+    if (isEmptyOrPlaceholder(existing.companyAddress) && trimStr(payload.companyAddress)) updateData.companyAddress = payload.companyAddress;
+    if ((existing.credit === null || existing.credit === undefined) && payload.credit !== null && payload.credit !== undefined) {
+      updateData.credit = payload.credit;
+    }
+  }
+  if (existing.ownerId !== ownerId) updateData.ownerId = ownerId;
+  return updateData;
 }
 
 function managerOnly(userRole: UserRole): NextResponse | null {
@@ -167,6 +246,8 @@ async function processCustomerImportRows(
       issueRows: [],
       createdCount: 0,
       updatedCount: 0,
+      createdRows: [],
+      updatedRows: [],
     };
   }
 
@@ -183,8 +264,34 @@ async function processCustomerImportRows(
     for (const owner of ownerUsers) ownerEmailToId.set(owner.email.toLowerCase(), owner.id);
   }
 
+  const ownerCustomerCache = new Map<string, ImportExistingCustomer[]>();
+  const loadOwnerCustomers = async (ownerId: string): Promise<ImportExistingCustomer[]> => {
+    if (!ownerCustomerCache.has(ownerId)) {
+      const ownerCustomers = await db.customer.findMany({
+        where: { ownerId },
+        select: {
+          id: true,
+          mark: true,
+          orderName: true,
+          name: true,
+          phone: true,
+          city: true,
+          consignee: true,
+          companyName: true,
+          credit: true,
+          companyAddress: true,
+          ownerId: true,
+        },
+      });
+      ownerCustomerCache.set(ownerId, ownerCustomers);
+    }
+    return ownerCustomerCache.get(ownerId)!;
+  };
+
   let createdCount = 0;
   let updatedCount = 0;
+  const createdRows: string[] = [];
+  const updatedRows: string[] = [];
 
   for (const row of rows) {
     const payload = row.payload;
@@ -206,13 +313,43 @@ async function processCustomerImportRows(
     const effectiveOwnerId = rowOwnerId || ownerIdFallback;
 
     try {
-      const targetId = await resolveCustomerUpsertTargetId(effectiveOwnerId, {
-        orderName: payload.orderName!,
-        phone: payload.phone!,
-        companyName: showExtended ? payload.companyName || null : null,
-      });
+      const ownerCustomers = await loadOwnerCustomers(effectiveOwnerId);
+      const phoneTokens = splitPhoneCandidates(payload.phone || '');
+      const inputMark = normalizeMarkForMatch(payload.mark || '');
+      const inputName = normalizeNameForMatch(payload.name || '');
+      const canUseMarkName = hasMeaningfulContent(payload.mark) && hasMeaningfulContent(payload.name);
 
+      const phoneMatchedIds = new Set<string>();
+      const markNameMatchedIds = new Set<string>();
+      for (const existing of ownerCustomers) {
+        if (phoneTokens.length > 0) {
+          const existingPhoneTokens = splitPhoneCandidates(existing.phone || '');
+          if (existingPhoneTokens.some((token) => phoneTokens.includes(token))) {
+            phoneMatchedIds.add(existing.id);
+          }
+        }
+        if (canUseMarkName) {
+          const existingMark = normalizeMarkForMatch(existing.mark || '');
+          const existingName = normalizeNameForMatch(existing.name || '');
+          if (hasMeaningfulContent(existing.mark) && hasMeaningfulContent(existing.name) && existingMark === inputMark && existingName === inputName) {
+            markNameMatchedIds.add(existing.id);
+          }
+        }
+      }
+
+      const matchedIds = new Set<string>([...phoneMatchedIds, ...markNameMatchedIds]);
+      if (matchedIds.size > 1) {
+        issueRows.push(toCustomerImportIssueRow(row, '同一行命中多条客户（PHONE 或 MARK+NAME），请人工处理后重试'));
+        continue;
+      }
+
+      const targetId = matchedIds.size === 1 ? Array.from(matchedIds)[0] : null;
       if (targetId) {
+        const target = ownerCustomers.find((item) => item.id === targetId);
+        if (!target) {
+          issueRows.push(toCustomerImportIssueRow(row, '命中客户后读取失败，请重试'));
+          continue;
+        }
         await assertNoCustomerScopeConflict(
           effectiveOwnerId,
           {
@@ -222,26 +359,22 @@ async function processCustomerImportRows(
           },
           targetId
         );
-        await db.customer.update({
-          where: { id: targetId },
-          data: {
-            mark: payload.mark!,
-            orderName: payload.orderName!,
-            name: payload.name!,
-            phone: payload.phone!,
-            city: payload.city!,
-            consignee: payload.consignee || null,
-            ownerId: effectiveOwnerId,
-            ...(showExtended
-              ? {
-                  companyName: payload.companyName || null,
-                  companyAddress: payload.companyAddress || null,
-                  credit: payload.credit ?? null,
-                }
-              : {}),
-          },
-        });
+        const updateData = buildCustomerUpdateDataForImport(target, payload, showExtended, effectiveOwnerId);
+        if (Object.keys(updateData).length > 0) {
+          await db.customer.update({
+            where: { id: targetId },
+            data: updateData,
+          });
+          const updatedRowIndex = ownerCustomers.findIndex((item) => item.id === targetId);
+          if (updatedRowIndex >= 0) {
+            ownerCustomers[updatedRowIndex] = {
+              ...ownerCustomers[updatedRowIndex],
+              ...updateData,
+            };
+          }
+        }
         updatedCount++;
+        updatedRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
         continue;
       }
 
@@ -266,7 +399,9 @@ async function processCustomerImportRows(
           ownerId: effectiveOwnerId,
         },
       });
+      ownerCustomerCache.delete(effectiveOwnerId);
       createdCount++;
+      createdRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
     } catch (error) {
       issueRows.push(toCustomerImportIssueRow(row, mapPrismaWriteError(error)));
     }
@@ -282,6 +417,8 @@ async function processCustomerImportRows(
       issueRows,
       createdCount,
       updatedCount,
+      createdRows,
+      updatedRows,
     };
   }
 
@@ -293,6 +430,8 @@ async function processCustomerImportRows(
     issueRows,
     createdCount,
     updatedCount,
+    createdRows,
+    updatedRows,
   };
 }
 
@@ -479,6 +618,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           createdCount: processed.createdCount,
           updatedCount: processed.updatedCount,
           failedCount: processed.issueRows.length,
+          createdRows: processed.createdRows.slice(0, 500),
+          updatedRows: processed.updatedRows.slice(0, 500),
         },
       },
       { status: processed.status }
@@ -533,6 +674,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           createdCount: processed.createdCount,
           updatedCount: processed.updatedCount,
           failedCount: processed.issueRows.length,
+          createdRows: processed.createdRows.slice(0, 500),
+          updatedRows: processed.updatedRows.slice(0, 500),
         },
       },
       { status: processed.status }

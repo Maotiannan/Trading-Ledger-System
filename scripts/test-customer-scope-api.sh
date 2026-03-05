@@ -44,6 +44,9 @@ pass "admin login"
 suffix="$(date +%s)-$RANDOM"
 phone_tail="$(printf '%05d' $((RANDOM % 100000)))"
 sales_email="qa-sales-${suffix}@example.com"
+mark="QA-MARK-${suffix}"
+base_name="Ibrahima Diallo ${suffix}"
+updated_name="Ibrahima Diallo Updated ${suffix}"
 
 # Create sales user
 request_json "POST" "/api/auth" "{\"action\":\"create\",\"email\":\"$sales_email\",\"password\":\"12345678\",\"role\":\"SALES\",\"name\":\"QA Sales $suffix\"}"
@@ -55,36 +58,38 @@ pass "create sales"
 for idx in 1 2; do
   order="QA-ORD-${suffix}-${idx}"
   phone="620${phone_tail}${idx}"
-  payload="{\"action\":\"create\",\"mark\":\"QA-MARK\",\"orderName\":\"$order\",\"name\":\"Ibrahima Diallo\",\"phone\":\"$phone\",\"city\":\"Conakry\",\"consignee\":\"\",\"companyName\":\"QA-COMP-${suffix}-${idx}\",\"credit\":0}"
+  payload="{\"action\":\"create\",\"mark\":\"$mark\",\"orderName\":\"$order\",\"name\":\"$base_name\",\"phone\":\"$phone\",\"city\":\"Conakry\",\"consignee\":\"\",\"companyName\":\"QA-COMP-${suffix}-${idx}\",\"credit\":0}"
   request_json "POST" "/api/customer" "$payload"
   [ "$HTTP_CODE" = "200" ] || fail "same-name create #$idx"
 done
 pass "same-name allowed"
 
 # Duplicate ORDER_NAME in same pool should fail
-payload_dup_order="{\"action\":\"create\",\"mark\":\"QA-MARK\",\"orderName\":\"QA-ORD-${suffix}-1\",\"name\":\"Dup Order\",\"phone\":\"631${phone_tail}9\",\"city\":\"Conakry\",\"companyName\":\"QA-COMP-${suffix}-X\",\"credit\":0}"
+payload_dup_order="{\"action\":\"create\",\"mark\":\"$mark\",\"orderName\":\"QA-ORD-${suffix}-1\",\"name\":\"Dup Order ${suffix}\",\"phone\":\"631${phone_tail}9\",\"city\":\"Conakry\",\"companyName\":\"QA-COMP-${suffix}-X\",\"credit\":0}"
 request_json "POST" "/api/customer" "$payload_dup_order"
 [ "$HTTP_CODE" = "400" ] || fail "duplicate ORDER_NAME rejected"
 pass "duplicate ORDER_NAME rejected"
 
 # Same ORDER_NAME in different pool should pass (owner=sales)
-payload_cross_scope="{\"action\":\"create\",\"ownerId\":\"$sales_id\",\"mark\":\"QA-MARK\",\"orderName\":\"QA-ORD-${suffix}-1\",\"name\":\"Cross Scope\",\"phone\":\"639${phone_tail}8\",\"city\":\"Conakry\",\"companyName\":\"QA-COMP-${suffix}-Y\",\"credit\":0}"
+payload_cross_scope="{\"action\":\"create\",\"ownerId\":\"$sales_id\",\"mark\":\"$mark\",\"orderName\":\"QA-ORD-${suffix}-1\",\"name\":\"Cross Scope ${suffix}\",\"phone\":\"639${phone_tail}8\",\"city\":\"Conakry\",\"companyName\":\"QA-COMP-${suffix}-Y\",\"credit\":0}"
 request_json "POST" "/api/customer" "$payload_cross_scope"
 [ "$HTTP_CODE" = "200" ] || fail "cross-scope duplicate allowed"
 pass "cross-scope duplicate allowed"
 
 # Build import xlsx (update same customer by ORDER_NAME/PHONE in admin pool)
 import_xlsx="/tmp/customer_scope_import_${suffix}.xlsx"
-node - <<'NODE' "$import_xlsx" "$suffix" "$phone_tail"
+node - <<'NODE' "$import_xlsx" "$suffix" "$phone_tail" "$mark" "$updated_name"
 const ExcelJS = require('exceljs');
 const out = process.argv[2];
 const suffix = process.argv[3];
 const phoneTail = process.argv[4];
+const mark = process.argv[5];
+const updatedName = process.argv[6];
 (async () => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('customer_import');
   ws.addRow(['MARK','ORDER_NAME','NAME','PHONE','CITY','CONSIGNEE','COMPANY_NAME','CREDIT','COMPANY_ADDRESS']);
-  ws.addRow(['QA-MARK',`QA-ORD-${suffix}-1`,'Ibrahima Diallo Updated',`620${phoneTail}1`,'Conakry','',`QA-COMP-${suffix}-1`,0,'']);
+  ws.addRow([mark,`QA-ORD-${suffix}-1`,updatedName,`620${phoneTail}1`,'Conakry','',`QA-COMP-${suffix}-1`,0,'']);
   await wb.xlsx.writeFile(out);
 })();
 NODE

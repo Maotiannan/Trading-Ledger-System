@@ -668,6 +668,14 @@ src/
 - 🧯 修复管理员删除用户 500：删除前自动重挂该用户创建的业务数据 `createdBy` 到当前操作者，再执行删除，避免外键约束 (`P2003`) 失败。
 - ✅ 用户删除链路稳定化：覆盖 `Invoice/Order/Receipt/Detail/SWIFT/Customer/History/DeletionRequest/AuditLog` 的创建者重挂。
 
+### v1.0.23 (2026-03-05)
+- 🧾 客户导入匹配规则升级：按 `PHONE` 或 `MARK+NAME` 命中更新；若同一行命中多条客户则进入问题行，不再误更新。
+- 🛡️ 客户导入更新策略收敛：仅覆盖目标客户的空值/占位值字段，已有有效字段不再被批量导入覆盖。
+- 📌 导入结果回执增强：账单导入返回并展示 `importedOrderNos`；客户导入返回并展示 `createdRows/updatedRows`（`NAME/MARK/PHONE`）。
+- 🗓️ 账单列表支持直接编辑并保存 `SHIP_DATE` / `RELEASE_DATE`（支持清空为 `null`）。
+- 🚫 账单导入重复防护增强：同批次重复与库内已存在 `ORDER_NO` 均按问题行拦截，禁止隐式合并金额。
+- 🧪 自动化回归补强：新增 API 自测覆盖导入匹配冲突、仅空字段覆盖、账单日期更新与重复导入拦截场景。
+
 ### v1.0.16 (2026-03-02)
 - 🔐 账单“刷新匹配”权限收敛：`rematch-preview` / `rematch-apply` / `rematch` 仅在当前账号可见范围内执行，不再扫描或改动全库数据。
 - 🧭 `updateOrder` 触发的自动 rematch 同步改为当前账号可见范围内执行，避免跨账号影响。

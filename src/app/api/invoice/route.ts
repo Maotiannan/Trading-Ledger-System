@@ -9,7 +9,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
-import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
+import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 import { customerAccessWhere } from '@/lib/customer-scope';
 
@@ -52,6 +52,7 @@ type InvoiceImportProcessResult = {
   message: string;
   details: string[];
   issueRows: InvoiceImportIssueRow[];
+  importedOrderNos: string[];
 };
 
 function toInvoiceIssueRow(row: InvoiceImportInputRow, reason: string): InvoiceImportIssueRow {
@@ -100,6 +101,8 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
 
   const customerByMarkCache = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
   const inferCache = new Map<string, { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string }>();
+  const importedOrderNos = new Set<string>();
+  const batchOrderSet = new Set<string>();
 
   const grouped = new Map<string, {
     shipDate: Date | null | undefined;
@@ -110,17 +113,87 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
   const issueRows: InvoiceImportIssueRow[] = [];
   const successMessages: string[] = [];
 
+  const inferCustomerBySingleOrderNo = async (singleOrderNo: string) => {
+    const cacheKey = singleOrderNo.toLowerCase();
+    if (!inferCache.has(cacheKey)) {
+      const inferResult: { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string } = { matched: false };
+      const matchedOrderId = await findOrderIdByNoOrAlias(singleOrderNo, orderVisibilityWhere);
+      if (matchedOrderId) {
+        const matchedOrder = orderById.get(matchedOrderId);
+        if (matchedOrder?.customerMark) {
+          inferResult.matched = true;
+          inferResult.customerMark = matchedOrder.customerMark;
+          inferResult.customerName = matchedOrder.customerName || '';
+          inferResult.customerId = matchedOrder.customerId || '';
+        }
+      }
+
+      if (!inferResult.matched) {
+        const groupKey = deriveOrderGroupKey(singleOrderNo);
+        if (groupKey) {
+          const groupedMarks = groupMarkMap.get(groupKey) || [];
+          const uniq = new Map<string, { customerMark: string; customerName: string | null; customerId: string | null }>();
+          for (const candidate of groupedMarks) {
+            if (!candidate.customerMark) continue;
+            const key = candidate.customerMark.toLowerCase();
+            if (!uniq.has(key)) uniq.set(key, candidate);
+          }
+          if (uniq.size === 1) {
+            const selected = Array.from(uniq.values())[0];
+            inferResult.matched = true;
+            inferResult.customerMark = selected.customerMark;
+            inferResult.customerName = selected.customerName || '';
+            inferResult.customerId = selected.customerId || '';
+          } else if (uniq.size > 1) {
+            inferResult.reason = '同组存在多个MARK';
+          } else {
+            const markKey = groupKey.toLowerCase();
+            if (!customerByMarkCache.has(markKey)) {
+              const customers = await db.customer.findMany({
+                where: {
+                  AND: [
+                    customerVisibilityWhere,
+                    { mark: { equals: groupKey } },
+                  ],
+                },
+                select: { id: true, mark: true, orderName: true },
+              });
+              customerByMarkCache.set(markKey, customers);
+            }
+            const customers = customerByMarkCache.get(markKey) || [];
+            if (customers.length === 1) {
+              const selected = customers[0];
+              inferResult.matched = true;
+              inferResult.customerMark = selected.mark;
+              inferResult.customerName = selected.orderName || '';
+              inferResult.customerId = selected.id;
+            } else if (customers.length > 1) {
+              inferResult.reason = '客户库同MARK存在多条';
+            } else {
+              inferResult.reason = '客户库无匹配';
+            }
+          }
+        } else {
+          inferResult.reason = 'ORDER格式不支持分组匹配';
+        }
+      }
+      inferCache.set(cacheKey, inferResult);
+    }
+    return inferCache.get(cacheKey)!;
+  };
+
   for (const input of rows) {
     const invNo = String(input.invNo || '').trim();
     const shipDateRaw = String(input.shipDateRaw || '').trim();
     const releaseDateRaw = String(input.releaseDateRaw || '').trim();
-    const orderNo = String(input.orderNo || '').trim();
+    const rawOrderNo = String(input.orderNo || '').trim();
     const amountRaw = String(input.amountRaw || '').trim();
     let customerMark = String(input.customerMark || '').trim();
     let customerName = String(input.customerName || '').trim();
     let customerId = String(input.customerId || '').trim();
 
-    if (!invNo && !orderNo && !amountRaw && !customerMark && !shipDateRaw && !releaseDateRaw) continue;
+    if (!invNo && !rawOrderNo && !amountRaw && !customerMark && !shipDateRaw && !releaseDateRaw) continue;
+    const orderNo = canonicalizeOrderNo(rawOrderNo);
 
     const rowErrors: string[] = [];
     const amount = Number(amountRaw);
@@ -132,79 +205,60 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
     if (shipDateRaw && shipDate === undefined) rowErrors.push('SHIP_DATE 格式错误，应为 YYYY-MM-DD');
     if (releaseDateRaw && releaseDate === undefined) rowErrors.push('RELEASE_DATE 格式错误，应为 YYYY-MM-DD');
 
-    if (!customerMark && orderNo) {
-      const cacheKey = orderNo.toLowerCase();
-      if (!inferCache.has(cacheKey)) {
-        const inferResult: { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string } = { matched: false };
-        const matchedOrderId = await findOrderIdByNoOrAlias(orderNo, orderVisibilityWhere);
-        if (matchedOrderId) {
-          const matchedOrder = orderById.get(matchedOrderId);
-          if (matchedOrder?.customerMark) {
-            inferResult.matched = true;
-            inferResult.customerMark = matchedOrder.customerMark;
-            inferResult.customerName = matchedOrder.customerName || '';
-            inferResult.customerId = matchedOrder.customerId || '';
-          }
-        }
-
-        if (!inferResult.matched) {
-          const groupKey = deriveOrderGroupKey(orderNo);
-          if (groupKey) {
-            const groupedMarks = groupMarkMap.get(groupKey) || [];
-            const uniq = new Map<string, { customerMark: string; customerName: string | null; customerId: string | null }>();
-            for (const candidate of groupedMarks) {
-              if (!candidate.customerMark) continue;
-              const key = candidate.customerMark.toLowerCase();
-              if (!uniq.has(key)) uniq.set(key, candidate);
-            }
-            if (uniq.size === 1) {
-              const selected = Array.from(uniq.values())[0];
-              inferResult.matched = true;
-              inferResult.customerMark = selected.customerMark;
-              inferResult.customerName = selected.customerName || '';
-              inferResult.customerId = selected.customerId || '';
-            } else if (uniq.size > 1) {
-              inferResult.reason = '同组存在多个MARK';
-            } else {
-              const markKey = groupKey.toLowerCase();
-              if (!customerByMarkCache.has(markKey)) {
-                const customers = await db.customer.findMany({
-                  where: {
-                    AND: [
-                      customerVisibilityWhere,
-                      { mark: { equals: groupKey } },
-                    ],
-                  },
-                  select: { id: true, mark: true, orderName: true },
-                });
-                customerByMarkCache.set(markKey, customers);
-              }
-              const customers = customerByMarkCache.get(markKey) || [];
-              if (customers.length === 1) {
-                const selected = customers[0];
-                inferResult.matched = true;
-                inferResult.customerMark = selected.mark;
-                inferResult.customerName = selected.orderName || '';
-                inferResult.customerId = selected.id;
-              } else if (customers.length > 1) {
-                inferResult.reason = '客户库同MARK存在多条';
-              } else {
-                inferResult.reason = '客户库无匹配';
-              }
-            }
-          } else {
-            inferResult.reason = 'ORDER格式不支持分组匹配';
-          }
-        }
-        inferCache.set(cacheKey, inferResult);
-      }
-      const inferred = inferCache.get(cacheKey)!;
-      if (inferred.matched && inferred.customerMark) {
-        customerMark = inferred.customerMark;
-        if (!customerName && inferred.customerName) customerName = inferred.customerName;
-        if (!customerId && inferred.customerId) customerId = inferred.customerId;
+    if (orderNo && rowErrors.length === 0) {
+      const duplicateKey = normalizeOrderNo(orderNo);
+      if (batchOrderSet.has(duplicateKey)) {
+        rowErrors.push(`ORDER_NO=${orderNo} 此条已存在（本次上传内重复）`);
       } else {
-        rowErrors.push(`CUSTOMER_MARK 为空且无法自动匹配：${inferred.reason || '未知原因'}`);
+        const existingOrderId = await findOrderIdByNoOrAlias(orderNo, orderVisibilityWhere);
+        if (existingOrderId) {
+          rowErrors.push(`ORDER_NO=${orderNo} 此条已存在`);
+        } else {
+          batchOrderSet.add(duplicateKey);
+        }
+      }
+    }
+
+    if (!customerMark && orderNo) {
+      const parts = splitCompositeOrderNo(orderNo);
+      if (parts.length > 1) {
+        const inferredMarks: Array<{ customerMark: string; customerName: string; customerId: string }> = [];
+        for (const part of parts) {
+          const inferred = await inferCustomerBySingleOrderNo(part);
+          if (!inferred.matched || !inferred.customerMark) {
+            rowErrors.push(`CUSTOMER_MARK 为空且无法自动匹配：子单号 ${part} ${inferred.reason || '未知原因'}`);
+            break;
+          }
+          inferredMarks.push({
+            customerMark: inferred.customerMark,
+            customerName: inferred.customerName || '',
+            customerId: inferred.customerId || '',
+          });
+        }
+        if (rowErrors.length === 0) {
+          const uniqMarkMap = new Map<string, { customerMark: string; customerName: string; customerId: string }>();
+          for (const inferred of inferredMarks) {
+            const markKey = inferred.customerMark.toLowerCase();
+            if (!uniqMarkMap.has(markKey)) uniqMarkMap.set(markKey, inferred);
+          }
+          if (uniqMarkMap.size !== 1) {
+            rowErrors.push('这条非同客户单号');
+          } else {
+            const selected = Array.from(uniqMarkMap.values())[0];
+            customerMark = selected.customerMark;
+            if (!customerName && selected.customerName) customerName = selected.customerName;
+            if (!customerId && selected.customerId) customerId = selected.customerId;
+          }
+        }
+      } else {
+        const inferred = await inferCustomerBySingleOrderNo(orderNo);
+        if (inferred.matched && inferred.customerMark) {
+          customerMark = inferred.customerMark;
+          if (!customerName && inferred.customerName) customerName = inferred.customerName;
+          if (!customerId && inferred.customerId) customerId = inferred.customerId;
+        } else {
+          rowErrors.push(`CUSTOMER_MARK 为空且无法自动匹配：${inferred.reason || '未知原因'}`);
+        }
       }
     }
 
@@ -261,6 +315,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       message: '没有可导入的数据行',
       details: issueRows.map((row) => `第${row.rowNo}行 ${row.reason}`),
       issueRows,
+      importedOrderNos: [],
     };
   }
 
@@ -280,6 +335,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       continue;
     }
     successCount++;
+    for (const row of group.rows) importedOrderNos.add(row.orderNo);
     successMessages.push(`${invNo}: ${saved.message}`);
   }
 
@@ -290,6 +346,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       message: '导入失败：没有成功导入的账单',
       details: issueRows.map((row) => `第${row.rowNo}行 ${row.reason}`),
       issueRows,
+      importedOrderNos: [],
     };
   }
 
@@ -301,6 +358,7 @@ async function processInvoiceImportRows(rows: InvoiceImportInputRow[], currentUs
       ? issueRows.map((row) => `第${row.rowNo}行 ${row.reason}`)
       : successMessages,
     issueRows,
+    importedOrderNos: Array.from(importedOrderNos),
   };
 }
 
@@ -620,6 +678,9 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         error: processed.success ? undefined : processed.message,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
+        data: {
+          importedOrderNos: processed.importedOrderNos.slice(0, 500),
+        },
       }, { status: processed.status });
     }
 
@@ -644,6 +705,9 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         error: processed.success ? undefined : processed.message,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
+        data: {
+          importedOrderNos: processed.importedOrderNos.slice(0, 500),
+        },
       }, { status: processed.status });
     }
 
@@ -1141,6 +1205,55 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         success: true, 
         message: `重新匹配完成（当前可见范围）：合并重复订单 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}` 
       });
+    }
+
+    if (action === 'updateInvoiceDates') {
+      const targetInvoiceId = typeof body.invoiceId === 'string' ? body.invoiceId.trim() : '';
+      if (!targetInvoiceId) {
+        return NextResponse.json({ success: false, error: '账单ID不能为空' }, { status: 400 });
+      }
+
+      const scope = await getHierarchyScope(currentUser);
+      const ownerIds = Array.from(scope.ownerVisibleIds);
+      const visibleInvoice = await db.invoice.findFirst({
+        where: {
+          id: targetInvoiceId,
+          OR: [
+            { createdBy: { in: ownerIds } },
+            { orders: { some: { createdBy: { in: ownerIds } } } },
+            { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!visibleInvoice) {
+        return NextResponse.json({ success: false, error: '账单不存在或无权限修改' }, { status: 404 });
+      }
+
+      const shipDateRaw = Object.prototype.hasOwnProperty.call(body, 'shipDate') ? body.shipDate : undefined;
+      const releaseDateRaw = Object.prototype.hasOwnProperty.call(body, 'releaseDate') ? body.releaseDate : undefined;
+
+      const parsedShipDate = parseDateInput(shipDateRaw);
+      const parsedReleaseDate = parseDateInput(releaseDateRaw);
+      if (shipDateRaw !== undefined && shipDateRaw !== null && shipDateRaw !== '' && parsedShipDate === undefined) {
+        return NextResponse.json({ success: false, error: 'SHIP_DATE 格式错误，应为 YYYY-MM-DD' }, { status: 400 });
+      }
+      if (releaseDateRaw !== undefined && releaseDateRaw !== null && releaseDateRaw !== '' && parsedReleaseDate === undefined) {
+        return NextResponse.json({ success: false, error: 'RELEASE_DATE 格式错误，应为 YYYY-MM-DD' }, { status: 400 });
+      }
+
+      const updateData: { shipDate?: Date | null; releaseDate?: Date | null } = {};
+      if (shipDateRaw !== undefined) updateData.shipDate = shipDateRaw === '' || shipDateRaw === null ? null : (parsedShipDate as Date);
+      if (releaseDateRaw !== undefined) updateData.releaseDate = releaseDateRaw === '' || releaseDateRaw === null ? null : (parsedReleaseDate as Date);
+      if (Object.keys(updateData).length === 0) {
+        return NextResponse.json({ success: false, error: '缺少可更新字段' }, { status: 400 });
+      }
+
+      const updated = await db.invoice.update({
+        where: { id: targetInvoiceId },
+        data: updateData,
+      });
+      return NextResponse.json({ success: true, data: updated, message: '账单日期已更新' });
     }
 
     // 更新订单

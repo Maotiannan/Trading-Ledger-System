@@ -90,6 +90,24 @@ function getDisplayImageUrl(rawUrl: string): string {
   return rawUrl;
 }
 
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function summarizeRowsForAlert(rows: unknown, limit = 20): string {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const list = rows
+    .map((item) => String(item || '').trim())
+    .filter(Boolean);
+  if (list.length === 0) return '';
+  const shown = list.slice(0, limit);
+  const suffix = list.length > limit ? `\n... (+${list.length - limit})` : '';
+  return `\n${shown.join('\n')}${suffix}`;
+}
+
 async function fetchServerDate(): Promise<string> {
   try {
     const result = await apiCall('system/health');
@@ -613,6 +631,10 @@ function InvoiceManager() {
   const [showInvoiceImportIssues, setShowInvoiceImportIssues] = useState(false);
   const [invoiceIssueSubmitting, setInvoiceIssueSubmitting] = useState(false);
   const [invoiceImportMessage, setInvoiceImportMessage] = useState('');
+  const [editingInvoiceDateId, setEditingInvoiceDateId] = useState<string | null>(null);
+  const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
+  const [editingInvoiceReleaseDate, setEditingInvoiceReleaseDate] = useState('');
+  const [invoiceDateSaving, setInvoiceDateSaving] = useState(false);
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
   const invoiceCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -682,10 +704,10 @@ function InvoiceManager() {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      const details = Array.isArray(result?.details) && result.details.length > 0
-        ? `\n${result.details.join('\n')}`
-        : '';
-      alert(`${result.message || tx('导入成功', 'Import successful')}${details}`);
+      const importedOrderNos = summarizeRowsForAlert(result?.data?.importedOrderNos, 40);
+      const details = Array.isArray(result?.details) && result.details.length > 0 ? `\n${result.details.join('\n')}` : '';
+      const importedBlock = importedOrderNos ? `\n${tx('已导入ORDER：', 'Imported ORDERs:')}${importedOrderNos}` : '';
+      alert(`${result.message || tx('导入成功', 'Import successful')}${importedBlock}${details}`);
       await loadInvoices();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
@@ -752,13 +774,53 @@ function InvoiceManager() {
         setShowInvoiceImportIssues(false);
         setInvoiceImportIssues([]);
         setInvoiceImportMessage('');
-        alert(result.message || tx('问题行导入成功', 'Issue rows imported successfully'));
+        const importedOrderNos = summarizeRowsForAlert(result?.data?.importedOrderNos, 40);
+        const importedBlock = importedOrderNos ? `\n${tx('已导入ORDER：', 'Imported ORDERs:')}${importedOrderNos}` : '';
+        alert(`${result.message || tx('问题行导入成功', 'Issue rows imported successfully')}${importedBlock}`);
       }
       await loadInvoices();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
     } finally {
       setInvoiceIssueSubmitting(false);
+    }
+  };
+
+  const openInvoiceDateEditor = (invoiceId: string, currentShipDate?: string | null, currentReleaseDate?: string | null) => {
+    setEditingInvoiceDateId(invoiceId);
+    setEditingInvoiceShipDate(toDateInputValue(currentShipDate));
+    setEditingInvoiceReleaseDate(toDateInputValue(currentReleaseDate));
+  };
+
+  const cancelInvoiceDateEditor = () => {
+    setEditingInvoiceDateId(null);
+    setEditingInvoiceShipDate('');
+    setEditingInvoiceReleaseDate('');
+  };
+
+  const saveInvoiceDates = async () => {
+    if (!editingInvoiceDateId) return;
+    setInvoiceDateSaving(true);
+    try {
+      const result = await apiCall('invoice', {
+        method: 'PUT',
+        body: JSON.stringify({
+          action: 'updateInvoiceDates',
+          invoiceId: editingInvoiceDateId,
+          shipDate: editingInvoiceShipDate || '',
+          releaseDate: editingInvoiceReleaseDate || '',
+        }),
+      });
+      if (!result.success) {
+        alert(result.error || tx('保存失败', 'Save failed'));
+        return;
+      }
+      cancelInvoiceDateEditor();
+      await loadInvoices();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : tx('保存失败', 'Save failed'));
+    } finally {
+      setInvoiceDateSaving(false);
     }
   };
 
@@ -1297,11 +1359,66 @@ function InvoiceManager() {
                   <div>
                     <CardTitle className="text-lg">{invoice.invNo}</CardTitle>
                     <CardDescription>
-                      {tx(`${invoice.orders.length} 个订单`, `${invoice.orders.length} orders`)}
-                      {' | '}
-                      {`${tx('发货', 'SHIP')}: ${invoice.shipDate ? new Date(invoice.shipDate).toLocaleDateString() : '-'}`}
-                      {' | '}
-                      {`${tx('放货', 'RELEASE')}: ${invoice.releaseDate ? new Date(invoice.releaseDate).toLocaleDateString() : '-'}`}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{tx(`${invoice.orders.length} 个订单`, `${invoice.orders.length} orders`)}</span>
+                        {editingInvoiceDateId === invoice.id ? (
+                          <div
+                            className="flex flex-wrap items-center gap-2"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <span>{tx('发货', 'SHIP')}</span>
+                            <Input
+                              type="date"
+                              value={editingInvoiceShipDate}
+                              onChange={(event) => setEditingInvoiceShipDate(event.target.value)}
+                              className="h-8 w-[150px]"
+                            />
+                            <span>{tx('放货', 'RELEASE')}</span>
+                            <Input
+                              type="date"
+                              value={editingInvoiceReleaseDate}
+                              onChange={(event) => setEditingInvoiceReleaseDate(event.target.value)}
+                              className="h-8 w-[150px]"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingInvoiceShipDate('');
+                                setEditingInvoiceReleaseDate('');
+                              }}
+                            >
+                              {tx('清空', 'Clear')}
+                            </Button>
+                            <Button size="sm" onClick={saveInvoiceDates} disabled={invoiceDateSaving}>
+                              {invoiceDateSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                              {tx('保存', 'Save')}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={cancelInvoiceDateEditor} disabled={invoiceDateSaving}>
+                              {tx('取消', 'Cancel')}
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <span>{`${tx('发货', 'SHIP')}: ${invoice.shipDate ? new Date(invoice.shipDate).toLocaleDateString() : '-'}`}</span>
+                            <span>{`${tx('放货', 'RELEASE')}: ${invoice.releaseDate ? new Date(invoice.releaseDate).toLocaleDateString() : '-'}`}</span>
+                            {isManager && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openInvoiceDateEditor(invoice.id, invoice.shipDate, invoice.releaseDate);
+                                }}
+                                className="h-7 px-2"
+                              >
+                                <Pencil className="h-3.5 w-3.5 mr-1" />
+                                {tx('编辑日期', 'Edit Dates')}
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </CardDescription>
                   </div>
                 </div>
@@ -1858,7 +1975,7 @@ function InvoiceManager() {
         <DialogContent className="max-w-6xl">
           <DialogHeader>
             <DialogTitle>{tx('账单导入问题行处理', 'Invoice Import Issue Rows')}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="whitespace-pre-wrap break-words">
               {invoiceImportMessage || tx('请补充问题行后继续导入，仅重试当前问题行。', 'Edit issue rows and retry import. Only current issue rows will be retried.')}
             </DialogDescription>
           </DialogHeader>
@@ -1888,7 +2005,7 @@ function InvoiceManager() {
                     <TableCell><Input value={row.customerName} onChange={(e) => updateInvoiceImportIssue(index, 'customerName', e.target.value)} /></TableCell>
                     <TableCell><Input value={row.shipDate} onChange={(e) => updateInvoiceImportIssue(index, 'shipDate', e.target.value)} /></TableCell>
                     <TableCell><Input value={row.releaseDate} onChange={(e) => updateInvoiceImportIssue(index, 'releaseDate', e.target.value)} /></TableCell>
-                    <TableCell className="text-xs text-red-600">{row.reason || '-'}</TableCell>
+                    <TableCell className="max-w-[360px] whitespace-pre-wrap break-words text-xs text-red-600">{row.reason || '-'}</TableCell>
                   </TableRow>
                 ))}
                 {invoiceImportIssues.length === 0 && (
@@ -4385,7 +4502,11 @@ function CustomerManager() {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
-      alert(result.message || tx('导入成功', 'Import successful'));
+      const createdRows = summarizeRowsForAlert(result?.data?.createdRows, 30);
+      const updatedRows = summarizeRowsForAlert(result?.data?.updatedRows, 30);
+      const createdBlock = createdRows ? `\n${tx('新增：', 'Created:')}${createdRows}` : '';
+      const updatedBlock = updatedRows ? `\n${tx('更新：', 'Updated:')}${updatedRows}` : '';
+      alert(`${result.message || tx('导入成功', 'Import successful')}${createdBlock}${updatedBlock}`);
       await loadCustomers();
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
@@ -4456,7 +4577,11 @@ function CustomerManager() {
         setShowCustomerImportIssues(false);
         setCustomerImportIssues([]);
         setCustomerImportMessage('');
-        alert(result.message || tx('问题行导入成功', 'Issue rows imported successfully'));
+        const createdRows = summarizeRowsForAlert(result?.data?.createdRows, 30);
+        const updatedRows = summarizeRowsForAlert(result?.data?.updatedRows, 30);
+        const createdBlock = createdRows ? `\n${tx('新增：', 'Created:')}${createdRows}` : '';
+        const updatedBlock = updatedRows ? `\n${tx('更新：', 'Updated:')}${updatedRows}` : '';
+        alert(`${result.message || tx('问题行导入成功', 'Issue rows imported successfully')}${createdBlock}${updatedBlock}`);
       }
       await loadCustomers();
     } catch (error) {
@@ -4695,7 +4820,7 @@ function CustomerManager() {
         <DialogContent className="max-w-6xl">
           <DialogHeader>
             <DialogTitle>{tx('客户导入问题行处理', 'Customer Import Issue Rows')}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="whitespace-pre-wrap break-words">
               {customerImportMessage || tx('请修改冲突行后重试，仅重试当前问题行。', 'Please edit issue rows and retry. Only current issue rows will be retried.')}
             </DialogDescription>
           </DialogHeader>
@@ -4731,7 +4856,7 @@ function CustomerManager() {
                     <TableCell><Input value={row.credit} onChange={(e) => updateCustomerImportIssue(index, 'credit', e.target.value)} /></TableCell>
                     <TableCell><Input value={row.companyAddress} onChange={(e) => updateCustomerImportIssue(index, 'companyAddress', e.target.value)} /></TableCell>
                     <TableCell><Input value={row.ownerEmail} onChange={(e) => updateCustomerImportIssue(index, 'ownerEmail', e.target.value)} /></TableCell>
-                    <TableCell className="text-xs text-red-600">{row.reason || '-'}</TableCell>
+                    <TableCell className="max-w-[360px] whitespace-pre-wrap break-words text-xs text-red-600">{row.reason || '-'}</TableCell>
                   </TableRow>
                 ))}
                 {customerImportIssues.length === 0 && (

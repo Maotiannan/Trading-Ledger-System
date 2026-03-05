@@ -619,9 +619,6 @@ function InvoiceManager() {
     try {
       const formData = new FormData();
       formData.append('action', 'import-excel');
-      if (isAdmin && (importOwnerId || defaultOwnerId)) {
-        formData.append('ownerId', importOwnerId || defaultOwnerId);
-      }
       formData.append('file', file);
       const response = await fetch('/api/invoice', {
         method: 'POST',
@@ -4162,6 +4159,9 @@ function CustomerManager() {
     try {
       const formData = new FormData();
       formData.append('action', 'import-excel');
+      if (isAdmin && (importOwnerId || defaultOwnerId)) {
+        formData.append('ownerId', importOwnerId || defaultOwnerId);
+      }
       formData.append('file', file);
       const response = await fetch('/api/customer', {
         method: 'POST',

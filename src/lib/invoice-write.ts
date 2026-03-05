@@ -2,6 +2,8 @@ import { db } from '@/lib/db';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { updateOrderBalance } from '@/lib/matching';
+import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
+import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 
 export type InvoiceOrderInput = {
   orderNo: string;
@@ -15,6 +17,8 @@ export async function saveInvoiceWithOrders(input: {
   invNo: string;
   orders: InvoiceOrderInput[];
   createdBy: string;
+  shipDate?: Date | null;
+  releaseDate?: Date | null;
 }) {
   const normalizedInvNo = String(input.invNo || '').trim();
   if (!normalizedInvNo) {
@@ -24,7 +28,7 @@ export async function saveInvoiceWithOrders(input: {
     return { ok: false as const, status: 400, error: '订单列表不能为空' };
   }
 
-  const normalizeOrderNo = (value: string) => value.toLowerCase().trim();
+  const normalizeOrderNoLocal = (value: string) => normalizeOrderNo(value);
 
   let targetInvoice = await db.invoice.findFirst({
     where: { invNo: normalizedInvNo },
@@ -35,8 +39,18 @@ export async function saveInvoiceWithOrders(input: {
       data: {
         invNo: normalizedInvNo,
         createdBy: input.createdBy,
+        shipDate: input.shipDate ?? null,
+        releaseDate: input.releaseDate ?? null,
       },
       select: { id: true, invNo: true },
+    });
+  } else if (input.shipDate !== undefined || input.releaseDate !== undefined) {
+    await db.invoice.update({
+      where: { id: targetInvoice.id },
+      data: {
+        ...(input.shipDate !== undefined ? { shipDate: input.shipDate } : {}),
+        ...(input.releaseDate !== undefined ? { releaseDate: input.releaseDate } : {}),
+      },
     });
   }
 
@@ -45,12 +59,13 @@ export async function saveInvoiceWithOrders(input: {
   let hasNeedsCustomerFix = false;
 
   for (const rawOrder of input.orders) {
-    const normalizedOrderNoRaw = typeof rawOrder.orderNo === 'string' ? rawOrder.orderNo.trim() : '';
+    const rawOrderNo = typeof rawOrder.orderNo === 'string' ? rawOrder.orderNo.trim() : '';
+    const { canonicalOrderNo } = buildOrderNoWithAliases(rawOrderNo);
     const amountNumber = Number(rawOrder.amount);
     const rowCustomerMark = typeof rawOrder.customerMark === 'string' ? rawOrder.customerMark.trim() : '';
     const rowCustomerName = typeof rawOrder.customerName === 'string' ? rawOrder.customerName.trim() : '';
     const rowCustomerId = typeof rawOrder.customerId === 'string' ? rawOrder.customerId.trim() : '';
-    if (!normalizedOrderNoRaw || !Number.isFinite(amountNumber) || amountNumber <= 0 || !rowCustomerMark) {
+    if (!canonicalOrderNo || !Number.isFinite(amountNumber) || amountNumber <= 0 || !rowCustomerMark) {
       return {
         ok: false as const,
         status: 400,
@@ -65,20 +80,21 @@ export async function saveInvoiceWithOrders(input: {
     });
     if (customerResolution.needsCustomerFix) hasNeedsCustomerFix = true;
 
-    const existingInTarget = await db.order.findFirst({
-      where: {
-        invoiceId: targetInvoice.id,
-        orderNo: {
-          equals: normalizedOrderNoRaw,
-        },
-      },
-      select: { id: true, orderNo: true },
-    });
+    const existingInTargetId = await findOrderIdByNoOrAlias(canonicalOrderNo, { invoiceId: targetInvoice.id });
+    const existingInTarget = existingInTargetId
+      ? await db.order.findUnique({ where: { id: existingInTargetId }, select: { id: true, orderNo: true } })
+      : null;
 
     if (existingInTarget) {
       await db.order.update({
         where: { id: existingInTarget.id },
         data: {
+          ...(normalizeOrderNo(existingInTarget.orderNo) !== normalizeOrderNo(canonicalOrderNo)
+            ? {
+                orderNo: canonicalOrderNo,
+                tokens: serializeOrderTokens(canonicalOrderNo),
+              }
+            : {}),
           amount: { increment: amountNumber },
           orderBalance: { increment: amountNumber },
           customerId: customerResolution.customerId,
@@ -89,26 +105,26 @@ export async function saveInvoiceWithOrders(input: {
           needsCustomerFix: customerResolution.needsCustomerFix,
         },
       });
+      await syncOrderAliases(db, existingInTarget.id, canonicalOrderNo);
       touchedOrderIds.add(existingInTarget.id);
       continue;
     }
 
-    const existingSystemOrder = await db.order.findFirst({
-      where: {
-        orderNo: {
-          equals: normalizedOrderNoRaw,
-        },
-        invoice: { invNo: 'Un_Associated' },
-      },
-      include: { invoice: true },
-    });
+    const existingGlobalId = await findOrderIdByNoOrAlias(canonicalOrderNo);
+    const existingGlobalOrder = existingGlobalId
+      ? await db.order.findUnique({
+          where: { id: existingGlobalId },
+          include: { invoice: true },
+        })
+      : null;
+    const existingSystemOrder = existingGlobalOrder?.invoice.invNo === 'Un_Associated' ? existingGlobalOrder : null;
 
     if (existingSystemOrder) {
       const newOrder = await db.order.create({
         data: {
           invoiceId: targetInvoice.id,
-          orderNo: normalizedOrderNoRaw,
-          tokens: serializeOrderTokens(normalizedOrderNoRaw),
+          orderNo: canonicalOrderNo,
+          tokens: serializeOrderTokens(canonicalOrderNo),
           amount: amountNumber,
           orderBalance: amountNumber,
           createdBy: input.createdBy,
@@ -127,26 +143,26 @@ export async function saveInvoiceWithOrders(input: {
         data: { orderId: newOrder.id },
       });
       await db.order.delete({ where: { id: existingSystemOrder.id } });
+      await syncOrderAliases(db, newOrder.id, canonicalOrderNo);
       await updateOrderBalance(newOrder.id);
 
       touchedOrderIds.add(newOrder.id);
-      mergedOrdersInfo.push(`${normalizedOrderNoRaw} (从 Un_Associated 合并)`);
+      mergedOrdersInfo.push(`${canonicalOrderNo} (from Un_Associated)`);
       continue;
     }
 
-    const existingOrder = await db.order.findFirst({
-      where: {
-        orderNo: {
-          equals: normalizedOrderNoRaw,
-        },
-      },
-      include: { invoice: true },
-    });
+    const existingOrder = existingGlobalOrder;
 
     if (existingOrder) {
       await db.order.update({
         where: { id: existingOrder.id },
         data: {
+          ...(normalizeOrderNo(existingOrder.orderNo) !== normalizeOrderNo(canonicalOrderNo)
+            ? {
+                orderNo: canonicalOrderNo,
+                tokens: serializeOrderTokens(canonicalOrderNo),
+              }
+            : {}),
           amount: { increment: amountNumber },
           orderBalance: { increment: amountNumber },
           customerId: customerResolution.customerId,
@@ -157,16 +173,17 @@ export async function saveInvoiceWithOrders(input: {
           needsCustomerFix: customerResolution.needsCustomerFix,
         },
       });
+      await syncOrderAliases(db, existingOrder.id, canonicalOrderNo);
       touchedOrderIds.add(existingOrder.id);
-      mergedOrdersInfo.push(`${normalizedOrderNoRaw} (合并到账单 ${existingOrder.invoice.invNo})`);
+      mergedOrdersInfo.push(`${canonicalOrderNo} (merged into invoice ${existingOrder.invoice.invNo})`);
       continue;
     }
 
     const created = await db.order.create({
       data: {
         invoiceId: targetInvoice.id,
-        orderNo: normalizedOrderNoRaw,
-        tokens: serializeOrderTokens(normalizedOrderNoRaw),
+        orderNo: canonicalOrderNo,
+        tokens: serializeOrderTokens(canonicalOrderNo),
         amount: amountNumber,
         orderBalance: amountNumber,
         createdBy: input.createdBy,
@@ -179,8 +196,11 @@ export async function saveInvoiceWithOrders(input: {
       },
       select: { id: true, orderNo: true },
     });
+    await syncOrderAliases(db, created.id, canonicalOrderNo);
     touchedOrderIds.add(created.id);
   }
+
+  await consolidateGroupedOrders({ invoiceIds: [targetInvoice.id] });
 
   for (const orderId of touchedOrderIds) {
     const order = await db.order.findUnique({
@@ -196,9 +216,9 @@ export async function saveInvoiceWithOrders(input: {
       },
     });
 
-    const normalizedOrderNo = normalizeOrderNo(order.orderNo);
+    const normalizedOrderNo = normalizeOrderNoLocal(order.orderNo);
     const deposits = allDeposits.filter((d) =>
-      d.orderNo ? normalizeOrderNo(d.orderNo).includes(normalizedOrderNo) : false
+      d.orderNo ? normalizeOrderNoLocal(d.orderNo).includes(normalizedOrderNo) : false
     );
 
     for (const deposit of deposits) {

@@ -18,6 +18,10 @@ const exactMap: Record<string, string> = {
   '配置已保存': 'Configuration saved',
   '密码修改成功': 'Password updated successfully',
   '密码修改失败': 'Password update failed',
+  '客户MARK不能为空': 'Customer MARK is required',
+  '收据已直接创建': 'Receipt created directly',
+  '付款明细已直接创建': 'Payment detail created directly',
+  'SWIFT已直接创建': 'SWIFT created directly',
 };
 
 const containsMap: Array<[string, string]> = [
@@ -26,6 +30,12 @@ const containsMap: Array<[string, string]> = [
   ['已存在', 'already exists'],
   ['禁止删除', 'deletion is forbidden in current status'],
   ['禁止修改', 'modification is forbidden in current status'],
+  ['请修复客户信息', 'Please fix customer information'],
+  ['格式错误，应为 YYYY-MM-DD', 'has invalid format, expected YYYY-MM-DD'],
+  ['大于等于0的数字', 'a number greater than or equal to 0'],
+  ['模板缺少列', 'Template missing columns'],
+  ['导入失败', 'Import failed'],
+  ['导入完成', 'Import completed'],
   ['OCR', 'OCR'],
 ];
 

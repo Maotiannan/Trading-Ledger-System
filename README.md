@@ -622,6 +622,14 @@ src/
 
 ## 更新日志
 
+### v1.0.18 (2026-03-05)
+- 👥 客户管理规则调整：`CONSIGNEE` 改为可空，`CREDIT` 支持 `0`（禁止负数）；修复批量导入/新建客户时 `consignee` 长度超限导致的 Prisma 列类型报错。
+- 🧾 INV 字段增强：新增 `SHIP_DATE` 与 `RELEASE_DATE`（非必填，支持创建与 Excel 导入可空），账单管理展示由“创建时间”改为显示 SHIP/RELEASE。
+- 🧩 组合 ORDER 能力：支持 `IB-31A/IB-32/IB-33B` 形式的组合订单，自动维护子订单别名匹配；收据/明细命中任一子订单时统一结算到组合订单。
+- 🔁 历史兼容：新增组合订单回填脚本 `scripts/backfill-group-orders.mjs`，用于将历史同组订单收敛为组合订单并迁移关联关系。
+- 📅 直接创建默认日期：收据/付款明细 direct-create 在未传日期时默认使用服务器当日日期。
+- 🌐 i18n 继续补齐：修复客户管理 `CONSIGNEE` 占位提示与多处硬编码提示文案，增强 API 错误中译英映射。
+
 ### v1.0.17 (2026-03-03)
 - 🧯 修复管理员删除用户 500：删除前自动重挂该用户创建的业务数据 `createdBy` 到当前操作者，再执行删除，避免外键约束 (`P2003`) 失败。
 - ✅ 用户删除链路稳定化：覆盖 `Invoice/Order/Receipt/Detail/SWIFT/Customer/History/DeletionRequest/AuditLog` 的创建者重挂。

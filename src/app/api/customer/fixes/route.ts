@@ -25,7 +25,7 @@ type FixCustomerPayload = {
   name: string;
   phone: string;
   city: string;
-  consignee: string;
+  consignee: string | null;
   companyName: string | null;
   companyAddress: string | null;
   credit: number | null;
@@ -37,17 +37,17 @@ function parsePayload(body: Record<string, unknown>): FixCustomerPayload | { err
   const name = trimStr(body.name);
   const phone = trimStr(body.phone);
   const city = trimStr(body.city);
-  const consignee = trimStr(body.consignee);
+  const consignee = trimStr(body.consignee) || null;
   const companyName = trimStr(body.companyName) || null;
   const companyAddress = trimStr(body.companyAddress) || null;
   const creditRaw = body.credit;
   const credit = creditRaw === null || creditRaw === undefined || creditRaw === '' ? null : Number(creditRaw);
 
-  if (!mark || !orderName || !name || !phone || !city || !consignee) {
-    return { error: 'MARK/ORDER_NAME/NAME/PHONE/CITY/CONSIGNEE均为必填' };
+  if (!mark || !orderName || !name || !phone || !city) {
+    return { error: 'MARK/ORDER_NAME/NAME/PHONE/CITY均为必填' };
   }
-  if (credit !== null && (!Number.isFinite(credit) || credit <= 0)) {
-    return { error: 'CREDIT必须为正数' };
+  if (credit !== null && (!Number.isFinite(credit) || credit < 0)) {
+    return { error: 'CREDIT必须为大于等于0的数字' };
   }
 
   return { mark, orderName, name, phone, city, consignee, companyName, companyAddress, credit };

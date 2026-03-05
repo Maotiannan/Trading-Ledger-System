@@ -2,6 +2,8 @@ import { db } from '@/lib/db';
 import { ReceiptStatus } from '@prisma/client';
 import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
 import { deriveOrderGroupKey } from '@/lib/order-group';
+import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
+import { findOrderIdByNoOrAlias, mapOrderIdsByOrderNos, syncOrderAliases } from '@/lib/order-alias-db';
 
 // 确保DEPOSIT_POOL发票池存在
 export async function ensureDepositPoolInvoice(userId: string): Promise<string> {
@@ -44,18 +46,23 @@ export async function ensureSystemPoolInvoice(userId: string): Promise<string> {
 // 创建新的Order
 export async function createOrder(orderNo: string, userId: string): Promise<string> {
   const invoiceId = await ensureSystemPoolInvoice(userId);
+  const { canonicalOrderNo } = buildOrderNoWithAliases(orderNo);
 
   try {
-    const order = await db.order.create({
-      data: {
-        invoiceId,
-        orderNo,
-        tokens: serializeOrderTokens(orderNo),
-        amount: 0, // 初始金额为0，会随着收据累加
-        orderBalance: 0,
-        createdBy: userId,
-        needsCustomerFix: true,
-      }
+    const order = await db.$transaction(async (tx) => {
+      const created = await tx.order.create({
+        data: {
+          invoiceId,
+          orderNo: canonicalOrderNo,
+          tokens: serializeOrderTokens(canonicalOrderNo),
+          amount: 0, // 初始金额为0，会随着收据累加
+          orderBalance: 0,
+          createdBy: userId,
+          needsCustomerFix: true,
+        }
+      });
+      await syncOrderAliases(tx, created.id, canonicalOrderNo);
+      return created;
     });
 
     return order.id;
@@ -65,23 +72,21 @@ export async function createOrder(orderNo: string, userId: string): Promise<stri
       throw error;
     }
 
-    const existing = await db.order.findFirst({
-      where: { invoiceId, orderNo },
-      select: { id: true }
-    });
-    if (existing) {
-      return existing.id;
-    }
+    const existingId = await findOrderIdByNoOrAlias(canonicalOrderNo, { invoiceId });
+    if (existingId) return existingId;
     throw error;
   }
 }
 
 // 查找或创建Order
 export async function findOrCreateOrder(orderNo: string, userId: string): Promise<string> {
-  const normalizedOrderNo = orderNo.toLowerCase().trim();
-  if (!normalizedOrderNo) {
+  const normalizedInput = normalizeOrderNo(orderNo);
+  if (!normalizedInput) {
     return createOrder(orderNo, userId);
   }
+
+  const directId = await findOrderIdByNoOrAlias(orderNo);
+  if (directId) return directId;
 
   // 查找所有订单
   const orders = await db.order.findMany({
@@ -115,8 +120,24 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
   orderBalance: number;
 } | null> {
   if (!orderNo) return null;
-  const normalizedOrderNo = orderNo.toLowerCase().trim();
+  const normalizedOrderNo = normalizeOrderNo(orderNo);
   if (!normalizedOrderNo) return null;
+
+  const directOrderId = await findOrderIdByNoOrAlias(orderNo);
+  if (directOrderId) {
+    const direct = await db.order.findUnique({
+      where: { id: directOrderId },
+      select: { id: true, orderNo: true, amount: true, orderBalance: true },
+    });
+    if (direct) {
+      return {
+        orderId: direct.id,
+        orderNo: direct.orderNo,
+        amount: Number(direct.amount),
+        orderBalance: Number(direct.orderBalance),
+      };
+    }
+  }
 
   // 查找所有订单，按创建时间排序
   const orders = await db.order.findMany({
@@ -136,8 +157,8 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
     return {
       orderId: exact.id,
       orderNo: exact.orderNo,
-      amount: exact.amount,
-      orderBalance: exact.orderBalance,
+      amount: Number(exact.amount),
+      orderBalance: Number(exact.orderBalance),
     };
   }
 
@@ -149,8 +170,8 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
       return {
         orderId: grouped.id,
         orderNo: grouped.orderNo,
-        amount: grouped.amount,
-        orderBalance: grouped.orderBalance,
+        amount: Number(grouped.amount),
+        orderBalance: Number(grouped.orderBalance),
       };
     }
   }
@@ -169,8 +190,8 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
       bestMatch = {
         id: order.id,
         orderNo: order.orderNo,
-        amount: order.amount,
-        orderBalance: order.orderBalance,
+        amount: Number(order.amount),
+        orderBalance: Number(order.orderBalance),
         score,
       };
     }
@@ -281,9 +302,8 @@ export async function findMatchingReceipt(
   amount: number
 ): Promise<string | null> {
   if (!orderNo) return null;
-
-  const targetKey = deriveOrderGroupKey(orderNo);
-  if (!targetKey) return null;
+  const normalizedInput = normalizeOrderNo(orderNo);
+  if (!normalizedInput) return null;
 
   const toleranceSetting = await db.systemSetting.findUnique({
     where: { key: 'DETAIL_RECEIPT_MATCH_TOLERANCE' },
@@ -312,18 +332,28 @@ export async function findMatchingReceipt(
     },
   });
 
-  const sameGroupCandidates = candidates.filter((candidate) => deriveOrderGroupKey(candidate.orderNo) === targetKey);
-  if (sameGroupCandidates.length === 0) return null;
+  const targetOrderId = await findOrderIdByNoOrAlias(orderNo);
+  const orderNoMap = await mapOrderIdsByOrderNos(candidates.map((candidate) => candidate.orderNo));
+  const matchedCandidates = candidates.filter((candidate) => {
+    const candidateNormalized = normalizeOrderNo(candidate.orderNo);
+    if (!candidateNormalized) return false;
+    if (targetOrderId) {
+      const candidateOrderId = orderNoMap.get(candidateNormalized) || null;
+      return candidateOrderId === targetOrderId;
+    }
+    return candidateNormalized === normalizedInput;
+  });
+  if (matchedCandidates.length === 0) return null;
 
   // 同客组内优先金额最接近，若并列取最早创建
-  sameGroupCandidates.sort((a, b) => {
+  matchedCandidates.sort((a, b) => {
     const diffA = Math.abs(a.usd - amount);
     const diffB = Math.abs(b.usd - amount);
     if (diffA !== diffB) return diffA - diffB;
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
 
-  return sameGroupCandidates[0].id;
+  return matchedCandidates[0].id;
 }
 
 // 验证金额容差

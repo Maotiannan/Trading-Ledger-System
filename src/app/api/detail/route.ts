@@ -431,10 +431,18 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         });
       }
 
+      const effectiveDate = date
+        ? new Date(date)
+        : (() => {
+            const serverToday = new Date();
+            serverToday.setHours(0, 0, 0, 0);
+            return serverToday;
+          })();
+
       const detail = await db.$transaction(async (tx) => {
         const created = await tx.detail.create({
           data: {
-            date: date ? new Date(date) : null,
+            date: effectiveDate,
             status: DetailStatus.Waiting_SWIFT,
             imageUrl: null,
             imageName: null,

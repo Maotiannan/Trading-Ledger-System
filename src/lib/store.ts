@@ -34,6 +34,8 @@ export interface Invoice {
   invNo: string;
   invAmount: number;
   invBalance: number;
+  shipDate?: string | null;
+  releaseDate?: string | null;
   orders: Order[];
   createdAt: string;
 }

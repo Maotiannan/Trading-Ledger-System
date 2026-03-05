@@ -9,6 +9,16 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
+import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
+
+function parseDateInput(value: unknown): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date;
+}
 
 // 获取账单列表
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -26,6 +36,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       const sheet = workbook.addWorksheet('invoice_import');
       sheet.columns = [
         { header: 'INV_NO', key: 'invNo', width: 22 },
+        { header: 'SHIP_DATE', key: 'shipDate', width: 16 },
+        { header: 'RELEASE_DATE', key: 'releaseDate', width: 16 },
         { header: 'ORDER_NO', key: 'orderNo', width: 26 },
         { header: 'AMOUNT', key: 'amount', width: 14 },
         { header: 'CUSTOMER_MARK', key: 'customerMark', width: 22 },
@@ -34,10 +46,12 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       ];
       sheet.addRow({
         invNo: 'INV-2026-001',
-        orderNo: 'MAB-1-05',
+        shipDate: '2026-03-01',
+        releaseDate: '2026-03-03',
+        orderNo: 'IB-31A/IB-32/IB-33B',
         amount: 1200,
-        customerMark: 'MAB-1',
-        customerName: 'MAB-1',
+        customerMark: 'IB',
+        customerName: 'IB',
         customerId: '',
       });
       sheet.getRow(1).font = { bold: true };
@@ -90,17 +104,32 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (orderNo) {
+      const visibilityWhere = buildOrderVisibilityWhere(ownerIds);
+      const matchedOrderId = await findOrderIdByNoOrAlias(orderNo, visibilityWhere);
+      if (matchedOrderId) {
+        const matchedOrder = await db.order.findUnique({
+          where: { id: matchedOrderId },
+          select: {
+            id: true,
+            orderNo: true,
+            customerId: true,
+            customerMark: true,
+            customerName: true,
+            customerPhone: true,
+            customerCity: true,
+            needsCustomerFix: true,
+            createdAt: true,
+          },
+        });
+        return NextResponse.json({ success: true, data: matchedOrder ? [matchedOrder] : [] });
+      }
+
       const targetKey = deriveOrderGroupKey(orderNo);
       if (!targetKey) {
         return NextResponse.json({ success: true, data: [] });
       }
       const allOrders = await db.order.findMany({
-        where: {
-          OR: [
-            { createdBy: { in: ownerIds } },
-            { customer: { createdBy: { in: ownerIds } } },
-          ],
-        },
+        where: visibilityWhere,
         select: {
           id: true,
           orderNo: true,
@@ -272,12 +301,18 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         return NextResponse.json({ success: false, error: `模板缺少列: ${missing.join(', ')}` }, { status: 400 });
       }
 
-      const grouped = new Map<string, Array<{ orderNo: string; amount: number; customerMark: string; customerName?: string; customerId?: string }>>();
+      const grouped = new Map<string, {
+        shipDate: Date | null | undefined;
+        releaseDate: Date | null | undefined;
+        rows: Array<{ orderNo: string; amount: number; customerMark: string; customerName?: string; customerId?: string }>;
+      }>();
       const errors: string[] = [];
 
       for (let rowNo = 2; rowNo <= sheet.rowCount; rowNo++) {
         const row = sheet.getRow(rowNo);
         const invNo = String(row.getCell(headerMap.get('INV_NO')!).value || '').trim();
+        const shipDateRaw = headerMap.get('SHIP_DATE') ? String(row.getCell(headerMap.get('SHIP_DATE')!).value || '').trim() : '';
+        const releaseDateRaw = headerMap.get('RELEASE_DATE') ? String(row.getCell(headerMap.get('RELEASE_DATE')!).value || '').trim() : '';
         const orderNo = String(row.getCell(headerMap.get('ORDER_NO')!).value || '').trim();
         const amountRaw = String(row.getCell(headerMap.get('AMOUNT')!).value || '').trim();
         const customerMark = String(row.getCell(headerMap.get('CUSTOMER_MARK')!).value || '').trim();
@@ -286,21 +321,34 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
         const customerName = customerOrderNameCol ? String(row.getCell(customerOrderNameCol).value || '').trim() : '';
         const customerId = customerIdCol ? String(row.getCell(customerIdCol).value || '').trim() : '';
 
-        if (!invNo && !orderNo && !amountRaw && !customerMark) continue;
+        if (!invNo && !orderNo && !amountRaw && !customerMark && !shipDateRaw && !releaseDateRaw) continue;
 
         const rowErrors: string[] = [];
         const amount = Number(amountRaw);
+        const shipDate = shipDateRaw ? parseDateInput(shipDateRaw) : undefined;
+        const releaseDate = releaseDateRaw ? parseDateInput(releaseDateRaw) : undefined;
         if (!invNo) rowErrors.push(`第${rowNo}行 INV_NO 不能为空`);
         if (!orderNo) rowErrors.push(`第${rowNo}行 ORDER_NO 不能为空`);
         if (!customerMark) rowErrors.push(`第${rowNo}行 CUSTOMER_MARK 不能为空`);
         if (!Number.isFinite(amount) || amount <= 0) rowErrors.push(`第${rowNo}行 AMOUNT 必须大于0`);
+        if (shipDateRaw && shipDate === undefined) rowErrors.push(`第${rowNo}行 SHIP_DATE 格式错误，应为 YYYY-MM-DD`);
+        if (releaseDateRaw && releaseDate === undefined) rowErrors.push(`第${rowNo}行 RELEASE_DATE 格式错误，应为 YYYY-MM-DD`);
         if (rowErrors.length > 0) {
           errors.push(...rowErrors);
           continue;
         }
 
-        if (!grouped.has(invNo)) grouped.set(invNo, []);
-        grouped.get(invNo)!.push({
+        if (!grouped.has(invNo)) {
+          grouped.set(invNo, {
+            shipDate,
+            releaseDate,
+            rows: [],
+          });
+        }
+        const bucket = grouped.get(invNo)!;
+        if (shipDate !== undefined) bucket.shipDate = shipDate;
+        if (releaseDate !== undefined) bucket.releaseDate = releaseDate;
+        bucket.rows.push({
           orderNo,
           amount,
           customerMark,
@@ -317,11 +365,13 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
       }
 
       const messages: string[] = [];
-      for (const [invNo, rows] of grouped.entries()) {
+      for (const [invNo, group] of grouped.entries()) {
         const saved = await saveInvoiceWithOrders({
           invNo,
-          orders: rows,
+          orders: group.rows,
           createdBy: currentUser.id,
+          shipDate: group.shipDate,
+          releaseDate: group.releaseDate,
         });
         if (!saved.ok) {
           return NextResponse.json({ success: false, error: `导入失败(INV_NO=${invNo}): ${saved.error}` }, { status: saved.status });
@@ -332,11 +382,21 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
     }
 
     const body = await request.json();
-    const { invNo, orders } = body;
+    const { invNo, orders, shipDate, releaseDate } = body;
+    const parsedShipDate = parseDateInput(shipDate);
+    const parsedReleaseDate = parseDateInput(releaseDate);
+    if (shipDate && parsedShipDate === undefined) {
+      return NextResponse.json({ success: false, error: 'SHIP_DATE 格式错误，应为 YYYY-MM-DD' }, { status: 400 });
+    }
+    if (releaseDate && parsedReleaseDate === undefined) {
+      return NextResponse.json({ success: false, error: 'RELEASE_DATE 格式错误，应为 YYYY-MM-DD' }, { status: 400 });
+    }
     const saved = await saveInvoiceWithOrders({
       invNo: String(invNo || ''),
       orders: Array.isArray(orders) ? orders : [],
       createdBy: currentUser.id,
+      shipDate: parsedShipDate,
+      releaseDate: parsedReleaseDate,
     });
     if (!saved.ok) {
       return NextResponse.json({ success: false, error: saved.error }, { status: saved.status });
@@ -397,7 +457,6 @@ function buildReceiptVisibilityWhere(ownerIds: string[]) {
 async function rematchAllOrders(ownerIds: string[]) {
   console.log('[Rematch] Starting rematch all orders...');
 
-  const normalizeOrderNo = (value: string | null | undefined) => (value || '').trim().toLowerCase();
   const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
   const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
 
@@ -538,23 +597,13 @@ async function rematchAllOrders(ownerIds: string[]) {
   for (const receipt of allReceipts) {
     if (!receipt.orderNo) continue;
 
-    const sameOrder = await db.order.findFirst({
-      where: {
-        AND: [
-          orderVisibilityWhere,
-          {
-        orderNo: { equals: receipt.orderNo },
-          },
-        ],
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (sameOrder) {
+    const sameOrderId = await findOrderIdByNoOrAlias(receipt.orderNo, orderVisibilityWhere);
+    if (sameOrderId) {
       await db.receipt.update({
         where: { id: receipt.id },
-        data: { orderId: sameOrder.id },
+        data: { orderId: sameOrderId },
       });
-      await updateOrderBalance(sameOrder.id);
+      await updateOrderBalance(sameOrderId);
       receiptMatchedCount++;
       continue;
     }
@@ -618,10 +667,20 @@ async function rematchAllOrders(ownerIds: string[]) {
     deletedZeroOrdersCount++;
   }
 
+  const consolidated = await consolidateGroupedOrders({ orderWhere: orderVisibilityWhere });
+
   console.log(
-    `[Rematch] Completed. merged=${mergedCount}, matchedReceipts=${receiptMatchedCount}, syncedCustomers=${customerSyncedCount}, deletedInvoices=${deletedInvoiceCount}, deletedZeroOrders=${deletedZeroOrdersCount}`
+    `[Rematch] Completed. merged=${mergedCount}, matchedReceipts=${receiptMatchedCount}, syncedCustomers=${customerSyncedCount}, deletedInvoices=${deletedInvoiceCount}, deletedZeroOrders=${deletedZeroOrdersCount}, groupedOrders=${consolidated.mergedOrders}`
   );
-  return { mergedCount, receiptMatchedCount, customerSyncedCount, deletedInvoiceCount, deletedZeroOrdersCount };
+  return {
+    mergedCount,
+    receiptMatchedCount,
+    customerSyncedCount,
+    deletedInvoiceCount,
+    deletedZeroOrdersCount,
+    groupedMergedCount: consolidated.mergedOrders,
+    groupedCreatedCount: consolidated.createdGroups,
+  };
 }
 
 type RematchConflictGroup = {
@@ -805,7 +864,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const result = await rematchAllOrders(ownerIds);
       return NextResponse.json({
         success: true,
-        message: `冲突处理完成（当前可见范围）：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`,
+        message: `冲突处理完成（当前可见范围）：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`,
       });
     }
 
@@ -815,7 +874,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const result = await rematchAllOrders(ownerIds);
       return NextResponse.json({ 
         success: true, 
-        message: `重新匹配完成（当前可见范围）：合并重复订单 ${result.mergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}` 
+        message: `重新匹配完成（当前可见范围）：合并重复订单 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}` 
       });
     }
 
@@ -830,7 +889,8 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         return NextResponse.json({ success: false, error: '订单不存在' }, { status: 400 });
       }
 
-      const incomingOrderNo = typeof orderNo === 'string' ? orderNo.trim() : order.orderNo;
+      const incomingOrderNoRaw = typeof orderNo === 'string' ? orderNo.trim() : order.orderNo;
+      const incomingOrderNo = canonicalizeOrderNo(incomingOrderNoRaw);
       const incomingAmount = amount !== undefined ? Number(amount) : order.amount;
       if (!incomingOrderNo) {
         return NextResponse.json({ success: false, error: '客户单号不能为空' }, { status: 400 });
@@ -900,6 +960,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
           needsCustomerFix: customerData.needsCustomerFix,
         }
       });
+      await syncOrderAliases(db, orderId, incomingOrderNo);
 
       await db.receipt.updateMany({
         where: { orderId },
@@ -918,7 +979,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       await updateOrderBalance(orderId);
 
       // 如果订单号有变化，触发重新匹配
-      if (incomingOrderNo !== order.orderNo) {
+      if (normalizeOrderNo(incomingOrderNo) !== normalizeOrderNo(order.orderNo)) {
         console.log(`[UpdateOrder] OrderNo changed from "${order.orderNo}" to "${incomingOrderNo}", triggering rematch...`);
         const scope = await getHierarchyScope(currentUser);
         const ownerIds = Array.from(scope.ownerVisibleIds);
@@ -933,7 +994,9 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const customerMark = typeof body.customerMark === 'string' ? body.customerMark.trim() : '';
       const customerName = typeof body.customerName === 'string' ? body.customerName.trim() : '';
       const customerId = typeof body.customerId === 'string' ? body.customerId.trim() : '';
-      if (!invoiceId || !orderNo || amount === undefined || !customerMark) {
+      const incomingOrderNo = canonicalizeOrderNo(typeof orderNo === 'string' ? orderNo : '');
+      const incomingAmount = Number(amount);
+      if (!invoiceId || !incomingOrderNo || !Number.isFinite(incomingAmount) || incomingAmount <= 0 || !customerMark) {
         return NextResponse.json({ success: false, error: '缺少必要参数' }, { status: 400 });
       }
       const customerResolution = await resolveCustomer({
@@ -942,23 +1005,26 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         customerId: customerId || null,
       });
 
-      // 先检查是否已存在相同订单号的订单
-      const existingOrder = await db.order.findFirst({
-        where: {
-          orderNo: {
-            equals: orderNo
-          }
-        },
-        include: { invoice: true }
-      });
+      const existingOrderId = await findOrderIdByNoOrAlias(incomingOrderNo);
+      const existingOrder = existingOrderId
+        ? await db.order.findUnique({
+            where: { id: existingOrderId },
+            include: { invoice: true },
+          })
+        : null;
 
       if (existingOrder) {
-        // 如果已存在，增加金额到现有订单
         const updated = await db.order.update({
           where: { id: existingOrder.id },
           data: {
-            amount: { increment: amount },
-            orderBalance: { increment: amount },
+            ...(normalizeOrderNo(existingOrder.orderNo) !== normalizeOrderNo(incomingOrderNo)
+              ? {
+                  orderNo: incomingOrderNo,
+                  tokens: serializeOrderTokens(incomingOrderNo),
+                }
+              : {}),
+            amount: { increment: incomingAmount },
+            orderBalance: { increment: incomingAmount },
             customerId: customerResolution.customerId,
             customerMark: customerResolution.customerMark,
             customerName: customerResolution.customerName,
@@ -967,6 +1033,8 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
             needsCustomerFix: customerResolution.needsCustomerFix,
           }
         });
+        await syncOrderAliases(db, updated.id, incomingOrderNo);
+        await consolidateGroupedOrders({ invoiceIds: [updated.invoiceId] });
         console.log(`[AddOrder] Merged to existing order ${existingOrder.orderNo}, new amount: ${updated.amount}`);
         return NextResponse.json({ success: true, data: updated, merged: true });
       }
@@ -974,10 +1042,10 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       const order = await db.order.create({
         data: {
           invoiceId,
-          orderNo,
-          tokens: serializeOrderTokens(orderNo),
-          amount,
-          orderBalance: amount,
+          orderNo: incomingOrderNo,
+          tokens: serializeOrderTokens(incomingOrderNo),
+          amount: incomingAmount,
+          orderBalance: incomingAmount,
           createdBy: currentUser.id,
           customerId: customerResolution.customerId,
           customerMark: customerResolution.customerMark,
@@ -987,48 +1055,9 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
           needsCustomerFix: customerResolution.needsCustomerFix,
         }
       });
-
-      // 检查并合并 Un_Associated 中匹配的订单
-      const systemPool = await db.invoice.findFirst({
-        where: { invNo: 'Un_Associated' }
-      });
-
-      if (systemPool) {
-        const systemOrders = await db.order.findMany({
-          where: { invoiceId: systemPool.id }
-        });
-
-        const normalizedNewOrderNo = orderNo.toLowerCase().trim();
-        
-        for (const sysOrder of systemOrders) {
-          const normalizedSysOrderNo = sysOrder.orderNo.toLowerCase().trim();
-          
-          // 检查是否匹配（双向包含或相等）
-          const isMatch = normalizedNewOrderNo === normalizedSysOrderNo ||
-                          normalizedNewOrderNo.includes(normalizedSysOrderNo) ||
-                          normalizedSysOrderNo.includes(normalizedNewOrderNo);
-          
-          console.log(`[AddOrder] Comparing: "${normalizedNewOrderNo}" vs "${normalizedSysOrderNo}" = ${isMatch}`);
-
-          if (isMatch) {
-            console.log(`[AddOrder] Merging Un_Associated order ${sysOrder.orderNo} to new order ${order.orderNo}`);
-            
-            // 将匹配的Un_Associated订单下的所有收据转移到新订单
-            await db.receipt.updateMany({
-              where: { orderId: sysOrder.id },
-              data: { orderId: order.id }
-            });
-
-            // 删除Un_Associated中的订单
-            await db.order.delete({
-              where: { id: sysOrder.id }
-            });
-
-            // 重新计算新订单的余额
-            await updateOrderBalance(order.id);
-          }
-        }
-      }
+      await syncOrderAliases(db, order.id, incomingOrderNo);
+      await consolidateGroupedOrders({ invoiceIds: [invoiceId] });
+      await updateOrderBalance(order.id);
 
       return NextResponse.json({ success: true, data: order });
     }
@@ -1065,8 +1094,9 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
     // 转移余额
     if (action === 'transferBalance') {
       const { fromOrderId, toOrderNo, transferAmount } = body;
+      const canonicalToOrderNo = canonicalizeOrderNo(typeof toOrderNo === 'string' ? toOrderNo : '');
       
-      if (!fromOrderId || !toOrderNo || transferAmount === undefined || transferAmount <= 0) {
+      if (!fromOrderId || !canonicalToOrderNo || transferAmount === undefined || transferAmount <= 0) {
         return NextResponse.json({ success: false, error: '缺少必要参数或金额无效' }, { status: 400 });
       }
 
@@ -1092,9 +1122,10 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       }
 
       // 查找目标订单
-      let toOrder = await db.order.findFirst({
-        where: { orderNo: toOrderNo }
-      });
+      const matchedToOrderId = await findOrderIdByNoOrAlias(canonicalToOrderNo);
+      let toOrder = matchedToOrderId
+        ? await db.order.findUnique({ where: { id: matchedToOrderId } })
+        : null;
 
       // 如果目标订单不存在，创建到 Un_Associated
       if (!toOrder) {
@@ -1117,15 +1148,16 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         toOrder = await db.order.create({
           data: {
             invoiceId: unAssociated.id,
-            orderNo: toOrderNo,
-            tokens: serializeOrderTokens(toOrderNo),
+            orderNo: canonicalToOrderNo,
+            tokens: serializeOrderTokens(canonicalToOrderNo),
             amount: 0,  // Un_Associated 下的订单金额为0
             orderBalance: 0,
             createdBy: currentUser.id,
             needsCustomerFix: true,
           }
         });
-        console.log(`[Transfer] Created new order in Un_Associated: ${toOrderNo}`);
+        await syncOrderAliases(db, toOrder.id, canonicalToOrderNo);
+        console.log(`[Transfer] Created new order in Un_Associated: ${canonicalToOrderNo}`);
       }
 
       // 创建余额转移记录
@@ -1153,7 +1185,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         data: {
           receiptNo: `TRANSFER-${Date.now()}`,
           usd: transferAmount,
-          orderNo: toOrderNo,
+          orderNo: canonicalToOrderNo,
           payer: `余额转移自 ${fromOrder.orderNo}`,
           status: 'Bank_Transfer',
           orderId: toOrder.id,
@@ -1169,7 +1201,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
       return NextResponse.json({ 
         success: true, 
-        message: `成功转移 $${transferAmount.toFixed(2)} 到订单 ${toOrderNo}` 
+        message: `成功转移 $${transferAmount.toFixed(2)} 到订单 ${canonicalToOrderNo}` 
       });
     }
 

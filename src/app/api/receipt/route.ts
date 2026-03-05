@@ -12,6 +12,7 @@ import { parseActionRequest } from '@/lib/http-body';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { toOcrDataUrl } from '@/lib/ocr-input';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { syncOrderAliases } from '@/lib/order-alias-db';
 
 function parseReceiptPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -209,6 +210,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             needsCustomerFix: customerResolution.needsCustomerFix,
           }
         });
+        await syncOrderAliases(db, depositOrder.id, normalizedOrderNo);
 
         orderId = depositOrder.id;
       }
@@ -217,11 +219,21 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         orderId = await createOrder(normalizedOrderNo, currentUser.id);
       }
 
+      const effectiveDate = receiptData.date
+        ? new Date(receiptData.date)
+        : (action === 'direct-create'
+          ? (() => {
+              const serverToday = new Date();
+              serverToday.setHours(0, 0, 0, 0);
+              return serverToday;
+            })()
+          : null);
+
       // 创建收据
       const receipt = await db.receipt.create({
         data: {
           receiptNo: receiptData.receiptNo?.trim() || null,
-          date: receiptData.date ? new Date(receiptData.date) : null,
+          date: effectiveDate,
           tel: receiptData.tel || null,
           usd: receiptData.usd,
           invNo: receiptData.invNo || null,

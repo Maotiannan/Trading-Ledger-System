@@ -12,7 +12,7 @@ type CustomerPayload = {
   name?: string;
   phone?: string;
   city?: string;
-  consignee?: string;
+  consignee?: string | null;
   companyName?: string | null;
   credit?: number | null;
   companyAddress?: string | null;
@@ -35,7 +35,7 @@ function parsePayload(body: Record<string, unknown>): CustomerPayload {
     name: trimStr(body.name),
     phone: trimStr(body.phone),
     city: trimStr(body.city),
-    consignee: trimStr(body.consignee),
+    consignee: trimStr(body.consignee) || null,
     companyName: trimStr(body.companyName) || null,
     companyAddress: trimStr(body.companyAddress) || null,
     credit: body.credit === null || body.credit === undefined || body.credit === '' ? null : Number(body.credit),
@@ -53,9 +53,8 @@ function validateRequired(payload: CustomerPayload): string | null {
   if (!payload.name) return 'NAME不能为空';
   if (!payload.phone) return 'PHONE不能为空';
   if (!payload.city) return 'CITY不能为空';
-  if (!payload.consignee) return 'CONSIGNEE不能为空';
   if (payload.credit !== null && payload.credit !== undefined) {
-    if (!Number.isFinite(payload.credit) || payload.credit <= 0) return 'CREDIT必须为正数';
+    if (!Number.isFinite(payload.credit) || payload.credit < 0) return 'CREDIT必须为大于等于0的数字';
   }
   return null;
 }
@@ -234,7 +233,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             name: row.name!,
             phone: row.phone!,
             city: row.city!,
-            consignee: row.consignee!,
+            consignee: row.consignee || null,
             companyName: showExtended ? row.companyName || null : null,
             companyAddress: showExtended ? row.companyAddress || null : null,
             credit: showExtended ? row.credit ?? null : null,
@@ -270,7 +269,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         name: payload.name!,
         phone: payload.phone!,
         city: payload.city!,
-        consignee: payload.consignee!,
+        consignee: payload.consignee || null,
         companyName: showExtended ? payload.companyName : null,
         companyAddress: showExtended ? payload.companyAddress : null,
         credit: showExtended ? payload.credit : null,
@@ -312,7 +311,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         name: payload.name!,
         phone: payload.phone!,
         city: payload.city!,
-        consignee: payload.consignee!,
+        consignee: payload.consignee || null,
         ...(showExtended
           ? {
               companyName: payload.companyName,

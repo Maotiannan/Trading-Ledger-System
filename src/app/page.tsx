@@ -90,6 +90,17 @@ function getDisplayImageUrl(rawUrl: string): string {
   return rawUrl;
 }
 
+async function fetchServerDate(): Promise<string> {
+  try {
+    const result = await apiCall('system/health');
+    const serverDate = typeof result?.data?.serverDate === 'string' ? result.data.serverDate : '';
+    if (serverDate) return serverDate;
+  } catch {
+    // fallback to client date
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
 async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
   const normalized = orderNoInput.trim();
   if (!normalized) return null;
@@ -497,6 +508,8 @@ function InvoiceManager() {
   const [search, setSearch] = useState('');
   const [showDialog, setShowDialog] = useState(false);
   const [invNo, setInvNo] = useState('');
+  const [shipDate, setShipDate] = useState('');
+  const [releaseDate, setReleaseDate] = useState('');
   const [orders, setOrders] = useState<Array<{
     orderNo: string;
     amount: string;
@@ -792,6 +805,8 @@ function InvoiceManager() {
         method: 'POST',
         body: JSON.stringify({
           invNo,
+          shipDate: shipDate || null,
+          releaseDate: releaseDate || null,
           orders: orders.map((o) => ({
             orderNo: o.orderNo,
             amount: parseFloat(o.amount),
@@ -805,6 +820,8 @@ function InvoiceManager() {
       if (result.success) {
         setShowDialog(false);
         setInvNo('');
+        setShipDate('');
+        setReleaseDate('');
         setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
         // 显示合并消息（如果有）
         if (result.message) {
@@ -1158,7 +1175,11 @@ function InvoiceManager() {
                   <div>
                     <CardTitle className="text-lg">{invoice.invNo}</CardTitle>
                     <CardDescription>
-                      {tx(`${invoice.orders.length} 个订单 | 创建于 ${new Date(invoice.createdAt).toLocaleDateString()}`, `${invoice.orders.length} orders | Created ${new Date(invoice.createdAt).toLocaleDateString()}`)}
+                      {tx(`${invoice.orders.length} 个订单`, `${invoice.orders.length} orders`)}
+                      {' | '}
+                      {`${tx('发货', 'SHIP')}: ${invoice.shipDate ? new Date(invoice.shipDate).toLocaleDateString() : '-'}`}
+                      {' | '}
+                      {`${tx('放货', 'RELEASE')}: ${invoice.releaseDate ? new Date(invoice.releaseDate).toLocaleDateString() : '-'}`}
                     </CardDescription>
                   </div>
                 </div>
@@ -1216,7 +1237,7 @@ function InvoiceManager() {
                               {order.orderNo}
                             </button>
                             {order.needsCustomerFix && (
-                              <div className="text-xs text-red-500">please modify guest information</div>
+                              <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
                             )}
                           </TableCell>
                           <TableCell>
@@ -1414,7 +1435,16 @@ function InvoiceManager() {
       </div>
 
       {/* 创建账单对话框 */}
-      <Dialog open={showDialog} onOpenChange={(open) => { setShowDialog(open); if (!open) setFormError(''); }}>
+      <Dialog open={showDialog} onOpenChange={(open) => {
+        setShowDialog(open);
+        if (!open) {
+          setFormError('');
+          setInvNo('');
+          setShipDate('');
+          setReleaseDate('');
+          setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
+        }
+      }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{tx('创建账单', 'Create Invoice')}</DialogTitle>
@@ -1429,6 +1459,16 @@ function InvoiceManager() {
             <div className="space-y-2">
               <Label>{tx('账单号 (INV NO)', 'Invoice No. (INV NO)')}</Label>
               <Input value={invNo} onChange={(e) => setInvNo(e.target.value)} placeholder={tx('如: L25MH090125', 'e.g. L25MH090125')} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{tx('发货日期 (SHIP_DATE)', 'SHIP_DATE')}</Label>
+                <Input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>{tx('放货日期 (RELEASE_DATE)', 'RELEASE_DATE')}</Label>
+                <Input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>{tx('订单列表', 'Order List')}</Label>
@@ -1866,6 +1906,13 @@ function ReceiptManager() {
 
   useEffect(() => {
     if (!showDirectCreate) return;
+    void fetchServerDate().then((serverDate) => {
+      setDirectForm((prev) => ({ ...prev, date: serverDate }));
+    });
+  }, [showDirectCreate]);
+
+  useEffect(() => {
+    if (!showDirectCreate) return;
     const currentOrderNo = directForm.orderNo;
     if (!currentOrderNo.trim()) return;
     const timer = setTimeout(() => {
@@ -2174,8 +2221,8 @@ function ReceiptManager() {
             <option value="Bank_Transfer">Bank_Transfer</option>
             <option value="RECEIVED">RECEIVED</option>
           </select>
-          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => setMinUsd(e.target.value)} />
           <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => setMaxUsd(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
@@ -2217,7 +2264,7 @@ function ReceiptManager() {
                   <TableCell>{receipt.receiptNo || '-'}</TableCell>
                   <TableCell>
                     {receipt.orderNo || '-'}
-                    {receipt.needsCustomerFix && <div className="text-xs text-red-500">please modify guest information</div>}
+                    {receipt.needsCustomerFix && <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>}
                   </TableCell>
                   <TableCell>{receipt.customerMark || '-'}</TableCell>
                   <TableCell className="font-medium">${receipt.usd.toFixed(2)}</TableCell>
@@ -2451,13 +2498,6 @@ function ReceiptManager() {
             <DialogDescription>{tx('跳过AI识别，手动录入收据信息', 'Skip AI and enter receipt information manually')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <Input placeholder={tx('收据号', 'Receipt No.')} value={directForm.receiptNo} onChange={(e) => setDirectForm((p) => ({ ...p, receiptNo: e.target.value }))} />
-            <Input type="date" placeholder={tx('日期', 'Date')} value={directForm.date} onChange={(e) => setDirectForm((p) => ({ ...p, date: e.target.value }))} />
-            <Input placeholder={tx('电话', 'Phone')} value={directForm.tel} onChange={(e) => setDirectForm((p) => ({ ...p, tel: e.target.value }))} />
-            <Input type="number" placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={directForm.usd} onChange={(e) => setDirectForm((p) => ({ ...p, usd: e.target.value }))} />
-            <Input placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')} value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
-            <Input placeholder={tx('客户单号(orderNo)', 'Order No. (orderNo)')} value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
-            <Input placeholder={tx('付款人', 'Payer')} value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
             <Input
               placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
               value={directForm.customerMark}
@@ -2488,6 +2528,13 @@ function ReceiptManager() {
                 ))}
               </select>
             )}
+            <Input placeholder={tx('收据号', 'Receipt No.')} value={directForm.receiptNo} onChange={(e) => setDirectForm((p) => ({ ...p, receiptNo: e.target.value }))} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} placeholder={tx('日期', 'Date')} value={directForm.date} onChange={(e) => setDirectForm((p) => ({ ...p, date: e.target.value }))} />
+            <Input placeholder={tx('电话', 'Phone')} value={directForm.tel} onChange={(e) => setDirectForm((p) => ({ ...p, tel: e.target.value }))} />
+            <Input type="number" placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={directForm.usd} onChange={(e) => setDirectForm((p) => ({ ...p, usd: e.target.value }))} />
+            <Input placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')} value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
+            <Input placeholder={tx('客户单号(orderNo)', 'Order No. (orderNo)')} value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
+            <Input placeholder={tx('付款人', 'Payer')} value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
             <Label className="flex items-center gap-2">
               <input type="checkbox" checked={directForm.isDeposit} onChange={(e) => setDirectForm((p) => ({ ...p, isDeposit: e.target.checked }))} />
               {tx('定金', 'Deposit')}
@@ -2572,6 +2619,13 @@ function DetailManager() {
   useEffect(() => {
     loadDetails();
   }, [loadDetails]);
+
+  useEffect(() => {
+    if (!showDirectCreate) return;
+    void fetchServerDate().then((serverDate) => {
+      setDirectDate(serverDate);
+    });
+  }, [showDirectCreate]);
 
   const toggleDetail = (detailId: string) => {
     const newExpanded = new Set(expandedDetails);
@@ -2740,8 +2794,8 @@ function DetailManager() {
             <option value="RECEIVED">RECEIVED</option>
             <option value="ERROR">ERROR</option>
           </select>
-          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input type="number" placeholder={tx('最小总金额', 'Min total amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
           <Input type="number" placeholder={tx('最大总金额', 'Max total amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
@@ -2961,7 +3015,7 @@ function DetailManager() {
             <DialogDescription>{tx('跳过AI识别，手动录入明细行', 'Skip AI and enter detail rows manually')}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <Input type="date" value={directDate} onChange={(e) => setDirectDate(e.target.value)} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} value={directDate} onChange={(e) => setDirectDate(e.target.value)} />
             {directItems.map((item, idx) => (
               <div key={idx} className="grid grid-cols-3 gap-2">
                 <Input
@@ -3261,8 +3315,8 @@ function SwiftManager() {
             <option value="true">{tx('仅异常', 'Errors only')}</option>
             <option value="false">{tx('仅正常', 'Normal only')}</option>
           </select>
-          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" lang={locale === 'en' ? 'en-US' : 'zh-CN'} title={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
           <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
@@ -3964,7 +4018,7 @@ function CustomerManager() {
       consignee: form.consignee,
       companyName: form.companyName || null,
       companyAddress: form.companyAddress || null,
-      credit: form.credit ? Number(form.credit) : null,
+      credit: form.credit === '' ? null : Number(form.credit),
     };
     const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
@@ -4032,7 +4086,7 @@ function CustomerManager() {
       consignee: form.consignee,
       companyName: form.companyName || null,
       companyAddress: form.companyAddress || null,
-      credit: form.credit ? Number(form.credit) : null,
+      credit: form.credit === '' ? null : Number(form.credit),
     };
     const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
@@ -4191,7 +4245,7 @@ function CustomerManager() {
                   <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
                     <div>
                       <div className="font-medium">{String(row.orderNo || '-')}</div>
-                      <div className="text-xs text-red-500">please modify guest information</div>
+                      <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
                     </div>
                     <Button size="sm" onClick={() => openFix('order', row)}>{tx('修复', 'Fix')}</Button>
                   </div>
@@ -4209,7 +4263,7 @@ function CustomerManager() {
                   <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
                     <div>
                       <div className="font-medium">{String(row.receiptNo || row.orderNo || '-')}</div>
-                      <div className="text-xs text-red-500">please modify guest information</div>
+                      <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
                     </div>
                     <Button size="sm" onClick={() => openFix('receipt', row)}>{tx('修复', 'Fix')}</Button>
                   </div>
@@ -4232,11 +4286,11 @@ function CustomerManager() {
             <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
             <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
             <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
-            <Input placeholder="CONSIGNEE*" value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
+            <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
             {isAdmin && (
               <>
                 <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
-                <Input placeholder="CREDIT" type="number" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
+                <Input placeholder="CREDIT" type="number" min="0" step="0.01" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
                 <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => setForm((p) => ({ ...p, companyAddress: e.target.value }))} />
               </>
             )}
@@ -4259,11 +4313,11 @@ function CustomerManager() {
             <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
             <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
             <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
-            <Input placeholder="CONSIGNEE*" value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
+            <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
             {isAdmin && (
               <>
                 <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
-                <Input placeholder="CREDIT" type="number" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
+                <Input placeholder="CREDIT" type="number" min="0" step="0.01" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
                 <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => setForm((p) => ({ ...p, companyAddress: e.target.value }))} />
               </>
             )}

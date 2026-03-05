@@ -94,6 +94,8 @@ model Invoice {
   id        String   @id @default(cuid())
   invNo     String   @unique // INV NO 账单号
   createdBy String
+  shipDate  DateTime?
+  releaseDate DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -128,6 +130,7 @@ model Order {
   creator         User?            @relation(fields: [createdBy], references: [id])
   receipts        Receipt[]        @relation("ReceiptOrder")
   mergedReceipts  Receipt[]        @relation("MergedTo")
+  aliases         OrderAlias[]
   balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
   balanceTransfersTo   BalanceTransfer[] @relation("TransferTo")
 
@@ -135,6 +138,18 @@ model Order {
   @@index([createdBy])
   @@index([orderNo])
   @@unique([invoiceId, orderNo])
+}
+
+model OrderAlias {
+  id        String   @id @default(cuid())
+  orderId   String
+  aliasNo   String
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([aliasNo])
+  @@index([orderId])
 }
 
 // ==================== 收据表 (Receipt) ====================
@@ -301,7 +316,7 @@ model Customer {
   name           String   @unique
   phone          String
   city           String
-  consignee      String
+  consignee      String?  @db.Text
   companyName    String?
   credit         Decimal? @db.Decimal(18, 2)
   companyAddress String?

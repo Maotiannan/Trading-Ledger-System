@@ -13,6 +13,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { toOcrDataUrl } from '@/lib/ocr-input';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { syncOrderAliases } from '@/lib/order-alias-db';
+import { filterRowsBySearch } from '@/lib/text-search';
 
 function parseReceiptPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -50,17 +51,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     ];
 
     if (status) filters.push({ status });
-    if (search) {
-      assertSearchLength(search);
-      filters.push({
-        OR: [
-          { receiptNo: { contains: search } },
-          { orderNo: { contains: search } },
-          { invNo: { contains: search } },
-          { payer: { contains: search } },
-        ],
-      });
-    }
+    if (search) assertSearchLength(search);
     if (orderId) filters.push({ orderId });
     if (dateFrom || dateTo) {
       filters.push({
@@ -93,7 +84,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({ success: true, data: receipts });
+    return NextResponse.json({ success: true, data: filterRowsBySearch(receipts, search) });
   } catch (error) {
     console.error('Get receipts error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });

@@ -11,6 +11,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { parseActionRequest } from '@/lib/http-body';
 import { toOcrDataUrl } from '@/lib/ocr-input';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { filterRowsBySearch } from '@/lib/text-search';
 
 function parseSwiftPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -45,17 +46,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         ],
       },
     ];
-    if (search) {
-      assertSearchLength(search);
-      filters.push({
-        OR: [
-          { senderName: { contains: search } },
-          { senderAddress: { contains: search } },
-          { receiverName: { contains: search } },
-          { receiverAccount: { contains: search } },
-        ],
-      });
-    }
+    if (search) assertSearchLength(search);
     if (dateFrom || dateTo) {
       filters.push({
         createdAt: {
@@ -90,7 +81,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({ success: true, data: swifts });
+    return NextResponse.json({ success: true, data: filterRowsBySearch(swifts, search) });
   } catch (error) {
     console.error('Get swifts error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });

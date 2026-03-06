@@ -1964,12 +1964,12 @@ function InvoiceManager() {
           setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
         }
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[calc(100vh-40px)] flex flex-col">
           <DialogHeader>
             <DialogTitle>{tx('创建账单', 'Create Invoice')}</DialogTitle>
             <DialogDescription>{tx('创建新账单并添加订单', 'Create a new invoice and add orders')}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto space-y-4 py-4 pr-2">
             {formError && (
               <Alert variant="destructive">
                 <AlertDescription>{formError}</AlertDescription>
@@ -2049,7 +2049,7 @@ function InvoiceManager() {
               </Button>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t pt-4 bg-background sticky bottom-0">
             <Button variant="outline" onClick={() => setShowDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleCreateInvoice} disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
@@ -2252,7 +2252,7 @@ function InvoiceManager() {
       </Dialog>
 
       <Dialog open={showInvoiceImportIssues} onOpenChange={(open) => { if (!open) closeInvoiceImportDialog(); else setShowInvoiceImportIssues(true); }}>
-        <DialogContent className="w-[calc(100vw-10px)] max-w-none h-[calc(100vh-10px)] flex flex-col">
+        <DialogContent className="!top-[5px] !left-[5px] !translate-x-0 !translate-y-0 !w-[calc(100vw-10px)] !max-w-none !h-[calc(100vh-10px)] flex flex-col p-4">
           <DialogHeader>
             <DialogTitle>{tx('账单导入问题行处理', 'Invoice Import Issue Rows')}</DialogTitle>
             <DialogDescription className="whitespace-pre-wrap break-words">
@@ -5190,7 +5190,7 @@ function CustomerManager() {
       </Dialog>
 
       <Dialog open={showCustomerImportIssues} onOpenChange={(open) => { if (!open) closeCustomerImportDialog(); else setShowCustomerImportIssues(true); }}>
-        <DialogContent className="w-[calc(100vw-10px)] max-w-none h-[calc(100vh-10px)] flex flex-col">
+        <DialogContent className="!top-[5px] !left-[5px] !translate-x-0 !translate-y-0 !w-[calc(100vw-10px)] !max-w-none !h-[calc(100vh-10px)] flex flex-col p-4">
           <DialogHeader>
             <DialogTitle>{tx('客户导入问题行处理', 'Customer Import Issue Rows')}</DialogTitle>
             <DialogDescription className="whitespace-pre-wrap break-words">

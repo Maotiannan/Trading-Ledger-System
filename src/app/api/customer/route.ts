@@ -8,9 +8,11 @@ import {
   assertNoCustomerScopeConflict,
   canMutateCustomer,
   customerAccessWhere,
+  findDuplicateCustomersInScope,
   mapPrismaWriteError,
   resolveCustomerOwnerId,
 } from '@/lib/customer-scope';
+import { filterRowsBySearch } from '@/lib/text-search';
 
 type CustomerPayload = {
   mark?: string;
@@ -133,30 +135,6 @@ type ImportExistingCustomer = {
   ownerId: string;
 };
 
-function buildCustomerUpdateDataForImport(
-  existing: ImportExistingCustomer,
-  payload: CustomerPayload,
-  showExtended: boolean,
-  ownerId: string
-): Record<string, unknown> {
-  const updateData: Record<string, unknown> = {};
-  if (isEmptyOrPlaceholder(existing.mark) && hasMeaningfulContent(payload.mark)) updateData.mark = payload.mark;
-  if (isEmptyOrPlaceholder(existing.orderName) && hasMeaningfulContent(payload.orderName)) updateData.orderName = payload.orderName;
-  if (isEmptyOrPlaceholder(existing.name) && hasMeaningfulContent(payload.name)) updateData.name = payload.name;
-  if (isEmptyOrPlaceholder(existing.phone) && hasMeaningfulContent(payload.phone)) updateData.phone = payload.phone;
-  if (isEmptyOrPlaceholder(existing.city) && hasMeaningfulContent(payload.city)) updateData.city = payload.city;
-  if (isEmptyOrPlaceholder(existing.consignee) && hasMeaningfulContent(payload.consignee)) updateData.consignee = payload.consignee;
-  if (showExtended) {
-    if (isEmptyOrPlaceholder(existing.companyName) && hasMeaningfulContent(payload.companyName)) updateData.companyName = payload.companyName;
-    if (isEmptyOrPlaceholder(existing.companyAddress) && hasMeaningfulContent(payload.companyAddress)) updateData.companyAddress = payload.companyAddress;
-    if ((existing.credit === null || existing.credit === undefined) && payload.credit !== null && payload.credit !== undefined) {
-      updateData.credit = payload.credit;
-    }
-  }
-  if (existing.ownerId !== ownerId) updateData.ownerId = ownerId;
-  return updateData;
-}
-
 function managerOnly(userRole: UserRole): NextResponse | null {
   if (userRole === UserRole.ADMIN || userRole === UserRole.SALES) return null;
   return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
@@ -247,6 +225,15 @@ function toCustomerImportIssueRow(row: ImportRow, reason: string): CustomerImpor
   };
 }
 
+function formatDuplicateCustomerMessage(
+  rows: Array<{ id: string; mark: string; orderName: string; name: string; phone: string; ownerEmail?: string | null }>
+): string {
+  const details = rows
+    .map((row) => `MARK=${trimStr(row.mark) || '-'} / NAME=${trimStr(row.name) || '-'} / PHONE=${trimStr(row.phone) || '-'} / BINDING=${trimStr(row.ownerEmail) || '-'} / ID=${row.id}`)
+    .join('\n');
+  return `发现重复客户：\n${details}`;
+}
+
 function toCustomerImportRowResult(
   row: ImportRow,
   status: 'CREATED' | 'UPDATED' | 'UNCHANGED' | 'FAILED',
@@ -307,6 +294,7 @@ async function processCustomerImportRows(
   }
 
   const ownerCustomerCache = new Map<string, ImportExistingCustomer[]>();
+  const ownerEmailCache = new Map<string, string>();
   const loadOwnerCustomers = async (ownerId: string): Promise<ImportExistingCustomer[]> => {
     if (!ownerCustomerCache.has(ownerId)) {
       const ownerCustomers = await db.customer.findMany({
@@ -329,10 +317,20 @@ async function processCustomerImportRows(
     }
     return ownerCustomerCache.get(ownerId)!;
   };
+  const resolveOwnerEmail = async (ownerId: string): Promise<string> => {
+    if (!ownerEmailCache.has(ownerId)) {
+      const owner = await db.user.findUnique({
+        where: { id: ownerId },
+        select: { email: true },
+      });
+      ownerEmailCache.set(ownerId, owner?.email || ownerId);
+    }
+    return ownerEmailCache.get(ownerId)!;
+  };
 
   let createdCount = 0;
-  let updatedCount = 0;
-  let unchangedCount = 0;
+  const updatedCount = 0;
+  const unchangedCount = 0;
   const createdRows: string[] = [];
   const updatedRows: string[] = [];
 
@@ -364,87 +362,32 @@ async function processCustomerImportRows(
       const inputMark = normalizeMarkForMatch(payload.mark || '');
       const inputName = normalizeNameForMatch(payload.name || '');
       const canUseMarkName = hasMeaningfulContent(payload.mark) && hasMeaningfulContent(payload.name);
-
-      const markNameMatchedIds = new Set<string>();
+      const duplicateIds = new Set<string>();
       for (const existing of ownerCustomers) {
-        if (canUseMarkName) {
-          const existingMark = normalizeMarkForMatch(existing.mark || '');
-          const existingName = normalizeNameForMatch(existing.name || '');
-          if (hasMeaningfulContent(existing.mark) && hasMeaningfulContent(existing.name) && existingMark === inputMark && existingName === inputName) {
-            markNameMatchedIds.add(existing.id);
-          }
-        }
+        const markNameMatched = canUseMarkName &&
+          hasMeaningfulContent(existing.mark) &&
+          hasMeaningfulContent(existing.name) &&
+          normalizeMarkForMatch(existing.mark) === inputMark &&
+          normalizeNameForMatch(existing.name) === inputName;
+        const phoneMatched = phoneTokens.length > 0 &&
+          splitPhoneCandidates(existing.phone || '').some((token) => phoneTokens.includes(token));
+        if (markNameMatched || phoneMatched) duplicateIds.add(existing.id);
       }
-
-      if (markNameMatchedIds.size > 1) {
-        const reason = '同一行命中多条客户（MARK+NAME），请人工处理后重试';
+      if (duplicateIds.size > 0) {
+        const ownerEmail = await resolveOwnerEmail(effectiveOwnerId);
+        const duplicates = ownerCustomers
+          .filter((item) => duplicateIds.has(item.id))
+          .map((item) => ({
+            id: item.id,
+            mark: item.mark,
+            orderName: item.orderName,
+            name: item.name,
+            phone: item.phone,
+            ownerEmail,
+          }));
+        const reason = formatDuplicateCustomerMessage(duplicates);
         issueRows.push(toCustomerImportIssueRow(row, reason));
         rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
-        continue;
-      }
-
-      const phoneMatchedIds = new Set<string>();
-      if (phoneTokens.length > 0) {
-        for (const existing of ownerCustomers) {
-          const existingPhoneTokens = splitPhoneCandidates(existing.phone || '');
-          if (existingPhoneTokens.some((token) => phoneTokens.includes(token))) {
-            phoneMatchedIds.add(existing.id);
-          }
-        }
-      }
-      if (phoneMatchedIds.size > 1) {
-        const reason = '同一行命中多条客户（PHONE），请人工处理后重试';
-        issueRows.push(toCustomerImportIssueRow(row, reason));
-        rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
-        continue;
-      }
-
-      const mergedMatchedIds = new Set<string>([...markNameMatchedIds, ...phoneMatchedIds]);
-      if (mergedMatchedIds.size > 1) {
-        const reason = '同一行同时命中不同客户，请人工处理后重试';
-        issueRows.push(toCustomerImportIssueRow(row, reason));
-        rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
-        continue;
-      }
-      const targetId = mergedMatchedIds.size === 1 ? Array.from(mergedMatchedIds)[0] : null;
-
-      if (targetId) {
-        const target = ownerCustomers.find((item) => item.id === targetId);
-        if (!target) {
-          const reason = '命中客户后读取失败，请重试';
-          issueRows.push(toCustomerImportIssueRow(row, reason));
-          rowResults.push(toCustomerImportRowResult(row, 'FAILED', reason));
-          continue;
-        }
-        await assertNoCustomerScopeConflict(
-          effectiveOwnerId,
-          {
-            orderName: payload.orderName!,
-            phone: payload.phone!,
-            companyName: showExtended ? payload.companyName || null : null,
-          },
-          targetId
-        );
-        const updateData = buildCustomerUpdateDataForImport(target, payload, showExtended, effectiveOwnerId);
-        if (Object.keys(updateData).length > 0) {
-          await db.customer.update({
-            where: { id: targetId },
-            data: updateData,
-          });
-          const updatedRowIndex = ownerCustomers.findIndex((item) => item.id === targetId);
-          if (updatedRowIndex >= 0) {
-            ownerCustomers[updatedRowIndex] = {
-              ...ownerCustomers[updatedRowIndex],
-              ...updateData,
-            };
-          }
-          updatedCount++;
-          updatedRows.push(formatCustomerSummary(payload.name, payload.mark, payload.phone));
-          rowResults.push(toCustomerImportRowResult(row, 'UPDATED', ''));
-        } else {
-          unchangedCount++;
-          rowResults.push(toCustomerImportRowResult(row, 'UNCHANGED', ''));
-        }
         continue;
       }
 
@@ -567,15 +510,6 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   };
   if (mark) {
     where.mark = { equals: mark };
-  } else if (search) {
-    where.OR = [
-      { mark: { contains: search } },
-      { orderName: { contains: search } },
-      { name: { contains: search } },
-      { phone: { contains: search } },
-      { city: { contains: search } },
-      { consignee: { contains: search } },
-    ];
   }
 
   const rows = await db.customer.findMany({
@@ -595,11 +529,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   });
 
   if (currentUser.role === UserRole.ADMIN) {
-    return NextResponse.json({ success: true, data: rows });
+    return NextResponse.json({ success: true, data: filterRowsBySearch(rows, search) });
   }
 
   const showExtended = await canSalesEditExtendedFields();
-  return NextResponse.json({ success: true, data: rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)) });
+  return NextResponse.json({
+    success: true,
+    data: filterRowsBySearch(rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search),
+  });
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
@@ -769,6 +706,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     let ownerId: string;
     try {
       ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
+      const duplicates = await findDuplicateCustomersInScope(ownerId, {
+        mark: payload.mark!,
+        name: payload.name!,
+        phone: payload.phone!,
+      });
+      if (duplicates.length > 0) {
+        throw new Error(formatDuplicateCustomerMessage(duplicates));
+      }
       await assertNoCustomerScopeConflict(ownerId, {
         orderName: payload.orderName!,
         phone: payload.phone!,
@@ -828,6 +773,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     let ownerId = existing.ownerId;
     try {
       ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || existing.ownerId);
+      const duplicates = await findDuplicateCustomersInScope(ownerId, {
+        mark: payload.mark!,
+        name: payload.name!,
+        phone: payload.phone!,
+      }, id);
+      if (duplicates.length > 0) {
+        throw new Error(formatDuplicateCustomerMessage(duplicates));
+      }
       await assertNoCustomerScopeConflict(
         ownerId,
         {

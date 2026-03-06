@@ -12,6 +12,7 @@ import { parseActionRequest } from '@/lib/http-body';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { toOcrDataUrl } from '@/lib/ocr-input';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { filterRowsBySearch } from '@/lib/text-search';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -78,15 +79,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     ];
 
     if (status) filters.push({ status });
-    if (search) {
-      assertSearchLength(search);
-      filters.push({
-        OR: [
-          { items: { some: { orderNo: { contains: search } } } },
-          { items: { some: { mark: { contains: search } } } },
-        ],
-      });
-    }
+    if (search) assertSearchLength(search);
     if (dateFrom || dateTo) {
       filters.push({
         createdAt: {
@@ -123,7 +116,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    return NextResponse.json({ success: true, data: details });
+    return NextResponse.json({ success: true, data: filterRowsBySearch(details, search) });
   } catch (error) {
     console.error('Get details error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });

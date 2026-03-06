@@ -12,6 +12,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 import { customerAccessWhere } from '@/lib/customer-scope';
+import { filterRowsBySearch } from '@/lib/text-search';
 
 function parseDateInput(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -523,29 +524,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       ],
     };
     const invoices = await db.invoice.findMany({
-      where: search
-        ? {
-            AND: [
-              baseVisibilityWhere,
-              {
-                OR: [
-                  { invNo: { contains: search } },
-                  {
-                    orders: {
-                      some: {
-                        orderNo: { contains: search },
-                        OR: [
-                          { createdBy: { in: ownerIds } },
-                          { customer: { createdBy: { in: ownerIds } } },
-                        ],
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-          }
-        : baseVisibilityWhere,
+      where: baseVisibilityWhere,
       include: {
         orders: {
           where: {
@@ -572,24 +551,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    const normalizedSearch = search.toLowerCase();
-    const filteredInvoices = search
-      ? invoices
-          .map((invoice) => {
-            const invMatched = invoice.invNo.toLowerCase().includes(normalizedSearch);
-            if (invMatched) return invoice;
-            return {
-              ...invoice,
-              orders: invoice.orders.filter((order) =>
-                order.orderNo.toLowerCase().includes(normalizedSearch)
-              ),
-            };
-          })
-          .filter((invoice) => invoice.orders.length > 0)
-      : invoices;
-
     // 计算每个账单的总金额和余额
-    const result = filteredInvoices.map(invoice => {
+    const result = invoices.map(invoice => {
       const invAmount = invoice.orders.reduce((sum, order) => sum + Number(order.amount), 0);
       const receivedAmount = invoice.orders.reduce((sum, order) => {
         return sum + order.receipts.reduce((s, r) => s + Number(r.usd), 0);
@@ -612,8 +575,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       };
     });
 
+    const searchedResult = filterRowsBySearch(result, search);
+
     // 排序：DEPOSIT_POOL、Un_Associated 置顶，其他按创建时间倒序
-    result.sort((a, b) => {
+    searchedResult.sort((a, b) => {
       const rank = (invNo: string) => {
         if (invNo === 'DEPOSIT_POOL') return 0;
         if (invNo === 'Un_Associated') return 1;
@@ -625,7 +590,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({ success: true, data: searchedResult });
   } catch (error) {
     console.error('Get invoices error:', error);
     return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });

@@ -8,6 +8,16 @@ export type CustomerUniqueInput = {
   companyName?: string | null;
 };
 
+export type CustomerDuplicateSummary = {
+  id: string;
+  mark: string;
+  orderName: string;
+  name: string;
+  phone: string;
+  ownerId: string;
+  ownerEmail: string;
+};
+
 type CustomerCollision = {
   id: string;
   orderName: string;
@@ -18,6 +28,21 @@ type CustomerCollision = {
 export function normalizeCompanyName(value: string | null | undefined): string | null {
   const normalized = (value || '').trim();
   return normalized || null;
+}
+
+function normalizeMatchText(value: string | null | undefined): string {
+  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function normalizePhoneToken(value: string | null | undefined): string {
+  const normalized = (value || '').trim().toLowerCase();
+  return normalized.replace(/[^a-z0-9]/g, '');
+}
+
+function splitPhoneCandidates(value: string | null | undefined): string[] {
+  const raw = (value || '').trim();
+  if (!raw) return [];
+  return Array.from(new Set(raw.split('/').map((part) => normalizePhoneToken(part)).filter(Boolean)));
 }
 
 export function customerAccessWhere(currentUser: CurrentUser): Prisma.CustomerWhereInput {
@@ -128,6 +153,51 @@ export async function resolveCustomerUpsertTargetId(ownerId: string, input: Cust
   }
 
   throw new Error('同一绑定池中 ORDER_NAME/PHONE/COMPANY_NAME 命中多条不同客户，无法自动导入');
+}
+
+export async function findDuplicateCustomersInScope(
+  ownerId: string,
+  input: { mark: string; name: string; phone: string },
+  excludeId?: string
+): Promise<CustomerDuplicateSummary[]> {
+  const normalizedMark = normalizeMatchText(input.mark);
+  const normalizedName = normalizeMatchText(input.name);
+  const inputPhoneTokens = splitPhoneCandidates(input.phone);
+  if (!normalizedMark && !normalizedName && inputPhoneTokens.length === 0) return [];
+
+  const rows = await db.customer.findMany({
+    where: {
+      ownerId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: {
+      id: true,
+      mark: true,
+      orderName: true,
+      name: true,
+      phone: true,
+      ownerId: true,
+      owner: { select: { email: true } },
+    },
+  });
+
+  return rows.filter((row) => {
+    const markNameMatched = normalizedMark &&
+      normalizedName &&
+      normalizeMatchText(row.mark) === normalizedMark &&
+      normalizeMatchText(row.name) === normalizedName;
+    const phoneMatched = inputPhoneTokens.length > 0 &&
+      splitPhoneCandidates(row.phone).some((token) => inputPhoneTokens.includes(token));
+    return markNameMatched || phoneMatched;
+  }).map((row) => ({
+    id: row.id,
+    mark: row.mark,
+    orderName: row.orderName,
+    name: row.name,
+    phone: row.phone,
+    ownerId: row.ownerId,
+    ownerEmail: row.owner.email,
+  }));
 }
 
 export function mapPrismaWriteError(error: unknown): string {

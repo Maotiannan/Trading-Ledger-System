@@ -44,6 +44,8 @@ npm run dev
 - `Caddyfile` 会基于 `CADDY_HOST` 自动启用 HTTPS
 - 本地默认 `CADDY_HOST=localhost`
 - 生产环境要获得浏览器小锁，请把 `CADDY_HOST` 设置为真实可访问域名
+- 源站已兼容 Cloudflare 反代场景：普通直连 HTTP 仍会跳 HTTPS，但当上游代理已声明原始请求是 HTTPS（如 `Cf-Visitor` / `X-Forwarded-Proto`）时，Caddy 不会再次重定向，避免 `308 -> https://同地址` 自循环
+- 如果线上仍然循环，请优先核查 Cloudflare SSL/TLS 模式，建议使用 `Full` 或 `Full (strict)`，不要使用 `Flexible`
 
 ## 自动化测试
 

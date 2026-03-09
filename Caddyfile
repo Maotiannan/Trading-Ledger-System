@@ -1,4 +1,19 @@
-{$CADDY_HOST:localhost} {
+{
+	auto_https disable_redirects
+}
+
+(app_proxy) {
 	encode zstd gzip
 	reverse_proxy app:3000
+}
+
+http://{$CADDY_HOST:localhost} {
+	@needs_https expression `!header({'Cf-Visitor':'*https*'}) && !header({'X-Forwarded-Proto':'https'})`
+	redir @needs_https https://{host}{uri} 308
+
+	import app_proxy
+}
+
+https://{$CADDY_HOST:localhost} {
+	import app_proxy
 }

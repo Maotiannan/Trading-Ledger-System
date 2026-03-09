@@ -20,6 +20,7 @@
 - `20260309153500_schema_sync_for_fresh_deploy` 现已兼容已有历史库，重复字段/索引/外键会自动跳过，避免容器启动时迁移失败
 - 前端 workspace 已完成第一阶段模块化：`src/app/page.tsx` 只保留鉴权初始化与视图路由，API client / import-result hooks / 各业务模块视图已拆到 `src/components/workspace/{api,hooks,chrome,modules}`
 - 前端 workspace 已完成第二阶段路由拆分：`/dashboard`、`/invoices`、`/receipts`、`/details`、`/swifts`、`/deletions`、`/customers`、`/settings` 为独立 app route；根 `/` 仅负责登录入口或登录后跳转
+- workspace 路由现已使用共享 `(workspace)` layout 承载侧栏与鉴权，模块切换时只替换右侧主内容区，避免整屏白屏后重新挂载
 
 ## 本地运行
 

@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.29  
+> 当前版本：v1.0.30  
 > 最后更新：2026-03-09
 
 ## P0（本周必须完成）
@@ -86,6 +86,8 @@
 - [x] 修复源站 Host 不匹配导致的空白页：HTTP 入口改为全 Host 兜底反代，避免 `200` 空 body ✅ 2026-03-09
 - [x] 前端保守拆分完成：`page.tsx` 抽出 API client、import-result hooks、登录/侧栏与各业务模块视图，`page.tsx` 收敛为鉴权+视图路由 ✅ 2026-03-09
 - [x] 业务模块组件集落地：新增 `workspace/modules/{dashboard,invoices,receipts,details,swifts,deletions,customers,settings,users}` 与统一 barrel 出口 ✅ 2026-03-09
+- [x] 前端独立路由落地：新增 `/dashboard`、`/invoices`、`/receipts`、`/details`、`/swifts`、`/deletions`、`/customers`、`/settings` 页面，侧栏切换改为基于 URL 导航 ✅ 2026-03-09
+- [x] 根入口职责收敛：`/` 仅处理登录或登录后跳转，`/users` 统一重定向到 `/settings` ✅ 2026-03-09
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -125,6 +127,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.30（2026-03-09）：前端完成第二阶段真路由拆分；各业务模块拥有独立 app route，侧栏改为路径驱动导航，根 `/` 收敛为登录/跳转入口
 - v1.0.29（2026-03-09）：前端完成第一阶段保守拆分；`page.tsx` 从 5359 行收敛到 93 行，API client / import hooks / 业务模块视图与 barrel 出口落地，为后续真路由拆分做准备
 - v1.0.28（2026-03-09）：修复 Caddy 在 Cloudflare 反代下的 HTTPS 自循环；增加 HTTP 全 Host 兜底反代，修复 `CADDY_HOST` 缺失/不匹配时的空白页（`200` 空 body）
 - v1.0.27（2026-03-06）：客户导入取消自动更新并显示重复客户详情；手动新建/编辑补齐重复校验；账单/收据/付款明细/SWIFT/客户统一改为全字段搜索；导入结果弹窗改为真正四边5px；创建账单弹窗改为内容滚动+底部按钮固定

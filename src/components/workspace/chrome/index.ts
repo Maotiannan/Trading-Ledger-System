@@ -1,2 +1,3 @@
 export * from '@/components/workspace/chrome/login-page';
 export * from '@/components/workspace/chrome/sidebar';
+export * from '@/components/workspace/chrome/workspace-page';

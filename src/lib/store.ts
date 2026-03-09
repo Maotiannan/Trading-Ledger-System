@@ -2,6 +2,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type UserRole = 'ADMIN' | 'SALES' | 'USER';
+export type WorkspaceView =
+  | 'dashboard'
+  | 'invoices'
+  | 'receipts'
+  | 'details'
+  | 'swifts'
+  | 'deletions'
+  | 'users'
+  | 'customers'
+  | 'settings';
 export type ReceiptStatus = 'SR_Received' | 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED';
 export type DetailStatus = 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
 export type SwiftStatus = 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
@@ -123,8 +133,8 @@ interface AppState {
   setUser: (user: User | null) => void;
   
   // 当前视图
-  currentView: 'dashboard' | 'invoices' | 'receipts' | 'details' | 'swifts' | 'deletions' | 'users' | 'customers' | 'settings';
-  setCurrentView: (view: AppState['currentView']) => void;
+  currentView: WorkspaceView;
+  setCurrentView: (view: WorkspaceView) => void;
   
   // 数据
   invoices: Invoice[];

@@ -1,50 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { apiCall, useUiText } from '@/components/workspace/shared';
+import { getWorkspacePath, getWorkspaceViewFromPath } from '@/components/workspace/routes';
 import {
-  CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
-  apiCall,
-  fetchCustomerCandidatesByMark,
-  fetchServerDate,
-  getDisplayImageUrl,
-  getErrorMessage,
-  initCustomerImportRowViews,
-  initInvoiceImportRowViews,
-  lookupCustomerByOrderNoGroup,
-  mergeCustomerImportRowViews,
-  mergeInvoiceImportRowViews,
-  summarizeRowsForAlert,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
-  toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
-  useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
-  type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
-  type InvoiceImportRowView,
-} from '@/components/workspace/shared';
-import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
-  ChevronDown, ChevronRight, Pencil
+  LogOut, Users, FileText, Receipt, FileSpreadsheet,
+  Building2, Trash2, LayoutDashboard, Settings
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -52,8 +18,15 @@ export function Sidebar() {
   const tCommon = useTranslations('common');
   const tx = useUiText();
   const locale = useLocale();
-  const { user, currentView, setCurrentView, setUser } = useStore();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, setCurrentView, setUser } = useStore();
   const [switchingLocale, setSwitchingLocale] = useState(false);
+  const activeView = getWorkspaceViewFromPath(pathname);
+
+  useEffect(() => {
+    setCurrentView(activeView === 'users' ? 'settings' : activeView);
+  }, [activeView, setCurrentView]);
 
   const handleLogout = async () => {
     await apiCall('auth', {
@@ -61,6 +34,7 @@ export function Sidebar() {
       body: JSON.stringify({ action: 'logout' }),
     });
     setUser(null);
+    router.push('/');
   };
 
   const menuItems = [
@@ -119,9 +93,9 @@ export function Sidebar() {
           return (
             <Button
               key={item.id}
-              variant={currentView === item.id ? 'secondary' : 'ghost'}
+              variant={activeView === item.id ? 'secondary' : 'ghost'}
               className="w-full justify-start mb-1"
-              onClick={() => setCurrentView(item.id)}
+              onClick={() => router.push(getWorkspacePath(item.id))}
             >
               <item.icon className="h-4 w-4 mr-2" />
               {item.label}
@@ -138,4 +112,3 @@ export function Sidebar() {
     </div>
   );
 }
-

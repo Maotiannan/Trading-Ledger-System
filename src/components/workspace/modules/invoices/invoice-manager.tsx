@@ -15,31 +15,23 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
   apiCall,
   fetchCustomerCandidatesByMark,
   fetchServerDate,
   getDisplayImageUrl,
   getErrorMessage,
-  initCustomerImportRowViews,
   initInvoiceImportRowViews,
   lookupCustomerByOrderNoGroup,
-  mergeCustomerImportRowViews,
   mergeInvoiceImportRowViews,
   summarizeRowsForAlert,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
   toDateInputValue,
   toInvoiceImportRowResults,
   toInvoiceImportRowResultsFromIssues,
   useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
-  type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
   type InvoiceImportRowView,
 } from '@/components/workspace/shared';
+import { ImportResultDialog, type ImportResultDialogColumn } from '@/components/workspace/components/import-result-dialog';
+import { useImportResultTable } from '@/components/workspace/hooks';
 import {
   Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
   Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
@@ -130,14 +122,13 @@ export function InvoiceManager() {
   const [showInvoiceImportIssues, setShowInvoiceImportIssues] = useState(false);
   const [invoiceIssueSubmitting, setInvoiceIssueSubmitting] = useState(false);
   const [invoiceImportMessage, setInvoiceImportMessage] = useState('');
-  const [invoiceImportFilter, setInvoiceImportFilter] = useState<'failed' | 'all'>('failed');
-  const [invoiceImportPage, setInvoiceImportPage] = useState(1);
   const [editingInvoiceDateId, setEditingInvoiceDateId] = useState<string | null>(null);
   const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
   const [editingInvoiceReleaseDate, setEditingInvoiceReleaseDate] = useState('');
   const [invoiceDateSaving, setInvoiceDateSaving] = useState(false);
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
   const invoiceCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const invoiceImportTable = useImportResultTable(invoiceImportRows);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -193,8 +184,7 @@ export function InvoiceManager() {
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
       setInvoiceImportRows(initInvoiceImportRowViews(fallbackResults));
-      setInvoiceImportFilter('failed');
-      setInvoiceImportPage(1);
+      invoiceImportTable.reset();
       setInvoiceImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
       setShowInvoiceImportIssues(true);
       await loadInvoices();
@@ -213,36 +203,8 @@ export function InvoiceManager() {
     }));
   };
 
-  const latestFailedInvoiceRows = useMemo(
-    () => invoiceImportRows.filter((row) => row.latestStatus === 'FAILED'),
-    [invoiceImportRows]
-  );
-  const invoiceAttemptCount = useMemo(
-    () => invoiceImportRows.reduce((max, row) => Math.max(max, row.attempts.length), 0),
-    [invoiceImportRows]
-  );
-  const visibleInvoiceImportRows = useMemo(() => {
-    if (invoiceImportFilter === 'failed') return latestFailedInvoiceRows;
-    return invoiceImportRows;
-  }, [invoiceImportFilter, latestFailedInvoiceRows, invoiceImportRows]);
-  const invoiceImportTotalPages = Math.max(1, Math.ceil(visibleInvoiceImportRows.length / IMPORT_RESULT_PAGE_SIZE));
-  const pagedInvoiceImportRows = useMemo(() => {
-    const start = (invoiceImportPage - 1) * IMPORT_RESULT_PAGE_SIZE;
-    return visibleInvoiceImportRows.slice(start, start + IMPORT_RESULT_PAGE_SIZE);
-  }, [visibleInvoiceImportRows, invoiceImportPage]);
-
-  useEffect(() => {
-    if (invoiceImportPage > invoiceImportTotalPages) {
-      setInvoiceImportPage(invoiceImportTotalPages);
-    }
-  }, [invoiceImportPage, invoiceImportTotalPages]);
-
-  useEffect(() => {
-    setInvoiceImportPage(1);
-  }, [invoiceImportFilter]);
-
   const retryInvoiceIssueRows = async () => {
-    if (latestFailedInvoiceRows.length === 0) return;
+    if (invoiceImportTable.latestFailedRows.length === 0) return;
     setInvoiceIssueSubmitting(true);
     try {
       const response = await fetch('/api/invoice', {
@@ -251,7 +213,7 @@ export function InvoiceManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'import-rows',
-          rows: latestFailedInvoiceRows.map((row) => ({
+          rows: invoiceImportTable.latestFailedRows.map((row) => ({
             rowNo: row.rowNo,
             invNo: row.invNo,
             shipDate: row.shipDate,
@@ -289,9 +251,67 @@ export function InvoiceManager() {
     setShowInvoiceImportIssues(false);
     setInvoiceImportRows([]);
     setInvoiceImportMessage('');
-    setInvoiceImportFilter('failed');
-    setInvoiceImportPage(1);
+    invoiceImportTable.reset();
   };
+
+  const invoiceImportColumns: ImportResultDialogColumn<InvoiceImportRowView>[] = useMemo(() => ([
+    {
+      key: 'invNo',
+      header: 'INV_NO',
+      className: 'min-w-[220px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[220px]" value={row.invNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'invNo', e.target.value)} />
+      ),
+    },
+    {
+      key: 'orderNo',
+      header: 'ORDER_NO',
+      className: 'min-w-[300px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[300px]" value={row.orderNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'orderNo', e.target.value)} />
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'AMOUNT',
+      className: 'min-w-[140px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[140px]" value={row.amount} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'amount', e.target.value)} />
+      ),
+    },
+    {
+      key: 'customerMark',
+      header: 'CUSTOMER_MARK',
+      className: 'min-w-[280px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[280px]" value={row.customerMark} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerMark', e.target.value)} />
+      ),
+    },
+    {
+      key: 'customerName',
+      header: 'CUSTOMER_ORDER_NAME',
+      className: 'min-w-[320px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[320px]" value={row.customerName} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerName', e.target.value)} />
+      ),
+    },
+    {
+      key: 'shipDate',
+      header: 'SHIP_DATE',
+      className: 'min-w-[180px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[180px]" value={row.shipDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'shipDate', e.target.value)} />
+      ),
+    },
+    {
+      key: 'releaseDate',
+      header: 'RELEASE_DATE',
+      className: 'min-w-[180px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[180px]" value={row.releaseDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'releaseDate', e.target.value)} />
+      ),
+    },
+  ]), []);
 
   const openInvoiceDateEditor = (invoiceId: string, currentShipDate?: string | null, currentReleaseDate?: string | null) => {
     setEditingInvoiceDateId(invoiceId);
@@ -1478,121 +1498,24 @@ export function InvoiceManager() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showInvoiceImportIssues} onOpenChange={(open) => { if (!open) closeInvoiceImportDialog(); else setShowInvoiceImportIssues(true); }}>
-        <DialogContent className="!top-[5px] !left-[5px] !translate-x-0 !translate-y-0 !w-[calc(100vw-10px)] !max-w-none !h-[calc(100vh-10px)] flex flex-col p-4">
-          <DialogHeader>
-            <DialogTitle>{tx('账单导入问题行处理', 'Invoice Import Issue Rows')}</DialogTitle>
-            <DialogDescription className="whitespace-pre-wrap break-words">
-              {invoiceImportMessage || tx('请查看导入结果，失败行可编辑后重试。', 'Check import results. Failed rows can be edited and retried.')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <div className="text-gray-600">
-              {tx('默认仅看最新失败行，可切换查看全部。', 'Default view shows latest failed rows. Switch to view all rows.')}
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                className="h-9 border rounded-md px-2 bg-white"
-                value={invoiceImportFilter}
-                onChange={(e) => setInvoiceImportFilter(e.target.value === 'all' ? 'all' : 'failed')}
-              >
-                <option value="failed">{tx('仅看失败', 'Failed Only')}</option>
-                <option value="all">{tx('查看全部', 'All Rows')}</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex-1 overflow-auto border rounded-md">
-            <Table className="min-w-[2600px] table-auto">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead className="min-w-[220px]">INV_NO</TableHead>
-                  <TableHead className="min-w-[300px]">ORDER_NO</TableHead>
-                  <TableHead className="min-w-[140px]">AMOUNT</TableHead>
-                  <TableHead className="min-w-[280px]">CUSTOMER_MARK</TableHead>
-                  <TableHead className="min-w-[320px]">CUSTOMER_ORDER_NAME</TableHead>
-                  <TableHead className="min-w-[180px]">SHIP_DATE</TableHead>
-                  <TableHead className="min-w-[180px]">RELEASE_DATE</TableHead>
-                  <TableHead className="min-w-[180px]">{tx('最新状态', 'Latest Status')}</TableHead>
-                  <TableHead className="min-w-[540px]">{tx('最新原因', 'Latest Reason')}</TableHead>
-                  {Array.from({ length: invoiceAttemptCount }).map((_, idx) => (
-                    <TableHead key={`invoice-attempt-${idx}`} className="min-w-[140px]">
-                      {`Result#${idx + 1}`}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagedInvoiceImportRows.map((row, index) => {
-                  const canEdit = row.latestStatus === 'FAILED';
-                  return (
-                  <TableRow key={`${row.rowNo}-${index}`}>
-                    <TableCell>{row.rowNo || index + 1}</TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.invNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'invNo', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[300px]" value={row.orderNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'orderNo', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[140px]" value={row.amount} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'amount', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[280px]" value={row.customerMark} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerMark', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[320px]" value={row.customerName} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerName', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[180px]" value={row.shipDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'shipDate', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[180px]" value={row.releaseDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'releaseDate', e.target.value)} /></TableCell>
-                    <TableCell className={row.latestStatus === 'FAILED' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
-                      {row.latestStatus}
-                    </TableCell>
-                    <TableCell className="min-w-[540px] whitespace-pre-wrap break-words text-xs">
-                      {row.latestReason || '-'}
-                    </TableCell>
-                    {Array.from({ length: invoiceAttemptCount }).map((_, idx) => (
-                      <TableCell key={`invoice-row-${row.rowNo}-attempt-${idx}`} className="text-xs">
-                        {row.attempts[idx]?.status || '-'}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                  );
-                })}
-                {pagedInvoiceImportRows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={10 + invoiceAttemptCount} className="text-center text-gray-500">
-                      {invoiceImportFilter === 'failed'
-                        ? tx('当前没有最新失败行，可切换“查看全部”', 'No latest failed rows. Switch to "All Rows".')
-                        : tx('暂无导入结果', 'No import results')}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <div className="text-gray-600">
-              {tx('每页 50 行', '50 rows per page')} · {tx('第', 'Page')} {invoiceImportPage} / {invoiceImportTotalPages}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setInvoiceImportPage((p) => Math.max(1, p - 1))}
-                disabled={invoiceImportPage <= 1}
-              >
-                {tx('上一页', 'Prev')}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setInvoiceImportPage((p) => Math.min(invoiceImportTotalPages, p + 1))}
-                disabled={invoiceImportPage >= invoiceImportTotalPages}
-              >
-                {tx('下一页', 'Next')}
-              </Button>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeInvoiceImportDialog}>
-              {tx('关闭', 'Close')}
-            </Button>
-            <Button onClick={retryInvoiceIssueRows} disabled={invoiceIssueSubmitting || latestFailedInvoiceRows.length === 0}>
-              {invoiceIssueSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {tx('仅重试失败行', 'Retry Failed Rows')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImportResultDialog
+        open={showInvoiceImportIssues}
+        onOpenChange={(open) => { if (!open) closeInvoiceImportDialog(); else setShowInvoiceImportIssues(true); }}
+        title={tx('账单导入问题行处理', 'Invoice Import Issue Rows')}
+        description={invoiceImportMessage || tx('请查看导入结果，失败行可编辑后重试。', 'Check import results. Failed rows can be edited and retried.')}
+        filter={invoiceImportTable.filter}
+        onFilterChange={invoiceImportTable.setFilter}
+        rows={invoiceImportTable.pagedRows}
+        columns={invoiceImportColumns}
+        attemptCount={invoiceImportTable.attemptCount}
+        page={invoiceImportTable.page}
+        totalPages={invoiceImportTable.totalPages}
+        onPageChange={invoiceImportTable.setPage}
+        onClose={closeInvoiceImportDialog}
+        onRetry={retryInvoiceIssueRows}
+        retrying={invoiceIssueSubmitting}
+        retryDisabled={invoiceImportTable.latestFailedRows.length === 0}
+      />
 
       <Dialog open={showRematchDialog} onOpenChange={setShowRematchDialog}>
         <DialogContent className="max-w-4xl">
@@ -1683,4 +1606,3 @@ export function InvoiceManager() {
     </div>
   );
 }
-

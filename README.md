@@ -21,6 +21,8 @@
 - 前端 workspace 已完成第一阶段模块化：`src/app/page.tsx` 只保留鉴权初始化与视图路由，API client / import-result hooks / 各业务模块视图已拆到 `src/components/workspace/{api,hooks,chrome,modules}`
 - 前端 workspace 已完成第二阶段路由拆分：`/dashboard`、`/invoices`、`/receipts`、`/details`、`/swifts`、`/deletions`、`/customers`、`/settings` 为独立 app route；根 `/` 仅负责登录入口或登录后跳转
 - workspace 路由现已使用共享 `(workspace)` layout 承载侧栏与鉴权，模块切换时只替换右侧主内容区，避免整屏白屏后重新挂载
+- 侧边栏已支持收缩为仅图标模式，并持久化到本地存储；刷新后会保留收缩状态
+- 发票/客户导入结果弹窗已抽成通用组件与通用表格 hook，后续模块内拆分将继续沿用这条复用路径
 
 ## 本地运行
 

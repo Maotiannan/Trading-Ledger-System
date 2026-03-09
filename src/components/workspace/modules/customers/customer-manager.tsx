@@ -15,36 +15,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
   apiCall,
-  fetchCustomerCandidatesByMark,
-  fetchServerDate,
-  getDisplayImageUrl,
-  getErrorMessage,
   initCustomerImportRowViews,
-  initInvoiceImportRowViews,
-  lookupCustomerByOrderNoGroup,
   mergeCustomerImportRowViews,
-  mergeInvoiceImportRowViews,
-  summarizeRowsForAlert,
   toCustomerImportRowResults,
   toCustomerImportRowResultsFromIssues,
-  toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
   useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
   type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
-  type InvoiceImportRowView,
 } from '@/components/workspace/shared';
+import { ImportResultDialog, type ImportResultDialogColumn } from '@/components/workspace/components/import-result-dialog';
+import { useImportResultTable } from '@/components/workspace/hooks';
 import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
-  ChevronDown, ChevronRight, Pencil
+  Loader2, Users, Upload, Check, X, AlertTriangle, Eye, Pencil, Plus, Trash2
 } from 'lucide-react';
 
 export function CustomerManager() {
@@ -66,10 +48,9 @@ export function CustomerManager() {
   const [showCustomerImportIssues, setShowCustomerImportIssues] = useState(false);
   const [customerIssueSubmitting, setCustomerIssueSubmitting] = useState(false);
   const [customerImportMessage, setCustomerImportMessage] = useState('');
-  const [customerImportFilter, setCustomerImportFilter] = useState<'failed' | 'all'>('failed');
-  const [customerImportPage, setCustomerImportPage] = useState(1);
   const [customerLongTextPreview, setCustomerLongTextPreview] = useState<{ label: string; value: string } | null>(null);
   const customerImportInputRef = useRef<HTMLInputElement | null>(null);
+  const customerImportTable = useImportResultTable(customerImportRows);
   const [form, setForm] = useState({
     mark: '',
     orderName: '',
@@ -293,8 +274,7 @@ export function CustomerManager() {
         throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
       }
       setCustomerImportRows(initCustomerImportRowViews(fallbackResults));
-      setCustomerImportFilter('failed');
-      setCustomerImportPage(1);
+      customerImportTable.reset();
       setCustomerImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
       setShowCustomerImportIssues(true);
       await loadCustomers();
@@ -313,36 +293,8 @@ export function CustomerManager() {
     }));
   };
 
-  const latestFailedCustomerRows = useMemo(
-    () => customerImportRows.filter((row) => row.latestStatus === 'FAILED'),
-    [customerImportRows]
-  );
-  const customerAttemptCount = useMemo(
-    () => customerImportRows.reduce((max, row) => Math.max(max, row.attempts.length), 0),
-    [customerImportRows]
-  );
-  const visibleCustomerImportRows = useMemo(() => {
-    if (customerImportFilter === 'failed') return latestFailedCustomerRows;
-    return customerImportRows;
-  }, [customerImportFilter, latestFailedCustomerRows, customerImportRows]);
-  const customerImportTotalPages = Math.max(1, Math.ceil(visibleCustomerImportRows.length / IMPORT_RESULT_PAGE_SIZE));
-  const pagedCustomerImportRows = useMemo(() => {
-    const start = (customerImportPage - 1) * IMPORT_RESULT_PAGE_SIZE;
-    return visibleCustomerImportRows.slice(start, start + IMPORT_RESULT_PAGE_SIZE);
-  }, [visibleCustomerImportRows, customerImportPage]);
-
-  useEffect(() => {
-    if (customerImportPage > customerImportTotalPages) {
-      setCustomerImportPage(customerImportTotalPages);
-    }
-  }, [customerImportPage, customerImportTotalPages]);
-
-  useEffect(() => {
-    setCustomerImportPage(1);
-  }, [customerImportFilter]);
-
   const retryCustomerIssueRows = async () => {
-    if (latestFailedCustomerRows.length === 0) return;
+    if (customerImportTable.latestFailedRows.length === 0) return;
     setCustomerIssueSubmitting(true);
     try {
       const response = await fetch('/api/customer', {
@@ -352,7 +304,7 @@ export function CustomerManager() {
         body: JSON.stringify({
           action: 'import-rows',
           ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
-          rows: latestFailedCustomerRows.map((row) => ({
+          rows: customerImportTable.latestFailedRows.map((row) => ({
             rowNo: row.rowNo,
             mark: row.mark,
             orderName: row.orderName,
@@ -392,9 +344,91 @@ export function CustomerManager() {
     setShowCustomerImportIssues(false);
     setCustomerImportRows([]);
     setCustomerImportMessage('');
-    setCustomerImportFilter('failed');
-    setCustomerImportPage(1);
+    customerImportTable.reset();
   };
+
+  const customerImportColumns: ImportResultDialogColumn<CustomerImportRowView>[] = useMemo(() => ([
+    {
+      key: 'mark',
+      header: 'MARK',
+      className: 'min-w-[180px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[180px]" value={row.mark} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'mark', e.target.value)} />
+      ),
+    },
+    {
+      key: 'orderName',
+      header: 'ORDER_NAME',
+      className: 'min-w-[220px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[220px]" value={row.orderName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'orderName', e.target.value)} />
+      ),
+    },
+    {
+      key: 'name',
+      header: 'NAME',
+      className: 'min-w-[220px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[220px]" value={row.name} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'name', e.target.value)} />
+      ),
+    },
+    {
+      key: 'phone',
+      header: 'PHONE',
+      className: 'min-w-[180px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[180px]" value={row.phone} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'phone', e.target.value)} />
+      ),
+    },
+    {
+      key: 'city',
+      header: 'CITY',
+      className: 'min-w-[160px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[160px]" value={row.city} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'city', e.target.value)} />
+      ),
+    },
+    {
+      key: 'consignee',
+      header: 'CONSIGNEE',
+      className: 'min-w-[220px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[220px]" value={row.consignee} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'consignee', e.target.value)} />
+      ),
+    },
+    {
+      key: 'companyName',
+      header: 'COMPANY_NAME',
+      className: 'min-w-[220px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[220px]" value={row.companyName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyName', e.target.value)} />
+      ),
+    },
+    {
+      key: 'credit',
+      header: 'CREDIT',
+      className: 'min-w-[140px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[140px]" value={row.credit} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'credit', e.target.value)} />
+      ),
+    },
+    {
+      key: 'companyAddress',
+      header: 'COMPANY_ADDRESS',
+      className: 'min-w-[320px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[320px]" value={row.companyAddress} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyAddress', e.target.value)} />
+      ),
+    },
+    {
+      key: 'ownerEmail',
+      header: 'SALES_EMAIL',
+      className: 'min-w-[220px]',
+      renderCell: (row, canEdit) => (
+        <Input className="min-w-[220px]" value={row.ownerEmail} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'ownerEmail', e.target.value)} />
+      ),
+    },
+  ]), []);
 
   return (
     <div className="space-y-6">
@@ -653,125 +687,24 @@ export function CustomerManager() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showCustomerImportIssues} onOpenChange={(open) => { if (!open) closeCustomerImportDialog(); else setShowCustomerImportIssues(true); }}>
-        <DialogContent className="!top-[5px] !left-[5px] !translate-x-0 !translate-y-0 !w-[calc(100vw-10px)] !max-w-none !h-[calc(100vh-10px)] flex flex-col p-4">
-          <DialogHeader>
-            <DialogTitle>{tx('客户导入问题行处理', 'Customer Import Issue Rows')}</DialogTitle>
-            <DialogDescription className="whitespace-pre-wrap break-words">
-              {customerImportMessage || tx('请查看导入结果，失败行可编辑后重试。', 'Check import results. Failed rows can be edited and retried.')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center justify-between gap-2 text-sm">
-            <div className="text-gray-600">
-              {tx('默认仅看最新失败行，可切换查看全部。', 'Default view shows latest failed rows. Switch to view all rows.')}
-            </div>
-            <div className="flex items-center gap-2">
-              <select
-                className="h-9 border rounded-md px-2 bg-white"
-                value={customerImportFilter}
-                onChange={(e) => setCustomerImportFilter(e.target.value === 'all' ? 'all' : 'failed')}
-              >
-                <option value="failed">{tx('仅看失败', 'Failed Only')}</option>
-                <option value="all">{tx('查看全部', 'All Rows')}</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex-1 overflow-auto border rounded-md">
-            <Table className="min-w-[3200px] table-auto">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>MARK</TableHead>
-                  <TableHead>ORDER_NAME</TableHead>
-                  <TableHead>NAME</TableHead>
-                  <TableHead>PHONE</TableHead>
-                  <TableHead>CITY</TableHead>
-                  <TableHead>CONSIGNEE</TableHead>
-                  <TableHead>COMPANY_NAME</TableHead>
-                  <TableHead>CREDIT</TableHead>
-                  <TableHead>COMPANY_ADDRESS</TableHead>
-                  <TableHead>SALES_EMAIL</TableHead>
-                  <TableHead className="min-w-[180px]">{tx('最新状态', 'Latest Status')}</TableHead>
-                  <TableHead className="min-w-[540px]">{tx('最新原因', 'Latest Reason')}</TableHead>
-                  {Array.from({ length: customerAttemptCount }).map((_, idx) => (
-                    <TableHead key={`customer-attempt-${idx}`} className="min-w-[140px]">
-                      {`Result#${idx + 1}`}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagedCustomerImportRows.map((row, index) => {
-                  const canEdit = row.latestStatus === 'FAILED';
-                  return (
-                  <TableRow key={`${row.rowNo}-${index}`}>
-                    <TableCell>{row.rowNo || index + 1}</TableCell>
-                    <TableCell><Input className="min-w-[180px]" value={row.mark} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'mark', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.orderName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'orderName', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.name} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'name', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[180px]" value={row.phone} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'phone', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[160px]" value={row.city} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'city', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.consignee} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'consignee', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.companyName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyName', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[140px]" value={row.credit} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'credit', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[320px]" value={row.companyAddress} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyAddress', e.target.value)} /></TableCell>
-                    <TableCell><Input className="min-w-[220px]" value={row.ownerEmail} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'ownerEmail', e.target.value)} /></TableCell>
-                    <TableCell className={row.latestStatus === 'FAILED' ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>
-                      {row.latestStatus}
-                    </TableCell>
-                    <TableCell className="min-w-[540px] whitespace-pre-wrap break-words text-xs">{row.latestReason || '-'}</TableCell>
-                    {Array.from({ length: customerAttemptCount }).map((_, idx) => (
-                      <TableCell key={`customer-row-${row.rowNo}-attempt-${idx}`} className="text-xs">
-                        {row.attempts[idx]?.status || '-'}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                  );
-                })}
-                {pagedCustomerImportRows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={13 + customerAttemptCount} className="text-center text-gray-500">
-                      {customerImportFilter === 'failed'
-                        ? tx('当前没有最新失败行，可切换“查看全部”', 'No latest failed rows. Switch to "All Rows".')
-                        : tx('暂无导入结果', 'No import results')}
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <div className="text-gray-600">
-              {tx('每页 50 行', '50 rows per page')} · {tx('第', 'Page')} {customerImportPage} / {customerImportTotalPages}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setCustomerImportPage((p) => Math.max(1, p - 1))}
-                disabled={customerImportPage <= 1}
-              >
-                {tx('上一页', 'Prev')}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setCustomerImportPage((p) => Math.min(customerImportTotalPages, p + 1))}
-                disabled={customerImportPage >= customerImportTotalPages}
-              >
-                {tx('下一页', 'Next')}
-              </Button>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={closeCustomerImportDialog}>
-              {tx('关闭', 'Close')}
-            </Button>
-            <Button onClick={retryCustomerIssueRows} disabled={customerIssueSubmitting || latestFailedCustomerRows.length === 0}>
-              {customerIssueSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {tx('仅重试失败行', 'Retry Failed Rows')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImportResultDialog
+        open={showCustomerImportIssues}
+        onOpenChange={(open) => { if (!open) closeCustomerImportDialog(); else setShowCustomerImportIssues(true); }}
+        title={tx('客户导入问题行处理', 'Customer Import Issue Rows')}
+        description={customerImportMessage || tx('请查看导入结果，失败行可编辑后重试。', 'Check import results. Failed rows can be edited and retried.')}
+        filter={customerImportTable.filter}
+        onFilterChange={customerImportTable.setFilter}
+        rows={customerImportTable.pagedRows}
+        columns={customerImportColumns}
+        attemptCount={customerImportTable.attemptCount}
+        page={customerImportTable.page}
+        totalPages={customerImportTable.totalPages}
+        onPageChange={customerImportTable.setPage}
+        onClose={closeCustomerImportDialog}
+        onRetry={retryCustomerIssueRows}
+        retrying={customerIssueSubmitting}
+        retryDisabled={customerImportTable.latestFailedRows.length === 0}
+      />
 
       <Dialog open={!!customerLongTextPreview} onOpenChange={(open) => { if (!open) setCustomerLongTextPreview(null); }}>
         <DialogContent className="max-w-2xl">

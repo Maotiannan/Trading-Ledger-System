@@ -2,17 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
-import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   CustomerCandidate,
   apiCall,
@@ -33,9 +27,21 @@ import {
 import { ImportResultDialog, type ImportResultDialogColumn } from '@/components/workspace/components/import-result-dialog';
 import { useImportResultTable } from '@/components/workspace/hooks';
 import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
+  CreateInvoiceDialog,
+  EditOrderDialog,
+  OrderHistoryDialog,
+  RematchDialog,
+  TransferBalanceDialog,
+} from './components';
+import type {
+  EditingInvoiceOrder,
+  InvoiceDraftOrder,
+  RematchPreviewGroup,
+  RematchSelection,
+  TransferFromOrder,
+} from './types';
+import {
+  Loader2, Trash2, Plus, Upload, ArrowRight, RefreshCw,
   ChevronDown, ChevronRight, Pencil
 } from 'lucide-react';
 
@@ -47,14 +53,7 @@ export function InvoiceManager() {
   const [invNo, setInvNo] = useState('');
   const [shipDate, setShipDate] = useState('');
   const [releaseDate, setReleaseDate] = useState('');
-  const [orders, setOrders] = useState<Array<{
-    orderNo: string;
-    amount: string;
-    customerMark: string;
-    customerName: string;
-    customerId: string;
-    customerCandidates: CustomerCandidate[];
-  }>>([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
+  const [orders, setOrders] = useState<InvoiceDraftOrder[]>([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
@@ -62,17 +61,7 @@ export function InvoiceManager() {
   const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set());
   
   // 编辑订单对话框
-  const [editingOrder, setEditingOrder] = useState<{
-    id: string;
-    orderNo: string;
-    amount: number;
-    invoiceId: string;
-    customerMark: string;
-    customerName: string;
-    customerPhone: string;
-    customerCity: string;
-    customerId: string;
-  } | null>(null);
+  const [editingOrder, setEditingOrder] = useState<EditingInvoiceOrder | null>(null);
   const [showOrderDialog, setShowOrderDialog] = useState(false);
   const [orderFormError, setOrderFormError] = useState('');
   
@@ -88,7 +77,7 @@ export function InvoiceManager() {
   
   // 转移余额对话框
   const [showTransferDialog, setShowTransferDialog] = useState(false);
-  const [transferFromOrder, setTransferFromOrder] = useState<{ id: string; orderNo: string; balance: number } | null>(null);
+  const [transferFromOrder, setTransferFromOrder] = useState<TransferFromOrder | null>(null);
   const [transferToOrderNo, setTransferToOrderNo] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
   const [transferError, setTransferError] = useState('');
@@ -98,21 +87,8 @@ export function InvoiceManager() {
   const [showRematchDialog, setShowRematchDialog] = useState(false);
   const [rematchLoading, setRematchLoading] = useState(false);
   const [applyingRematch, setApplyingRematch] = useState(false);
-  const [rematchGroups, setRematchGroups] = useState<Array<{
-    groupId: string;
-    groupType: 'exact' | 'customer-group';
-    groupKey: string;
-    orders: Array<{
-      id: string;
-      invNo: string;
-      orderNo: string;
-      amount: number;
-      orderBalance: number;
-      receiptCount: number;
-      createdAt: string;
-    }>;
-  }>>([]);
-  const [rematchSelections, setRematchSelections] = useState<Record<string, { keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>>({});
+  const [rematchGroups, setRematchGroups] = useState<RematchPreviewGroup[]>([]);
+  const [rematchSelections, setRematchSelections] = useState<Record<string, RematchSelection>>({});
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
@@ -254,6 +230,38 @@ export function InvoiceManager() {
     invoiceImportTable.reset();
   };
 
+  const resetCreateInvoiceDialog = () => {
+    setFormError('');
+    setInvNo('');
+    setShipDate('');
+    setReleaseDate('');
+    setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
+  };
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    setShowDialog(open);
+    if (!open) resetCreateInvoiceDialog();
+  };
+
+  const handleOrderDialogOpenChange = (open: boolean) => {
+    setShowOrderDialog(open);
+    if (!open) {
+      setEditingOrder(null);
+      setOrderFormError('');
+      setEditingOrderCandidates([]);
+    }
+  };
+
+  const handleTransferDialogOpenChange = (open: boolean) => {
+    setShowTransferDialog(open);
+    if (!open) {
+      setTransferFromOrder(null);
+      setTransferToOrderNo('');
+      setTransferAmount('');
+      setTransferError('');
+    }
+  };
+
   const invoiceImportColumns: ImportResultDialogColumn<InvoiceImportRowView>[] = useMemo(() => ([
     {
       key: 'invNo',
@@ -323,6 +331,18 @@ export function InvoiceManager() {
     setEditingInvoiceDateId(null);
     setEditingInvoiceShipDate('');
     setEditingInvoiceReleaseDate('');
+  };
+
+  const updateRematchSelection = (groupId: string, value: Partial<RematchSelection>, group: RematchPreviewGroup) => {
+    setRematchSelections((prev) => ({
+      ...prev,
+      [groupId]: {
+        keepOrderId: prev[groupId]?.keepOrderId || group.orders[0]?.id || '',
+        mode: prev[groupId]?.mode || 'merge',
+        orderIds: prev[groupId]?.orderIds || group.orders.map((order) => order.id),
+        ...value,
+      },
+    }));
   };
 
   const saveInvoiceDates = async () => {
@@ -530,10 +550,7 @@ export function InvoiceManager() {
 
       if (result.success) {
         setShowDialog(false);
-        setInvNo('');
-        setShipDate('');
-        setReleaseDate('');
-        setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
+        resetCreateInvoiceDialog();
         // 显示合并消息（如果有）
         if (result.message) {
           alert(result.message);
@@ -583,8 +600,7 @@ export function InvoiceManager() {
       });
 
       if (result.success) {
-        setShowOrderDialog(false);
-        setEditingOrder(null);
+        handleOrderDialogOpenChange(false);
         loadInvoices();
       } else {
         setOrderFormError(result.error || tx('修改失败', 'Update failed'));
@@ -703,10 +719,7 @@ export function InvoiceManager() {
 
       if (result.success) {
         alert(result.message);
-        setShowTransferDialog(false);
-        setTransferFromOrder(null);
-        setTransferToOrderNo('');
-        setTransferAmount('');
+        handleTransferDialogOpenChange(false);
         loadInvoices();
       } else {
         setTransferError(result.error || tx('转移失败', 'Transfer failed'));
@@ -800,6 +813,42 @@ export function InvoiceManager() {
     if (orders.length > 1) {
       setOrders(orders.filter((_, i) => i !== index));
     }
+  };
+
+  const selectCreateInvoiceCustomer = (index: number, customerId: string) => {
+    setOrders((prev) => {
+      const copy = [...prev];
+      const row = copy[index];
+      if (!row) return prev;
+      row.customerId = customerId;
+      const selected = row.customerCandidates.find((candidate) => candidate.id === customerId);
+      row.customerName = selected?.orderName || '';
+      return copy;
+    });
+  };
+
+  const handleEditingOrderMarkChange = (mark: string) => {
+    if (!editingOrder) return;
+    setEditingOrder({ ...editingOrder, customerMark: mark, customerName: '', customerPhone: '', customerCity: '', customerId: '' });
+    loadCustomerCandidates(
+      mark,
+      setEditingOrderCandidates,
+      (name) => setEditingOrder((prev) => prev ? ({ ...prev, customerName: name }) : prev),
+      (id) => setEditingOrder((prev) => prev ? ({ ...prev, customerId: id }) : prev),
+      (phone) => setEditingOrder((prev) => prev ? ({ ...prev, customerPhone: phone }) : prev),
+      (city) => setEditingOrder((prev) => prev ? ({ ...prev, customerCity: city }) : prev)
+    );
+  };
+
+  const selectEditingOrderCustomer = (customerId: string) => {
+    const selected = editingOrderCandidates.find((candidate) => candidate.id === customerId);
+    setEditingOrder((prev) => prev ? ({
+      ...prev,
+      customerId,
+      customerName: selected?.orderName || '',
+      customerPhone: selected?.phone || '',
+      customerCity: selected?.city || '',
+    }) : prev);
   };
 
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
@@ -1200,303 +1249,61 @@ export function InvoiceManager() {
         )}
       </div>
 
-      {/* 创建账单对话框 */}
-      <Dialog open={showDialog} onOpenChange={(open) => {
-        setShowDialog(open);
-        if (!open) {
-          setFormError('');
-          setInvNo('');
-          setShipDate('');
-          setReleaseDate('');
-          setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
-        }
-      }}>
-        <DialogContent className="max-w-2xl max-h-[calc(100vh-40px)] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{tx('创建账单', 'Create Invoice')}</DialogTitle>
-            <DialogDescription>{tx('创建新账单并添加订单', 'Create a new invoice and add orders')}</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 py-4 pr-2">
-            {formError && (
-              <Alert variant="destructive">
-                <AlertDescription>{formError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label>{tx('账单号 (INV NO)', 'Invoice No. (INV NO)')}</Label>
-              <Input value={invNo} onChange={(e) => setInvNo(e.target.value)} placeholder={tx('如: L25MH090125', 'e.g. L25MH090125')} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>{tx('发货日期 (SHIP_DATE)', 'SHIP_DATE')}</Label>
-                <Input type="date" value={shipDate} onChange={(e) => setShipDate(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>{tx('放货日期 (RELEASE_DATE)', 'RELEASE_DATE')}</Label>
-                <Input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('订单列表', 'Order List')}</Label>
-              {orders.map((order, index) => (
-                <div key={index} className="space-y-2 border rounded-md p-2">
-                  <div className="flex gap-2">
-                  <Input
-                    placeholder={tx('客户单号 (ORDER)', 'Order No. (ORDER)')}
-                    value={order.orderNo}
-                    onChange={(e) => updateOrder(index, 'orderNo', e.target.value)}
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder={tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}
-                    type="number"
-                    value={order.amount}
-                    onChange={(e) => updateOrder(index, 'amount', e.target.value)}
-                    className="w-32"
-                  />
-                    <Input
-                      placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
-                      value={order.customerMark}
-                      onChange={(e) => updateOrder(index, 'customerMark', e.target.value)}
-                      className="w-44"
-                    />
-                  {orders.length > 1 && (
-                    <Button variant="ghost" size="icon" onClick={() => removeOrder(index)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                  {order.customerCandidates.length > 1 && (
-                    <select
-                      className="w-full border rounded-md px-3 py-2 text-sm"
-                      value={order.customerId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setOrders((prev) => {
-                          const copy = [...prev];
-                          const row = copy[index];
-                          if (!row) return prev;
-                          row.customerId = id;
-                          const selected = row.customerCandidates.find((c) => c.id === id);
-                          row.customerName = selected?.orderName || '';
-                          return copy;
-                        });
-                      }}
-                    >
-                      <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
-                      {order.customerCandidates.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              ))}
-              <Button variant="outline" onClick={addOrderRow} className="w-full">
-                <Plus className="h-4 w-4 mr-2" /> {tx('添加订单', 'Add Order')}
-              </Button>
-            </div>
-          </div>
-          <DialogFooter className="border-t pt-4 bg-background sticky bottom-0">
-            <Button variant="outline" onClick={() => setShowDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleCreateInvoice} disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {tx('创建', 'Create')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateInvoiceDialog
+        open={showDialog}
+        submitting={submitting}
+        formError={formError}
+        invNo={invNo}
+        shipDate={shipDate}
+        releaseDate={releaseDate}
+        orders={orders}
+        tx={tx}
+        onOpenChange={handleCreateDialogOpenChange}
+        onInvNoChange={setInvNo}
+        onShipDateChange={setShipDate}
+        onReleaseDateChange={setReleaseDate}
+        onOrderChange={updateOrder}
+        onOrderCustomerSelect={selectCreateInvoiceCustomer}
+        onAddOrderRow={addOrderRow}
+        onRemoveOrder={removeOrder}
+        onSubmit={handleCreateInvoice}
+      />
 
-      {/* 编辑订单对话框 */}
-      <Dialog open={showOrderDialog} onOpenChange={(open) => { setShowOrderDialog(open); if (!open) { setEditingOrder(null); setOrderFormError(''); }}}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tx('编辑订单', 'Edit Order')}</DialogTitle>
-            <DialogDescription>{tx('修改订单信息', 'Update order information')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {orderFormError && (
-              <Alert variant="destructive">
-                <AlertDescription>{orderFormError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label>{tx('客户单号 (ORDER)', 'Order No. (ORDER)')}</Label>
-              <Input 
-                value={editingOrder?.orderNo || ''} 
-                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, orderNo: e.target.value })} 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}</Label>
-              <Input 
-                type="number"
-                value={editingOrder?.amount || ''} 
-                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, amount: parseFloat(e.target.value) || 0 })} 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('客户MARK', 'Customer MARK')}</Label>
-              <Input
-                value={editingOrder?.customerMark || ''}
-                onChange={(e) => {
-                  if (!editingOrder) return;
-                  const mark = e.target.value;
-                  setEditingOrder({ ...editingOrder, customerMark: mark, customerName: '', customerPhone: '', customerCity: '', customerId: '' });
-                  loadCustomerCandidates(
-                    mark,
-                    setEditingOrderCandidates,
-                    (name) => setEditingOrder((prev) => prev ? ({ ...prev, customerName: name }) : prev),
-                    (id) => setEditingOrder((prev) => prev ? ({ ...prev, customerId: id }) : prev),
-                    (phone) => setEditingOrder((prev) => prev ? ({ ...prev, customerPhone: phone }) : prev),
-                    (city) => setEditingOrder((prev) => prev ? ({ ...prev, customerCity: city }) : prev)
-                  );
-                }}
-              />
-            </div>
-            {editingOrderCandidates.length > 1 && (
-              <div className="space-y-2">
-                <Label>{tx('选择客户', 'Select Customer')}</Label>
-                <select
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  value={editingOrder?.customerId || ''}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const selected = editingOrderCandidates.find((c) => c.id === id);
-                    setEditingOrder((prev) => prev ? ({
-                      ...prev,
-                      customerId: id,
-                      customerName: selected?.orderName || '',
-                      customerPhone: selected?.phone || '',
-                      customerCity: selected?.city || '',
-                    }) : prev);
-                  }}
-                >
-                  <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
-                  {editingOrderCandidates.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>{tx('客户ORDER_NAME', 'Customer ORDER_NAME')}</Label>
-              <Input
-                value={editingOrder?.customerName || ''}
-                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerName: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('客户PHONE', 'Customer PHONE')}</Label>
-              <Input
-                value={editingOrder?.customerPhone || ''}
-                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerPhone: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('客户CITY', 'Customer CITY')}</Label>
-              <Input
-                value={editingOrder?.customerCity || ''}
-                onChange={(e) => editingOrder && setEditingOrder({ ...editingOrder, customerCity: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowOrderDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleUpdateOrder} disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {tx('保存', 'Save')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditOrderDialog
+        open={showOrderDialog}
+        submitting={submitting}
+        error={orderFormError}
+        order={editingOrder}
+        candidates={editingOrderCandidates}
+        tx={tx}
+        onOpenChange={handleOrderDialogOpenChange}
+        onOrderChange={setEditingOrder}
+        onMarkChange={handleEditingOrderMarkChange}
+        onCandidateSelect={selectEditingOrderCustomer}
+        onSubmit={handleUpdateOrder}
+      />
 
-      {/* 转移余额对话框 */}
-      <Dialog open={showTransferDialog} onOpenChange={(open) => { setShowTransferDialog(open); if (!open) { setTransferFromOrder(null); setTransferToOrderNo(''); setTransferAmount(''); setTransferError(''); }}}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tx('转移多付余额', 'Transfer Overpayment')}</DialogTitle>
-            <DialogDescription>
-              {tx('将订单', 'Transfer overpayment from order')} <strong>{transferFromOrder?.orderNo}</strong> {tx('的多付金额转移到其他订单', 'to another order')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {transferError && (
-              <Alert variant="destructive">
-                <AlertDescription>{transferError}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label>{tx('当前多付金额', 'Current overpayment')}</Label>
-              <div className="text-green-600 font-bold text-lg">
-                ${Math.abs(transferFromOrder?.balance || 0).toFixed(2)}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('目标订单号', 'Target order number')}</Label>
-              <Input 
-                placeholder={tx('输入目标订单号', 'Enter target order number')}
-                value={transferToOrderNo} 
-                onChange={(e) => setTransferToOrderNo(e.target.value)} 
-              />
-              <p className="text-xs text-gray-500">{tx('如果订单不存在，将创建到 Un_Associated 账单', 'If target order does not exist, it will be created under Un_Associated invoice.')}</p>
-            </div>
-            <div className="space-y-2">
-              <Label>{tx('转移金额', 'Transfer amount')}</Label>
-              <Input 
-                type="number"
-                step="0.01"
-                value={transferAmount} 
-                onChange={(e) => setTransferAmount(e.target.value)} 
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowTransferDialog(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleTransferBalance} disabled={submitting}>
-              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {tx('确认转移', 'Confirm Transfer')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TransferBalanceDialog
+        open={showTransferDialog}
+        submitting={submitting}
+        error={transferError}
+        transferFromOrder={transferFromOrder}
+        transferToOrderNo={transferToOrderNo}
+        transferAmount={transferAmount}
+        tx={tx}
+        onOpenChange={handleTransferDialogOpenChange}
+        onTransferToOrderNoChange={setTransferToOrderNo}
+        onTransferAmountChange={setTransferAmount}
+        onSubmit={handleTransferBalance}
+      />
 
-      <Dialog open={orderHistoryOpen} onOpenChange={setOrderHistoryOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{tx('ORDER 付款记录', 'ORDER Payment Records')}</DialogTitle>
-            <DialogDescription>{orderHistoryTitle}</DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[60vh] overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>
-                  <TableHead>{tx('金额', 'Amount')}</TableHead>
-                  <TableHead>{tx('状态', 'Status')}</TableHead>
-                  <TableHead>{tx('日期', 'Date')}</TableHead>
-                  <TableHead>{tx('创建时间', 'Created At')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orderHistoryRows.map((row) => (
-                  <TableRow key={String(row.id)}>
-                    <TableCell>{(row.receiptNo as string) || '-'}</TableCell>
-                    <TableCell>${Number(row.usd || 0).toFixed(2)}</TableCell>
-                    <TableCell><Badge>{String(row.status || '-')}</Badge></TableCell>
-                    <TableCell>{row.date ? new Date(String(row.date)).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : '-'}</TableCell>
-                  </TableRow>
-                ))}
-                {orderHistoryRows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-gray-500">{tx('暂无付款记录', 'No payment records')}</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <OrderHistoryDialog
+        open={orderHistoryOpen}
+        title={orderHistoryTitle}
+        rows={orderHistoryRows}
+        tx={tx}
+        onOpenChange={setOrderHistoryOpen}
+      />
 
       <ImportResultDialog
         open={showInvoiceImportIssues}
@@ -1517,92 +1324,16 @@ export function InvoiceManager() {
         retryDisabled={invoiceImportTable.latestFailedRows.length === 0}
       />
 
-      <Dialog open={showRematchDialog} onOpenChange={setShowRematchDialog}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{tx('冲突匹配处理', 'Conflict Match Resolution')}</DialogTitle>
-            <DialogDescription>{tx('逐组选择保留订单与处理方式，再执行刷新匹配。', 'Choose keeper and strategy for each group before applying rematch.')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-auto">
-            {rematchGroups.map((group) => (
-              <Card key={group.groupId}>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {group.groupType === 'exact' ? tx('同订单号冲突', 'Exact order conflict') : tx('同客组冲突', 'Customer-group conflict')} - {group.groupKey}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <select
-                      className="border rounded-md px-3 py-2 text-sm"
-                      value={rematchSelections[group.groupId]?.keepOrderId || ''}
-                      onChange={(e) => setRematchSelections((prev) => ({
-                        ...prev,
-                        [group.groupId]: {
-                          ...(prev[group.groupId] || { mode: 'merge', orderIds: group.orders.map((o) => o.id) }),
-                          keepOrderId: e.target.value,
-                        },
-                      }))}
-                    >
-                      {group.orders.map((order) => (
-                        <option key={order.id} value={order.id}>
-                          {order.invNo} / {order.orderNo} / ${order.amount.toFixed(2)}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="border rounded-md px-3 py-2 text-sm"
-                      value={rematchSelections[group.groupId]?.mode || 'merge'}
-                      onChange={(e) => setRematchSelections((prev) => ({
-                        ...prev,
-                        [group.groupId]: {
-                          ...(prev[group.groupId] || { keepOrderId: group.orders[0]?.id || '', orderIds: group.orders.map((o) => o.id) }),
-                          mode: e.target.value as 'keep' | 'merge',
-                        },
-                      }))}
-                    >
-                      <option value="merge">{tx('累加金额并删除其余', 'Merge amounts and delete others')}</option>
-                      <option value="keep">{tx('仅保留主订单并删除其余', 'Keep selected order and delete others')}</option>
-                    </select>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>INV</TableHead>
-                        <TableHead>ORDER</TableHead>
-                        <TableHead>{tx('金额', 'Amount')}</TableHead>
-                        <TableHead>{tx('余额', 'Balance')}</TableHead>
-                        <TableHead>{tx('收据数', 'Receipts')}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {group.orders.map((order) => (
-                        <TableRow key={order.id}>
-                          <TableCell>{order.invNo}</TableCell>
-                          <TableCell>{order.orderNo}</TableCell>
-                          <TableCell>${order.amount.toFixed(2)}</TableCell>
-                          <TableCell>${order.orderBalance.toFixed(2)}</TableCell>
-                          <TableCell>{order.receiptCount}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            ))}
-            {rematchGroups.length === 0 && (
-              <div className="text-sm text-gray-500">{tx('未发现冲突组，可直接执行自动刷新匹配。', 'No conflict groups found; automatic rematch will still run.')}</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRematchDialog(false)}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleRematchApply} disabled={applyingRematch}>
-              {applyingRematch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {tx('确认执行', 'Apply')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RematchDialog
+        open={showRematchDialog}
+        groups={rematchGroups}
+        selections={rematchSelections}
+        applying={applyingRematch}
+        tx={tx}
+        onOpenChange={setShowRematchDialog}
+        onSelectionChange={updateRematchSelection}
+        onApply={handleRematchApply}
+      />
     </div>
   );
 }

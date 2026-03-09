@@ -18,6 +18,7 @@
 - `examples/websocket` 仅作历史示例，已排除出主工程类型检查
 - Prisma 增加了 `20260309153500_schema_sync_for_fresh_deploy`，用于保证全新数据库部署与当前 schema 一致
 - `20260309153500_schema_sync_for_fresh_deploy` 现已兼容已有历史库，重复字段/索引/外键会自动跳过，避免容器启动时迁移失败
+- 前端 workspace 已完成第一阶段模块化：`src/app/page.tsx` 只保留鉴权初始化与视图路由，API client / import-result hooks / 各业务模块视图已拆到 `src/components/workspace/{api,hooks,chrome,modules}`
 
 ## 本地运行
 

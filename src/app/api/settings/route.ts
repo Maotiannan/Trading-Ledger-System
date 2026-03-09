@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { UserRole } from '@prisma/client';
+import { DeletionTargetType, UserRole } from '@prisma/client';
 import { withAuth } from '@/lib/route-auth';
 import { db } from '@/lib/db';
 import { editableSystemSettingKeys, getSystemSettings, invalidateSystemSettingsCache } from '@/lib/system-settings';
@@ -184,7 +184,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }),
       db.swift.findMany({
         where: { createdBy: { in: branchUserIds } },
-        select: { id: true },
+        select: { id: true, detailId: true },
       }),
       db.customer.findMany({
         where: {
@@ -289,9 +289,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             OR: [
               { requestedBy: { in: branchUserIds } },
               { approvedBy: { in: branchUserIds } },
-              ...(selectedReceiptIds.length > 0 ? [{ targetType: 'RECEIPT', targetId: { in: selectedReceiptIds } }] : []),
-              ...(selectedDetailIds.length > 0 ? [{ targetType: 'DETAIL', targetId: { in: selectedDetailIds } }] : []),
-              ...(selectedSwiftIds.length > 0 ? [{ targetType: 'SWIFT', targetId: { in: selectedSwiftIds } }] : []),
+              ...(selectedReceiptIds.length > 0 ? [{ targetType: DeletionTargetType.RECEIPT, targetId: { in: selectedReceiptIds } }] : []),
+              ...(selectedDetailIds.length > 0 ? [{ targetType: DeletionTargetType.DETAIL, targetId: { in: selectedDetailIds } }] : []),
+              ...(selectedSwiftIds.length > 0 ? [{ targetType: DeletionTargetType.SWIFT, targetId: { in: selectedSwiftIds } }] : []),
             ],
           },
         });

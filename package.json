@@ -11,6 +11,7 @@
     "test:watch": "jest --watch",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:api:isolated": "bash scripts/test-api-isolated.sh",
     "i18n:audit": "bash scripts/i18n-audit.sh",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",

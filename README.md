@@ -10,6 +10,60 @@
 - **状态管理**: Zustand
 - **AI能力**: VLM图像识别（收据OCR）
 
+## 当前工程约束
+
+- 构建现在会执行真实 TypeScript 校验，不再忽略类型错误
+- `/api/report` 已按当前用户层级做数据可见范围导出
+- `/api/upload-image` 已要求登录并校验当前用户是否有权访问对应业务图片
+- `examples/websocket` 仅作历史示例，已排除出主工程类型检查
+- Prisma 增加了 `20260309153500_schema_sync_for_fresh_deploy`，用于保证全新数据库部署与当前 schema 一致
+
+## 本地运行
+
+1. 复制 `.env.example` 为 `.env`
+2. 配置 `DATABASE_URL` 与 `SESSION_SECRET`
+3. 如需 HTTPS，配置：
+   - `CADDY_HOST`: 生产环境填真实域名
+   - `CADDY_EMAIL`: 可选，留给 Caddy 申请证书时使用
+4. 执行数据库迁移：
+
+```bash
+npx prisma migrate deploy
+```
+
+5. 启动开发环境：
+
+```bash
+npm run dev
+```
+
+## Docker / HTTPS
+
+- `docker-compose.yml` 现在默认通过 Caddy 暴露 `80/443`
+- `Caddyfile` 会基于 `CADDY_HOST` 自动启用 HTTPS
+- 本地默认 `CADDY_HOST=localhost`
+- 生产环境要获得浏览器小锁，请把 `CADDY_HOST` 设置为真实可访问域名
+
+## 自动化测试
+
+- 单元测试：
+
+```bash
+npm test -- --runInBand
+```
+
+- 隔离 API 测试：
+
+```bash
+npm run test:api:isolated
+```
+
+说明：
+- 该脚本会启动一套独立的 MariaDB 测试容器
+- 使用独立测试库 `trading_ledger_test`
+- 运行结束后自动删除测试容器、测试卷、临时上传目录和 Cookie/日志文件
+- 不会碰现有业务数据库
+
 ---
 
 ## 系统概述

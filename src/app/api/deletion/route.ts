@@ -311,7 +311,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
               });
               if (!order) continue;
               if (order.invoice.invNo !== 'Un_Associated') continue;
-              if (order.amount !== 0) continue;
+              if (Number(order.amount) !== 0) continue;
               if (order._count.receipts > 0) continue;
 
               await tx.order.delete({ where: { id: orderId } });

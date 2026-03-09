@@ -293,7 +293,10 @@ export async function getAvailableReceipts(): Promise<{
     }
   });
 
-  return receipts;
+  return receipts.map((receipt) => ({
+    ...receipt,
+    usd: Number(receipt.usd),
+  }));
 }
 
 // 查找匹配的RECEIPT
@@ -347,8 +350,8 @@ export async function findMatchingReceipt(
 
   // 同客组内优先金额最接近，若并列取最早创建
   matchedCandidates.sort((a, b) => {
-    const diffA = Math.abs(a.usd - amount);
-    const diffB = Math.abs(b.usd - amount);
+    const diffA = Math.abs(Number(a.usd) - amount);
+    const diffB = Math.abs(Number(b.usd) - amount);
     if (diffA !== diffB) return diffA - diffB;
     return a.createdAt.getTime() - b.createdAt.getTime();
   });

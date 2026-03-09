@@ -425,7 +425,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       });
       sheet.getRow(1).font = { bold: true };
       const buffer = await workbook.xlsx.writeBuffer();
-      return new NextResponse(Buffer.from(buffer), {
+      return new NextResponse(new Blob([buffer]), {
         status: 200,
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -616,7 +616,8 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
 
       const workbook = new ExcelJS.Workbook();
       const arrayBuffer = await file.arrayBuffer();
-      await workbook.xlsx.load(Buffer.from(arrayBuffer));
+      const workbookBuffer = Buffer.from(arrayBuffer) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+      await workbook.xlsx.load(workbookBuffer);
       const sheet = workbook.worksheets[0];
       if (!sheet) {
         return NextResponse.json({ success: false, error: 'Excel为空' }, { status: 400 });
@@ -1074,8 +1075,8 @@ async function listRematchConflictGroupsByScope(ownerIds: string[]): Promise<Rem
         invoiceId: row.invoice.id,
         invNo: row.invoice.invNo,
         orderNo: row.orderNo,
-        amount: row.amount,
-        orderBalance: row.orderBalance,
+        amount: Number(row.amount),
+        orderBalance: Number(row.orderBalance),
         receiptCount: row._count.receipts,
         createdAt: row.createdAt,
       })),
@@ -1096,8 +1097,8 @@ async function listRematchConflictGroupsByScope(ownerIds: string[]): Promise<Rem
         invoiceId: row.invoice.id,
         invNo: row.invoice.invNo,
         orderNo: row.orderNo,
-        amount: row.amount,
-        orderBalance: row.orderBalance,
+        amount: Number(row.amount),
+        orderBalance: Number(row.orderBalance),
         receiptCount: row._count.receipts,
         createdAt: row.createdAt,
       })),
@@ -1262,7 +1263,7 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
       const incomingOrderNoRaw = typeof orderNo === 'string' ? orderNo.trim() : order.orderNo;
       const incomingOrderNo = canonicalizeOrderNo(incomingOrderNoRaw);
-      const incomingAmount = amount !== undefined ? Number(amount) : order.amount;
+      const incomingAmount = amount !== undefined ? Number(amount) : Number(order.amount);
       if (!incomingOrderNo) {
         return NextResponse.json({ success: false, error: '客户单号不能为空' }, { status: 400 });
       }

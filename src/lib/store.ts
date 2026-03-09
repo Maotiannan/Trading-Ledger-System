@@ -56,6 +56,7 @@ export interface Receipt {
   needsCustomerFix?: boolean;
   status: ReceiptStatus;
   imageUrl: string | null;
+  imageName?: string | null;
   isDeposit: boolean;
   isMerged: boolean;
   note: string | null;

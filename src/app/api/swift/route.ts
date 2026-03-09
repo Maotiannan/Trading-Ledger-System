@@ -171,7 +171,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
 
       // 验证金额
-      const validation = validateAmountTolerance(detail.totalAmount, amount);
+      const validation = validateAmountTolerance(Number(detail.totalAmount), amount);
 
       // 创建SWIFT
       const swift = await db.swift.create({

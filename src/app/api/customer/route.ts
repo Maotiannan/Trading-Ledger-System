@@ -496,7 +496,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     });
     sheet.getRow(1).font = { bold: true };
     const buffer = await workbook.xlsx.writeBuffer();
-    return new NextResponse(Buffer.from(buffer), {
+    return new NextResponse(new Blob([buffer]), {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -565,7 +565,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     const workbook = new ExcelJS.Workbook();
     const arrayBuffer = await file.arrayBuffer();
-    await workbook.xlsx.load(Buffer.from(arrayBuffer));
+    const workbookBuffer = Buffer.from(arrayBuffer) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+    await workbook.xlsx.load(workbookBuffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) {
       return NextResponse.json({ success: false, error: 'Excel为空' }, { status: 400 });

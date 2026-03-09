@@ -3,19 +3,30 @@ import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { withAuth } from '@/lib/route-auth';
 import { db } from '@/lib/db';
+import { buildDetailVisibilityWhere, buildInvoiceVisibilityWhere, buildOrderVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds } from '@/lib/resource-visibility';
+import type { CurrentUser } from '@/lib/request-auth';
 
 function buildFileName(ext: 'xlsx' | 'pdf'): string {
   const date = new Date().toISOString().slice(0, 10);
   return `trading-ledger-report-${date}.${ext}`;
 }
 
-async function exportExcel() {
+async function exportExcel(currentUser: CurrentUser) {
+  const ownerIds = await getOwnerVisibleIds(currentUser);
+  const invoiceWhere = buildInvoiceVisibilityWhere(ownerIds);
+  const orderWhere = buildOrderVisibilityWhere(ownerIds);
+  const receiptWhere = buildReceiptVisibilityWhere(ownerIds);
+  const detailWhere = buildDetailVisibilityWhere(ownerIds);
+  const swiftWhere = buildSwiftVisibilityWhere(ownerIds);
   const [invoices, receipts, details, swifts] = await Promise.all([
     db.invoice.findMany({
+      where: invoiceWhere,
       include: {
         orders: {
+          where: orderWhere,
           include: {
             receipts: {
+              where: receiptWhere,
               select: { usd: true },
             },
           },
@@ -23,9 +34,9 @@ async function exportExcel() {
       },
       orderBy: { createdAt: 'desc' },
     }),
-    db.receipt.findMany({ orderBy: { createdAt: 'desc' } }),
-    db.detail.findMany({ orderBy: { createdAt: 'desc' } }),
-    db.swift.findMany({ orderBy: { createdAt: 'desc' } }),
+    db.receipt.findMany({ where: receiptWhere, orderBy: { createdAt: 'desc' } }),
+    db.detail.findMany({ where: detailWhere, orderBy: { createdAt: 'desc' } }),
+    db.swift.findMany({ where: swiftWhere, orderBy: { createdAt: 'desc' } }),
   ]);
 
   const workbook = new ExcelJS.Workbook();
@@ -66,15 +77,21 @@ async function exportExcel() {
   return Buffer.from(buffer);
 }
 
-async function exportPdf() {
+async function exportPdf(currentUser: CurrentUser) {
+  const ownerIds = await getOwnerVisibleIds(currentUser);
+  const invoiceWhere = buildInvoiceVisibilityWhere(ownerIds);
+  const receiptWhere = buildReceiptVisibilityWhere(ownerIds);
+  const detailWhere = buildDetailVisibilityWhere(ownerIds);
+  const swiftWhere = buildSwiftVisibilityWhere(ownerIds);
   const [invoiceCount, receiptCount, detailCount, swiftCount] = await Promise.all([
-    db.invoice.count(),
-    db.receipt.count(),
-    db.detail.count(),
-    db.swift.count(),
+    db.invoice.count({ where: invoiceWhere }),
+    db.receipt.count({ where: receiptWhere }),
+    db.detail.count({ where: detailWhere }),
+    db.swift.count({ where: swiftWhere }),
   ]);
 
   const recentReceipts = await db.receipt.findMany({
+    where: receiptWhere,
     take: 10,
     orderBy: { createdAt: 'desc' },
     select: { orderNo: true, usd: true, status: true, createdAt: true },
@@ -122,7 +139,7 @@ async function exportPdf() {
   return Buffer.from(await pdfDoc.save());
 }
 
-export const GET = withAuth(async (request: NextRequest) => {
+export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const { searchParams } = new URL(request.url);
   const format = searchParams.get('format');
 
@@ -131,7 +148,7 @@ export const GET = withAuth(async (request: NextRequest) => {
   }
 
   try {
-    const fileBuffer = format === 'excel' ? await exportExcel() : await exportPdf();
+    const fileBuffer = format === 'excel' ? await exportExcel(currentUser) : await exportPdf(currentUser);
     const contentType =
       format === 'excel'
         ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

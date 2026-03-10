@@ -850,6 +850,10 @@ src/
 - 🧩 客户模块继续收口导入工作区：顶部工具区抽为 `customer-toolbar.tsx`，导入问题行列定义抽为 `use-customer-import-columns.tsx`，页面层不再直接维护大段列配置 JSX。
 - 📉 客户主模块继续瘦身：`customer-manager.tsx` 从 `347` 行进一步压缩到 `236` 行，当前主要剩查询加载、格式化辅助和页面编排。
 
+### v1.0.49 (2026-03-10)
+- 🧩 用户管理模块完成首轮拆分：`user-manager.tsx` 拆出 `components/ + hooks/ + types.ts`，创建用户对话框、用户列表、本地表单态、远程动作不再堆在单文件内。
+- 📉 用户主模块显著瘦身：`user-manager.tsx` 收敛到页面编排层，后续只保留数据加载、权限衍生与组件组装。
+
 ### v1.0.47 (2026-03-10)
 - 🪝 账单模块继续抽远程动作与页面壳：新增 `use-invoice-actions.ts`，并将顶部工具区、搜索卡片拆为独立组件，进一步收口创建/更新/删除/加单与模板下载逻辑。
 - 📉 账单主模块继续瘦身：`invoice-manager.tsx` 从 `533` 行进一步压缩到 `329` 行，页面层更接近纯编排。
@@ -956,3 +960,39 @@ src/
 
 所有安全修复、功能增强、测试计划都在那里统一维护。  
 建议每周查看并更新 todolist.md，保持开发节奏透明。
+
+## 🧱 前端模块拆分规则与预留接口
+
+后续继续拆前端时，统一按下面这套边界执行，避免重新长回巨石文件。
+
+### 1. 页面层只做编排，不做细节实现
+- `src/app/(workspace)/**/page.tsx` 只负责路由入口、权限门禁、layout 挂载。
+- `*-manager.tsx` 只负责数据加载、权限衍生、hook 组合、组件拼装。
+- 页面层不要再写大段表格列定义、导入状态机、表单重置逻辑、网络请求分支。
+
+### 2. 每个业务模块固定目录结构
+- `components/`：列表、工具栏、卡片、对话框、预览器等纯视图块。
+- `hooks/`：
+  - `use-*-forms` 负责本地表单态、展开态、预览态、默认值回填。
+  - `use-*-actions` 负责远程请求、提交态、成功/失败后的刷新联动。
+  - `use-*-import` / `use-*-columns` 负责导入结果状态机、问题行列配置与重试编排。
+- `types.ts`：收口本模块公共类型，避免匿名对象散落在页面和组件之间。
+
+### 3. 共享能力必须留在 workspace 公共层
+- 导入结果弹窗、分页筛选、API client、UI 文案、多语言工具统一放在 `src/components/workspace/{api,hooks,components,chrome,shared}`。
+- 同类模块如果出现第二次复制，必须回抽到 shared，而不是在模块目录里再复制一份。
+
+### 4. 后续新增功能的预留点
+- 工具栏新增动作：优先加到 `components/*-toolbar.tsx`，不要把按钮直接塞回 manager。
+- 导入问题行新增列：优先扩展 `use-*-import-columns.tsx` 或对应 import hook。
+- 新增弹窗：先落 `components/`，再由 manager 负责挂载，不要在 manager 里直接写完整弹窗 JSX。
+- 新增网络动作：统一补到 `use-*-actions.ts`，避免页面层堆叠 `fetch/apiCall`。
+- 新增格式化/搜索辅助：优先放模块内 helper/hook；若跨模块复用，再回抽 shared。
+
+### 5. 当前拆分进度与剩余目标
+- 已完成首轮模块化：`invoices / receipts / details / swifts / customers / settings / users`。
+- 低优先级轻量模块：`deletions / dashboard` 目前体量可控，暂不强拆。
+- 后续继续清理方向：
+  - 账单模块剩余少量格式化与展开态辅助可继续下沉。
+  - 客户模块剩余少量格式化辅助可继续收口为 helper/hook。
+  - 若后续新增复杂工作区，先复用现有 import-result 架构，再决定是否抽新的 shared 组件。

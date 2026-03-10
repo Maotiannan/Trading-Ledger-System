@@ -5,8 +5,7 @@ import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   CustomerCandidate,
   apiCall,
@@ -29,6 +28,7 @@ import { useImportResultTable } from '@/components/workspace/hooks';
 import {
   CreateInvoiceDialog,
   EditOrderDialog,
+  InvoiceList,
   OrderHistoryDialog,
   RematchDialog,
   TransferBalanceDialog,
@@ -40,10 +40,7 @@ import type {
   RematchSelection,
   TransferFromOrder,
 } from './types';
-import {
-  Loader2, Trash2, Plus, Upload, ArrowRight, RefreshCw,
-  ChevronDown, ChevronRight, Pencil
-} from 'lucide-react';
+import { Loader2, Plus, Upload, RefreshCw } from 'lucide-react';
 
 export function InvoiceManager() {
   const tx = useUiText();
@@ -918,336 +915,112 @@ export function InvoiceManager() {
         </CardContent>
       </Card>
 
-      <div className="space-y-4">
-        {invoices.map((invoice) => (
-          <Card key={invoice.id}>
-            <CardHeader 
-              className="cursor-pointer hover:bg-gray-50"
-              onClick={() => toggleInvoice(invoice.id)}
-            >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                  {expandedInvoices.has(invoice.id) ? (
-                    <ChevronDown className="h-5 w-5 text-gray-500" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-gray-500" />
-                  )}
-                  <div>
-                    <CardTitle className="text-lg">{invoice.invNo}</CardTitle>
-                    <CardDescription>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span>{tx(`${invoice.orders.length} 个订单`, `${invoice.orders.length} orders`)}</span>
-                        {editingInvoiceDateId === invoice.id ? (
-                          <div
-                            className="flex flex-wrap items-center gap-2"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <span>{tx('发货', 'SHIP')}</span>
-                            <Input
-                              type="date"
-                              value={editingInvoiceShipDate}
-                              onChange={(event) => setEditingInvoiceShipDate(event.target.value)}
-                              className="h-8 w-[150px]"
-                            />
-                            <span>{tx('放货', 'RELEASE')}</span>
-                            <Input
-                              type="date"
-                              value={editingInvoiceReleaseDate}
-                              onChange={(event) => setEditingInvoiceReleaseDate(event.target.value)}
-                              className="h-8 w-[150px]"
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingInvoiceShipDate('');
-                                setEditingInvoiceReleaseDate('');
-                              }}
-                            >
-                              {tx('清空', 'Clear')}
-                            </Button>
-                            <Button size="sm" onClick={saveInvoiceDates} disabled={invoiceDateSaving}>
-                              {invoiceDateSaving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
-                              {tx('保存', 'Save')}
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={cancelInvoiceDateEditor} disabled={invoiceDateSaving}>
-                              {tx('取消', 'Cancel')}
-                            </Button>
-                          </div>
-                        ) : (
-                          <>
-                            <span>{`${tx('发货', 'SHIP')}: ${invoice.shipDate ? new Date(invoice.shipDate).toLocaleDateString() : '-'}`}</span>
-                            <span>{`${tx('放货', 'RELEASE')}: ${invoice.releaseDate ? new Date(invoice.releaseDate).toLocaleDateString() : '-'}`}</span>
-                            {isManager && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openInvoiceDateEditor(invoice.id, invoice.shipDate, invoice.releaseDate);
-                                }}
-                                className="h-7 px-2"
-                              >
-                                <Pencil className="h-3.5 w-3.5 mr-1" />
-                                {tx('编辑日期', 'Edit Dates')}
-                              </Button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-right">
-                    <div className="text-gray-500">{tx('总金额', 'Total Amount')}</div>
-                    <div className="font-semibold">${invoice.invAmount.toFixed(2)}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-gray-500">{tx('未收金额', 'Outstanding')}</div>
-                    <div className={`font-semibold ${invoice.invBalance > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                      ${invoice.invBalance.toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            
-            {expandedInvoices.has(invoice.id) && (
-              <CardContent className="border-t pt-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-medium">{tx('订单明细', 'Order Details')}</h4>
-                  {isManager && (
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => setAddingOrderToInvoice(invoice.id)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      {tx('添加订单', 'Add Order')}
-                    </Button>
-                  )}
-                </div>
-                
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{tx('客户单号 (ORDER)', 'Order No. (ORDER)')}</TableHead>
-                      <TableHead>MARK</TableHead>
-                      <TableHead>{tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}</TableHead>
-                      <TableHead>{tx('未收金额', 'Outstanding')}</TableHead>
-                      {isManager && <TableHead className="text-right">{tx('操作', 'Actions')}</TableHead>}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoice.orders.map((order) => {
-                      return (
-                        <TableRow key={order.id}>
-                          <TableCell className="font-medium">
-                            <button
-                              type="button"
-                              className={`underline ${order.needsCustomerFix ? 'text-red-600' : 'text-blue-600'}`}
-                              onClick={() => openOrderHistory(order.id, order.orderNo)}
-                            >
-                              {order.orderNo}
-                            </button>
-                            {order.needsCustomerFix && (
-                              <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {order.customerMark || '-'}
-                          </TableCell>
-                          <TableCell>
-                            ${order.amount.toFixed(2)}
-                          </TableCell>
-                          <TableCell className={order.orderBalance > 0 ? 'text-red-500' : 'text-green-500'}>
-                            ${Math.abs(order.orderBalance).toFixed(2)}
-                            {order.orderBalance < 0 && <span className="ml-1 text-xs">{tx('(多付)', '(Overpaid)')}</span>}
-                          </TableCell>
-                          {isManager && (
-                            <TableCell className="text-right">
-                              {order.orderBalance < 0 && (
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setTransferFromOrder({
-                                      id: order.id,
-                                      orderNo: order.orderNo,
-                                      balance: order.orderBalance
-                                    });
-                                    setTransferAmount(Math.abs(order.orderBalance).toFixed(2));
-                                    setShowTransferDialog(true);
-                                  }}
-                                  title={tx('转移多付金额', 'Transfer Overpayment')}
-                                  className="text-blue-600 hover:text-blue-700"
-                                >
-                                  <ArrowRight className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingOrder({
-                                    id: order.id,
-                                    orderNo: order.orderNo,
-                                    amount: order.amount,
-                                    invoiceId: invoice.id,
-                                    customerMark: order.customerMark || '',
-                                    customerName: order.customerName || '',
-                                    customerPhone: order.customerPhone || '',
-                                    customerCity: order.customerCity || '',
-                                    customerId: '',
-                                  });
-                                  setEditingOrderCandidates([]);
-                                  if (order.customerMark) {
-                                    loadCustomerCandidates(
-                                      order.customerMark,
-                                      setEditingOrderCandidates,
-                                      undefined,
-                                      undefined,
-                                      undefined,
-                                      undefined
-                                    );
-                                  }
-                                  setShowOrderDialog(true);
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="ghost"
-                                onClick={() => handleDeleteOrder(order.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      );
-                    })}
-                    {invoice.orders.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={isManager ? 5 : 4} className="text-center py-4 text-gray-500">
-                          {tx('暂无订单', 'No orders')}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-                
-                {/* 添加订单表单 */}
-                {addingOrderToInvoice === invoice.id && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <h5 className="font-medium mb-3">{tx('添加新订单', 'Add New Order')}</h5>
-                    {addError && (
-                      <Alert variant="destructive" className="mb-3">
-                        <AlertDescription>{addError}</AlertDescription>
-                      </Alert>
-                    )}
-                    <div className="flex gap-3">
-                      <Input
-                        placeholder={tx('客户单号', 'Order number')}
-                        value={newOrderNo}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setNewOrderNo(value);
-                          if (value.trim()) {
-                            void lookupCustomerByOrderNoGroup(value).then((matched) => {
-                              if (!matched) return;
-                              setNewOrderCustomerMark(matched.mark);
-                              setNewOrderCustomerName(matched.name);
-                              setNewOrderCustomerId(matched.customerId);
-                              loadCustomerCandidates(
-                                matched.mark,
-                                setNewOrderCustomerCandidates,
-                                setNewOrderCustomerName,
-                                setNewOrderCustomerId
-                              );
-                            });
-                          }
-                        }}
-                        className="flex-1"
-                      />
-                      <Input
-                        placeholder={tx('金额', 'Amount')}
-                        type="number"
-                        value={newOrderAmount}
-                        onChange={(e) => setNewOrderAmount(e.target.value)}
-                        className="w-32"
-                      />
-                      <Input
-                        placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
-                        value={newOrderCustomerMark}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setNewOrderCustomerMark(value);
-                          setNewOrderCustomerId('');
-                          setNewOrderCustomerName('');
-                          loadCustomerCandidates(
-                            value,
-                            setNewOrderCustomerCandidates,
-                            setNewOrderCustomerName,
-                            setNewOrderCustomerId
-                          );
-                        }}
-                        className="w-44"
-                      />
-                      {newOrderCustomerCandidates.length > 1 && (
-                        <select
-                          className="border rounded-md px-2 py-2 text-sm"
-                          value={newOrderCustomerId}
-                          onChange={(e) => {
-                            const id = e.target.value;
-                            setNewOrderCustomerId(id);
-                            const selected = newOrderCustomerCandidates.find((c) => c.id === id);
-                            setNewOrderCustomerName(selected?.orderName || '');
-                          }}
-                        >
-                          <option value="">{tx('选择客户', 'Select customer')}</option>
-                          {newOrderCustomerCandidates.map((candidate) => (
-                            <option key={candidate.id} value={candidate.id}>{candidate.mark}/{candidate.orderName}</option>
-                          ))}
-                        </select>
-                      )}
-                      <Button onClick={handleAddOrder} disabled={submitting}>
-                        {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-                        {tx('添加', 'Add')}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setAddingOrderToInvoice(null);
-                          setNewOrderNo('');
-                          setNewOrderAmount('');
-                          setNewOrderCustomerMark('');
-                          setNewOrderCustomerName('');
-                          setNewOrderCustomerId('');
-                          setNewOrderCustomerCandidates([]);
-                          setAddError('');
-                        }}
-                      >
-                        {tx('取消', 'Cancel')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            )}
-          </Card>
-        ))}
-        
-        {invoices.length === 0 && (
-          <Card>
-            <CardContent className="py-12 text-center text-gray-500">
-              {tx('暂无账单', 'No invoices')}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      <InvoiceList
+        invoices={invoices}
+        expandedInvoices={expandedInvoices}
+        isManager={isManager}
+        addingOrderToInvoice={addingOrderToInvoice}
+        newOrderNo={newOrderNo}
+        newOrderAmount={newOrderAmount}
+        newOrderCustomerMark={newOrderCustomerMark}
+        newOrderCustomerId={newOrderCustomerId}
+        newOrderCustomerCandidates={newOrderCustomerCandidates}
+        addError={addError}
+        editingInvoiceDateId={editingInvoiceDateId}
+        editingInvoiceShipDate={editingInvoiceShipDate}
+        editingInvoiceReleaseDate={editingInvoiceReleaseDate}
+        invoiceDateSaving={invoiceDateSaving}
+        submitting={submitting}
+        tx={tx}
+        onToggleInvoice={toggleInvoice}
+        onOpenInvoiceDateEditor={openInvoiceDateEditor}
+        onEditingInvoiceShipDateChange={setEditingInvoiceShipDate}
+        onEditingInvoiceReleaseDateChange={setEditingInvoiceReleaseDate}
+        onClearInvoiceDates={() => {
+          setEditingInvoiceShipDate('');
+          setEditingInvoiceReleaseDate('');
+        }}
+        onSaveInvoiceDates={saveInvoiceDates}
+        onCancelInvoiceDateEditor={cancelInvoiceDateEditor}
+        onStartAddOrder={setAddingOrderToInvoice}
+        onNewOrderNoChange={(value) => {
+          setNewOrderNo(value);
+          if (value.trim()) {
+            void lookupCustomerByOrderNoGroup(value).then((matched) => {
+              if (!matched) return;
+              setNewOrderCustomerMark(matched.mark);
+              setNewOrderCustomerName(matched.name);
+              setNewOrderCustomerId(matched.customerId);
+              loadCustomerCandidates(
+                matched.mark,
+                setNewOrderCustomerCandidates,
+                setNewOrderCustomerName,
+                setNewOrderCustomerId
+              );
+            });
+          }
+        }}
+        onNewOrderAmountChange={setNewOrderAmount}
+        onNewOrderCustomerMarkChange={(value) => {
+          setNewOrderCustomerMark(value);
+          setNewOrderCustomerId('');
+          setNewOrderCustomerName('');
+          loadCustomerCandidates(
+            value,
+            setNewOrderCustomerCandidates,
+            setNewOrderCustomerName,
+            setNewOrderCustomerId
+          );
+        }}
+        onNewOrderCustomerSelect={(customerId) => {
+          setNewOrderCustomerId(customerId);
+          const selected = newOrderCustomerCandidates.find((candidate) => candidate.id === customerId);
+          setNewOrderCustomerName(selected?.orderName || '');
+        }}
+        onSubmitAddOrder={handleAddOrder}
+        onCancelAddOrder={() => {
+          setAddingOrderToInvoice(null);
+          setNewOrderNo('');
+          setNewOrderAmount('');
+          setNewOrderCustomerMark('');
+          setNewOrderCustomerName('');
+          setNewOrderCustomerId('');
+          setNewOrderCustomerCandidates([]);
+          setAddError('');
+        }}
+        onOpenOrderHistory={openOrderHistory}
+        onOpenTransfer={(order) => {
+          setTransferFromOrder(order);
+          setTransferAmount(Math.abs(order.balance).toFixed(2));
+          setShowTransferDialog(true);
+        }}
+        onOpenEditOrder={(invoiceId, order) => {
+          setEditingOrder({
+            id: order.id,
+            orderNo: order.orderNo,
+            amount: order.amount,
+            invoiceId,
+            customerMark: order.customerMark || '',
+            customerName: order.customerName || '',
+            customerPhone: order.customerPhone || '',
+            customerCity: order.customerCity || '',
+            customerId: '',
+          });
+          setEditingOrderCandidates([]);
+          if (order.customerMark) {
+            loadCustomerCandidates(
+              order.customerMark,
+              setEditingOrderCandidates,
+              undefined,
+              undefined,
+              undefined,
+              undefined
+            );
+          }
+          setShowOrderDialog(true);
+        }}
+        onDeleteOrder={handleDeleteOrder}
+      />
 
       <CreateInvoiceDialog
         open={showDialog}

@@ -1,16 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   apiCall,
   useUiText,
-  type CustomerImportRowView,
 } from '@/components/workspace/shared';
-import { ImportResultDialog, type ImportResultDialogColumn } from '@/components/workspace/components/import-result-dialog';
+import { ImportResultDialog } from '@/components/workspace/components/import-result-dialog';
 import { useImportResultTable } from '@/components/workspace/hooks';
 import {
   CustomerFixDialog,
@@ -18,10 +15,10 @@ import {
   CustomerFormDialog,
   CustomerList,
   CustomerLongTextPreviewDialog,
+  CustomerToolbar,
 } from './components';
 import type { CustomerOwnerOption } from './types';
-import { useCustomerActions, useCustomerForms } from './hooks';
-import { Loader2, Upload, Plus } from 'lucide-react';
+import { useCustomerActions, useCustomerForms, useCustomerImportColumns } from './hooks';
 
 export function CustomerManager() {
   const tx = useUiText();
@@ -63,6 +60,7 @@ export function CustomerManager() {
     updateCustomerImportIssue,
   } = useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId });
   const customerImportTable = useImportResultTable(customerImportRows);
+  const customerImportColumns = useCustomerImportColumns(updateCustomerImportIssue);
 
   const loadCustomers = useCallback(async () => {
     const result = await apiCall(`customer${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''}`);
@@ -135,136 +133,27 @@ export function CustomerManager() {
     return `${normalized.slice(0, maxLength)}...`;
   };
 
-  const customerImportColumns: ImportResultDialogColumn<CustomerImportRowView>[] = useMemo(() => ([
-    {
-      key: 'mark',
-      header: 'MARK',
-      className: 'min-w-[180px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[180px]" value={row.mark} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'mark', e.target.value)} />
-      ),
-    },
-    {
-      key: 'orderName',
-      header: 'ORDER_NAME',
-      className: 'min-w-[220px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[220px]" value={row.orderName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'orderName', e.target.value)} />
-      ),
-    },
-    {
-      key: 'name',
-      header: 'NAME',
-      className: 'min-w-[220px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[220px]" value={row.name} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'name', e.target.value)} />
-      ),
-    },
-    {
-      key: 'phone',
-      header: 'PHONE',
-      className: 'min-w-[180px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[180px]" value={row.phone} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'phone', e.target.value)} />
-      ),
-    },
-    {
-      key: 'city',
-      header: 'CITY',
-      className: 'min-w-[160px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[160px]" value={row.city} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'city', e.target.value)} />
-      ),
-    },
-    {
-      key: 'consignee',
-      header: 'CONSIGNEE',
-      className: 'min-w-[220px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[220px]" value={row.consignee} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'consignee', e.target.value)} />
-      ),
-    },
-    {
-      key: 'companyName',
-      header: 'COMPANY_NAME',
-      className: 'min-w-[220px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[220px]" value={row.companyName} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyName', e.target.value)} />
-      ),
-    },
-    {
-      key: 'credit',
-      header: 'CREDIT',
-      className: 'min-w-[140px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[140px]" value={row.credit} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'credit', e.target.value)} />
-      ),
-    },
-    {
-      key: 'companyAddress',
-      header: 'COMPANY_ADDRESS',
-      className: 'min-w-[320px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[320px]" value={row.companyAddress} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'companyAddress', e.target.value)} />
-      ),
-    },
-    {
-      key: 'ownerEmail',
-      header: 'SALES_EMAIL',
-      className: 'min-w-[220px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[220px]" value={row.ownerEmail} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'ownerEmail', e.target.value)} />
-      ),
-    },
-  ]), [updateCustomerImportIssue]);
-
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">{tx('客户管理', 'Customer Management')}</h2>
-        <div className="flex gap-2">
-          <input
-            ref={customerImportInputRef}
-            type="file"
-            accept=".xlsx"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void handleCustomerExcelImport(file);
-            }}
-          />
-          <Input placeholder={tx('搜索 mark/order_name/name/phone/city', 'Search mark/order_name/name/phone/city')} value={search} onChange={(e) => setSearch(e.target.value)} className="w-72" />
-          {isAdmin && (
-            <select
-              className="h-10 border rounded-md px-3 text-sm bg-white"
-              value={importOwnerId}
-              onChange={(e) => setImportOwnerId(e.target.value)}
-              title={tx('批量导入默认绑定Sales', 'Default sales binding for import')}
-            >
-              {ownerOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {`${option.email} (${option.role})`}
-                </option>
-              ))}
-            </select>
-          )}
-          <Button variant="outline" onClick={downloadCustomerImportTemplate}>
-            {tx('下载客户模板', 'Download Customer Template')}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={customerImporting}
-            onClick={() => customerImportInputRef.current?.click()}
-          >
-            {customerImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            {tx('批量上传客户', 'Bulk Import Customers')}
-          </Button>
-          <Button onClick={() => { setEditing(null); resetForm(); setShowCreate(true); }}>
-            <Plus className="h-4 w-4 mr-2" />
-            {tx('新建客户', 'New Customer')}
-          </Button>
-        </div>
-      </div>
+      <CustomerToolbar
+        isAdmin={isAdmin}
+        search={search}
+        importOwnerId={importOwnerId}
+        ownerOptions={ownerOptions}
+        customerImporting={customerImporting}
+        tx={tx}
+        inputRef={customerImportInputRef}
+        onFileChange={(file) => void handleCustomerExcelImport(file)}
+        onSearchChange={setSearch}
+        onImportOwnerChange={setImportOwnerId}
+        onDownloadTemplate={downloadCustomerImportTemplate}
+        onOpenImport={() => customerImportInputRef.current?.click()}
+        onOpenCreate={() => {
+          setEditing(null);
+          resetForm();
+          setShowCreate(true);
+        }}
+      />
 
       <Tabs defaultValue="customers">
         <TabsList>

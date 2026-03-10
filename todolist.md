@@ -138,6 +138,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.48（2026-03-10）：客户模块导入工作区继续拆分；顶部工具区抽为 `customer-toolbar`，导入问题行列定义抽为 `use-customer-import-columns`，`customer-manager.tsx` 从 347 行压缩到 236 行
 - v1.0.47（2026-03-10）：账单模块新增 `use-invoice-actions`，顶部工具区与搜索卡片抽为独立组件，创建/更新/删除/加单与模板下载逻辑脱离主组件，`invoice-manager.tsx` 从 533 行压缩到 329 行
 - v1.0.46（2026-03-10）：设置模块完成首轮完整拆分；密码/分支清库/系统配置抽为独立组件，新增 `use-settings-forms` 与 `use-settings-actions`，`settings-manager.tsx` 从 479 行压缩到 139 行
 - v1.0.45（2026-03-10）：SWIFT 模块完成首轮完整拆分；列表/上传/直建/图片预览抽为独立组件，新增 `use-swift-forms` 与 `use-swift-actions`，`swift-manager.tsx` 从 541 行压缩到 202 行

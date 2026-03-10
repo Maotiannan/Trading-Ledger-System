@@ -3,3 +3,4 @@ export * from './customer-fix-queue';
 export * from './customer-form-dialog';
 export * from './customer-list';
 export * from './customer-long-text-preview-dialog';
+export * from './customer-toolbar';

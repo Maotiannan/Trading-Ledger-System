@@ -1,50 +1,32 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/lib/store';
-import { useLocale, useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
   apiCall,
   fetchCustomerCandidatesByMark,
   fetchServerDate,
   getDisplayImageUrl,
-  getErrorMessage,
-  initCustomerImportRowViews,
-  initInvoiceImportRowViews,
   lookupCustomerByOrderNoGroup,
-  mergeCustomerImportRowViews,
-  mergeInvoiceImportRowViews,
-  summarizeRowsForAlert,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
-  toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
   useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
-  type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
-  type InvoiceImportRowView,
 } from '@/components/workspace/shared';
 import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
-  ChevronDown, ChevronRight, Pencil
+  ReceiptDirectCreateDialog,
+  ReceiptImagePreviewDialog,
+  ReceiptList,
+  ReceiptUploadDialog,
+} from './components';
+import { EMPTY_RECEIPT_DIRECT_FORM } from './types';
+import {
+  Loader2, Trash2, Plus, Upload, Check
 } from 'lucide-react';
 
 export function ReceiptManager() {
@@ -65,17 +47,7 @@ export function ReceiptManager() {
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directForm, setDirectForm] = useState({
-    receiptNo: '',
-    date: '',
-    tel: '',
-    usd: '',
-    invNo: '',
-    orderNo: '',
-    payer: '',
-    customerMark: '',
-    customerName: '',
-    customerId: '',
-    isDeposit: false,
+    ...EMPTY_RECEIPT_DIRECT_FORM,
   });
   const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
   
@@ -364,19 +336,7 @@ export function ReceiptManager() {
       });
       if (result.success) {
         setShowDirectCreate(false);
-        setDirectForm({
-          receiptNo: '',
-          date: '',
-          tel: '',
-          usd: '',
-          invNo: '',
-          orderNo: '',
-          payer: '',
-          customerMark: '',
-          customerName: '',
-          customerId: '',
-          isDeposit: false,
-        });
+        setDirectForm({ ...EMPTY_RECEIPT_DIRECT_FORM });
         setDirectCustomerCandidates([]);
         loadReceipts();
       } else {
@@ -467,331 +427,103 @@ export function ReceiptManager() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>
-                <TableHead>{tx('客户单号', 'Order No.')}</TableHead>
-                <TableHead>MARK</TableHead>
-                <TableHead>{tx('付款金额', 'Amount')}</TableHead>
-                <TableHead>{tx('付款人', 'Payer')}</TableHead>
-                <TableHead>{tx('状态', 'Status')}</TableHead>
-                <TableHead>{tx('创建时间', 'Created At')}</TableHead>
-                <TableHead>{tx('操作', 'Actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedReceipts.map((receipt) => (
-                <TableRow key={receipt.id} className={receipt.needsCustomerFix ? 'bg-red-50' : ''}>
-                  <TableCell>{receipt.receiptNo || '-'}</TableCell>
-                  <TableCell>
-                    {receipt.orderNo || '-'}
-                    {receipt.needsCustomerFix && <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>}
-                  </TableCell>
-                  <TableCell>{receipt.customerMark || '-'}</TableCell>
-                  <TableCell className="font-medium">${receipt.usd.toFixed(2)}</TableCell>
-                  <TableCell>{receipt.payer || '-'}</TableCell>
-                  <TableCell>{getStatusBadge(receipt.status)}</TableCell>
-                  <TableCell>{new Date(receipt.createdAt).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {receipt.imageUrl && (
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => setViewingImage({ url: getDisplayImageUrl(receipt.imageUrl!), name: receipt.imageName || tx('收据图片', 'Receipt image') })}
-                          title={tx('查看图片', 'View image')}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {receipt.status === 'Bank_Transfer' && isManager && (
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => handleMarkReceived(receipt.id)}
-                          title={tx('签收归档', 'Mark as received')}
-                          className="text-green-600 hover:text-green-700"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {receipt.status !== 'RECEIVED' && receipt.status !== 'Bank_Transfer' && (
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => handleDeleteReceipt(receipt.id)}
-                          title={tx('申请删除', 'Request deletion')}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {receipts.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    {tx('暂无收据', 'No receipts')}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          
-          {/* 分页控件 */}
-          {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 py-4 border-t">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-              >
-                {tx('上一页', 'Previous')}
-              </Button>
-              <span className="text-sm text-gray-600">
-                {tx(`第 ${currentPage} / ${totalPages} 页 (共 ${receipts.length} 条)`, `Page ${currentPage} / ${totalPages} (Total ${receipts.length})`)}
-              </span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-              >
-                {tx('下一页', 'Next')}
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <ReceiptList
+        receipts={receipts}
+        paginatedReceipts={paginatedReceipts}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        isManager={isManager}
+        tx={tx}
+        getStatusBadge={getStatusBadge}
+        onViewImage={(receipt) => {
+          if (!receipt.imageUrl) return;
+          setViewingImage({
+            url: getDisplayImageUrl(receipt.imageUrl),
+            name: receipt.imageName || tx('收据图片', 'Receipt image'),
+          });
+        }}
+        onMarkReceived={handleMarkReceived}
+        onDeleteReceipt={handleDeleteReceipt}
+        onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
+        onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+      />
 
-      {/* 上传对话框 */}
-      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); setSavedImagePath(null); setOcrCustomerMark(''); setOcrCustomerName(''); setOcrCustomerId(''); setOcrCustomerCandidates([]); } }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{tx('上传收据', 'Upload Receipt')}</DialogTitle>
-            <DialogDescription>{tx('上传收据图片，AI将自动识别内容', 'Upload a receipt image and let AI recognize fields automatically')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="border-2 border-dashed rounded-lg p-4">
-              <Input type="file" accept="image/*" onChange={handleFileSelect} />
-            </div>
+      <ReceiptUploadDialog
+        open={showUpload}
+        uploading={uploading}
+        submitting={submitting}
+        error={error}
+        imagePreview={imagePreview}
+        ocrResult={ocrResult}
+        ocrCustomerMark={ocrCustomerMark}
+        ocrCustomerId={ocrCustomerId}
+        ocrCustomerCandidates={ocrCustomerCandidates}
+        tx={tx}
+        onOpenChange={(open) => {
+          setShowUpload(open);
+          if (!open) {
+            setError(null);
+            setOcrResult(null);
+            setImagePreview(null);
+            setSavedImagePath(null);
+            setOcrCustomerMark('');
+            setOcrCustomerName('');
+            setOcrCustomerId('');
+            setOcrCustomerCandidates([]);
+          }
+        }}
+        onFileSelect={handleFileSelect}
+        onOcrResultChange={setOcrResult}
+        onOcrCustomerMarkChange={(value) => {
+          setOcrCustomerMark(value);
+          setOcrCustomerName('');
+          setOcrCustomerId('');
+          loadCustomerCandidates(value, setOcrCustomerCandidates, setOcrCustomerName, setOcrCustomerId);
+        }}
+        onOcrCustomerSelect={(customerId) => {
+          setOcrCustomerId(customerId);
+          const selected = ocrCustomerCandidates.find((candidate) => candidate.id === customerId);
+          setOcrCustomerName(selected?.orderName || '');
+        }}
+        onConfirm={handleConfirm}
+      />
 
-            {uploading && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">{tx('AI识别中...', 'AI recognizing...')}</span>
-              </div>
-            )}
+      <ReceiptDirectCreateDialog
+        open={showDirectCreate}
+        locale={locale}
+        form={directForm}
+        customerCandidates={directCustomerCandidates}
+        tx={tx}
+        onOpenChange={(open) => {
+          setShowDirectCreate(open);
+          if (!open) {
+            setError(null);
+            setDirectCustomerCandidates([]);
+          }
+        }}
+        onFormChange={setDirectForm}
+        onCustomerMarkChange={(value) => {
+          setDirectForm((prev) => ({ ...prev, customerMark: value, customerName: '', customerId: '' }));
+          loadCustomerCandidates(
+            value,
+            (rows) => setDirectCustomerCandidates(rows),
+            (name) => setDirectForm((prev) => ({ ...prev, customerName: name })),
+            (id) => setDirectForm((prev) => ({ ...prev, customerId: id })),
+          );
+        }}
+        onCustomerSelect={(customerId) => {
+          const selected = directCustomerCandidates.find((candidate) => candidate.id === customerId);
+          setDirectForm((prev) => ({ ...prev, customerId, customerName: selected?.orderName || '' }));
+        }}
+        onSubmit={handleDirectCreate}
+      />
 
-            {imagePreview && (
-              <div className="border rounded-lg p-2">
-                <img src={imagePreview} alt="Preview" className="max-h-48 mx-auto rounded" />
-              </div>
-            )}
-
-            {ocrResult && (
-              <div className="space-y-3 border rounded-lg p-4">
-                <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-sm text-gray-500">{tx('收据号', 'Receipt No.')}</Label>
-                    <Input 
-                      value={(ocrResult.receiptNo as string) || ''} 
-                      onChange={(e) => setOcrResult({...ocrResult, receiptNo: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">{tx('日期', 'Date')}</Label>
-                    <Input 
-                      value={(ocrResult.date as string) || ''} 
-                      onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">{tx('付款金额 (USD)', 'Amount (USD)')}</Label>
-                    <Input 
-                      type="number"
-                      value={(ocrResult.usd as number) || ''} 
-                      onChange={(e) => setOcrResult({...ocrResult, usd: parseFloat(e.target.value)})}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">{tx('客户单号', 'Order No.')}</Label>
-                    <Input 
-                      value={(ocrResult.orderNo as string) || ''} 
-                      onChange={(e) => setOcrResult({...ocrResult, orderNo: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">{tx('账单号', 'Invoice No.')}</Label>
-                    <Input 
-                      value={(ocrResult.invNo as string) || ''} 
-                      onChange={(e) => setOcrResult({...ocrResult, invNo: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-500">{tx('付款人', 'Payer')}</Label>
-                    <Input 
-                      value={(ocrResult.payer as string) || ''} 
-                      onChange={(e) => setOcrResult({...ocrResult, payer: e.target.value})}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Label className="text-sm text-gray-500">{tx('客户MARK（必填）', 'Customer MARK (required)')}</Label>
-                    <Input
-                      value={ocrCustomerMark}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setOcrCustomerMark(value);
-                        setOcrCustomerName('');
-                        setOcrCustomerId('');
-                        loadCustomerCandidates(value, setOcrCustomerCandidates, setOcrCustomerName, setOcrCustomerId);
-                      }}
-                    />
-                  </div>
-                  {ocrCustomerCandidates.length > 1 && (
-                    <div className="col-span-2">
-                      <Label className="text-sm text-gray-500">{tx('选择准确客户(MARK+ORDER_NAME)', 'Select exact customer (MARK+ORDER_NAME)')}</Label>
-                      <select
-                        className="w-full border rounded-md px-3 py-2 text-sm"
-                        value={ocrCustomerId}
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          setOcrCustomerId(id);
-                          const selected = ocrCustomerCandidates.find((c) => c.id === id);
-                          setOcrCustomerName(selected?.orderName || '');
-                        }}
-                      >
-                        <option value="">{tx('请选择', 'Please select')}</option>
-                        {ocrCustomerCandidates.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <div className="col-span-2">
-                    <Label className="flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        checked={ocrResult.isDeposit as boolean} 
-                        onChange={(e) => setOcrResult({...ocrResult, isDeposit: e.target.checked})}
-                      />
-                      {tx('这是定金 (DEPOSIT)', 'This is a deposit (DEPOSIT)')}
-                    </Label>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowUpload(false);
-              setOcrResult(null);
-              setImagePreview(null);
-            }} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleConfirm} disabled={!ocrResult || submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  {tx('处理中...', 'Processing...')}
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showDirectCreate} onOpenChange={(open) => { setShowDirectCreate(open); if (!open) { setError(null); setDirectCustomerCandidates([]); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tx('直接创建收据', 'Create Receipt Directly')}</DialogTitle>
-            <DialogDescription>{tx('跳过AI识别，手动录入收据信息', 'Skip AI and enter receipt information manually')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Input
-              placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
-              value={directForm.customerMark}
-              onChange={(e) => {
-                const value = e.target.value;
-                setDirectForm((p) => ({ ...p, customerMark: value, customerName: '', customerId: '' }));
-                loadCustomerCandidates(
-                  value,
-                  (rows) => setDirectCustomerCandidates(rows),
-                  (name) => setDirectForm((p) => ({ ...p, customerName: name })),
-                  (id) => setDirectForm((p) => ({ ...p, customerId: id }))
-                );
-              }}
-            />
-            {directCustomerCandidates.length > 1 && (
-              <select
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                value={directForm.customerId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  const selected = directCustomerCandidates.find((c) => c.id === id);
-                  setDirectForm((p) => ({ ...p, customerId: id, customerName: selected?.orderName || '' }));
-                }}
-              >
-                <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
-                {directCustomerCandidates.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
-                ))}
-              </select>
-            )}
-            <Input placeholder={tx('收据号', 'Receipt No.')} value={directForm.receiptNo} onChange={(e) => setDirectForm((p) => ({ ...p, receiptNo: e.target.value }))} />
-            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} placeholder={tx('日期', 'Date')} value={directForm.date} onChange={(e) => setDirectForm((p) => ({ ...p, date: e.target.value }))} />
-            <Input placeholder={tx('电话', 'Phone')} value={directForm.tel} onChange={(e) => setDirectForm((p) => ({ ...p, tel: e.target.value }))} />
-            <Input type="number" placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={directForm.usd} onChange={(e) => setDirectForm((p) => ({ ...p, usd: e.target.value }))} />
-            <Input placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')} value={directForm.invNo} onChange={(e) => setDirectForm((p) => ({ ...p, invNo: e.target.value }))} />
-            <Input placeholder={tx('客户单号(orderNo)', 'Order No. (orderNo)')} value={directForm.orderNo} onChange={(e) => setDirectForm((p) => ({ ...p, orderNo: e.target.value }))} />
-            <Input placeholder={tx('付款人', 'Payer')} value={directForm.payer} onChange={(e) => setDirectForm((p) => ({ ...p, payer: e.target.value }))} />
-            <Label className="flex items-center gap-2">
-              <input type="checkbox" checked={directForm.isDeposit} onChange={(e) => setDirectForm((p) => ({ ...p, isDeposit: e.target.checked }))} />
-              {tx('定金', 'Deposit')}
-            </Label>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleDirectCreate}>
-              <Check className="h-4 w-4 mr-2" />
-              {tx('创建', 'Create')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 图片查看对话框 */}
-      <Dialog open={!!viewingImage} onOpenChange={(open) => { if (!open) setViewingImage(null); }}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{viewingImage?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex justify-center">
-            {viewingImage && (
-              <img 
-                src={viewingImage.url} 
-                alt={viewingImage.name} 
-                className="max-h-[70vh] object-contain rounded-lg"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ReceiptImagePreviewDialog
+        image={viewingImage}
+        onOpenChange={(open) => {
+          if (!open) setViewingImage(null);
+        }}
+      />
     </div>
   );
 }
-

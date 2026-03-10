@@ -1,50 +1,26 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store';
-import { useLocale, useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent } from '@/components/ui/card';
 import {
-  CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
   apiCall,
-  fetchCustomerCandidatesByMark,
   fetchServerDate,
   getDisplayImageUrl,
-  getErrorMessage,
-  initCustomerImportRowViews,
-  initInvoiceImportRowViews,
-  lookupCustomerByOrderNoGroup,
-  mergeCustomerImportRowViews,
-  mergeInvoiceImportRowViews,
-  summarizeRowsForAlert,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
-  toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
   useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
-  type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
-  type InvoiceImportRowView,
 } from '@/components/workspace/shared';
 import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
-  ChevronDown, ChevronRight, Pencil
+  DetailDirectCreateDialog,
+  DetailImagePreviewDialog,
+  DetailList,
+  DetailUploadDialog,
+} from './components';
+import { EMPTY_DETAIL_DIRECT_ITEM, type DetailOcrResult } from './types';
+import {
+  Plus, Upload
 } from 'lucide-react';
 
 export function DetailManager() {
@@ -55,14 +31,14 @@ export function DetailManager() {
   const [showDirectCreate, setShowDirectCreate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [ocrResult, setOcrResult] = useState<{ date: string | null; items: { mark: string | null; orderNo: string | null; amount: number; matchedReceiptId?: string | null }[] } | null>(null);
+  const [ocrResult, setOcrResult] = useState<DetailOcrResult | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 服务器保存的图片路径
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [directDate, setDirectDate] = useState('');
-  const [directItems, setDirectItems] = useState([{ mark: '', orderNo: '', amount: '' }]);
+  const [directItems, setDirectItems] = useState([{ ...EMPTY_DETAIL_DIRECT_ITEM }]);
   
   // 折叠状态
   const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
@@ -233,7 +209,7 @@ export function DetailManager() {
       if (result.success) {
         setShowDirectCreate(false);
         setDirectDate('');
-        setDirectItems([{ mark: '', orderNo: '', amount: '' }]);
+        setDirectItems([{ ...EMPTY_DETAIL_DIRECT_ITEM }]);
         loadDetails();
       } else {
         setError(result.error || tx('创建失败', 'Create failed'));
@@ -291,259 +267,62 @@ export function DetailManager() {
         </CardContent>
       </Card>
 
-      <div className="space-y-4">
-        {details.map((detail) => (
-          <Card key={detail.id} className={detail.status === 'ERROR' ? 'border-red-500' : ''}>
-            <CardHeader 
-              className="cursor-pointer hover:bg-gray-50"
-              onClick={() => toggleDetail(detail.id)}
-            >
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                  {expandedDetails.has(detail.id) ? (
-                    <ChevronDown className="h-5 w-5 text-gray-500" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-gray-500" />
-                  )}
-                  <div>
-                    <CardTitle className="text-lg">
-                      {tx('付款明细', 'Payment Detail')} - {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
-                    </CardTitle>
-                    <CardDescription>
-                      {tx(`${detail.items.length} 笔 | 总计: $${detail.totalAmount.toFixed(2)}`, `${detail.items.length} items | Total: $${detail.totalAmount.toFixed(2)}`)}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={detail.status === 'ERROR' ? 'destructive' : 'default'}>
-                    {detail.status}
-                  </Badge>
-                  {detail.imageUrl && (
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
-                        setViewingImage({ url: getDisplayImageUrl(detail.imageUrl!), name: detail.imageName || tx('付款明细图片', 'Payment detail image') }); 
-                      }}
-                      title={tx('查看图片', 'View image')}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  )}
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
-                    onClick={(e) => { e.stopPropagation(); handleDeleteDetail(detail.id); }}
-                    title={tx('申请删除', 'Request deletion')}
-                  >
-                    <Trash2 className="h-4 w-4 text-red-500" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            
-            {expandedDetails.has(detail.id) && (
-              <CardContent className="border-t pt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{tx('唛头', 'Mark')}</TableHead>
-                      <TableHead>{tx('单号', 'Order No.')}</TableHead>
-                      <TableHead>{tx('金额', 'Amount')}</TableHead>
-                      <TableHead>{tx('关联收据', 'Linked Receipt')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detail.items.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>{item.mark || '-'}</TableCell>
-                        <TableCell>{item.orderNo || '-'}</TableCell>
-                        <TableCell>${item.amount.toFixed(2)}</TableCell>
-                        <TableCell>
-                          {item.receipt ? (
-                            <Badge variant="outline">{item.receipt.orderNo}</Badge>
-                          ) : (
-                            <span className="text-gray-400">{tx('未匹配', 'Unmatched')}</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            )}
-          </Card>
-        ))}
-        {details.length === 0 && (
-          <Card>
-            <CardContent className="py-12 text-center text-gray-500">
-              {tx('暂无付款明细', 'No payment details')}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      <DetailList
+        details={details}
+        expandedDetails={expandedDetails}
+        tx={tx}
+        onToggleDetail={toggleDetail}
+        onViewImage={(detail) => {
+          if (!detail.imageUrl) return;
+          setViewingImage({
+            url: getDisplayImageUrl(detail.imageUrl),
+            name: detail.imageName || tx('付款明细图片', 'Payment detail image'),
+          });
+        }}
+        onDeleteDetail={handleDeleteDetail}
+      />
 
-      <Dialog open={showUpload} onOpenChange={(open) => { setShowUpload(open); if (!open) { setError(null); setOcrResult(null); setImagePreview(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{tx('上传付款明细', 'Upload Payment Detail')}</DialogTitle>
-            <DialogDescription>{tx('上传付款明细图片，AI将自动识别内容', 'Upload payment detail image and let AI recognize content')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="border-2 border-dashed rounded-lg p-4">
-              <Input type="file" accept="image/*" onChange={handleFileSelect} />
-            </div>
+      <DetailUploadDialog
+        open={showUpload}
+        uploading={uploading}
+        submitting={submitting}
+        error={error}
+        imagePreview={imagePreview}
+        ocrResult={ocrResult}
+        tx={tx}
+        onOpenChange={(open) => {
+          setShowUpload(open);
+          if (!open) {
+            setError(null);
+            setOcrResult(null);
+            setImagePreview(null);
+          }
+        }}
+        onFileSelect={handleFileSelect}
+        onOcrResultChange={setOcrResult}
+        onConfirm={handleConfirm}
+      />
 
-            {uploading && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">{tx('AI识别中...', 'AI recognizing...')}</span>
-              </div>
-            )}
+      <DetailDirectCreateDialog
+        open={showDirectCreate}
+        locale={locale}
+        directDate={directDate}
+        directItems={directItems}
+        tx={tx}
+        onOpenChange={setShowDirectCreate}
+        onDirectDateChange={setDirectDate}
+        onDirectItemsChange={setDirectItems}
+        onSubmit={handleDirectCreate}
+      />
 
-            {imagePreview && (
-              <div className="border rounded-lg p-2">
-                <img src={imagePreview} alt="Preview" className="max-h-48 mx-auto rounded" />
-              </div>
-            )}
-
-            {ocrResult && (
-              <div className="space-y-3 border rounded-lg p-4">
-                <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
-                <div>
-                  <Label className="text-sm text-gray-500">{tx('日期', 'Date')}</Label>
-                  <Input 
-                    value={ocrResult.date || ''} 
-                    onChange={(e) => setOcrResult({...ocrResult, date: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-sm text-gray-500">{tx('明细项目', 'Detail Items')}</Label>
-                  {ocrResult.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-3 gap-2">
-                      <Input 
-                        placeholder={tx('唛头', 'Mark')}
-                        value={item.mark || ''} 
-                        onChange={(e) => {
-                          const newItems = [...ocrResult.items];
-                          newItems[index] = {...item, mark: e.target.value};
-                          setOcrResult({...ocrResult, items: newItems});
-                        }}
-                      />
-                      <Input 
-                        placeholder={tx('单号', 'Order No.')}
-                        value={item.orderNo || ''} 
-                        onChange={(e) => {
-                          const newItems = [...ocrResult.items];
-                          newItems[index] = {...item, orderNo: e.target.value};
-                          setOcrResult({...ocrResult, items: newItems});
-                        }}
-                      />
-                      <Input 
-                        placeholder={tx('金额', 'Amount')}
-                        type="number"
-                        value={item.amount || ''} 
-                        onChange={(e) => {
-                          const newItems = [...ocrResult.items];
-                          newItems[index] = {...item, amount: parseFloat(e.target.value)};
-                          setOcrResult({...ocrResult, items: newItems});
-                        }}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowUpload(false);
-              setOcrResult(null);
-              setImagePreview(null);
-            }} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleConfirm} disabled={!ocrResult || submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  {tx('处理中...', 'Processing...')}
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showDirectCreate} onOpenChange={setShowDirectCreate}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tx('直接创建付款明细', 'Create Payment Detail Directly')}</DialogTitle>
-            <DialogDescription>{tx('跳过AI识别，手动录入明细行', 'Skip AI and enter detail rows manually')}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} value={directDate} onChange={(e) => setDirectDate(e.target.value)} />
-            {directItems.map((item, idx) => (
-              <div key={idx} className="grid grid-cols-3 gap-2">
-                <Input
-                  placeholder={tx('唛头', 'Mark')}
-                  value={item.mark}
-                  onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, mark: e.target.value } : row)))}
-                />
-                <Input
-                  placeholder={tx('单号', 'Order No.')}
-                  value={item.orderNo}
-                  onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, orderNo: e.target.value } : row)))}
-                />
-                <Input
-                  type="number"
-                  placeholder={tx('金额', 'Amount')}
-                  value={item.amount}
-                  onChange={(e) => setDirectItems((prev) => prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row)))}
-                />
-              </div>
-            ))}
-            <Button variant="outline" onClick={() => setDirectItems((prev) => [...prev, { mark: '', orderNo: '', amount: '' }])}>
-              <Plus className="h-4 w-4 mr-2" />
-              {tx('增加明细行', 'Add Detail Row')}
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDirectCreate(false)}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleDirectCreate}>
-              <Check className="h-4 w-4 mr-2" />
-              {tx('创建', 'Create')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 图片查看对话框 */}
-      <Dialog open={!!viewingImage} onOpenChange={(open) => { if (!open) setViewingImage(null); }}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{viewingImage?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="flex justify-center">
-            {viewingImage && (
-              <img 
-                src={viewingImage.url} 
-                alt={viewingImage.name} 
-                className="max-h-[70vh] object-contain rounded-lg"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DetailImagePreviewDialog
+        image={viewingImage}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewingImage(null);
+          }
+        }}
+      />
     </div>
   );
 }
-

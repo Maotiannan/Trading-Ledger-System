@@ -2,19 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
-import { useLocale, useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  CustomerCandidate,
   apiCall,
   initCustomerImportRowViews,
   mergeCustomerImportRowViews,
@@ -26,8 +19,14 @@ import {
 import { ImportResultDialog, type ImportResultDialogColumn } from '@/components/workspace/components/import-result-dialog';
 import { useImportResultTable } from '@/components/workspace/hooks';
 import {
-  Loader2, Users, Upload, Check, X, AlertTriangle, Eye, Pencil, Plus, Trash2
-} from 'lucide-react';
+  CustomerFixDialog,
+  CustomerFixQueue,
+  CustomerFormDialog,
+  CustomerList,
+  CustomerLongTextPreviewDialog,
+} from './components';
+import type { CustomerFormState, CustomerOwnerOption } from './types';
+import { Loader2, Upload, Plus } from 'lucide-react';
 
 export function CustomerManager() {
   const tx = useUiText();
@@ -35,7 +34,7 @@ export function CustomerManager() {
   const isAdmin = user?.role === 'ADMIN';
   const defaultOwnerId = isAdmin ? (user?.id || '') : (user?.id || '');
   const [customers, setCustomers] = useState<Array<Record<string, unknown>>>([]);
-  const [ownerOptions, setOwnerOptions] = useState<Array<{ id: string; email: string; name: string | null; role: string; level: number }>>([]);
+  const [ownerOptions, setOwnerOptions] = useState<CustomerOwnerOption[]>([]);
   const [importOwnerId, setImportOwnerId] = useState('');
   const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
   const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
@@ -51,7 +50,7 @@ export function CustomerManager() {
   const [customerLongTextPreview, setCustomerLongTextPreview] = useState<{ label: string; value: string } | null>(null);
   const customerImportInputRef = useRef<HTMLInputElement | null>(null);
   const customerImportTable = useImportResultTable(customerImportRows);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<CustomerFormState>({
     mark: '',
     orderName: '',
     name: '',
@@ -485,207 +484,51 @@ export function CustomerManager() {
         </TabsList>
 
         <TabsContent value="customers">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>MARK</TableHead>
-                    <TableHead>ORDER_NAME</TableHead>
-                    <TableHead>NAME</TableHead>
-                    <TableHead>PHONE</TableHead>
-                    <TableHead>CITY</TableHead>
-                    <TableHead>CONSIGNEE</TableHead>
-                    <TableHead>{tx('绑定账户', 'Binding')}</TableHead>
-                    {canSeeExtended && <TableHead>COMPANY_NAME</TableHead>}
-                    {canSeeExtended && <TableHead>CREDIT</TableHead>}
-                    {canSeeExtended && <TableHead>COMPANY_ADDRESS</TableHead>}
-                    <TableHead>{tx('操作', 'Actions')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {customers.map((row) => (
-                    <TableRow key={String(row.id)}>
-                      {(() => {
-                        const consigneeFull = String(row.consignee || '').trim();
-                        const addressFull = String(row.companyAddress || '').trim();
-                        return (
-                          <>
-                      <TableCell>{String(row.mark || '-')}</TableCell>
-                      <TableCell>{String(row.orderName || '-')}</TableCell>
-                      <TableCell>{String(row.name || '-')}</TableCell>
-                      <TableCell>{String(row.phone || '-')}</TableCell>
-                      <TableCell>{String(row.city || '-')}</TableCell>
-                      <TableCell>
-                        {consigneeFull ? (
-                          <button
-                            type="button"
-                            className="max-w-[220px] truncate text-left hover:underline"
-                            title={consigneeFull}
-                            onClick={() => setCustomerLongTextPreview({ label: 'CONSIGNEE', value: consigneeFull })}
-                          >
-                            {truncateLongText(consigneeFull)}
-                          </button>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>{formatOwnerLabel(row)}</TableCell>
-                      {canSeeExtended && <TableCell>{String(row.companyName || '-')}</TableCell>}
-                      {canSeeExtended && <TableCell>{row.credit !== null && row.credit !== undefined ? String(row.credit) : '-'}</TableCell>}
-                      {canSeeExtended && (
-                        <TableCell>
-                          {addressFull ? (
-                            <button
-                              type="button"
-                              className="max-w-[260px] truncate text-left hover:underline"
-                              title={addressFull}
-                              onClick={() => setCustomerLongTextPreview({ label: 'COMPANY_ADDRESS', value: addressFull })}
-                            >
-                              {truncateLongText(addressFull)}
-                            </button>
-                          ) : '-'}
-                        </TableCell>
-                      )}
-                      <TableCell>
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        {isAdmin && (
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(String(row.id))}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        )}
-                      </TableCell>
-                          </>
-                        );
-                      })()}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <CustomerList
+            customers={customers}
+            canSeeExtended={canSeeExtended}
+            isAdmin={isAdmin}
+            tx={tx}
+            formatOwnerLabel={formatOwnerLabel}
+            truncateLongText={truncateLongText}
+            onPreviewLongText={(label, value) => setCustomerLongTextPreview({ label, value })}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+          />
         </TabsContent>
 
         <TabsContent value="fixes">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{tx('待修复 ORDER', 'Orders To Fix')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {fixOrders.map((row) => (
-                  <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
-                    <div>
-                      <div className="font-medium">{String(row.orderNo || '-')}</div>
-                      <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
-                    </div>
-                    <Button size="sm" onClick={() => openFix('order', row)}>{tx('修复', 'Fix')}</Button>
-                  </div>
-                ))}
-                {fixOrders.length === 0 && <p className="text-sm text-gray-500">{tx('暂无', 'None')}</p>}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>{tx('待修复 RECEIPT', 'Receipts To Fix')}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {fixReceipts.map((row) => (
-                  <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
-                    <div>
-                      <div className="font-medium">{String(row.receiptNo || row.orderNo || '-')}</div>
-                      <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
-                    </div>
-                    <Button size="sm" onClick={() => openFix('receipt', row)}>{tx('修复', 'Fix')}</Button>
-                  </div>
-                ))}
-                {fixReceipts.length === 0 && <p className="text-sm text-gray-500">{tx('暂无', 'None')}</p>}
-              </CardContent>
-            </Card>
-          </div>
+          <CustomerFixQueue
+            fixOrders={fixOrders}
+            fixReceipts={fixReceipts}
+            tx={tx}
+            onOpenFix={openFix}
+          />
         </TabsContent>
       </Tabs>
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? tx('编辑客户', 'Edit Customer') : tx('创建客户', 'Create Customer')}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
-            <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => setForm((p) => ({ ...p, orderName: e.target.value }))} />
-            <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-            <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
-            <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
-            <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
-            {isAdmin && (
-              <select
-                className="h-10 border rounded-md px-3 text-sm bg-white"
-                value={form.ownerId}
-                onChange={(e) => setForm((p) => ({ ...p, ownerId: e.target.value }))}
-              >
-                {ownerOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {`${option.email} (${option.role})`}
-                  </option>
-                ))}
-              </select>
-            )}
-            {isAdmin && (
-              <>
-                <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
-                <Input placeholder="CREDIT" type="number" min="0" step="0.01" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
-                <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => setForm((p) => ({ ...p, companyAddress: e.target.value }))} />
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={handleCreateOrUpdate}>{tx('保存', 'Save')}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CustomerFormDialog
+        open={showCreate}
+        editing={editing}
+        form={form}
+        isAdmin={isAdmin}
+        ownerOptions={ownerOptions}
+        tx={tx}
+        onOpenChange={setShowCreate}
+        onFormChange={(updater) => setForm(updater)}
+        onSubmit={handleCreateOrUpdate}
+      />
 
-      <Dialog open={!!fixingTarget} onOpenChange={(open) => { if (!open) setFixingTarget(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{tx('修复客户信息并加入客户库', 'Fix Customer Info And Save')}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input placeholder="MARK*" value={form.mark} onChange={(e) => setForm((p) => ({ ...p, mark: e.target.value }))} />
-            <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => setForm((p) => ({ ...p, orderName: e.target.value }))} />
-            <Input placeholder="NAME*" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-            <Input placeholder="PHONE*" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
-            <Input placeholder="CITY*" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
-            <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => setForm((p) => ({ ...p, consignee: e.target.value }))} />
-            {isAdmin && (
-              <select
-                className="h-10 border rounded-md px-3 text-sm bg-white"
-                value={form.ownerId}
-                onChange={(e) => setForm((p) => ({ ...p, ownerId: e.target.value }))}
-              >
-                {ownerOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {`${option.email} (${option.role})`}
-                  </option>
-                ))}
-              </select>
-            )}
-            {isAdmin && (
-              <>
-                <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => setForm((p) => ({ ...p, companyName: e.target.value }))} />
-                <Input placeholder="CREDIT" type="number" min="0" step="0.01" value={form.credit} onChange={(e) => setForm((p) => ({ ...p, credit: e.target.value }))} />
-                <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => setForm((p) => ({ ...p, companyAddress: e.target.value }))} />
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFixingTarget(null)}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={submitFix}>{tx('修复并保存', 'Fix And Save')}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CustomerFixDialog
+        fixingTarget={fixingTarget}
+        form={form}
+        isAdmin={isAdmin}
+        ownerOptions={ownerOptions}
+        tx={tx}
+        onOpenChange={(open) => { if (!open) setFixingTarget(null); }}
+        onFormChange={(updater) => setForm(updater)}
+        onSubmit={submitFix}
+      />
 
       <ImportResultDialog
         open={showCustomerImportIssues}
@@ -706,16 +549,10 @@ export function CustomerManager() {
         retryDisabled={customerImportTable.latestFailedRows.length === 0}
       />
 
-      <Dialog open={!!customerLongTextPreview} onOpenChange={(open) => { if (!open) setCustomerLongTextPreview(null); }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{customerLongTextPreview?.label || 'Text'}</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[50vh] overflow-auto rounded-md border p-3 whitespace-pre-wrap break-words text-sm">
-            {customerLongTextPreview?.value || '-'}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CustomerLongTextPreviewDialog
+        preview={customerLongTextPreview}
+        onOpenChange={(open) => { if (!open) setCustomerLongTextPreview(null); }}
+      />
     </div>
   );
 }

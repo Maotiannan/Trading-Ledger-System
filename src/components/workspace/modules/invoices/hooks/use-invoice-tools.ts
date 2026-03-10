@@ -12,6 +12,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
   const [transferToOrderNo, setTransferToOrderNo] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
   const [transferError, setTransferError] = useState('');
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
 
   const [showRematchDialog, setShowRematchDialog] = useState(false);
   const [rematchLoading, setRematchLoading] = useState(false);
@@ -44,8 +45,8 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     setShowTransferDialog(true);
   };
 
-  const handleTransferBalance = async (submitting: boolean, setSubmitting: (value: boolean) => void) => {
-    if (submitting) return;
+  const handleTransferBalance = async () => {
+    if (transferSubmitting) return;
     if (!transferFromOrder || !transferToOrderNo || !transferAmount) {
       setTransferError(tx('请填写完整信息', 'Please complete all required fields.'));
       return;
@@ -57,7 +58,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
       return;
     }
 
-    setSubmitting(true);
+    setTransferSubmitting(true);
     setTransferError('');
 
     try {
@@ -82,7 +83,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
       setTransferError(tx('网络错误，请重试', 'Network error, please retry.'));
       console.error(err);
     } finally {
-      setSubmitting(false);
+      setTransferSubmitting(false);
     }
   };
 
@@ -222,6 +223,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     transferAmount,
     setTransferAmount,
     transferError,
+    transferSubmitting,
     handleTransferDialogOpenChange,
     openTransferDialog,
     handleTransferBalance,

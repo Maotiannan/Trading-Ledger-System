@@ -834,6 +834,10 @@ src/
 - 🧱 客户写操作补权控：`customer update/delete` 新增归属校验，仅允许可见范围内客户被修改/删除。
 - 🛠️ 用户管理修补：修复 `update-role` 缺失 `level` 字段导致的同级管理判定漏洞，并在前端展示 `level/parent`。
 
+### v1.0.39 (2026-03-10)
+- 🪝 收据模块本地态与候选匹配拆分：新增 `use-receipt-customer-lookup.ts` 与 `use-receipt-forms.ts`，统一承接 OCR/直建的客户候选查询、表单状态、预览与打开关闭逻辑。
+- 📉 收据主模块继续瘦身：`receipt-manager.tsx` 从 `529` 行压缩到 `397` 行，后续只剩远程动作可继续抽离。
+
 ### v1.0.38 (2026-03-10)
 - 🧩 收据模块开始组件化：将收据列表、上传收据对话框、直接创建收据对话框、图片预览对话框抽为独立组件，并新增 `receipts/types.ts`。
 - 📉 收据主模块首轮瘦身：`receipt-manager.tsx` 从 `797` 行压缩到 `529` 行，为后续抽本地 hook 和动作 hook 做准备。

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
@@ -10,12 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  CustomerCandidate,
   apiCall,
-  fetchCustomerCandidatesByMark,
-  fetchServerDate,
   getDisplayImageUrl,
-  lookupCustomerByOrderNoGroup,
   useUiText,
 } from '@/components/workspace/shared';
 import {
@@ -25,6 +21,7 @@ import {
   ReceiptUploadDialog,
 } from './components';
 import { EMPTY_RECEIPT_DIRECT_FORM } from './types';
+import { useReceiptCustomerLookup, useReceiptForms } from './hooks';
 import {
   Loader2, Trash2, Plus, Upload, Check
 } from 'lucide-react';
@@ -33,39 +30,56 @@ export function ReceiptManager() {
   const tx = useUiText();
   const locale = useLocale();
   const { receipts, setReceipts, loading, setLoading, user } = useStore();
-  const [showUpload, setShowUpload] = useState(false);
-  const [showDirectCreate, setShowDirectCreate] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [ocrResult, setOcrResult] = useState<Record<string, unknown> | null>(null);
-  const [ocrCustomerMark, setOcrCustomerMark] = useState('');
-  const [ocrCustomerName, setOcrCustomerName] = useState('');
-  const [ocrCustomerId, setOcrCustomerId] = useState('');
-  const [ocrCustomerCandidates, setOcrCustomerCandidates] = useState<CustomerCandidate[]>([]);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [directForm, setDirectForm] = useState({
-    ...EMPTY_RECEIPT_DIRECT_FORM,
-  });
-  const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
-  
-  // 图片查看对话框
-  const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [minUsd, setMinUsd] = useState('');
   const [maxUsd, setMaxUsd] = useState('');
-  const receiptCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 30;
   const totalPages = Math.ceil(receipts.length / pageSize);
   const paginatedReceipts = receipts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const { loadCustomerCandidates } = useReceiptCustomerLookup();
+  const {
+    showUpload,
+    showDirectCreate,
+    ocrResult,
+    setOcrResult,
+    ocrCustomerMark,
+    setOcrCustomerMark,
+    ocrCustomerName,
+    setOcrCustomerName,
+    ocrCustomerId,
+    setOcrCustomerId,
+    ocrCustomerCandidates,
+    setOcrCustomerCandidates,
+    imagePreview,
+    setImagePreview,
+    selectedFile,
+    setSelectedFile,
+    savedImagePath,
+    setSavedImagePath,
+    error,
+    setError,
+    directForm,
+    setDirectForm,
+    directCustomerCandidates,
+    viewingImage,
+    setViewingImage,
+    handleShowUploadChange,
+    handleShowDirectCreateChange,
+    handleOcrCustomerMarkChange,
+    handleOcrCustomerSelect,
+    handleDirectCustomerMarkChange,
+    handleDirectCustomerSelect,
+    resetDirectForm,
+  } = useReceiptForms(loadCustomerCandidates);
 
   const loadReceipts = useCallback(async () => {
     setLoading(true);
@@ -91,106 +105,6 @@ export function ReceiptManager() {
   useEffect(() => {
     setCurrentPage(1);
   }, [search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
-
-  useEffect(() => {
-    return () => {
-      if (receiptCustomerLookupTimerRef.current) {
-        clearTimeout(receiptCustomerLookupTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!showDirectCreate) return;
-    void fetchServerDate().then((serverDate) => {
-      setDirectForm((prev) => ({ ...prev, date: serverDate }));
-    });
-  }, [showDirectCreate]);
-
-  useEffect(() => {
-    if (!showDirectCreate) return;
-    const currentOrderNo = directForm.orderNo;
-    if (!currentOrderNo.trim()) return;
-    const timer = setTimeout(() => {
-      void lookupCustomerByOrderNoGroup(currentOrderNo).then((matched) => {
-        if (!matched) return;
-        setDirectForm((prev) => ({
-          ...prev,
-          customerMark: matched.mark,
-          customerName: matched.name || prev.customerName,
-          customerId: matched.customerId || prev.customerId,
-        }));
-        loadCustomerCandidates(
-          matched.mark,
-          (rows) => setDirectCustomerCandidates(rows),
-          (resolvedName) => setDirectForm((prev) => ({ ...prev, customerName: resolvedName })),
-          (resolvedId) => setDirectForm((prev) => ({ ...prev, customerId: resolvedId }))
-        );
-      });
-    }, 260);
-    return () => clearTimeout(timer);
-  }, [directForm.orderNo, showDirectCreate]);
-
-  useEffect(() => {
-    if (!showUpload || !ocrResult) return;
-    const currentOrderNo = typeof ocrResult.orderNo === 'string' ? ocrResult.orderNo : '';
-    if (!currentOrderNo.trim()) return;
-    const timer = setTimeout(() => {
-      void lookupCustomerByOrderNoGroup(currentOrderNo).then((matched) => {
-        if (!matched) return;
-        setOcrCustomerMark(matched.mark);
-        setOcrCustomerName(matched.name);
-        setOcrCustomerId(matched.customerId);
-        loadCustomerCandidates(matched.mark, setOcrCustomerCandidates, setOcrCustomerName, setOcrCustomerId);
-      });
-    }, 260);
-    return () => clearTimeout(timer);
-  }, [ocrResult, showUpload]);
-
-  const loadCustomerCandidates = (
-    mark: string,
-    setter: (rows: CustomerCandidate[]) => void,
-    setDefaultName?: (value: string) => void,
-    setDefaultId?: (value: string) => void
-  ) => {
-    const normalized = mark.trim();
-    if (receiptCustomerLookupTimerRef.current) {
-      clearTimeout(receiptCustomerLookupTimerRef.current);
-      receiptCustomerLookupTimerRef.current = null;
-    }
-    if (!normalized) {
-      setter([]);
-      if (setDefaultName) setDefaultName('');
-      if (setDefaultId) setDefaultId('');
-      return;
-    }
-    receiptCustomerLookupTimerRef.current = setTimeout(() => {
-      void (async () => {
-        try {
-          const result = await fetchCustomerCandidatesByMark(normalized);
-          if (!result.success || !Array.isArray(result.data)) {
-            setter([]);
-            return;
-          }
-          const rows: CustomerCandidate[] = result.data.map((row) => ({
-            id: row.id,
-            mark: row.mark,
-            orderName: row.orderName || row.name || '',
-            displayName: row.name || '',
-            phone: row.phone ?? null,
-            city: row.city ?? null,
-          }));
-          setter(rows);
-          if (rows.length === 1) {
-            if (setDefaultName) setDefaultName(rows[0].orderName);
-            if (setDefaultId) setDefaultId(rows[0].id);
-          }
-        } catch {
-          setter([]);
-        }
-      })();
-    }, 220);
-  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -265,15 +179,8 @@ export function ReceiptManager() {
       }).then(r => r.json());
 
       if (result.success) {
-        setShowUpload(false);
-        setOcrResult(null);
-        setOcrCustomerMark('');
-        setOcrCustomerName('');
-        setOcrCustomerId('');
-        setOcrCustomerCandidates([]);
-        setImagePreview(null);
+        handleShowUploadChange(false);
         setSelectedFile(null);
-        setSavedImagePath(null);
         loadReceipts();
       } else {
         setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
@@ -335,9 +242,8 @@ export function ReceiptManager() {
         }),
       });
       if (result.success) {
-        setShowDirectCreate(false);
-        setDirectForm({ ...EMPTY_RECEIPT_DIRECT_FORM });
-        setDirectCustomerCandidates([]);
+        handleShowDirectCreateChange(false);
+        resetDirectForm();
         loadReceipts();
       } else {
         setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
@@ -384,11 +290,11 @@ export function ReceiptManager() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">{tx('收据管理', 'Receipt Management')}</h2>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowDirectCreate(true)}>
+          <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
             <Plus className="h-4 w-4 mr-2" />
             {tx('直接创建', 'Create Directly')}
           </Button>
-          <Button onClick={() => setShowUpload(true)}>
+          <Button onClick={() => handleShowUploadChange(true)}>
             <Upload className="h-4 w-4 mr-2" />
             {tx('上传收据', 'Upload Receipt')}
           </Button>
@@ -459,32 +365,11 @@ export function ReceiptManager() {
         ocrCustomerId={ocrCustomerId}
         ocrCustomerCandidates={ocrCustomerCandidates}
         tx={tx}
-        onOpenChange={(open) => {
-          setShowUpload(open);
-          if (!open) {
-            setError(null);
-            setOcrResult(null);
-            setImagePreview(null);
-            setSavedImagePath(null);
-            setOcrCustomerMark('');
-            setOcrCustomerName('');
-            setOcrCustomerId('');
-            setOcrCustomerCandidates([]);
-          }
-        }}
+        onOpenChange={handleShowUploadChange}
         onFileSelect={handleFileSelect}
         onOcrResultChange={setOcrResult}
-        onOcrCustomerMarkChange={(value) => {
-          setOcrCustomerMark(value);
-          setOcrCustomerName('');
-          setOcrCustomerId('');
-          loadCustomerCandidates(value, setOcrCustomerCandidates, setOcrCustomerName, setOcrCustomerId);
-        }}
-        onOcrCustomerSelect={(customerId) => {
-          setOcrCustomerId(customerId);
-          const selected = ocrCustomerCandidates.find((candidate) => candidate.id === customerId);
-          setOcrCustomerName(selected?.orderName || '');
-        }}
+        onOcrCustomerMarkChange={handleOcrCustomerMarkChange}
+        onOcrCustomerSelect={handleOcrCustomerSelect}
         onConfirm={handleConfirm}
       />
 
@@ -494,27 +379,10 @@ export function ReceiptManager() {
         form={directForm}
         customerCandidates={directCustomerCandidates}
         tx={tx}
-        onOpenChange={(open) => {
-          setShowDirectCreate(open);
-          if (!open) {
-            setError(null);
-            setDirectCustomerCandidates([]);
-          }
-        }}
+        onOpenChange={handleShowDirectCreateChange}
         onFormChange={setDirectForm}
-        onCustomerMarkChange={(value) => {
-          setDirectForm((prev) => ({ ...prev, customerMark: value, customerName: '', customerId: '' }));
-          loadCustomerCandidates(
-            value,
-            (rows) => setDirectCustomerCandidates(rows),
-            (name) => setDirectForm((prev) => ({ ...prev, customerName: name })),
-            (id) => setDirectForm((prev) => ({ ...prev, customerId: id })),
-          );
-        }}
-        onCustomerSelect={(customerId) => {
-          const selected = directCustomerCandidates.find((candidate) => candidate.id === customerId);
-          setDirectForm((prev) => ({ ...prev, customerId, customerName: selected?.orderName || '' }));
-        }}
+        onCustomerMarkChange={handleDirectCustomerMarkChange}
+        onCustomerSelect={handleDirectCustomerSelect}
         onSubmit={handleDirectCreate}
       />
 

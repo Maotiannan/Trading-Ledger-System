@@ -138,6 +138,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.42（2026-03-10）：详情模块新增 `use-detail-forms` 与 `use-detail-actions`，上传/确认/直建/删除申请与图片预览状态脱离主组件，`detail-manager.tsx` 从 328 行压缩到 203 行
 - v1.0.41（2026-03-10）：详情模块开始组件化；列表、上传、直接创建、图片预览抽为独立组件，`detail-manager.tsx` 从 549 行压缩到 328 行
 - v1.0.40（2026-03-10）：收据模块新增 `use-receipt-actions`，OCR/确认创建/直接创建/签收/删除申请等网络动作脱离主组件，`receipt-manager.tsx` 从 397 行压缩到 257 行
 - v1.0.39（2026-03-10）：收据模块新增 `use-receipt-customer-lookup` 与 `use-receipt-forms`，OCR/直建表单态与候选匹配脱离主组件，`receipt-manager.tsx` 从 529 行压缩到 397 行

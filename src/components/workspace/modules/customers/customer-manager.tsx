@@ -1,18 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '@/lib/store';
-import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   apiCall,
-  initCustomerImportRowViews,
-  mergeCustomerImportRowViews,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
   useUiText,
   type CustomerImportRowView,
 } from '@/components/workspace/shared';
@@ -25,7 +19,8 @@ import {
   CustomerList,
   CustomerLongTextPreviewDialog,
 } from './components';
-import type { CustomerFormState, CustomerOwnerOption } from './types';
+import type { CustomerOwnerOption } from './types';
+import { useCustomerActions, useCustomerForms } from './hooks';
 import { Loader2, Upload, Plus } from 'lucide-react';
 
 export function CustomerManager() {
@@ -39,44 +34,35 @@ export function CustomerManager() {
   const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
   const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
   const [search, setSearch] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
-  const [fixingTarget, setFixingTarget] = useState<{ type: 'order' | 'receipt'; id: string } | null>(null);
-  const [customerImporting, setCustomerImporting] = useState(false);
-  const [customerImportRows, setCustomerImportRows] = useState<CustomerImportRowView[]>([]);
-  const [showCustomerImportIssues, setShowCustomerImportIssues] = useState(false);
-  const [customerIssueSubmitting, setCustomerIssueSubmitting] = useState(false);
-  const [customerImportMessage, setCustomerImportMessage] = useState('');
-  const [customerLongTextPreview, setCustomerLongTextPreview] = useState<{ label: string; value: string } | null>(null);
-  const customerImportInputRef = useRef<HTMLInputElement | null>(null);
+  const {
+    customerImportInputRef,
+    showCreate,
+    setShowCreate,
+    editing,
+    setEditing,
+    fixingTarget,
+    setFixingTarget,
+    customerImporting,
+    setCustomerImporting,
+    customerImportRows,
+    setCustomerImportRows,
+    showCustomerImportIssues,
+    setShowCustomerImportIssues,
+    customerIssueSubmitting,
+    setCustomerIssueSubmitting,
+    customerImportMessage,
+    setCustomerImportMessage,
+    customerLongTextPreview,
+    setCustomerLongTextPreview,
+    form,
+    setForm,
+    resetForm,
+    openEdit,
+    openFix,
+    closeCustomerImportDialog,
+    updateCustomerImportIssue,
+  } = useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId });
   const customerImportTable = useImportResultTable(customerImportRows);
-  const [form, setForm] = useState<CustomerFormState>({
-    mark: '',
-    orderName: '',
-    name: '',
-    phone: '',
-    city: '',
-    consignee: '',
-    companyName: '',
-    credit: '',
-    companyAddress: '',
-    ownerId: defaultOwnerId,
-  });
-
-  const resetForm = () => {
-    setForm({
-      mark: '',
-      orderName: '',
-      name: '',
-      phone: '',
-      city: '',
-      consignee: '',
-      companyName: '',
-      credit: '',
-      companyAddress: '',
-      ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
-    });
-  };
 
   const loadCustomers = useCallback(async () => {
     const result = await apiCall(`customer${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''}`);
@@ -91,22 +77,40 @@ export function CustomerManager() {
     }
   }, []);
 
-  const loadOwnerOptions = useCallback(async () => {
-    const result = await apiCall('customer?action=owner-options');
-    if (!result.success) return;
-    const options = Array.isArray(result.data) ? result.data : [];
-    setOwnerOptions(options);
-
-    if (isAdmin) {
-      const preferredSales = options.find((row) => row && row.role === 'SALES');
-      const fallback = preferredSales?.id || options[0]?.id || defaultOwnerId;
-      setImportOwnerId((prev) => prev || fallback);
-      setForm((prev) => ({ ...prev, ownerId: prev.ownerId || fallback }));
-    } else {
-      setImportOwnerId(defaultOwnerId);
-      setForm((prev) => ({ ...prev, ownerId: defaultOwnerId }));
-    }
-  }, [defaultOwnerId, isAdmin]);
+  const {
+    loadOwnerOptions,
+    handleCreateOrUpdate,
+    handleDelete,
+    submitFix,
+    downloadCustomerImportTemplate,
+    handleCustomerExcelImport,
+    retryCustomerIssueRows,
+  } = useCustomerActions({
+    tx,
+    isAdmin,
+    defaultOwnerId,
+    importOwnerId,
+    editing,
+    fixingTarget,
+    form,
+    latestFailedRows: customerImportTable.latestFailedRows,
+    loadCustomers,
+    loadFixes,
+    setOwnerOptions,
+    setImportOwnerId,
+    setForm,
+    setShowCreate,
+    setEditing,
+    setFixingTarget,
+    setCustomerImporting,
+    setCustomerImportRows,
+    setShowCustomerImportIssues,
+    setCustomerIssueSubmitting,
+    setCustomerImportMessage,
+    customerImportInputRef,
+    resetForm,
+    resetImportTable: customerImportTable.reset,
+  });
 
   useEffect(() => {
     void Promise.resolve().then(() => {
@@ -115,102 +119,6 @@ export function CustomerManager() {
       void loadOwnerOptions();
     });
   }, [loadCustomers, loadFixes, loadOwnerOptions]);
-
-  const handleCreateOrUpdate = async () => {
-    const payload = {
-      ...(editing ? { action: 'update', id: editing.id } : { action: 'create' }),
-      mark: form.mark,
-      orderName: form.orderName,
-      name: form.name,
-      phone: form.phone,
-      city: form.city,
-      consignee: form.consignee,
-      companyName: form.companyName || null,
-      companyAddress: form.companyAddress || null,
-      credit: form.credit === '' ? null : Number(form.credit),
-      ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
-    };
-    const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
-    if (!result.success) {
-      alert(result.error || tx('保存失败', 'Save failed'));
-      return;
-    }
-    setShowCreate(false);
-    setEditing(null);
-    resetForm();
-    loadCustomers();
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!isAdmin) return;
-    if (!confirm(tx('确定删除该客户吗？', 'Delete this customer?'))) return;
-    const result = await apiCall('customer', { method: 'POST', body: JSON.stringify({ action: 'delete', id }) });
-    if (!result.success) {
-      alert(result.error || tx('删除失败', 'Delete failed'));
-      return;
-    }
-    loadCustomers();
-  };
-
-  const openEdit = (row: Record<string, unknown>) => {
-    setEditing(row);
-    setForm({
-      mark: String(row.mark || ''),
-      orderName: String(row.orderName || ''),
-      name: String(row.name || ''),
-      phone: String(row.phone || ''),
-      city: String(row.city || ''),
-      consignee: String(row.consignee || ''),
-      companyName: String(row.companyName || ''),
-      credit: row.credit === null || row.credit === undefined ? '' : String(row.credit),
-      companyAddress: String(row.companyAddress || ''),
-      ownerId: String(row.ownerId || importOwnerId || defaultOwnerId),
-    });
-    setShowCreate(true);
-  };
-
-  const openFix = (type: 'order' | 'receipt', row: Record<string, unknown>) => {
-    setFixingTarget({ type, id: String(row.id) });
-    setForm({
-      mark: String(row.customerMark || ''),
-      orderName: String(row.customerName || ''),
-      name: '',
-      phone: String(row.customerPhone || ''),
-      city: String(row.customerCity || ''),
-      consignee: '',
-      companyName: '',
-      credit: '',
-      companyAddress: '',
-      ownerId: importOwnerId || defaultOwnerId,
-    });
-  };
-
-  const submitFix = async () => {
-    if (!fixingTarget) return;
-    const payload = {
-      action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
-      ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
-      mark: form.mark,
-      orderName: form.orderName,
-      name: form.name,
-      phone: form.phone,
-      city: form.city,
-      consignee: form.consignee,
-      companyName: form.companyName || null,
-      companyAddress: form.companyAddress || null,
-      credit: form.credit === '' ? null : Number(form.credit),
-      ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
-    };
-    const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
-    if (!result.success) {
-      alert(result.error || tx('修复失败', 'Fix failed'));
-      return;
-    }
-    setFixingTarget(null);
-    resetForm();
-    loadCustomers();
-    loadFixes();
-  };
 
   const canSeeExtended = isAdmin || customers.some((row) => row.companyName !== null || row.companyAddress !== null || row.credit !== null);
   const formatOwnerLabel = (row: Record<string, unknown>) => {
@@ -225,125 +133,6 @@ export function CustomerManager() {
     if (!normalized) return '-';
     if (normalized.length <= maxLength) return normalized;
     return `${normalized.slice(0, maxLength)}...`;
-  };
-
-  const downloadCustomerImportTemplate = async () => {
-    try {
-      const response = await fetch('/api/customer?action=import-template', {
-        method: 'GET',
-        credentials: 'include',
-      });
-      if (!response.ok) throw new Error(tx('模板下载失败', 'Failed to download template'));
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'customer-import-template.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : tx('模板下载失败', 'Failed to download template'));
-    }
-  };
-
-  const handleCustomerExcelImport = async (file: File) => {
-    setCustomerImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append('action', 'import-excel');
-      if (isAdmin && (importOwnerId || defaultOwnerId)) {
-        formData.append('ownerId', importOwnerId || defaultOwnerId);
-      }
-      formData.append('file', file);
-      const response = await fetch('/api/customer', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-
-      const rowResults = toCustomerImportRowResults(result?.rowResults);
-      const fallbackResults = rowResults.length > 0 ? rowResults : toCustomerImportRowResultsFromIssues(result?.issueRows);
-      if (fallbackResults.length === 0) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-      setCustomerImportRows(initCustomerImportRowViews(fallbackResults));
-      customerImportTable.reset();
-      setCustomerImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
-      setShowCustomerImportIssues(true);
-      await loadCustomers();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
-    } finally {
-      setCustomerImporting(false);
-      if (customerImportInputRef.current) customerImportInputRef.current.value = '';
-    }
-  };
-
-  const updateCustomerImportIssue = (rowNo: number, field: keyof Omit<CustomerImportRowView, 'latestStatus' | 'latestReason' | 'attempts'>, value: string) => {
-    setCustomerImportRows((prev) => prev.map((row) => {
-      if (row.rowNo !== rowNo || row.latestStatus !== 'FAILED') return row;
-      return { ...row, [field]: value };
-    }));
-  };
-
-  const retryCustomerIssueRows = async () => {
-    if (customerImportTable.latestFailedRows.length === 0) return;
-    setCustomerIssueSubmitting(true);
-    try {
-      const response = await fetch('/api/customer', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'import-rows',
-          ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
-          rows: customerImportTable.latestFailedRows.map((row) => ({
-            rowNo: row.rowNo,
-            mark: row.mark,
-            orderName: row.orderName,
-            name: row.name,
-            phone: row.phone,
-            city: row.city,
-            consignee: row.consignee,
-            companyName: row.companyName,
-            credit: row.credit,
-            companyAddress: row.companyAddress,
-            ownerEmail: row.ownerEmail,
-          })),
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-      const rowResults = toCustomerImportRowResults(result?.rowResults);
-      const fallbackResults = rowResults.length > 0 ? rowResults : toCustomerImportRowResultsFromIssues(result?.issueRows);
-      if (fallbackResults.length === 0) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-      setCustomerImportRows((prev) => mergeCustomerImportRowViews(prev, fallbackResults));
-      setCustomerImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
-      await loadCustomers();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
-    } finally {
-      setCustomerIssueSubmitting(false);
-    }
-  };
-
-  const closeCustomerImportDialog = () => {
-    setShowCustomerImportIssues(false);
-    setCustomerImportRows([]);
-    setCustomerImportMessage('');
-    customerImportTable.reset();
   };
 
   const customerImportColumns: ImportResultDialogColumn<CustomerImportRowView>[] = useMemo(() => ([
@@ -427,7 +216,7 @@ export function CustomerManager() {
         <Input className="min-w-[220px]" value={row.ownerEmail} disabled={!canEdit} onChange={(e) => updateCustomerImportIssue(row.rowNo, 'ownerEmail', e.target.value)} />
       ),
     },
-  ]), []);
+  ]), [updateCustomerImportIssue]);
 
   return (
     <div className="space-y-6">

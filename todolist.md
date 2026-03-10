@@ -94,6 +94,7 @@
 - [x] 账单模块继续内聚拆分：创建账单/编辑订单/转移多付/付款记录/冲突匹配对话框抽离为独立组件，`invoice-manager.tsx` 继续瘦身 ✅ 2026-03-09
 - [x] 账单列表区拆分：发票卡片列表、订单表格、行内加单表单抽离为 `invoice-list.tsx`，主模块进一步收敛为状态与动作编排 ✅ 2026-03-10
 - [x] 账单模块副作用逻辑拆分：导入结果状态与客户候选查询抽为本地 hooks，`invoice-manager.tsx` 进一步收敛为页面编排层 ✅ 2026-03-10
+- [x] 账单模块表单态拆分：创建账单、编辑订单、行内加单的本地状态与候选回填抽为 `use-invoice-order-forms`，主模块继续减重 ✅ 2026-03-10
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -133,6 +134,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.36（2026-03-10）：账单模块新增 `use-invoice-order-forms`，创建/编辑/加单表单态与候选回填脱离主组件，`invoice-manager.tsx` 从 901 行压缩到 711 行
 - v1.0.35（2026-03-10）：账单模块抽出 `use-invoice-import` 与 `use-invoice-customer-lookup`，导入状态机与客户候选查询脱离主组件，`invoice-manager.tsx` 从 1112 行压缩到 901 行
 - v1.0.34（2026-03-10）：账单列表区继续拆分；`invoice-list.tsx` 承接发票卡片列表、订单表格与行内加单表单，`invoice-manager.tsx` 从 1339 行压缩到 1112 行
 - v1.0.33（2026-03-09）：账单模块内进一步拆分；五个大对话框抽为独立组件，新增 invoices/types.ts 收口本模块类型，`invoice-manager.tsx` 从 1608 行压缩到 1339 行

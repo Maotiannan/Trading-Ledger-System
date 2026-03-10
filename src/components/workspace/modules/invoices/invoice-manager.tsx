@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  CustomerCandidate,
   apiCall,
   fetchServerDate,
   getDisplayImageUrl,
@@ -32,38 +31,17 @@ import type {
   RematchSelection,
   TransferFromOrder,
 } from './types';
-import { useInvoiceCustomerLookup, useInvoiceImport } from './hooks';
+import { useInvoiceCustomerLookup, useInvoiceImport, useInvoiceOrderForms } from './hooks';
 import { Loader2, Plus, Upload, RefreshCw } from 'lucide-react';
 
 export function InvoiceManager() {
   const tx = useUiText();
   const { invoices, setInvoices, loading, setLoading, user } = useStore();
   const [search, setSearch] = useState('');
-  const [showDialog, setShowDialog] = useState(false);
-  const [invNo, setInvNo] = useState('');
-  const [shipDate, setShipDate] = useState('');
-  const [releaseDate, setReleaseDate] = useState('');
-  const [orders, setOrders] = useState<InvoiceDraftOrder[]>([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
-  const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   
   // 展开状态
   const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set());
-  
-  // 编辑订单对话框
-  const [editingOrder, setEditingOrder] = useState<EditingInvoiceOrder | null>(null);
-  const [showOrderDialog, setShowOrderDialog] = useState(false);
-  const [orderFormError, setOrderFormError] = useState('');
-  
-  // 添加订单到现有账单
-  const [addingOrderToInvoice, setAddingOrderToInvoice] = useState<string | null>(null);
-  const [newOrderNo, setNewOrderNo] = useState('');
-  const [newOrderAmount, setNewOrderAmount] = useState('');
-  const [newOrderCustomerMark, setNewOrderCustomerMark] = useState('');
-  const [newOrderCustomerName, setNewOrderCustomerName] = useState('');
-  const [newOrderCustomerId, setNewOrderCustomerId] = useState('');
-  const [newOrderCustomerCandidates, setNewOrderCustomerCandidates] = useState<CustomerCandidate[]>([]);
-  const [addError, setAddError] = useState('');
   
   // 转移余额对话框
   const [showTransferDialog, setShowTransferDialog] = useState(false);
@@ -82,7 +60,6 @@ export function InvoiceManager() {
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
-  const [editingOrderCandidates, setEditingOrderCandidates] = useState<CustomerCandidate[]>([]);
   const [editingInvoiceDateId, setEditingInvoiceDateId] = useState<string | null>(null);
   const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
   const [editingInvoiceReleaseDate, setEditingInvoiceReleaseDate] = useState('');
@@ -101,6 +78,49 @@ export function InvoiceManager() {
   }, [setInvoices, setLoading, search]);
 
   const { loadCustomerCandidates } = useInvoiceCustomerLookup();
+  const {
+    showDialog,
+    invNo,
+    setInvNo,
+    shipDate,
+    setShipDate,
+    releaseDate,
+    setReleaseDate,
+    orders,
+    formError,
+    setFormError,
+    resetCreateInvoiceDialog,
+    handleCreateDialogOpenChange,
+    addOrderRow,
+    updateOrder,
+    removeOrder,
+    selectCreateInvoiceCustomer,
+    editingOrder,
+    setEditingOrder,
+    showOrderDialog,
+    orderFormError,
+    setOrderFormError,
+    editingOrderCandidates,
+    handleOrderDialogOpenChange,
+    openEditOrder,
+    handleEditingOrderMarkChange,
+    selectEditingOrderCustomer,
+    addingOrderToInvoice,
+    addError,
+    setAddError,
+    newOrderNo,
+    newOrderAmount,
+    setNewOrderAmount,
+    newOrderCustomerMark,
+    newOrderCustomerName,
+    newOrderCustomerId,
+    newOrderCustomerCandidates,
+    startAddOrder,
+    handleNewOrderNoChange,
+    handleNewOrderCustomerMarkChange,
+    selectNewOrderCustomer,
+    resetAddOrderForm,
+  } = useInvoiceOrderForms(loadCustomerCandidates);
   const {
     invoiceImporting,
     showInvoiceImportIssues,
@@ -134,28 +154,6 @@ export function InvoiceManager() {
       URL.revokeObjectURL(url);
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('模板下载失败', 'Failed to download template'));
-    }
-  };
-
-  const resetCreateInvoiceDialog = () => {
-    setFormError('');
-    setInvNo('');
-    setShipDate('');
-    setReleaseDate('');
-    setOrders([{ orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
-  };
-
-  const handleCreateDialogOpenChange = (open: boolean) => {
-    setShowDialog(open);
-    if (!open) resetCreateInvoiceDialog();
-  };
-
-  const handleOrderDialogOpenChange = (open: boolean) => {
-    setShowOrderDialog(open);
-    if (!open) {
-      setEditingOrder(null);
-      setOrderFormError('');
-      setEditingOrderCandidates([]);
     }
   };
 
@@ -335,7 +333,7 @@ export function InvoiceManager() {
       });
 
       if (result.success) {
-        setShowDialog(false);
+        handleCreateDialogOpenChange(false);
         resetCreateInvoiceDialog();
         // 显示合并消息（如果有）
         if (result.message) {
@@ -457,13 +455,7 @@ export function InvoiceManager() {
       });
 
       if (result.success) {
-        setAddingOrderToInvoice(null);
-        setNewOrderNo('');
-        setNewOrderAmount('');
-        setNewOrderCustomerMark('');
-        setNewOrderCustomerName('');
-        setNewOrderCustomerId('');
-        setNewOrderCustomerCandidates([]);
+        resetAddOrderForm();
         loadInvoices();
       } else {
         setAddError(result.error || tx('添加失败', 'Add failed'));
@@ -518,125 +510,6 @@ export function InvoiceManager() {
     }
   };
 
-  const addOrderRow = () => {
-    setOrders([...orders, { orderNo: '', amount: '', customerMark: '', customerName: '', customerId: '', customerCandidates: [] }]);
-  };
-
-  const updateOrder = (index: number, field: 'orderNo' | 'amount' | 'customerMark', value: string) => {
-    const newOrders = [...orders];
-    if (field === 'customerMark') {
-      newOrders[index].customerMark = value;
-      newOrders[index].customerId = '';
-      newOrders[index].customerName = '';
-      loadCustomerCandidates(
-        value,
-        (rows) => {
-          setOrders((prev) => {
-            const copy = [...prev];
-            const row = copy[index];
-            if (!row) return prev;
-            row.customerCandidates = rows;
-            if (rows.length === 1) {
-              row.customerName = rows[0].orderName;
-              row.customerId = rows[0].id;
-            }
-            return copy;
-          });
-        },
-        (name) => setOrders((prev) => {
-          const copy = [...prev];
-          if (copy[index]) copy[index].customerName = name;
-          return copy;
-        }),
-        (id) => setOrders((prev) => {
-          const copy = [...prev];
-          if (copy[index]) copy[index].customerId = id;
-          return copy;
-        })
-      );
-    } else if (field === 'orderNo') {
-      newOrders[index].orderNo = value;
-      const orderInput = value.trim();
-      if (orderInput) {
-        void lookupCustomerByOrderNoGroup(orderInput).then((matched) => {
-          if (!matched) return;
-          setOrders((prev) => {
-            const copy = [...prev];
-            const row = copy[index];
-            if (!row) return prev;
-            row.customerMark = matched.mark;
-            row.customerName = matched.name || row.customerName;
-            row.customerId = matched.customerId || row.customerId;
-            return copy;
-          });
-          loadCustomerCandidates(
-            matched.mark,
-            (rows) => setOrders((prev) => {
-              const copy = [...prev];
-              if (copy[index]) copy[index].customerCandidates = rows;
-              return copy;
-            }),
-            (name) => setOrders((prev) => {
-              const copy = [...prev];
-              if (copy[index]) copy[index].customerName = name;
-              return copy;
-            }),
-            (id) => setOrders((prev) => {
-              const copy = [...prev];
-              if (copy[index]) copy[index].customerId = id;
-              return copy;
-            })
-          );
-        });
-      }
-    } else {
-      newOrders[index].amount = value;
-    }
-    setOrders(newOrders);
-  };
-
-  const removeOrder = (index: number) => {
-    if (orders.length > 1) {
-      setOrders(orders.filter((_, i) => i !== index));
-    }
-  };
-
-  const selectCreateInvoiceCustomer = (index: number, customerId: string) => {
-    setOrders((prev) => {
-      const copy = [...prev];
-      const row = copy[index];
-      if (!row) return prev;
-      row.customerId = customerId;
-      const selected = row.customerCandidates.find((candidate) => candidate.id === customerId);
-      row.customerName = selected?.orderName || '';
-      return copy;
-    });
-  };
-
-  const handleEditingOrderMarkChange = (mark: string) => {
-    if (!editingOrder) return;
-    setEditingOrder({ ...editingOrder, customerMark: mark, customerName: '', customerPhone: '', customerCity: '', customerId: '' });
-    loadCustomerCandidates(
-      mark,
-      setEditingOrderCandidates,
-      (name) => setEditingOrder((prev) => prev ? ({ ...prev, customerName: name }) : prev),
-      (id) => setEditingOrder((prev) => prev ? ({ ...prev, customerId: id }) : prev),
-      (phone) => setEditingOrder((prev) => prev ? ({ ...prev, customerPhone: phone }) : prev),
-      (city) => setEditingOrder((prev) => prev ? ({ ...prev, customerCity: city }) : prev)
-    );
-  };
-
-  const selectEditingOrderCustomer = (customerId: string) => {
-    const selected = editingOrderCandidates.find((candidate) => candidate.id === customerId);
-    setEditingOrder((prev) => prev ? ({
-      ...prev,
-      customerId,
-      customerName: selected?.orderName || '',
-      customerPhone: selected?.phone || '',
-      customerCity: selected?.city || '',
-    }) : prev);
-  };
-
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
 
   return (
@@ -679,7 +552,7 @@ export function InvoiceManager() {
                 )}
                 {tx('刷新匹配', 'Rematch')}
               </Button>
-              <Button onClick={() => setShowDialog(true)}>
+              <Button onClick={() => handleCreateDialogOpenChange(true)}>
                 <Plus className="h-4 w-4 mr-2" />
                 {tx('直接创建账单', 'Create Invoice')}
               </Button>
@@ -731,83 +604,20 @@ export function InvoiceManager() {
         }}
         onSaveInvoiceDates={saveInvoiceDates}
         onCancelInvoiceDateEditor={cancelInvoiceDateEditor}
-        onStartAddOrder={setAddingOrderToInvoice}
-        onNewOrderNoChange={(value) => {
-          setNewOrderNo(value);
-          if (value.trim()) {
-            void lookupCustomerByOrderNoGroup(value).then((matched) => {
-              if (!matched) return;
-              setNewOrderCustomerMark(matched.mark);
-              setNewOrderCustomerName(matched.name);
-              setNewOrderCustomerId(matched.customerId);
-              loadCustomerCandidates(
-                matched.mark,
-                setNewOrderCustomerCandidates,
-                setNewOrderCustomerName,
-                setNewOrderCustomerId
-              );
-            });
-          }
-        }}
+        onStartAddOrder={startAddOrder}
+        onNewOrderNoChange={handleNewOrderNoChange}
         onNewOrderAmountChange={setNewOrderAmount}
-        onNewOrderCustomerMarkChange={(value) => {
-          setNewOrderCustomerMark(value);
-          setNewOrderCustomerId('');
-          setNewOrderCustomerName('');
-          loadCustomerCandidates(
-            value,
-            setNewOrderCustomerCandidates,
-            setNewOrderCustomerName,
-            setNewOrderCustomerId
-          );
-        }}
-        onNewOrderCustomerSelect={(customerId) => {
-          setNewOrderCustomerId(customerId);
-          const selected = newOrderCustomerCandidates.find((candidate) => candidate.id === customerId);
-          setNewOrderCustomerName(selected?.orderName || '');
-        }}
+        onNewOrderCustomerMarkChange={handleNewOrderCustomerMarkChange}
+        onNewOrderCustomerSelect={selectNewOrderCustomer}
         onSubmitAddOrder={handleAddOrder}
-        onCancelAddOrder={() => {
-          setAddingOrderToInvoice(null);
-          setNewOrderNo('');
-          setNewOrderAmount('');
-          setNewOrderCustomerMark('');
-          setNewOrderCustomerName('');
-          setNewOrderCustomerId('');
-          setNewOrderCustomerCandidates([]);
-          setAddError('');
-        }}
+        onCancelAddOrder={resetAddOrderForm}
         onOpenOrderHistory={openOrderHistory}
         onOpenTransfer={(order) => {
           setTransferFromOrder(order);
           setTransferAmount(Math.abs(order.balance).toFixed(2));
           setShowTransferDialog(true);
         }}
-        onOpenEditOrder={(invoiceId, order) => {
-          setEditingOrder({
-            id: order.id,
-            orderNo: order.orderNo,
-            amount: order.amount,
-            invoiceId,
-            customerMark: order.customerMark || '',
-            customerName: order.customerName || '',
-            customerPhone: order.customerPhone || '',
-            customerCity: order.customerCity || '',
-            customerId: '',
-          });
-          setEditingOrderCandidates([]);
-          if (order.customerMark) {
-            loadCustomerCandidates(
-              order.customerMark,
-              setEditingOrderCandidates,
-              undefined,
-              undefined,
-              undefined,
-              undefined
-            );
-          }
-          setShowOrderDialog(true);
-        }}
+        onOpenEditOrder={openEditOrder}
         onDeleteOrder={handleDeleteOrder}
       />
 

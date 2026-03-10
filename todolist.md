@@ -1,8 +1,8 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.32  
-> 最后更新：2026-03-09
+> 当前版本：v1.0.51  
+> 最后更新：2026-03-10
 
 ## P0（本周必须完成）
 
@@ -99,6 +99,12 @@
 - [x] 收据模块第一轮组件拆分：列表、上传对话框、直接创建对话框、图片预览对话框抽离，`receipt-manager.tsx` 显著减重 ✅ 2026-03-10
 - [x] 收据模块本地表单与候选匹配拆分：OCR/直建客户候选查询、预览状态、打开关闭逻辑抽为 hooks，主模块继续减重 ✅ 2026-03-10
 - [x] 收据模块远程动作拆分：OCR识别、确认创建、直接创建、签收、删除申请抽为 `use-receipt-actions`，主模块基本收敛为拼装层 ✅ 2026-03-10
+- [x] 隔离 API 测试重构完成：`test-api-isolated.sh` 仅负责环境引导，API 回归拆分为 `tests/api/isolated/cases/*.case.mjs` 模块化 case ✅ 2026-03-10
+- [x] 第一批 workspace hook/module 测试落地：`invoice/customer/settings` 关键 hooks 已纳入 Jest + RTL 自动化回归 ✅ 2026-03-10
+- [x] 新增稳定 Playwright 闭环：登录导航、客户->账单创建、设置页渲染均已纳入隔离 E2E ✅ 2026-03-10
+- [x] CI 门禁与覆盖率阈值上线：新增 GitHub Actions 流水线与 `npm run test:ci`，统一串联类型检查、lint、单测覆盖、隔离 API/E2E ✅ 2026-03-10
+- [x] 修复根管理员初始化幂等与层级归一，避免 `/api/init` 并发或历史脏数据导致根账号层级错误 ✅ 2026-03-10
+- [x] 修复 grouped order 合并后账单加单仍对旧 `orderId` 结算导致的潜在 500 ✅ 2026-03-10
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -113,7 +119,7 @@
 ### 测试覆盖
 - [ ] 覆盖 `deletion` 审批分支单测（RECEIPT/DETAIL/SWIFT）
 - [ ] 覆盖 `swift` 金额容差分支单测（正常/警告/拒绝）
-- [ ] 增加 Playwright API 驱动用例（优先 API，不依赖手工 UI 点击）
+- [x] 增加 Playwright API 驱动用例（优先 API，不依赖手工 UI 点击）✅ 2026-03-10
 
 ## P2（持续迭代）
 
@@ -138,6 +144,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.51（2026-03-10）：测试工程化收口；隔离 API 测试拆成环境引导 + 模块化 case 文件，新增 invoice/customer/settings 第一批 hook 测试、三条稳定 Playwright 隔离 E2E、GitHub Actions CI 与覆盖率阈值；同时修复 `/api/init` 根管理员层级归一和 `/api/invoice` grouped order 合并后的旧 `orderId` 结算风险
 - v1.0.48（2026-03-10）：客户模块导入工作区继续拆分；顶部工具区抽为 `customer-toolbar`，导入问题行列定义抽为 `use-customer-import-columns`，`customer-manager.tsx` 从 347 行压缩到 236 行
 - v1.0.49（2026-03-10）：用户管理模块完成首轮拆分；创建用户对话框、用户列表、本地表单态与远程动作拆到 `components/ + hooks/ + types.ts`，`user-manager.tsx` 收敛到页面编排层；README 补充前端模块拆分规则、共享能力边界与后续预留接口
 - v1.0.50（2026-03-10）：账单模块新增 `use-invoice-view-state`，搜索词、展开状态、导入 input ref 与列表加载逻辑脱离 `invoice-manager.tsx`；主文件从 329 行压缩到 304 行；同时明确 `deletions / dashboard` 现阶段维持轻量模块，不为拆分而拆分

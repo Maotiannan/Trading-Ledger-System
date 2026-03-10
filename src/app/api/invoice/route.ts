@@ -1429,7 +1429,6 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       });
       await syncOrderAliases(db, order.id, incomingOrderNo);
       await consolidateGroupedOrders({ invoiceIds: [invoiceId] });
-      await updateOrderBalance(order.id);
 
       return NextResponse.json({ success: true, data: order });
     }

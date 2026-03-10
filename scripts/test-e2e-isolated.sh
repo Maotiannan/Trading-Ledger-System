@@ -4,13 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BASE_URL="${BASE_URL:-http://127.0.0.1:3100}"
-APP_PORT="${APP_PORT:-3100}"
-COOKIE_FILE="$(mktemp /tmp/tls-api-cookie.XXXXXX)"
-APP_LOG="$(mktemp /tmp/tls-api-app.XXXXXX.log)"
-UPLOAD_DIR="$(mktemp -d /tmp/tls-upload.XXXXXX)"
+BASE_URL="${BASE_URL:-http://127.0.0.1:3200}"
+APP_PORT="${APP_PORT:-3200}"
+APP_LOG="$(mktemp /tmp/tls-e2e-app.XXXXXX.log)"
+UPLOAD_DIR="$(mktemp -d /tmp/tls-e2e-upload.XXXXXX)"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.test.yml"
-COMPOSE_PROJECT_NAME="trading-ledger-system-test"
+COMPOSE_PROJECT_NAME="trading-ledger-system-e2e"
 APP_PID=""
 
 compose() {
@@ -23,7 +22,7 @@ cleanup() {
     wait "$APP_PID" >/dev/null 2>&1 || true
   fi
   compose down -v >/dev/null 2>&1 || true
-  rm -f "$COOKIE_FILE" "$APP_LOG"
+  rm -f "$APP_LOG"
   rm -rf "$UPLOAD_DIR"
 }
 trap cleanup EXIT
@@ -62,8 +61,6 @@ compose up -d >/dev/null
 wait_for_mysql || fail "mysql not ready"
 sleep 2
 
-export BASE_URL
-export COOKIE_FILE
 export DATABASE_URL="mysql://root:rootpass@127.0.0.1:3307/trading_ledger_test"
 export SESSION_SECRET="test-session-secret-12345678901234567890"
 export ENABLE_INIT_ROUTE="true"
@@ -78,6 +75,11 @@ npx next dev -p "$APP_PORT" >"$APP_LOG" 2>&1 &
 APP_PID="$!"
 wait_for_http "$BASE_URL" || fail "app not ready"
 
-node scripts/run-api-isolated-tests.mjs || fail "isolated API cases"
+PLAYWRIGHT_BASE_URL="$BASE_URL" \
+PLAYWRIGHT_SKIP_WEBSERVER=1 \
+PW_TEST_INIT_TOKEN="$INIT_ADMIN_TOKEN" \
+PW_TEST_ADMIN_EMAIL="$INIT_ADMIN_EMAIL" \
+PW_TEST_ADMIN_PASSWORD="$INIT_ADMIN_PASSWORD" \
+npx playwright test || fail "playwright end-to-end"
 
-echo "Isolated API tests completed."
+echo "Isolated Playwright tests completed."

@@ -23,6 +23,11 @@
 - workspace 路由现已使用共享 `(workspace)` layout 承载侧栏与鉴权，模块切换时只替换右侧主内容区，避免整屏白屏后重新挂载
 - 侧边栏已支持收缩为仅图标模式，并持久化到本地存储；刷新后会保留收缩状态
 - 发票/客户导入结果弹窗已抽成通用组件与通用表格 hook，后续模块内拆分将继续沿用这条复用路径
+- 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
+- `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
+- 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，覆盖率门禁先只对这些高价值 hook 生效，避免一开始把阈值铺得过宽
+- `/api/init` 已补齐根管理员初始化幂等与层级归一，避免并发初始化或历史脏数据导致根账号层级错误
+- `/api/invoice` 已修复 grouped order 合并后继续对旧 orderId 重算余额导致的潜在 500
 
 ## 本地运行
 
@@ -67,11 +72,25 @@ npm test -- --runInBand
 npm run test:api:isolated
 ```
 
+- 隔离 E2E 测试（Playwright）：
+
+```bash
+npm run test:e2e:isolated
+```
+
+- CI 全量校验：
+
+```bash
+npm run test:ci
+```
+
 说明：
 - 该脚本会启动一套独立的 MariaDB 测试容器
 - 使用独立测试库 `trading_ledger_test`
 - 运行结束后自动删除测试容器、测试卷、临时上传目录和 Cookie/日志文件
 - 不会碰现有业务数据库
+- 隔离 API 用例已按模块拆分到 `tests/api/isolated/cases/*.case.mjs`
+- Playwright 闭环会复用 `/api/init` 初始化管理员，不依赖手工准备账号
 
 ---
 
@@ -615,12 +634,29 @@ npm test
 # 监听模式
 npm run test:watch
 
-# 运行 E2E 测试（Playwright）
+# 运行 E2E 测试（Playwright，本地开发）
 npm run test:e2e
 
-# API 冒烟测试（登录 + 核心业务接口 + 导出）
-./scripts/smoke-api.sh
+# 运行隔离 API 测试集（独立 MySQL + 模块化 case）
+npm run test:api:isolated
+
+# 运行隔离 E2E 闭环（独立 MySQL + Playwright）
+npm run test:e2e:isolated
+
+# 本地模拟 CI 全量校验
+npm run test:ci
 ```
+
+- 隔离 API 测试结构：
+  - `scripts/test-api-isolated.sh`: 只负责起隔离环境、迁移数据库、启动应用
+  - `scripts/run-api-isolated-tests.mjs`: 逐个加载并运行 case
+  - `tests/api/isolated/helpers/context.mjs`: 登录、请求、断言、临时文件等公共能力
+  - `tests/api/isolated/cases/*.case.mjs`: 按业务模块拆开的 API 回归 case
+- 第一批 hook/module 测试覆盖：
+  - `invoice`: `use-invoice-view-state`, `use-invoice-actions`
+  - `customer`: `use-customer-forms`, `use-customer-actions`
+  - `settings`: `use-settings-forms`, `use-settings-actions`
+- 覆盖率门禁当前只对上述 hook 生效，先保证新增可维护测试资产稳定，再逐步扩大到 `receipt/detail/swift/users`
 
 ### 报表导出
 
@@ -853,6 +889,13 @@ src/
 ### v1.0.49 (2026-03-10)
 - 🧩 用户管理模块完成首轮拆分：`user-manager.tsx` 拆出 `components/ + hooks/ + types.ts`，创建用户对话框、用户列表、本地表单态、远程动作不再堆在单文件内。
 - 📉 用户主模块显著瘦身：`user-manager.tsx` 收敛到页面编排层，后续只保留数据加载、权限衍生与组件组装。
+
+### v1.0.51 (2026-03-10)
+- 🧪 自动化测试工程化收口：隔离 API 测试从单脚本重构为“环境引导 + 模块化 case 文件”，新增 `tests/api/isolated/helpers/context.mjs` 与四组 case（鉴权/客户/账单链路/设置导出）。
+- 🪝 第一批 workspace hook/module 测试落地：为 `invoice / customer / settings` 的关键 hooks 补齐 Jest + RTL 测试，并在 `jest.config.ts` 增加针对这些 hook 的覆盖率门禁。
+- 🎭 新增稳定 Playwright 闭环：补充登录导航、客户->账单创建、设置页渲染三条隔离 E2E，用例通过 `/api/init` 自举管理员，不依赖手工准备环境。
+- 🧱 CI 门禁上线：新增 `.github/workflows/ci.yml` 与 `npm run test:ci`，统一串联 `tsc + lint + unit coverage + isolated api + isolated e2e`。
+- 🔧 真实缺陷修复：`/api/init` 补齐根管理员幂等初始化与层级归一；`/api/invoice` 修复 grouped order 合并后继续使用旧 `orderId` 结算可能触发的 500。
 
 ### v1.0.50 (2026-03-10)
 - 🪝 账单模块继续收口页面壳状态：新增 `use-invoice-view-state.ts`，统一承接搜索词、展开状态、导入文件 input ref 与列表加载逻辑。

@@ -95,6 +95,7 @@
 - [x] 账单列表区拆分：发票卡片列表、订单表格、行内加单表单抽离为 `invoice-list.tsx`，主模块进一步收敛为状态与动作编排 ✅ 2026-03-10
 - [x] 账单模块副作用逻辑拆分：导入结果状态与客户候选查询抽为本地 hooks，`invoice-manager.tsx` 进一步收敛为页面编排层 ✅ 2026-03-10
 - [x] 账单模块表单态拆分：创建账单、编辑订单、行内加单的本地状态与候选回填抽为 `use-invoice-order-forms`，主模块继续减重 ✅ 2026-03-10
+- [x] 账单模块远程动作拆分：转移余额、冲突匹配、订单历史、账单日期编辑抽为 `use-invoice-tools`，主模块进一步收敛 ✅ 2026-03-10
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -134,6 +135,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.37（2026-03-10）：账单模块新增 `use-invoice-tools`，转移余额/冲突匹配/订单历史/账单日期编辑等远程动作脱离主组件，`invoice-manager.tsx` 从 711 行压缩到 533 行
 - v1.0.36（2026-03-10）：账单模块新增 `use-invoice-order-forms`，创建/编辑/加单表单态与候选回填脱离主组件，`invoice-manager.tsx` 从 901 行压缩到 711 行
 - v1.0.35（2026-03-10）：账单模块抽出 `use-invoice-import` 与 `use-invoice-customer-lookup`，导入状态机与客户候选查询脱离主组件，`invoice-manager.tsx` 从 1112 行压缩到 901 行
 - v1.0.34（2026-03-10）：账单列表区继续拆分；`invoice-list.tsx` 承接发票卡片列表、订单表格与行内加单表单，`invoice-manager.tsx` 从 1339 行压缩到 1112 行

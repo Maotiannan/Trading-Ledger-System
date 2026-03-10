@@ -1,30 +1,22 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   CustomerCandidate,
   apiCall,
-  fetchCustomerCandidatesByMark,
   fetchServerDate,
   getDisplayImageUrl,
   getErrorMessage,
-  initInvoiceImportRowViews,
   lookupCustomerByOrderNoGroup,
-  mergeInvoiceImportRowViews,
   summarizeRowsForAlert,
   toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
   useUiText,
-  type InvoiceImportRowView,
 } from '@/components/workspace/shared';
-import { ImportResultDialog, type ImportResultDialogColumn } from '@/components/workspace/components/import-result-dialog';
-import { useImportResultTable } from '@/components/workspace/hooks';
+import { ImportResultDialog } from '@/components/workspace/components/import-result-dialog';
 import {
   CreateInvoiceDialog,
   EditOrderDialog,
@@ -40,6 +32,7 @@ import type {
   RematchSelection,
   TransferFromOrder,
 } from './types';
+import { useInvoiceCustomerLookup, useInvoiceImport } from './hooks';
 import { Loader2, Plus, Upload, RefreshCw } from 'lucide-react';
 
 export function InvoiceManager() {
@@ -90,18 +83,11 @@ export function InvoiceManager() {
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
   const [editingOrderCandidates, setEditingOrderCandidates] = useState<CustomerCandidate[]>([]);
-  const [invoiceImporting, setInvoiceImporting] = useState(false);
-  const [invoiceImportRows, setInvoiceImportRows] = useState<InvoiceImportRowView[]>([]);
-  const [showInvoiceImportIssues, setShowInvoiceImportIssues] = useState(false);
-  const [invoiceIssueSubmitting, setInvoiceIssueSubmitting] = useState(false);
-  const [invoiceImportMessage, setInvoiceImportMessage] = useState('');
   const [editingInvoiceDateId, setEditingInvoiceDateId] = useState<string | null>(null);
   const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
   const [editingInvoiceReleaseDate, setEditingInvoiceReleaseDate] = useState('');
   const [invoiceDateSaving, setInvoiceDateSaving] = useState(false);
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
-  const invoiceCustomerLookupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const invoiceImportTable = useImportResultTable(invoiceImportRows);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -113,6 +99,24 @@ export function InvoiceManager() {
     }
     setLoading(false);
   }, [setInvoices, setLoading, search]);
+
+  const { loadCustomerCandidates } = useInvoiceCustomerLookup();
+  const {
+    invoiceImporting,
+    showInvoiceImportIssues,
+    setShowInvoiceImportIssues,
+    invoiceIssueSubmitting,
+    invoiceImportMessage,
+    invoiceImportTable,
+    invoiceImportColumns,
+    handleInvoiceExcelImport,
+    retryInvoiceIssueRows,
+    closeInvoiceImportDialog,
+  } = useInvoiceImport(tx, loadInvoices, invoiceImportInputRef);
+
+  useEffect(() => {
+    loadInvoices();
+  }, [loadInvoices]);
 
   const downloadInvoiceImportTemplate = async () => {
     try {
@@ -131,100 +135,6 @@ export function InvoiceManager() {
     } catch (error) {
       alert(error instanceof Error ? error.message : tx('模板下载失败', 'Failed to download template'));
     }
-  };
-
-  const handleInvoiceExcelImport = async (file: File) => {
-    setInvoiceImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append('action', 'import-excel');
-      formData.append('file', file);
-      const response = await fetch('/api/invoice', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-
-      const rowResults = toInvoiceImportRowResults(result?.rowResults);
-      const fallbackResults = rowResults.length > 0 ? rowResults : toInvoiceImportRowResultsFromIssues(result?.issueRows);
-      if (fallbackResults.length === 0) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-      setInvoiceImportRows(initInvoiceImportRowViews(fallbackResults));
-      invoiceImportTable.reset();
-      setInvoiceImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
-      setShowInvoiceImportIssues(true);
-      await loadInvoices();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
-    } finally {
-      setInvoiceImporting(false);
-      if (invoiceImportInputRef.current) invoiceImportInputRef.current.value = '';
-    }
-  };
-
-  const updateInvoiceImportIssue = (rowNo: number, field: keyof Omit<InvoiceImportRowView, 'latestStatus' | 'latestReason' | 'attempts'>, value: string) => {
-    setInvoiceImportRows((prev) => prev.map((row) => {
-      if (row.rowNo !== rowNo || row.latestStatus !== 'FAILED') return row;
-      return { ...row, [field]: value };
-    }));
-  };
-
-  const retryInvoiceIssueRows = async () => {
-    if (invoiceImportTable.latestFailedRows.length === 0) return;
-    setInvoiceIssueSubmitting(true);
-    try {
-      const response = await fetch('/api/invoice', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'import-rows',
-          rows: invoiceImportTable.latestFailedRows.map((row) => ({
-            rowNo: row.rowNo,
-            invNo: row.invNo,
-            shipDate: row.shipDate,
-            releaseDate: row.releaseDate,
-            orderNo: row.orderNo,
-            amount: row.amount,
-            customerMark: row.customerMark,
-            customerName: row.customerName,
-            customerId: row.customerId,
-          })),
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-      const rowResults = toInvoiceImportRowResults(result?.rowResults);
-      const fallbackResults = rowResults.length > 0 ? rowResults : toInvoiceImportRowResultsFromIssues(result?.issueRows);
-      if (fallbackResults.length === 0) {
-        const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
-      }
-      setInvoiceImportRows((prev) => mergeInvoiceImportRowViews(prev, fallbackResults));
-      setInvoiceImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
-      await loadInvoices();
-    } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
-    } finally {
-      setInvoiceIssueSubmitting(false);
-    }
-  };
-
-  const closeInvoiceImportDialog = () => {
-    setShowInvoiceImportIssues(false);
-    setInvoiceImportRows([]);
-    setInvoiceImportMessage('');
-    invoiceImportTable.reset();
   };
 
   const resetCreateInvoiceDialog = () => {
@@ -258,65 +168,6 @@ export function InvoiceManager() {
       setTransferError('');
     }
   };
-
-  const invoiceImportColumns: ImportResultDialogColumn<InvoiceImportRowView>[] = useMemo(() => ([
-    {
-      key: 'invNo',
-      header: 'INV_NO',
-      className: 'min-w-[220px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[220px]" value={row.invNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'invNo', e.target.value)} />
-      ),
-    },
-    {
-      key: 'orderNo',
-      header: 'ORDER_NO',
-      className: 'min-w-[300px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[300px]" value={row.orderNo} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'orderNo', e.target.value)} />
-      ),
-    },
-    {
-      key: 'amount',
-      header: 'AMOUNT',
-      className: 'min-w-[140px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[140px]" value={row.amount} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'amount', e.target.value)} />
-      ),
-    },
-    {
-      key: 'customerMark',
-      header: 'CUSTOMER_MARK',
-      className: 'min-w-[280px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[280px]" value={row.customerMark} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerMark', e.target.value)} />
-      ),
-    },
-    {
-      key: 'customerName',
-      header: 'CUSTOMER_ORDER_NAME',
-      className: 'min-w-[320px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[320px]" value={row.customerName} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerName', e.target.value)} />
-      ),
-    },
-    {
-      key: 'shipDate',
-      header: 'SHIP_DATE',
-      className: 'min-w-[180px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[180px]" value={row.shipDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'shipDate', e.target.value)} />
-      ),
-    },
-    {
-      key: 'releaseDate',
-      header: 'RELEASE_DATE',
-      className: 'min-w-[180px]',
-      renderCell: (row, canEdit) => (
-        <Input className="min-w-[180px]" value={row.releaseDate} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'releaseDate', e.target.value)} />
-      ),
-    },
-  ]), []);
 
   const openInvoiceDateEditor = (invoiceId: string, currentShipDate?: string | null, currentReleaseDate?: string | null) => {
     setEditingInvoiceDateId(invoiceId);
@@ -366,68 +217,6 @@ export function InvoiceManager() {
     } finally {
       setInvoiceDateSaving(false);
     }
-  };
-
-  useEffect(() => {
-    loadInvoices();
-  }, [loadInvoices]);
-
-  useEffect(() => {
-    return () => {
-      if (invoiceCustomerLookupTimerRef.current) {
-        clearTimeout(invoiceCustomerLookupTimerRef.current);
-      }
-    };
-  }, []);
-
-  const loadCustomerCandidates = (
-    mark: string,
-    setter: (rows: CustomerCandidate[]) => void,
-    setDefaultName?: (value: string) => void,
-    setDefaultId?: (value: string) => void,
-    setDefaultPhone?: (value: string) => void,
-    setDefaultCity?: (value: string) => void
-  ) => {
-    const normalized = mark.trim();
-    if (invoiceCustomerLookupTimerRef.current) {
-      clearTimeout(invoiceCustomerLookupTimerRef.current);
-      invoiceCustomerLookupTimerRef.current = null;
-    }
-    if (!normalized) {
-      setter([]);
-      if (setDefaultName) setDefaultName('');
-      if (setDefaultId) setDefaultId('');
-      return;
-    }
-
-    invoiceCustomerLookupTimerRef.current = setTimeout(() => {
-      void (async () => {
-        try {
-          const result = await fetchCustomerCandidatesByMark(normalized);
-          if (!result.success || !Array.isArray(result.data)) {
-            setter([]);
-            return;
-          }
-          const rows: CustomerCandidate[] = result.data.map((row) => ({
-            id: row.id,
-            mark: row.mark,
-            orderName: row.orderName || row.name || '',
-            displayName: row.name || '',
-            phone: row.phone ?? null,
-            city: row.city ?? null,
-          }));
-          setter(rows);
-          if (rows.length === 1) {
-            if (setDefaultName) setDefaultName(rows[0].orderName);
-            if (setDefaultId) setDefaultId(rows[0].id);
-            if (setDefaultPhone) setDefaultPhone(rows[0].phone || '');
-            if (setDefaultCity) setDefaultCity(rows[0].city || '');
-          }
-        } catch {
-          setter([]);
-        }
-      })();
-    }, 220);
   };
 
   const openOrderHistory = async (orderId: string, orderNo: string) => {

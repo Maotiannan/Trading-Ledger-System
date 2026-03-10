@@ -1,11 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '@/lib/store';
-import {
-  apiCall,
-  useUiText,
-} from '@/components/workspace/shared';
+import { useUiText } from '@/components/workspace/shared';
 import { ImportResultDialog } from '@/components/workspace/components/import-result-dialog';
 import {
   CreateInvoiceDialog,
@@ -17,27 +14,15 @@ import {
   RematchDialog,
   TransferBalanceDialog,
 } from './components';
-import { useInvoiceActions, useInvoiceCustomerLookup, useInvoiceImport, useInvoiceOrderForms, useInvoiceTools } from './hooks';
+import { useInvoiceActions, useInvoiceCustomerLookup, useInvoiceImport, useInvoiceOrderForms, useInvoiceTools, useInvoiceViewState } from './hooks';
 
 export function InvoiceManager() {
   const tx = useUiText();
-  const { invoices, setInvoices, loading, setLoading, user } = useStore();
-  const [search, setSearch] = useState('');
-  
-  // 展开状态
-  const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set());
-  const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
-
-  const loadInvoices = useCallback(async () => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (search.trim()) params.set('search', search.trim());
-    const result = await apiCall(`invoice${params.toString() ? `?${params.toString()}` : ''}`);
-    if (result.success) {
-      setInvoices(result.data);
-    }
-    setLoading(false);
-  }, [setInvoices, setLoading, search]);
+  const { invoices, setInvoices, setLoading, user } = useStore();
+  const { search, setSearch, expandedInvoices, invoiceImportInputRef, loadInvoices, toggleInvoice } = useInvoiceViewState({
+    setInvoices,
+    setLoading,
+  });
 
   const { loadCustomerCandidates } = useInvoiceCustomerLookup();
   const {
@@ -167,16 +152,6 @@ export function InvoiceManager() {
   useEffect(() => {
     loadInvoices();
   }, [loadInvoices]);
-
-  const toggleInvoice = (invoiceId: string) => {
-    const newExpanded = new Set(expandedInvoices);
-    if (newExpanded.has(invoiceId)) {
-      newExpanded.delete(invoiceId);
-    } else {
-      newExpanded.add(invoiceId);
-    }
-    setExpandedInvoices(newExpanded);
-  };
 
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
 

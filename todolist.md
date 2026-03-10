@@ -140,6 +140,7 @@
 
 - v1.0.48（2026-03-10）：客户模块导入工作区继续拆分；顶部工具区抽为 `customer-toolbar`，导入问题行列定义抽为 `use-customer-import-columns`，`customer-manager.tsx` 从 347 行压缩到 236 行
 - v1.0.49（2026-03-10）：用户管理模块完成首轮拆分；创建用户对话框、用户列表、本地表单态与远程动作拆到 `components/ + hooks/ + types.ts`，`user-manager.tsx` 收敛到页面编排层；README 补充前端模块拆分规则、共享能力边界与后续预留接口
+- v1.0.50（2026-03-10）：账单模块新增 `use-invoice-view-state`，搜索词、展开状态、导入 input ref 与列表加载逻辑脱离 `invoice-manager.tsx`；主文件从 329 行压缩到 304 行；同时明确 `deletions / dashboard` 现阶段维持轻量模块，不为拆分而拆分
 - v1.0.47（2026-03-10）：账单模块新增 `use-invoice-actions`，顶部工具区与搜索卡片抽为独立组件，创建/更新/删除/加单与模板下载逻辑脱离主组件，`invoice-manager.tsx` 从 533 行压缩到 329 行
 - v1.0.46（2026-03-10）：设置模块完成首轮完整拆分；密码/分支清库/系统配置抽为独立组件，新增 `use-settings-forms` 与 `use-settings-actions`，`settings-manager.tsx` 从 479 行压缩到 139 行
 - v1.0.45（2026-03-10）：SWIFT 模块完成首轮完整拆分；列表/上传/直建/图片预览抽为独立组件，新增 `use-swift-forms` 与 `use-swift-actions`，`swift-manager.tsx` 从 541 行压缩到 202 行

@@ -138,6 +138,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.46（2026-03-10）：设置模块完成首轮完整拆分；密码/分支清库/系统配置抽为独立组件，新增 `use-settings-forms` 与 `use-settings-actions`，`settings-manager.tsx` 从 479 行压缩到 139 行
 - v1.0.45（2026-03-10）：SWIFT 模块完成首轮完整拆分；列表/上传/直建/图片预览抽为独立组件，新增 `use-swift-forms` 与 `use-swift-actions`，`swift-manager.tsx` 从 541 行压缩到 202 行
 - v1.0.44（2026-03-10）：客户模块新增 `use-customer-forms` 与 `use-customer-actions`，创建/编辑/修复/导入/重试等状态与动作脱离主组件，`customer-manager.tsx` 从 558 行压缩到 347 行
 - v1.0.43（2026-03-10）：客户模块开始组件化；列表、修复队列、创建/编辑弹窗、修复弹窗、长文本预览弹窗抽为独立组件，`customer-manager.tsx` 从 721 行压缩到 558 行

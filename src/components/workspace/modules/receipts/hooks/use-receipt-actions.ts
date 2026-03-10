@@ -1,0 +1,231 @@
+'use client';
+
+import { useState } from 'react';
+import { apiCall } from '@/components/workspace/shared';
+import type { ReceiptDirectForm } from '../types';
+
+export type ReceiptActionText = (zh: string, en: string) => string;
+
+export type ReceiptActionDeps = {
+  tx: ReceiptActionText;
+  loadReceipts: () => Promise<void>;
+  selectedFile: File | null;
+  ocrResult: Record<string, unknown> | null;
+  ocrCustomerMark: string;
+  ocrCustomerName: string;
+  ocrCustomerId: string;
+  savedImagePath: { path: string; name: string } | null;
+  directForm: ReceiptDirectForm;
+  setOcrResult: (value: Record<string, unknown> | null) => void;
+  setOcrCustomerMark: (value: string) => void;
+  setOcrCustomerName: (value: string) => void;
+  setOcrCustomerId: (value: string) => void;
+  setOcrCustomerCandidates: (value: Array<{ id: string; mark: string; orderName: string; displayName: string; phone: string | null; city: string | null }>) => void;
+  setImagePreview: (value: string | null) => void;
+  setSelectedFile: (value: File | null) => void;
+  setSavedImagePath: (value: { path: string; name: string } | null) => void;
+  setError: (value: string | null) => void;
+  handleShowUploadChange: (open: boolean) => void;
+  handleShowDirectCreateChange: (open: boolean) => void;
+  resetDirectForm: () => void;
+};
+
+export function useReceiptActions({
+  tx,
+  loadReceipts,
+  selectedFile,
+  ocrResult,
+  ocrCustomerMark,
+  ocrCustomerName,
+  ocrCustomerId,
+  savedImagePath,
+  directForm,
+  setOcrResult,
+  setOcrCustomerMark,
+  setOcrCustomerName,
+  setOcrCustomerId,
+  setOcrCustomerCandidates,
+  setImagePreview,
+  setSelectedFile,
+  setSavedImagePath,
+  setError,
+  handleShowUploadChange,
+  handleShowDirectCreateChange,
+  resetDirectForm,
+}: ReceiptActionDeps) {
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+    setUploading(true);
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('action', 'recognize');
+
+    try {
+      const result = await fetch('/api/receipt', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      }).then((response) => response.json());
+
+      if (result.success) {
+        setOcrResult(result.data.ocrResult);
+        setOcrCustomerMark('');
+        setOcrCustomerName('');
+        setOcrCustomerId('');
+        setOcrCustomerCandidates([]);
+        setSavedImagePath(result.data.image || null);
+      } else {
+        setSavedImagePath(null);
+        setError(result.error || tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
+      }
+    } catch (err) {
+      console.error('OCR error:', err);
+      setSavedImagePath(null);
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
+    }
+    setUploading(false);
+  };
+
+  const handleConfirm = async () => {
+    if (!selectedFile || !ocrResult) return;
+    if (!ocrCustomerMark.trim()) {
+      setError(tx('客户MARK不能为空', 'Customer MARK is required.'));
+      return;
+    }
+
+    setError(null);
+    setSubmitting(true);
+    const formData = new FormData();
+    const payload = {
+      ...ocrResult,
+      customerMark: ocrCustomerMark.trim(),
+      customerName: ocrCustomerName || null,
+      customerId: ocrCustomerId || null,
+    };
+    formData.append('action', 'confirm');
+    formData.append('data', JSON.stringify(payload));
+    formData.append('imagePath', savedImagePath?.path || '');
+    formData.append('imageName', savedImagePath?.name || selectedFile.name);
+
+    try {
+      const result = await fetch('/api/receipt', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      }).then((response) => response.json());
+
+      if (result.success) {
+        handleShowUploadChange(false);
+        setSelectedFile(null);
+        await loadReceipts();
+      } else {
+        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
+      }
+    } catch (err) {
+      console.error('Confirm error:', err);
+      setError(tx('网络错误，请重试', 'Network error, please retry.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMarkReceived = async (receiptId: string) => {
+    if (!confirm(tx('确定要标记此收据为已签收吗？', 'Mark this receipt as received?'))) return;
+
+    try {
+      const result = await fetch('/api/receipt', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark-received', receiptId }),
+      }).then((response) => response.json());
+
+      if (result.success) {
+        await loadReceipts();
+      } else {
+        alert(result.error || tx('操作失败', 'Operation failed'));
+      }
+    } catch (err) {
+      alert(tx('网络错误，请重试', 'Network error, please retry.'));
+      console.error(err);
+    }
+  };
+
+  const handleDirectCreate = async () => {
+    setError(null);
+    if (!directForm.customerMark.trim()) {
+      setError(tx('客户MARK不能为空', 'Customer MARK is required.'));
+      return;
+    }
+    try {
+      const result = await apiCall('receipt', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'direct-create',
+          receiptNo: directForm.receiptNo || null,
+          date: directForm.date || null,
+          tel: directForm.tel || null,
+          usd: Number(directForm.usd),
+          invNo: directForm.invNo || null,
+          orderNo: directForm.orderNo || null,
+          payer: directForm.payer || null,
+          customerMark: directForm.customerMark || null,
+          customerName: directForm.customerName || null,
+          customerId: directForm.customerId || null,
+          isDeposit: directForm.isDeposit,
+        }),
+      });
+      if (result.success) {
+        handleShowDirectCreateChange(false);
+        resetDirectForm();
+        await loadReceipts();
+      } else {
+        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : tx('创建失败，请重试', 'Create failed, please retry.'));
+    }
+  };
+
+  const handleDeleteReceipt = async (receiptId: string) => {
+    if (!confirm(tx('确定要申请删除这条收据吗？删除需要管理员审批。', 'Submit a deletion request for this receipt? Admin approval is required.'))) return;
+
+    const result = await apiCall('deletion', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'request',
+        targetType: 'RECEIPT',
+        targetId: receiptId,
+      }),
+    });
+
+    if (result.success) {
+      alert(tx('删除申请已提交，等待管理员审批', 'Deletion request submitted. Waiting for admin approval.'));
+      await loadReceipts();
+    } else {
+      alert(result.error || tx('申请失败', 'Request failed'));
+    }
+  };
+
+  return {
+    uploading,
+    submitting,
+    handleFileSelect,
+    handleConfirm,
+    handleMarkReceived,
+    handleDirectCreate,
+    handleDeleteReceipt,
+  };
+}

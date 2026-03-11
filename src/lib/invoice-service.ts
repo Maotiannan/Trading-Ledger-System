@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
-import { runInTransaction } from '@/lib/transaction';
 import { recordAuditEvent } from '@/lib/audit';
+import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { updateOrderBalance } from '@/lib/matching';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
@@ -12,6 +12,7 @@ import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 import { customerAccessWhere } from '@/lib/customer-scope';
 import type { CurrentUser } from '@/lib/request-auth';
+import { runInTransaction } from '@/lib/transaction';
 
 export function parseDateInput(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -425,9 +426,9 @@ export async function processInvoiceImportRows(
   }
 
   await recordAuditEvent({
-    action: 'INVOICE_IMPORT',
+    action: auditActions.INVOICE_IMPORT,
     actorId: currentUser.id,
-    targetType: 'INVOICE',
+    targetType: auditTargetTypes.INVOICE,
     metadata: {
       successCount,
       failedRows: issueRows.length,
@@ -470,9 +471,9 @@ export async function createInvoiceRecord(currentUser: CurrentUser, input: {
     });
   }
   await recordAuditEvent({
-    action: 'INVOICE_CREATE',
+    action: auditActions.INVOICE_CREATE,
     actorId: currentUser.id,
-    targetType: 'INVOICE',
+    targetType: auditTargetTypes.INVOICE,
     targetId: saved.data?.id,
     metadata: {
       invNo: input.invNo,
@@ -832,9 +833,9 @@ export async function applyInvoiceRematch(
   const result = await rematchAllOrders(ownerIds);
   const message = `冲突处理完成（当前可见范围）：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
   await recordAuditEvent({
-    action: 'INVOICE_REMATCH_APPLY',
+    action: auditActions.INVOICE_REMATCH_APPLY,
     actorId: currentUser.id,
-    targetType: 'INVOICE',
+    targetType: auditTargetTypes.INVOICE,
     metadata: {
       manualMerged: applied.mergedCount,
       ...result,
@@ -849,9 +850,9 @@ export async function rematchInvoices(currentUser: CurrentUser) {
   const result = await rematchAllOrders(ownerIds);
   const message = `重新匹配完成（当前可见范围）：合并重复订单 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
   await recordAuditEvent({
-    action: 'INVOICE_REMATCH',
+    action: auditActions.INVOICE_REMATCH,
     actorId: currentUser.id,
-    targetType: 'INVOICE',
+    targetType: auditTargetTypes.INVOICE,
     metadata: result,
   });
   return { message };
@@ -907,9 +908,9 @@ export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
     data: updateData,
   }));
   await recordAuditEvent({
-    action: 'INVOICE_UPDATE_DATES',
+    action: auditActions.INVOICE_UPDATE_DATES,
     actorId: currentUser.id,
-    targetType: 'INVOICE',
+    targetType: auditTargetTypes.INVOICE,
     targetId: targetInvoiceId,
     metadata: {
       before: {
@@ -1039,9 +1040,9 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
   }
 
   await recordAuditEvent({
-    action: 'ORDER_UPDATE',
+    action: auditActions.ORDER_UPDATE,
     actorId: currentUser.id,
-    targetType: 'ORDER',
+    targetType: auditTargetTypes.ORDER,
     targetId: orderId,
     metadata: {
       before: {
@@ -1131,9 +1132,9 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
     });
     await consolidateGroupedOrders({ invoiceIds: [updated.invoiceId] });
     await recordAuditEvent({
-      action: 'ORDER_ADD',
+      action: auditActions.ORDER_ADD,
       actorId: currentUser.id,
-      targetType: 'ORDER',
+      targetType: auditTargetTypes.ORDER,
       targetId: updated.id,
       metadata: {
         merged: true,
@@ -1166,9 +1167,9 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
   });
   await consolidateGroupedOrders({ invoiceIds: [payload.invoiceId] });
   await recordAuditEvent({
-    action: 'ORDER_ADD',
+    action: auditActions.ORDER_ADD,
     actorId: currentUser.id,
-    targetType: 'ORDER',
+    targetType: auditTargetTypes.ORDER,
     targetId: order.id,
     metadata: {
       merged: false,
@@ -1214,9 +1215,9 @@ export async function deleteInvoiceOrder(currentUser: CurrentUser, orderId: stri
     }
   });
   await recordAuditEvent({
-    action: 'ORDER_DELETE',
+    action: auditActions.ORDER_DELETE,
     actorId: currentUser.id,
-    targetType: 'ORDER',
+    targetType: auditTargetTypes.ORDER,
     targetId: orderId,
     metadata: { invoiceId: order.invoiceId },
   });
@@ -1259,9 +1260,9 @@ export async function deleteInvoiceRecord(currentUser: CurrentUser, invoiceId: s
     await tx.invoice.delete({ where: { id: invoiceId } });
   });
   await recordAuditEvent({
-    action: 'INVOICE_DELETE',
+    action: auditActions.INVOICE_DELETE,
     actorId: currentUser.id,
-    targetType: 'INVOICE',
+    targetType: auditTargetTypes.INVOICE,
     targetId: invoiceId,
   });
   return { message: '账单已删除' };
@@ -1376,9 +1377,9 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
   }
 
   await recordAuditEvent({
-    action: 'ORDER_TRANSFER_BALANCE',
+    action: auditActions.ORDER_TRANSFER_BALANCE,
     actorId: currentUser.id,
-    targetType: 'ORDER',
+    targetType: auditTargetTypes.ORDER,
     targetId: fromOrderId,
     metadata: {
       fromOrderId,

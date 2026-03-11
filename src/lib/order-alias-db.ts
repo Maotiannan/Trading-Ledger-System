@@ -6,7 +6,8 @@ import { buildOrderNoWithAliases, canonicalizeOrderNo, isCompositeOrderNo, norma
 
 type DbExecutor = Prisma.TransactionClient | typeof db;
 
-export async function findOrderIdByNoOrAlias(
+export async function findOrderIdByNoOrAliasWithExecutor(
+  executor: DbExecutor,
   orderNo: string | null | undefined,
   orderWhere?: Prisma.OrderWhereInput
 ): Promise<string | null> {
@@ -15,7 +16,7 @@ export async function findOrderIdByNoOrAlias(
   const normalized = normalizeOrderNo(raw);
   const canonical = canonicalizeOrderNo(raw);
 
-  const aliasMatch = await db.orderAlias.findFirst({
+  const aliasMatch = await executor.orderAlias.findFirst({
     where: {
       aliasNo: normalized,
       ...(orderWhere ? { order: orderWhere } : {}),
@@ -24,7 +25,7 @@ export async function findOrderIdByNoOrAlias(
   });
   if (aliasMatch) return aliasMatch.orderId;
 
-  const orderMatch = await db.order.findFirst({
+  const orderMatch = await executor.order.findFirst({
     where: {
       AND: [
         ...(orderWhere ? [orderWhere] : []),
@@ -42,7 +43,15 @@ export async function findOrderIdByNoOrAlias(
   return orderMatch?.id || null;
 }
 
-export async function mapOrderIdsByOrderNos(
+export async function findOrderIdByNoOrAlias(
+  orderNo: string | null | undefined,
+  orderWhere?: Prisma.OrderWhereInput
+): Promise<string | null> {
+  return findOrderIdByNoOrAliasWithExecutor(db, orderNo, orderWhere);
+}
+
+export async function mapOrderIdsByOrderNosWithExecutor(
+  executor: DbExecutor,
   orderNos: Array<string | null | undefined>,
   orderWhere?: Prisma.OrderWhereInput
 ): Promise<Map<string, string>> {
@@ -50,7 +59,7 @@ export async function mapOrderIdsByOrderNos(
   const mapped = new Map<string, string>();
   if (normalizedOrderNos.length === 0) return mapped;
 
-  const aliasRows = await db.orderAlias.findMany({
+  const aliasRows = await executor.orderAlias.findMany({
     where: {
       aliasNo: { in: normalizedOrderNos },
       ...(orderWhere ? { order: orderWhere } : {}),
@@ -64,7 +73,7 @@ export async function mapOrderIdsByOrderNos(
   const unresolved = normalizedOrderNos.filter((row) => !mapped.has(row));
   if (unresolved.length === 0) return mapped;
 
-  const orderRows = await db.order.findMany({
+  const orderRows = await executor.order.findMany({
     where: {
       AND: [
         ...(orderWhere ? [orderWhere] : []),
@@ -81,6 +90,13 @@ export async function mapOrderIdsByOrderNos(
   }
 
   return mapped;
+}
+
+export async function mapOrderIdsByOrderNos(
+  orderNos: Array<string | null | undefined>,
+  orderWhere?: Prisma.OrderWhereInput
+): Promise<Map<string, string>> {
+  return mapOrderIdsByOrderNosWithExecutor(db, orderNos, orderWhere);
 }
 
 export async function syncOrderAliases(tx: DbExecutor, orderId: string, orderNo: string): Promise<number> {

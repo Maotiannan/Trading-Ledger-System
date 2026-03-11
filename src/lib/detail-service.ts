@@ -2,6 +2,7 @@ import { DetailStatus, ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
+import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/lib/matching';
@@ -235,9 +236,9 @@ export async function createDetailRecord(params: {
   });
 
   await recordAuditEvent({
-    action: mode === 'direct-create' ? 'DETAIL_CREATE_DIRECT' : 'DETAIL_CREATE',
+    action: mode === 'direct-create' ? auditActions.DETAIL_CREATE_DIRECT : auditActions.DETAIL_CREATE,
     actorId: currentUser.id,
-    targetType: 'DETAIL',
+    targetType: auditTargetTypes.DETAIL,
     targetId: detail.id,
   });
 
@@ -333,9 +334,9 @@ export async function updateDetailRecord(params: {
   });
 
   await recordAuditEvent({
-    action: 'DETAIL_UPDATE',
+    action: auditActions.DETAIL_UPDATE,
     actorId: currentUser.id,
-    targetType: 'DETAIL',
+    targetType: auditTargetTypes.DETAIL,
     targetId: detailId,
   });
 

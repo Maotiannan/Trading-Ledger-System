@@ -8,6 +8,7 @@ import {
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
+import { auditActions } from '@/lib/audit-catalog';
 import { updateOrderBalance } from '@/lib/matching';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
@@ -397,7 +398,7 @@ export async function createDeletionRequest({
   });
 
   await recordAuditEvent({
-    action: 'DELETION_REQUEST_CREATE',
+    action: auditActions.DELETION_REQUEST_CREATE,
     actorId: currentUser.id,
     targetType: normalizedTargetType,
     targetId,
@@ -457,7 +458,7 @@ export async function reviewDeletionRequest({
       },
     });
     await recordAuditEvent({
-      action: 'DELETION_REQUEST_REJECT',
+      action: auditActions.DELETION_REQUEST_REJECT,
       actorId: currentUser.id,
       targetType: existingRequest.targetType,
       targetId: existingRequest.targetId,
@@ -505,7 +506,7 @@ export async function reviewDeletionRequest({
   }
 
   await recordAuditEvent({
-    action: 'DELETION_REQUEST_APPROVE',
+    action: auditActions.DELETION_REQUEST_APPROVE,
     actorId: currentUser.id,
     targetType: existingRequest.targetType,
     targetId: existingRequest.targetId,

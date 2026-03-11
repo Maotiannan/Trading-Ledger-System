@@ -1,9 +1,10 @@
 import { db } from '@/lib/db';
+import type { AuditAction, AuditTargetType } from '@/lib/audit-catalog';
 
 export type AuditEvent = {
-  action: string;
+  action: AuditAction | string;
   actorId: string;
-  targetType: string;
+  targetType: AuditTargetType | string;
   targetId?: string;
   metadata?: Record<string, unknown>;
   at?: string;

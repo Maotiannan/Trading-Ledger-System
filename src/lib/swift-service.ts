@@ -7,6 +7,7 @@ import {
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
+import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction } from '@/lib/transaction';
 import { getNumericSystemSetting } from '@/lib/system-settings';
@@ -146,9 +147,9 @@ export async function createSwiftRecord(params: {
     });
 
     await recordAuditEvent({
-      action: 'SWIFT_CREATE',
+      action: auditActions.SWIFT_CREATE,
       actorId: currentUser.id,
-      targetType: 'SWIFT',
+      targetType: auditTargetTypes.SWIFT,
       targetId: swift.id,
       metadata: {
         mode,
@@ -240,9 +241,9 @@ export async function deleteSwiftRecord(params: {
   });
 
   await recordAuditEvent({
-    action: 'SWIFT_DELETE',
+    action: auditActions.SWIFT_DELETE,
     actorId: currentUser.id,
-    targetType: 'SWIFT',
+    targetType: auditTargetTypes.SWIFT,
     targetId: swiftId,
     metadata: {
       hadError: existingSwift.hasError,

@@ -2,6 +2,7 @@ import { DetailStatus, ReceiptStatus, SwiftStatus, UserRole } from '@prisma/clie
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
+import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction } from '@/lib/transaction';
 import { createOrder, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
@@ -189,9 +190,9 @@ export async function createReceiptRecord(params: {
   }
 
   await recordAuditEvent({
-    action: 'RECEIPT_CREATE',
+    action: auditActions.RECEIPT_CREATE,
     actorId: currentUser.id,
-    targetType: 'RECEIPT',
+    targetType: auditTargetTypes.RECEIPT,
     targetId: receipt.id,
     metadata: { mode },
   });
@@ -301,9 +302,9 @@ export async function updateReceiptRecord(params: {
   }
 
   await recordAuditEvent({
-    action: 'RECEIPT_UPDATE',
+    action: auditActions.RECEIPT_UPDATE,
     actorId: currentUser.id,
-    targetType: 'RECEIPT',
+    targetType: auditTargetTypes.RECEIPT,
     targetId: receiptId,
   });
 
@@ -374,9 +375,9 @@ export async function markReceiptReceived(params: {
   });
 
   await recordAuditEvent({
-    action: 'RECEIPT_MARK_RECEIVED',
+    action: auditActions.RECEIPT_MARK_RECEIVED,
     actorId: currentUser.id,
-    targetType: 'RECEIPT',
+    targetType: auditTargetTypes.RECEIPT,
     targetId: receiptId,
   });
 

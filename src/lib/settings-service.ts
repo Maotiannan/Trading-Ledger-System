@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
 import { testOcrConnectivity } from '@/lib/ocr';
 import { recordAuditEvent } from '@/lib/audit';
+import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -495,9 +496,9 @@ export async function updateSystemSettings(
 
   invalidateSystemSettingsCache();
   await recordAuditEvent({
-    action: 'SYSTEM_SETTINGS_UPDATE',
+    action: auditActions.SYSTEM_SETTINGS_UPDATE,
     actorId: currentUser.id,
-    targetType: 'SYSTEM_SETTING',
+    targetType: auditTargetTypes.SYSTEM_SETTING,
     metadata: {
       updatedKeys: updates.map((item) => item.key),
       changes: changeSet,

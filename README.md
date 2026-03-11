@@ -26,7 +26,7 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
-- 当前 Jest 已扩展到 `23 suites / 112 tests`；coverage global threshold 已小步提升到 `branches 45 / functions 71 / lines 65 / statements 65`
+- 当前 Jest 已扩展到 `24 suites / 114 tests`；coverage global threshold 已小步提升到 `branches 46 / functions 72 / lines 66 / statements 66`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -34,9 +34,11 @@
 - 删除审批链路已开始统一错误码与事务边界：`/api/deletion` 现通过 `deletion-service + ApiError(code/message/detail) + runInTransaction` 承接写操作，前端删除审批也已抽到独立 `use-deletion-actions`
 - `settings / receipt / detail / swift` 现已继续迁到同一套 `service + ApiError(code/message/detail) + runInTransaction` 模式，路由层只保留请求解析、识别与响应封装
 - `/api/invoice` 写接口现也已迁到 `invoice-service + ApiError(code/message/detail) + runInTransaction` 模式；路由层仅保留读取、模板下载与 Excel 解析
+- `invoice-write` 现已补事务化持久化：先完成整批订单校验与客户解析，再在单一事务中落库 invoice/order/alias/receipt 迁移，避免中途坏行留下半写入数据
 - `SWIFT_WARNING_TOLERANCE / SWIFT_REJECT_TOLERANCE` 已纳入 `/api/settings` 和设置页，金额容差不再硬编码在业务代码里
 - `system-settings` 已修复“热缓存只记住首批 key 子集”的缺陷，后续不同 key 的设置读取会增量补齐缓存，不再错误回退到环境默认值
 - 系统配置更新现写入审计日志：记录操作人、变更 key、前后值；敏感配置（如 `OCR_API_KEY`）会自动脱敏
+- 审计与错误目录已开始统一常量化：新增 `audit-catalog.ts` 与 `apiErrorCodes`，`deletion/settings/receipt/detail/swift/invoice` 这批 service 已先接入统一动作/目标类型常量
 - `/api/init` 已补齐根管理员初始化幂等与层级归一，避免并发初始化或历史脏数据导致根账号层级错误
 - `/api/invoice` 已修复 grouped order 合并后继续对旧 orderId 重算余额导致的潜在 500
 
@@ -928,6 +930,12 @@ src/
 - 📝 系统配置修改补齐审计日志：`updateSystemSettings` 现记录操作人、变更 key、前后值；敏感配置（如 `OCR_API_KEY`）自动脱敏为 `[masked]`。
 - 🧪 新增 `invoice-service` 单测，覆盖建单失败结构化错误、导入自动推断/冲突、日期更新审计、加单合并、转余额审计等关键分支；Jest 扩展到 `23 suites / 112 tests`。
 - 📈 coverage threshold 第七轮小步上调：global 提升到 `45 / 71 / 65 / 65`，并将 `invoice-service` 纳入首轮局部门禁，本地 `build + test:ci` 全绿。
+
+### v1.0.60 (2026-03-11)
+- 🔒 `invoice-write` 内部持久化继续事务化：整批订单先校验，再通过 `runInTransaction` 统一写入 invoice/order/orderAlias，并在提交后执行 grouped order consolidate、deposit receipt 补挂与余额重算。
+- 🗂️ 审计/错误目录继续统一：新增 `src/lib/audit-catalog.ts` 与 `apiErrorCodes`，并把 `deletion/settings/receipt/detail/swift/invoice` 这批 service 的审计动作/目标类型切到统一常量目录。
+- 🧪 新增 `invoice-write` 单测，覆盖“坏数据不进事务”和“正常保存走事务 + 提交后对账”边界；Jest 扩展到 `24 suites / 114 tests`。
+- 📈 coverage threshold 第八轮小步上调：global 提升到 `46 / 72 / 66 / 66`，并把 `invoice-write` 纳入局部门禁（`50 / 80 / 72 / 70`），本地 `build + test:ci` 全绿。
 
 ### v1.0.58 (2026-03-11)
 - 🧱 `settings / receipt / detail / swift` 写接口继续统一：新增 `settings-service / receipt-service / detail-service / swift-service`，路由层只保留请求解析、OCR 识别和响应封装。

@@ -914,6 +914,11 @@ src/
 - 🧪 第三批 workspace 模块测试推进：为 `receipt/detail/swift/users` 四组 action hooks 补齐上传识别、确认创建、取消/异常分支、权限动作等真实交互测试，Jest 扩展到 `15 suites / 54 tests`。
 - 📈 coverage threshold 第三轮小步上调：将 `receipt/detail/swift/users` 正式纳入 `collectCoverageFrom` 与 module threshold，同时把 global threshold 提升到 `branches 40 / functions 65 / lines 60 / statements 60`，继续保持渐进收紧而不是一次性全仓拉满。
 
+### v1.0.55 (2026-03-11)
+- 🧯 修复 GitHub Actions 隔离 E2E 锁冲突：`test:api:isolated` 与 `test:e2e:isolated` 改为分别使用 `.next-api-isolated` / `.next-e2e-isolated`，避免两个 `next dev` 阶段共用 `.next/dev/lock` 导致 CI 在 `app not ready` 处失败。
+- 🧹 清理错误产物来源：此前 `NEXT_DIST_DIR` 误用绝对路径，Next 会把输出落到仓库内的 `Users/...` 目录并自动污染 `tsconfig.json`；现已统一改为相对 `distDir`，并在 `.gitignore`/`tsconfig.json` 中显式声明测试专用输出目录，避免再次生成脏目录。
+- ✅ 本地完整验证通过：`npx tsc --noEmit`、`npm run test:api:isolated`、`npm run test:e2e:isolated`、`npm run test:ci` 全部通过。
+
 ### v1.0.52 (2026-03-11)
 - 🛡️ 第二批隔离 API case 落地：新增 `40-auth-hierarchy-boundaries` 与 `50-deletion-approval-flow`，补齐层级权限边界、同级可见不可管、旁支不可管理、删除审批与状态回退链路验证。
 - 🪝 hook 分支测试继续补强：为 `use-invoice-actions`、`use-customer-actions`、`use-settings-actions` 增加成功/失败/重试分支测试，覆盖率显著提升。

@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.54  
+> 当前版本：v1.0.55  
 > 最后更新：2026-03-11
 
 ## P0（本周必须完成）
@@ -114,6 +114,8 @@
 - [x] 修复 GitHub Actions Jest 配置解析失败：`jest.config.ts` 改为 `jest.config.mjs`，移除 runner 对 `ts-node` 的隐式依赖 ✅ 2026-03-11
 - [x] 第三批模块 hook 测试补齐：`receipt/detail/swift/users` 覆盖上传识别、确认创建、取消/异常分支、权限动作，Jest 扩展到 15 suites / 54 tests ✅ 2026-03-11
 - [x] 覆盖率门禁第三轮上调：将 `receipt/detail/swift/users` 纳入 `collectCoverageFrom` 和 module thresholds，并将 global 提升到 `40/65/60/60` ✅ 2026-03-11
+- [x] 修复 GitHub Actions isolated E2E 锁冲突：API/E2E 分别使用 `.next-api-isolated` 与 `.next-e2e-isolated`，不再共用 `.next/dev/lock` ✅ 2026-03-11
+- [x] 清理错误测试产物来源：修正 `NEXT_DIST_DIR` 为相对路径，删除误生成的 `Users/...` 目录树，并将测试专用 distDir 纳入 `.gitignore`/`tsconfig.json` ✅ 2026-03-11
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -153,6 +155,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.55（2026-03-11）：修复 GitHub Actions 中 isolated API 与 isolated E2E 共用 `.next/dev/lock` 导致的 `app not ready`；测试脚本改为独立 `distDir`，并收口 `NEXT_DIST_DIR` 的相对路径规则，避免再次生成仓库内 `Users/...` 编译产物
 - v1.0.54（2026-03-11）：修复 GitHub Actions 对 `jest.config.ts` 的解析失败，将配置切换为 `jest.config.mjs`；第三批模块测试为 `receipt/detail/swift/users` 补齐上传识别、确认创建和异常/取消分支，Jest 扩展到 15 suites / 54 tests，并将这四组 hooks 纳入 coverage 门禁
 - v1.0.53（2026-03-11）：修复 GitHub Actions `npm ci` 的 lockfile 失配；通过 `package.json#overrides` 固定 `@swc/helpers=0.5.19`，并新增 `receipt/detail/swift/users` 第二批 hook/module 测试，Jest 扩展到 15 suites / 36 tests
 - v1.0.52（2026-03-11）：补齐第二批测试工程化；新增层级权限边界与删除审批链路的 isolated API case，继续为 `use-invoice-actions / use-customer-actions / use-settings-actions` 补分支测试，并将 coverage threshold 做第二轮小步上调

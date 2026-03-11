@@ -8,6 +8,7 @@ BASE_URL="${BASE_URL:-http://127.0.0.1:3200}"
 APP_PORT="${APP_PORT:-3200}"
 APP_LOG="$(mktemp /tmp/tls-e2e-app.XXXXXX.log)"
 UPLOAD_DIR="$(mktemp -d /tmp/tls-e2e-upload.XXXXXX)"
+DIST_DIR=".next-e2e-isolated"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.test.yml"
 COMPOSE_PROJECT_NAME="trading-ledger-system-e2e"
 APP_PID=""
@@ -24,6 +25,7 @@ cleanup() {
   compose down -v >/dev/null 2>&1 || true
   rm -f "$APP_LOG"
   rm -rf "$UPLOAD_DIR"
+  rm -rf "$ROOT_DIR/$DIST_DIR"
 }
 trap cleanup EXIT
 
@@ -69,8 +71,10 @@ export INIT_ADMIN_EMAIL="admin@example.com"
 export INIT_ADMIN_PASSWORD="Admin@2026!"
 export OCR_DISABLED="true"
 export UPLOAD_DIR="$UPLOAD_DIR"
+export NEXT_DIST_DIR="$DIST_DIR"
 
 npx prisma migrate deploy >/dev/null
+rm -rf "$ROOT_DIR/$DIST_DIR"
 npx next dev -p "$APP_PORT" >"$APP_LOG" 2>&1 &
 APP_PID="$!"
 wait_for_http "$BASE_URL" || fail "app not ready"

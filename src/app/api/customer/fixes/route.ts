@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
+import { apiErrorCodes } from '@/lib/api-error';
+import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
 import { deriveOrderGroupKey } from '@/lib/order-group';
@@ -17,7 +19,7 @@ function trimStr(value: unknown): string {
 
 function managerOnly(role: UserRole): NextResponse | null {
   if (role === UserRole.ADMIN || role === UserRole.SALES) return null;
-  return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+  return createApiErrorResponse({ code: apiErrorCodes.FORBIDDEN, status: 403, message: '无权限' });
 }
 
 async function salesCanEditExtended(): Promise<boolean> {
@@ -239,39 +241,52 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   const action = trimStr(body.action);
 
   if (action !== 'resolve-order' && action !== 'resolve-receipt') {
-    return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
+    return createApiErrorResponse({
+      code: apiErrorCodes.INVALID_ACTION,
+      status: 400,
+      message: '未知操作',
+      detail: { action },
+    });
   }
 
   const parsed = parsePayload(body);
   if ('error' in parsed) {
-    return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
+    return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: parsed.error });
   }
 
   let ownerId: string;
   try {
     ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
   } catch (error) {
-    return NextResponse.json({ success: false, error: mapPrismaWriteError(error) }, { status: 400 });
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.BAD_REQUEST,
+      status: 400,
+      message: mapPrismaWriteError(error),
+    });
   }
 
   let customer;
   try {
     customer = await upsertCustomer(currentUser.id, currentUser.role as UserRole, parsed, ownerId);
   } catch (error) {
-    return NextResponse.json({ success: false, error: mapPrismaWriteError(error) }, { status: 400 });
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.BAD_REQUEST,
+      status: 400,
+      message: mapPrismaWriteError(error),
+    });
   }
 
   if (action === 'resolve-order') {
     const orderId = trimStr(body.orderId);
-    if (!orderId) return NextResponse.json({ success: false, error: 'orderId不能为空' }, { status: 400 });
+    if (!orderId) return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'orderId不能为空' });
 
     const existingOrder = await db.order.findUnique({
       where: { id: orderId },
       select: { id: true, createdBy: true },
     });
-    if (!existingOrder) return NextResponse.json({ success: false, error: '订单不存在' }, { status: 404 });
+    if (!existingOrder) return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '订单不存在' });
     if (currentUser.role === UserRole.SALES && existingOrder.createdBy !== currentUser.id) {
-      return NextResponse.json({ success: false, error: '无权修复该订单' }, { status: 403 });
+      return createApiErrorResponse({ code: apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, status: 403, message: '无权修复该订单' });
     }
 
     const order = await db.order.update({
@@ -293,15 +308,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   }
 
   const receiptId = trimStr(body.receiptId);
-  if (!receiptId) return NextResponse.json({ success: false, error: 'receiptId不能为空' }, { status: 400 });
+  if (!receiptId) return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'receiptId不能为空' });
 
   const existingReceipt = await db.receipt.findUnique({
     where: { id: receiptId },
     select: { id: true, createdBy: true },
   });
-  if (!existingReceipt) return NextResponse.json({ success: false, error: '收据不存在' }, { status: 404 });
+  if (!existingReceipt) return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '收据不存在' });
   if (currentUser.role === UserRole.SALES && existingReceipt.createdBy !== currentUser.id) {
-    return NextResponse.json({ success: false, error: '无权修复该收据' }, { status: 403 });
+    return createApiErrorResponse({ code: apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, status: 403, message: '无权修复该收据' });
   }
 
   const receipt = await db.receipt.update({

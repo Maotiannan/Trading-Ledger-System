@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword, validateUser, verifyPassword } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
+import { type ApiErrorCode, apiErrorCodes, createApiError } from '@/lib/api-error';
+import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
@@ -41,6 +43,22 @@ function canCreateRole(currentLevel: number, currentRole: UserRole, targetRole: 
   return true;
 }
 
+function badRequest(message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown) {
+  return createApiErrorResponse({ code, status: 400, message, detail });
+}
+
+function unauthorized(message: string, code: ApiErrorCode = apiErrorCodes.AUTH_REQUIRED, detail?: unknown) {
+  return createApiErrorResponse({ code, status: 401, message, detail });
+}
+
+function forbidden(message: string, code: ApiErrorCode = apiErrorCodes.FORBIDDEN, detail?: unknown) {
+  return createApiErrorResponse({ code, status: 403, message, detail });
+}
+
+function notFound(message: string, detail?: unknown) {
+  return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message, detail });
+}
+
 // 登录
 export async function POST(request: NextRequest) {
   try {
@@ -50,12 +68,12 @@ export async function POST(request: NextRequest) {
     // 登录
     if (action === 'login') {
       if (!email || !password) {
-        return NextResponse.json({ success: false, error: '邮箱和密码不能为空' }, { status: 400 });
+        return badRequest('邮箱和密码不能为空', apiErrorCodes.VALIDATION_ERROR);
       }
 
       const user = await validateUser(email, password);
       if (!user) {
-        return NextResponse.json({ success: false, error: '邮箱或密码错误' }, { status: 401 });
+        return unauthorized('邮箱或密码错误', apiErrorCodes.INVALID_CREDENTIALS);
       }
 
       const response = NextResponse.json({ success: true, data: user });
@@ -74,7 +92,7 @@ export async function POST(request: NextRequest) {
     if (action === 'me') {
       const user = await getCurrentUser(request);
       if (!user) {
-        return NextResponse.json({ success: false, error: '未登录' });
+        return unauthorized('未登录');
       }
       return NextResponse.json({ success: true, data: user });
     }
@@ -83,17 +101,17 @@ export async function POST(request: NextRequest) {
     if (action === 'create') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
-        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+        return forbidden('无权限');
       }
 
       if (!email || !password) {
-        return NextResponse.json({ success: false, error: '邮箱和密码不能为空' }, { status: 400 });
+        return badRequest('邮箱和密码不能为空', apiErrorCodes.VALIDATION_ERROR);
       }
 
       const requestedRole = parseRole(body.role);
       const targetRole = requestedRole;
       if (!canCreateRole(currentUser.level, currentUser.role, targetRole)) {
-        return NextResponse.json({ success: false, error: '当前账户无权创建该角色' }, { status: 403 });
+        return forbidden('当前账户无权创建该角色', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       const targetLevel = roleLevel[targetRole];
@@ -104,33 +122,33 @@ export async function POST(request: NextRequest) {
         select: { id: true, level: true, role: true },
       });
       if (!parent) {
-        return NextResponse.json({ success: false, error: '指定上级不存在' }, { status: 400 });
+        return badRequest('指定上级不存在', apiErrorCodes.PARENT_NOT_FOUND);
       }
 
       const isVisibleParent = scope.visibleIds.has(parent.id) || parent.id === currentUser.id;
       if (!isVisibleParent) {
-        return NextResponse.json({ success: false, error: '无权指定该上级账户' }, { status: 403 });
+        return forbidden('无权指定该上级账户', apiErrorCodes.PARENT_SCOPE_FORBIDDEN);
       }
 
       if (targetRole === UserRole.SALES) {
         if (parent.role !== UserRole.ADMIN || (parent.level !== 1 && parent.level !== 2)) {
-          return NextResponse.json({ success: false, error: 'SALES 上级必须为 1/2 级 ADMIN' }, { status: 400 });
+          return badRequest('SALES 上级必须为 1/2 级 ADMIN', apiErrorCodes.ROLE_NOT_ALLOWED);
         }
       } else if (targetRole === UserRole.USER) {
         const parentAllowed = (parent.role === UserRole.SALES && parent.level === 3) ||
           (parent.role === UserRole.ADMIN && (parent.level === 1 || parent.level === 2));
         if (!parentAllowed) {
-          return NextResponse.json({ success: false, error: 'USER 上级必须为 1/2 级 ADMIN 或 3 级 SALES' }, { status: 400 });
+          return badRequest('USER 上级必须为 1/2 级 ADMIN 或 3 级 SALES', apiErrorCodes.ROLE_NOT_ALLOWED);
         }
       } else if (targetRole === UserRole.ADMIN) {
         if (parent.level !== 1 || parent.role !== UserRole.ADMIN) {
-          return NextResponse.json({ success: false, error: '2级 ADMIN 只能由 1级 ADMIN 创建' }, { status: 400 });
+          return badRequest('2级 ADMIN 只能由 1级 ADMIN 创建', apiErrorCodes.ROLE_NOT_ALLOWED);
         }
       }
 
       const existing = await db.user.findUnique({ where: { email } });
       if (existing) {
-        return NextResponse.json({ success: false, error: '邮箱已存在' }, { status: 400 });
+        return badRequest('邮箱已存在', apiErrorCodes.EMAIL_ALREADY_EXISTS);
       }
 
       const hashedPassword = await hashPassword(password);
@@ -154,15 +172,15 @@ export async function POST(request: NextRequest) {
     if (action === 'update-role') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser || currentUser.role !== UserRole.ADMIN) {
-        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+        return forbidden('无权限');
       }
 
       if (!userId) {
-        return NextResponse.json({ success: false, error: '用户ID不能为空' }, { status: 400 });
+        return badRequest('用户ID不能为空', apiErrorCodes.VALIDATION_ERROR);
       }
       const newRole = parseRole(body.role);
       if (roleRank[newRole] > roleRank[currentUser.role]) {
-        return NextResponse.json({ success: false, error: '不能设置高于自己的角色' }, { status: 400 });
+        return badRequest('不能设置高于自己的角色', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       const target = await db.user.findUnique({
@@ -170,20 +188,20 @@ export async function POST(request: NextRequest) {
         select: { id: true, email: true, name: true, role: true, level: true, createdById: true },
       });
       if (!target) {
-        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+        return notFound('用户不存在');
       }
       const scope = await getHierarchyScope(currentUser);
       if (!scope.descendantIds.has(target.id)) {
-        return NextResponse.json({ success: false, error: '只能管理下级用户' }, { status: 403 });
+        return forbidden('只能管理下级用户', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
       if (target.level === currentUser.level) {
-        return NextResponse.json({ success: false, error: '同级用户不可管理' }, { status: 403 });
+        return forbidden('同级用户不可管理', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
       if (isProtectedPrimaryAdmin(target)) {
-        return NextResponse.json({ success: false, error: '唯一管理员Admin角色不可修改' }, { status: 400 });
+        return badRequest('唯一管理员Admin角色不可修改', apiErrorCodes.PRIMARY_ADMIN_PROTECTED);
       }
       if (!canCreateRole(currentUser.level, currentUser.role, newRole)) {
-        return NextResponse.json({ success: false, error: '当前账户无权设置该角色' }, { status: 403 });
+        return forbidden('当前账户无权设置该角色', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       const updated = await db.user.update({
@@ -198,12 +216,12 @@ export async function POST(request: NextRequest) {
     if (action === 'parent-options') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
-        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+        return forbidden('无权限');
       }
 
       const targetRole = parseRole(body.role);
       if (!canCreateRole(currentUser.level, currentUser.role, targetRole)) {
-        return NextResponse.json({ success: false, error: '当前账户无权创建该角色' }, { status: 403 });
+        return forbidden('当前账户无权创建该角色', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       const scope = await getHierarchyScope(currentUser);
@@ -234,7 +252,7 @@ export async function POST(request: NextRequest) {
     if (action === 'list') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
-        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+        return forbidden('无权限');
       }
 
       const scope = await getHierarchyScope(currentUser);
@@ -257,15 +275,15 @@ export async function POST(request: NextRequest) {
     if (action === 'delete') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
-        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+        return forbidden('无权限');
       }
 
       if (!userId) {
-        return NextResponse.json({ success: false, error: '用户ID不能为空' }, { status: 400 });
+        return badRequest('用户ID不能为空', apiErrorCodes.VALIDATION_ERROR);
       }
 
       if (userId === currentUser.id) {
-        return NextResponse.json({ success: false, error: '不能删除自己' }, { status: 400 });
+        return badRequest('不能删除自己', apiErrorCodes.SELF_ACTION_FORBIDDEN);
       }
 
       const target = await db.user.findUnique({
@@ -273,11 +291,11 @@ export async function POST(request: NextRequest) {
         select: { id: true, role: true, level: true },
       });
       if (!target) {
-        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+        return notFound('用户不存在');
       }
       const scope = await getHierarchyScope(currentUser);
       if (!scope.descendantIds.has(target.id) || target.level <= currentUser.level) {
-        return NextResponse.json({ success: false, error: '仅可删除下级用户' }, { status: 403 });
+        return forbidden('仅可删除下级用户', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       await db.$transaction(async (tx) => {
@@ -303,22 +321,22 @@ export async function POST(request: NextRequest) {
     if (action === 'reset-password') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
-        return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+        return forbidden('无权限');
       }
 
       if (!userId || !password) {
-        return NextResponse.json({ success: false, error: '用户ID和新密码不能为空' }, { status: 400 });
+        return badRequest('用户ID和新密码不能为空', apiErrorCodes.VALIDATION_ERROR);
       }
       const target = await db.user.findUnique({
         where: { id: userId },
         select: { id: true, level: true },
       });
       if (!target) {
-        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+        return notFound('用户不存在');
       }
       const scope = await getHierarchyScope(currentUser);
       if (!scope.descendantIds.has(target.id) || target.level <= currentUser.level) {
-        return NextResponse.json({ success: false, error: '仅可重置下级用户密码' }, { status: 403 });
+        return forbidden('仅可重置下级用户密码', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       const hashedPassword = await hashPassword(password);
@@ -334,17 +352,17 @@ export async function POST(request: NextRequest) {
     if (action === 'change-password') {
       const currentUser = await getCurrentUser(request);
       if (!currentUser) {
-        return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
+        return unauthorized('未登录');
       }
 
       const oldPassword = typeof body.oldPassword === 'string' ? body.oldPassword : '';
       const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
 
       if (!oldPassword || !newPassword) {
-        return NextResponse.json({ success: false, error: '旧密码和新密码不能为空' }, { status: 400 });
+        return badRequest('旧密码和新密码不能为空', apiErrorCodes.VALIDATION_ERROR);
       }
       if (newPassword.length < 8) {
-        return NextResponse.json({ success: false, error: '新密码至少8位' }, { status: 400 });
+        return badRequest('新密码至少8位', apiErrorCodes.PASSWORD_TOO_SHORT);
       }
 
       const userWithPassword = await db.user.findUnique({
@@ -352,12 +370,12 @@ export async function POST(request: NextRequest) {
         select: { id: true, password: true },
       });
       if (!userWithPassword) {
-        return NextResponse.json({ success: false, error: '用户不存在' }, { status: 404 });
+        return notFound('用户不存在');
       }
 
       const oldValid = await verifyPassword(oldPassword, userWithPassword.password);
       if (!oldValid) {
-        return NextResponse.json({ success: false, error: '旧密码错误' }, { status: 400 });
+        return badRequest('旧密码错误', apiErrorCodes.INVALID_CREDENTIALS);
       }
 
       const hashedPassword = await hashPassword(newPassword);
@@ -368,9 +386,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: '密码修改成功' });
     }
 
-    return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
+    throw createApiError({
+      code: apiErrorCodes.INVALID_ACTION,
+      status: 400,
+      message: '未知操作',
+      detail: { action },
+    });
   } catch (error) {
     console.error('Auth API error:', error);
-    return NextResponse.json({ success: false, error: '服务器错误' }, { status: 500 });
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.INTERNAL_ERROR,
+      status: 500,
+      message: '服务器错误',
+    });
   }
 }

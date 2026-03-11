@@ -80,6 +80,7 @@ export default async function run(t) {
     },
     expectedStatus: 400,
   });
+  t.assertEqual(duplicate.data?.code, 'CUSTOMER_DUPLICATE', 'duplicate customer create returns CUSTOMER_DUPLICATE code');
   t.assertMatch(duplicate.data?.error || duplicate.text, /PHONE|MARK|NAME|Duplicate|重复/, 'duplicate customer is rejected with detail message');
 
   const workbookPath = t.writeTempFile(`customer-import-${suffix}.xlsx`, '');
@@ -132,6 +133,27 @@ export default async function run(t) {
   });
   const retryRows = Array.isArray(retry.data?.rowResults) ? retry.data.rowResults : [];
   t.assertEqual(retryRows[0]?.status, 'CREATED', 'customer issue row retry succeeds after correction');
+
+  const missingTemplateColumnWorkbookPath = t.writeTempFile(`customer-import-missing-column-${suffix}.xlsx`, '');
+  await buildWorkbook(missingTemplateColumnWorkbookPath, []);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(missingTemplateColumnWorkbookPath);
+  const sheet = workbook.worksheets[0];
+  sheet.getRow(1).values = ['MARK', 'ORDER_NAME', 'NAME'];
+  await workbook.xlsx.writeFile(missingTemplateColumnWorkbookPath);
+  const invalidTemplate = await t.request('POST', '/api/customer', {
+    form: {
+      action: 'import-excel',
+      ownerId: salesId,
+      file: {
+        filePath: missingTemplateColumnWorkbookPath,
+        filename: 'customer-invalid-template.xlsx',
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      },
+    },
+    expectedStatus: 400,
+  });
+  t.assertEqual(invalidTemplate.data?.code, 'IMPORT_TEMPLATE_INVALID', 'customer import template validation returns IMPORT_TEMPLATE_INVALID code');
 
   await t.logout();
   await t.login(salesEmail, 'Sales@2026!');

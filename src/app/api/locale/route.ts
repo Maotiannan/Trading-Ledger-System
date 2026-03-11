@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiErrorCodes } from '@/lib/api-error';
+import { toApiErrorResponse } from '@/lib/api-error-response';
 import { defaultLocale, isSupportedLocale } from '@/lib/i18n';
 
 export async function POST(request: NextRequest) {
@@ -18,6 +20,10 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error('Locale API error:', error);
-    return NextResponse.json({ success: false, error: '设置语言失败' }, { status: 500 });
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.INTERNAL_ERROR,
+      status: 500,
+      message: '设置语言失败',
+    });
   }
 }

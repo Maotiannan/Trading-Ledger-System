@@ -26,7 +26,7 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
-- 当前 Jest 已扩展到 `25 suites / 124 tests`；coverage global threshold 已小步提升到 `branches 47 / functions 73 / lines 67 / statements 66`
+- 当前 Jest 已扩展到 `25 suites / 128 tests`；coverage global threshold 已小步提升到 `branches 48 / functions 74 / lines 68 / statements 66`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -944,6 +944,13 @@ src/
 - 📜 设置页新增独立配置审计查询与展示：`/api/settings?view=audit` 返回配置变更分页结果，设置页新增审计卡片，展示操作人、时间、更新键与前后值。
 - 🧪 新增 `client.test.ts` 与更多 `use-settings-actions` 分支测试，Jest 扩展到 `25 suites / 124 tests`。
 - 📈 coverage threshold 第九轮小步上调：global 提升到 `47 / 73 / 67 / 66`，`use-settings-actions` 局部门禁同步提升到 `40 / 92 / 68 / 68`。
+
+### v1.0.62 (2026-03-11)
+- 🧱 剩余历史错误响应收口：`auth/customer/customer-fixes/report/upload-image/locale/init` 这批路由统一补齐 `code/message/detail`，不再返回裸字符串错误体。
+- 🧩 前端错误消费继续收尾：登录页、账单导入、客户导入、用户管理补齐错误码优先消费，旧式 `result.error || ...` 路径清理完成。
+- 🧪 隔离 API 回归新增错误码断言：已覆盖 `AUTH_REQUIRED / INVALID_CREDENTIALS / INVALID_ACTION / CUSTOMER_DUPLICATE / IMPORT_TEMPLATE_INVALID`。
+- 🧪 Jest 扩展到 `25 suites / 128 tests`。
+- 📈 coverage threshold 第十轮小步上调：global 提升到 `48 / 74 / 68 / 66`，`use-user-actions` 局部门禁同步提升到 `50 / 100 / 88 / 85`。
 
 ### v1.0.58 (2026-03-11)
 - 🧱 `settings / receipt / detail / swift` 写接口继续统一：新增 `settings-service / receipt-service / detail-service / swift-service`，路由层只保留请求解析、OCR 识别和响应封装。

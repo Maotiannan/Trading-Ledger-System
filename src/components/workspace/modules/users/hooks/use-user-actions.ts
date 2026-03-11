@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import type { User } from '@/lib/store';
 import type { ManagedUserRole, NewUserForm, ParentOption } from '../types';
 
@@ -29,12 +29,16 @@ export function useUserActions({
   setLoadingParents: (loading: boolean) => void;
 }) {
   const loadUsers = useCallback(async () => {
-    const result = await apiCall('auth', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'list' }),
-    });
-    if (result.success) {
-      setUsers(result.data);
+    try {
+      const result = await apiCall('auth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'list' }),
+      });
+      if (result.success) {
+        setUsers(result.data);
+      }
+    } catch {
+      setUsers([]);
     }
   }, [setUsers]);
 
@@ -66,15 +70,19 @@ export function useUserActions({
 
   const handleCreate = useCallback(async () => {
     const targetRole = user?.role === 'SALES' ? 'USER' : newUser.role;
-    const result = await apiCall('auth', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'create', ...newUser, role: targetRole, parentId: newUser.parentId || undefined }),
-    });
-    if (result.success) {
-      setShowCreate(false);
-      setNewUser({ email: '', password: '', name: '', role: creatableRoles[0] || 'USER', parentId: '' });
-      setParentOptions([]);
-      await loadUsers();
+    try {
+      const result = await apiCall('auth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'create', ...newUser, role: targetRole, parentId: newUser.parentId || undefined }),
+      });
+      if (result.success) {
+        setShowCreate(false);
+        setNewUser({ email: '', password: '', name: '', role: creatableRoles[0] || 'USER', parentId: '' });
+        setParentOptions([]);
+        await loadUsers();
+      }
+    } catch (error) {
+      alert(getApiErrorMessage(error, tx('创建失败', 'Create failed')));
     }
   }, [creatableRoles, loadUsers, newUser, setNewUser, setParentOptions, setShowCreate, user?.role]);
 
@@ -94,11 +102,15 @@ export function useUserActions({
 
   const handleDelete = useCallback(async (userId: string) => {
     if (confirm(tx('确定要删除此用户吗？', 'Delete this user?'))) {
-      await apiCall('auth', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'delete', userId }),
-      });
-      await loadUsers();
+      try {
+        await apiCall('auth', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'delete', userId }),
+        });
+        await loadUsers();
+      } catch (error) {
+        alert(getApiErrorMessage(error, tx('删除失败', 'Delete failed')));
+      }
     }
   }, [loadUsers, tx]);
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { apiErrorCodes } from '@/lib/api-error';
+import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { withAuth } from '@/lib/route-auth';
 import { db } from '@/lib/db';
 import { buildDetailVisibilityWhere, buildInvoiceVisibilityWhere, buildOrderVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds } from '@/lib/resource-visibility';
@@ -144,7 +146,12 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const format = searchParams.get('format');
 
   if (format !== 'excel' && format !== 'pdf') {
-    return NextResponse.json({ success: false, error: 'format must be excel or pdf' }, { status: 400 });
+    return createApiErrorResponse({
+      code: apiErrorCodes.EXPORT_FORMAT_INVALID,
+      status: 400,
+      message: 'format must be excel or pdf',
+      detail: { format },
+    });
   }
 
   try {
@@ -163,6 +170,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     });
   } catch (error) {
     console.error('Report export failed:', error);
-    return NextResponse.json({ success: false, error: '报表导出失败' }, { status: 500 });
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.REPORT_EXPORT_FAILED,
+      status: 500,
+      message: '报表导出失败',
+    });
   }
 });

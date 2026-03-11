@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import {
   apiCall,
+  getApiErrorMessage,
   getApiResponseErrorMessage,
   getErrorMessage,
   initCustomerImportRowViews,
@@ -198,7 +199,7 @@ export function useCustomerActions({
       }
       setCustomerImportRows(initCustomerImportRowViews(fallbackResults));
       resetImportTable();
-      setCustomerImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
+      setCustomerImportMessage(String(result?.message || getApiErrorMessage(result, tx('导入完成', 'Import completed'))));
       setShowCustomerImportIssues(true);
       await loadCustomers();
     } catch (error) {
@@ -259,7 +260,7 @@ export function useCustomerActions({
         throw new Error(`${getErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       setCustomerImportRows((prev) => mergeCustomerImportRowViews(prev, fallbackResults));
-      setCustomerImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
+      setCustomerImportMessage(String(result?.message || getApiErrorMessage(result, tx('重试完成', 'Retry completed'))));
       await loadCustomers();
     } catch (error) {
       alert(getErrorMessage(error, tx('导入失败', 'Import failed')));

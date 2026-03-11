@@ -1,10 +1,17 @@
 import { act, renderHook } from '@testing-library/react';
 import { useUserActions } from './use-user-actions';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import type { ManagedUserRole } from '../types';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  getApiErrorMessage: jest.fn((error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) return error.message;
+    if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
+      return String((error as Record<string, unknown>).error || fallback);
+    }
+    return fallback;
+  }),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => {
     if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
       return String((error as Record<string, unknown>).error || fallback);
@@ -14,6 +21,7 @@ jest.mock('@/components/workspace/shared', () => ({
 }));
 
 const mockApiCall = apiCall as jest.Mock;
+const mockGetApiErrorMessage = getApiErrorMessage as jest.Mock;
 const mockGetErrorMessage = getErrorMessage as jest.Mock;
 
 describe('useUserActions', () => {
@@ -29,6 +37,7 @@ describe('useUserActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockGetApiErrorMessage.mockClear();
     mockGetErrorMessage.mockClear();
     setUsers.mockClear();
     setShowCreate.mockClear();
@@ -102,6 +111,17 @@ describe('useUserActions', () => {
     expect(setShowCreate).toHaveBeenCalledWith(false);
   });
 
+  it('alerts when create fails with structured api error', async () => {
+    mockApiCall.mockRejectedValue(new Error('Email already exists'));
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleCreate();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('Email already exists');
+  });
+
   it('alerts when role change fails', async () => {
     mockApiCall.mockResolvedValue({ success: false, error: '角色更新失败' });
     const { result } = renderHook(() => useUserActions(createDeps()));
@@ -163,5 +183,16 @@ describe('useUserActions', () => {
     });
 
     expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('alerts when delete fails with structured api error', async () => {
+    mockApiCall.mockRejectedValue(new Error('Permission denied'));
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDelete('user-1');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('Permission denied');
   });
 });

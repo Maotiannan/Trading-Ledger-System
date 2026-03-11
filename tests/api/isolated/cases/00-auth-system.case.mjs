@@ -1,8 +1,15 @@
 export const name = 'auth-system';
 
 export default async function run(t) {
-  await t.request('GET', '/api/system/health', { expectedStatus: 401 });
+  const unauthedHealth = await t.request('GET', '/api/system/health', { expectedStatus: 401 });
+  t.assertEqual(unauthedHealth.data?.code, 'AUTH_REQUIRED', 'system health unauthenticated response returns AUTH_REQUIRED code');
   t.step('system health requires auth');
+
+  const badLogin = await t.request('POST', '/api/auth', {
+    json: { action: 'login', email: t.adminEmail, password: 'wrong-password' },
+    expectedStatus: 401,
+  });
+  t.assertEqual(badLogin.data?.code, 'INVALID_CREDENTIALS', 'invalid login returns INVALID_CREDENTIALS code');
 
   await t.initAdmin();
   const login = await t.loginAdmin();
@@ -25,6 +32,12 @@ export default async function run(t) {
     expectedStatus: 200,
   });
   t.step('locale update works');
+
+  const invalidAction = await t.request('POST', '/api/auth', {
+    json: { action: 'nope' },
+    expectedStatus: 400,
+  });
+  t.assertEqual(invalidAction.data?.code, 'INVALID_ACTION', 'unknown auth action returns INVALID_ACTION code');
 
   await t.logout();
 }

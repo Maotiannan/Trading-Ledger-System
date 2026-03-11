@@ -22,6 +22,15 @@ describe('workspace api client', () => {
     expect(getApiErrorCode({ code: 'FORBIDDEN', error: '无权限' })).toBe('FORBIDDEN');
   });
 
+  it('translates auth-specific error codes', () => {
+    const message = getApiErrorMessage(
+      { code: 'INVALID_CREDENTIALS', error: '邮箱或密码错误' },
+      'fallback',
+    );
+
+    expect(message).toBe('Invalid email or password');
+  });
+
   it('appends detail text when requested', () => {
     const message = getApiErrorMessage(
       { code: 'BAD_REQUEST', error: '参数错误', detail: 'field=OCR_DISABLED' },
@@ -41,5 +50,9 @@ describe('workspace api client', () => {
 
     expect(getApiErrorMessage(error, 'fallback')).toBe('Conflict detected');
     expect(getApiErrorCode(error)).toBe('CONFLICT');
+  });
+
+  it('falls back to translated raw message when no code exists', () => {
+    expect(getApiErrorMessage({ error: '请上传Excel文件' }, 'fallback')).toBe('Please upload an Excel file');
   });
 });

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { apiErrorCodes } from '@/lib/api-error';
+import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { getCurrentUser } from '@/lib/request-auth';
 import { db } from '@/lib/db';
 import { buildDetailVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds } from '@/lib/resource-visibility';
@@ -22,18 +24,18 @@ export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
     if (!currentUser) {
-      return NextResponse.json({ success: false, error: '未登录' }, { status: 401 });
+      return createApiErrorResponse({ code: apiErrorCodes.AUTH_REQUIRED, status: 401, message: '未登录' });
     }
 
     const { searchParams } = new URL(request.url);
     const rawPath = searchParams.get('path') || '';
     if (!rawPath.startsWith(PUBLIC_UPLOAD_PREFIX)) {
-      return NextResponse.json({ success: false, error: '无效图片路径' }, { status: 400 });
+      return createApiErrorResponse({ code: apiErrorCodes.INVALID_FILE_PATH, status: 400, message: '无效图片路径' });
     }
 
     const relativePath = rawPath.slice(PUBLIC_UPLOAD_PREFIX.length);
     if (!relativePath || relativePath.includes('..')) {
-      return NextResponse.json({ success: false, error: '无效图片路径' }, { status: 400 });
+      return createApiErrorResponse({ code: apiErrorCodes.INVALID_FILE_PATH, status: 400, message: '无效图片路径' });
     }
 
     const ownerIds = await getOwnerVisibleIds(currentUser);
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
     if (!receipt && !detail && !swift) {
-      return NextResponse.json({ success: false, error: '无权访问该图片' }, { status: 403 });
+      return createApiErrorResponse({ code: apiErrorCodes.FILE_ACCESS_DENIED, status: 403, message: '无权访问该图片' });
     }
 
     const uploadDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
@@ -77,6 +79,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Read upload image error:', error);
-    return NextResponse.json({ success: false, error: '图片读取失败' }, { status: 404 });
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.FILE_READ_FAILED,
+      status: 404,
+      message: '图片读取失败',
+    });
   }
 }

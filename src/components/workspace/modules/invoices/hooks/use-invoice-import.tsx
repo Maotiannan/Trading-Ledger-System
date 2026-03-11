@@ -3,6 +3,7 @@
 import { useMemo, useState, type MutableRefObject } from 'react';
 import { Input } from '@/components/ui/input';
 import {
+  getApiErrorMessage,
   initInvoiceImportRowViews,
   mergeInvoiceImportRowViews,
   toInvoiceImportRowResults,
@@ -47,22 +48,22 @@ export function useInvoiceImport(
       const result = await response.json().catch(() => ({}));
       if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getApiErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
 
       const rowResults = toInvoiceImportRowResults(result?.rowResults);
       const fallbackResults = rowResults.length > 0 ? rowResults : toInvoiceImportRowResultsFromIssues(result?.issueRows);
       if (fallbackResults.length === 0) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getApiErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       setInvoiceImportRows(initInvoiceImportRowViews(fallbackResults));
       invoiceImportTable.reset();
-      setInvoiceImportMessage(String(result?.message || result?.error || tx('导入完成', 'Import completed')));
+      setInvoiceImportMessage(String(result?.message || getApiErrorMessage(result, tx('导入完成', 'Import completed'))));
       setShowInvoiceImportIssues(true);
       await loadInvoices();
     } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
+      alert(getApiErrorMessage(error, tx('导入失败', 'Import failed')));
     } finally {
       setInvoiceImporting(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -95,19 +96,19 @@ export function useInvoiceImport(
       const result = await response.json().catch(() => ({}));
       if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getApiErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       const rowResults = toInvoiceImportRowResults(result?.rowResults);
       const fallbackResults = rowResults.length > 0 ? rowResults : toInvoiceImportRowResultsFromIssues(result?.issueRows);
       if (fallbackResults.length === 0) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getApiErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       setInvoiceImportRows((prev) => mergeInvoiceImportRowViews(prev, fallbackResults));
       setInvoiceImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
       await loadInvoices();
     } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
+      alert(getApiErrorMessage(error, tx('导入失败', 'Import failed')));
     } finally {
       setInvoiceIssueSubmitting(false);
     }

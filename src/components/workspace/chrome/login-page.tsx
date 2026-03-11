@@ -20,7 +20,7 @@ import {
   fetchCustomerCandidatesByMark,
   fetchServerDate,
   getDisplayImageUrl,
-  getErrorMessage,
+  getApiErrorMessage,
   initCustomerImportRowViews,
   initInvoiceImportRowViews,
   lookupCustomerByOrderNoGroup,
@@ -69,14 +69,10 @@ export function LoginPage() {
       if (result.success && result.data) {
         setUser(result.data);
       } else {
-        setError(result.error || t('loginFailed'));
+        setError(getApiErrorMessage(result, t('loginFailed')));
       }
     } catch (err) {
-      if (err instanceof Error && err.message) {
-        setError(err.message);
-      } else {
-        setError(t('networkError'));
-      }
+      setError(getApiErrorMessage(err, t('networkError')));
     } finally {
       setLoading(false);
     }
@@ -124,4 +120,3 @@ export function LoginPage() {
     </div>
   );
 }
-

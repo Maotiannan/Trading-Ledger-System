@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
+import { type ApiErrorCode, apiErrorCodes } from '@/lib/api-error';
+import { createApiErrorResponse } from '@/lib/api-error-response';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
 import {
@@ -137,7 +139,19 @@ type ImportExistingCustomer = {
 
 function managerOnly(userRole: UserRole): NextResponse | null {
   if (userRole === UserRole.ADMIN || userRole === UserRole.SALES) return null;
-  return NextResponse.json({ success: false, error: '无权限' }, { status: 403 });
+  return createApiErrorResponse({ code: apiErrorCodes.FORBIDDEN, status: 403, message: '无权限' });
+}
+
+function badRequest(message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown) {
+  return createApiErrorResponse({ code, status: 400, message, detail });
+}
+
+function forbidden(message: string, code: ApiErrorCode = apiErrorCodes.FORBIDDEN, detail?: unknown) {
+  return createApiErrorResponse({ code, status: 403, message, detail });
+}
+
+function notFound(message: string, detail?: unknown) {
+  return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message, detail });
 }
 
 function parsePayload(body: Record<string, unknown>): CustomerPayload {
@@ -548,19 +562,19 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const formData = await request.formData();
     const action = trimStr(formData.get('action'));
     if (action !== 'import-excel') {
-      return NextResponse.json({ success: false, error: '未知上传操作' }, { status: 400 });
+      return badRequest('未知上传操作', apiErrorCodes.INVALID_ACTION, { action });
     }
 
     const file = formData.get('file');
     if (!(file instanceof File)) {
-      return NextResponse.json({ success: false, error: '请上传Excel文件' }, { status: 400 });
+      return badRequest('请上传Excel文件', apiErrorCodes.INVALID_FILE_TYPE);
     }
 
     let ownerId: string;
     try {
       ownerId = await resolveCustomerOwnerId(currentUser, trimStr(formData.get('ownerId')) || null);
     } catch (error) {
-      return NextResponse.json({ success: false, error: mapPrismaWriteError(error) }, { status: 400 });
+      return badRequest(mapPrismaWriteError(error));
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -569,7 +583,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     await workbook.xlsx.load(workbookBuffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) {
-      return NextResponse.json({ success: false, error: 'Excel为空' }, { status: 400 });
+      return badRequest('Excel为空', apiErrorCodes.IMPORT_EMPTY_FILE);
     }
 
     const headerRow = sheet.getRow(1);
@@ -581,7 +595,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const requiredHeaders = ['MARK', 'ORDER_NAME', 'NAME', 'PHONE', 'CITY', 'CONSIGNEE'];
     const missing = requiredHeaders.filter((h) => !headerMap.has(h));
     if (missing.length > 0) {
-      return NextResponse.json({ success: false, error: `模板缺少列: ${missing.join(', ')}` }, { status: 400 });
+      return badRequest(`模板缺少列: ${missing.join(', ')}`, apiErrorCodes.IMPORT_TEMPLATE_INVALID, { missing });
     }
 
     const rows: ImportRow[] = [];
@@ -615,7 +629,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (rows.length === 0) {
-      return NextResponse.json({ success: false, error: '没有可导入的数据行' }, { status: 400 });
+      return badRequest('没有可导入的数据行', apiErrorCodes.NO_IMPORT_ROWS);
     }
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
@@ -625,6 +639,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         success: processed.success,
         message: processed.message,
         error: processed.success ? undefined : processed.message,
+        code: processed.success ? undefined : apiErrorCodes.BAD_REQUEST,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
         rowResults: processed.rowResults,
@@ -666,14 +681,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       };
     });
     if (rows.length === 0) {
-      return NextResponse.json({ success: false, error: '没有可导入的数据行' }, { status: 400 });
+      return badRequest('没有可导入的数据行', apiErrorCodes.NO_IMPORT_ROWS);
     }
 
     let ownerId: string;
     try {
       ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
     } catch (innerError) {
-      return NextResponse.json({ success: false, error: mapPrismaWriteError(innerError) }, { status: 400 });
+      return badRequest(mapPrismaWriteError(innerError));
     }
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
     const processed = await processCustomerImportRows(rows, currentUser as { id: string; role: UserRole }, ownerId, showExtended);
@@ -682,6 +697,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         success: processed.success,
         message: processed.message,
         error: processed.success ? undefined : processed.message,
+        code: processed.success ? undefined : apiErrorCodes.BAD_REQUEST,
         details: processed.details.slice(0, 200),
         issueRows: processed.issueRows.slice(0, 200),
         rowResults: processed.rowResults,
@@ -700,7 +716,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   if (action === 'create') {
     const payload = parsePayload(body);
     const error = validateRequired(payload);
-    if (error) return NextResponse.json({ success: false, error }, { status: 400 });
+    if (error) return badRequest(error, apiErrorCodes.VALIDATION_ERROR);
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
 
@@ -713,7 +729,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         phone: payload.phone!,
       });
       if (duplicates.length > 0) {
-        throw new Error(formatDuplicateCustomerMessage(duplicates));
+        return badRequest(formatDuplicateCustomerMessage(duplicates), apiErrorCodes.CUSTOMER_DUPLICATE);
       }
       await assertNoCustomerScopeConflict(ownerId, {
         orderName: payload.orderName!,
@@ -721,7 +737,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         companyName: showExtended ? payload.companyName || null : null,
       });
     } catch (innerError) {
-      return NextResponse.json({ success: false, error: mapPrismaWriteError(innerError) }, { status: 400 });
+      return badRequest(mapPrismaWriteError(innerError));
     }
 
     try {
@@ -746,28 +762,28 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
       return NextResponse.json({ success: true, data: toSalesView(created as Record<string, unknown>, showExtended) });
     } catch (createError) {
-      return NextResponse.json({ success: false, error: mapPrismaWriteError(createError) }, { status: 400 });
+      return badRequest(mapPrismaWriteError(createError));
     }
   }
 
   if (action === 'update') {
     const id = trimStr(body.id);
-    if (!id) return NextResponse.json({ success: false, error: '客户ID不能为空' }, { status: 400 });
+    if (!id) return badRequest('客户ID不能为空', apiErrorCodes.VALIDATION_ERROR);
 
     const existing = await db.customer.findUnique({
       where: { id },
       select: { id: true, ownerId: true },
     });
     if (!existing) {
-      return NextResponse.json({ success: false, error: '客户不存在' }, { status: 404 });
+      return notFound('客户不存在');
     }
     if (!canMutateCustomer(currentUser, existing.ownerId)) {
-      return NextResponse.json({ success: false, error: '无权修改该客户' }, { status: 403 });
+      return forbidden('无权修改该客户', apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN);
     }
 
     const payload = parsePayload(body);
     const error = validateRequired(payload);
-    if (error) return NextResponse.json({ success: false, error }, { status: 400 });
+    if (error) return badRequest(error, apiErrorCodes.VALIDATION_ERROR);
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
 
@@ -780,7 +796,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         phone: payload.phone!,
       }, id);
       if (duplicates.length > 0) {
-        throw new Error(formatDuplicateCustomerMessage(duplicates));
+        return badRequest(formatDuplicateCustomerMessage(duplicates), apiErrorCodes.CUSTOMER_DUPLICATE);
       }
       await assertNoCustomerScopeConflict(
         ownerId,
@@ -792,7 +808,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         id
       );
     } catch (innerError) {
-      return NextResponse.json({ success: false, error: mapPrismaWriteError(innerError) }, { status: 400 });
+      return badRequest(mapPrismaWriteError(innerError));
     }
 
     try {
@@ -821,25 +837,25 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
       return NextResponse.json({ success: true, data: toSalesView(updated as Record<string, unknown>, showExtended) });
     } catch (updateError) {
-      return NextResponse.json({ success: false, error: mapPrismaWriteError(updateError) }, { status: 400 });
+      return badRequest(mapPrismaWriteError(updateError));
     }
   }
 
   if (action === 'delete') {
     if (currentUser.role !== UserRole.ADMIN) {
-      return NextResponse.json({ success: false, error: '只有管理员可删除客户' }, { status: 403 });
+      return forbidden('只有管理员可删除客户', apiErrorCodes.ROLE_NOT_ALLOWED);
     }
     const id = trimStr(body.id);
-    if (!id) return NextResponse.json({ success: false, error: '客户ID不能为空' }, { status: 400 });
+    if (!id) return badRequest('客户ID不能为空', apiErrorCodes.VALIDATION_ERROR);
 
     const existing = await db.customer.findUnique({ where: { id }, select: { id: true } });
     if (!existing) {
-      return NextResponse.json({ success: false, error: '客户不存在' }, { status: 404 });
+      return notFound('客户不存在');
     }
 
     await db.customer.delete({ where: { id } });
     return NextResponse.json({ success: true, message: '客户已删除' });
   }
 
-  return NextResponse.json({ success: false, error: '未知操作' }, { status: 400 });
+  return badRequest('未知操作', apiErrorCodes.INVALID_ACTION, { action });
 });

@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.55  
+> 当前版本：v1.0.56  
 > 最后更新：2026-03-11
 
 ## P0（本周必须完成）
@@ -116,7 +116,9 @@
 - [x] 覆盖率门禁第三轮上调：将 `receipt/detail/swift/users` 纳入 `collectCoverageFrom` 和 module thresholds，并将 global 提升到 `40/65/60/60` ✅ 2026-03-11
 - [x] 修复 GitHub Actions isolated E2E 锁冲突：API/E2E 分别使用 `.next-api-isolated` 与 `.next-e2e-isolated`，不再共用 `.next/dev/lock` ✅ 2026-03-11
 - [x] 清理错误测试产物来源：修正 `NEXT_DIST_DIR` 为相对路径，删除误生成的 `Users/...` 目录树，并将测试专用 distDir 纳入 `.gitignore`/`tsconfig.json` ✅ 2026-03-11
-- [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
+- [x] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received，含拒绝删除与签收后禁删）✅ 2026-03-11
+- [x] 新增 SWIFT 金额容差 isolated API 边界回归：覆盖 `±5 / ±6 / ±50 / ±51`、错误 SWIFT 持久化与创建者直删 ✅ 2026-03-11
+- [x] 覆盖率门禁第四轮上调：global 提升到 `42/68/62/62`，并同步提高 `invoice/customer/settings` 局部门禁 ✅ 2026-03-11
 
 ## P1（两周内完成）
 
@@ -129,7 +131,7 @@
 
 ### 测试覆盖
 - [ ] 覆盖 `deletion` 审批分支单测（RECEIPT/DETAIL/SWIFT）
-- [ ] 覆盖 `swift` 金额容差分支单测（正常/警告/拒绝）
+- [x] 覆盖 `swift` 金额容差分支单测（正常/警告/拒绝）✅ 2026-03-11
 - [x] 增加 Playwright API 驱动用例（优先 API，不依赖手工 UI 点击）✅ 2026-03-10
 
 ## P2（持续迭代）
@@ -144,6 +146,7 @@
 - [ ] 接入 Sentry（前后端异常聚合）
 - [ ] 接入 Prometheus + Grafana（接口成功率、耗时、错误率）
 - [ ] 制定备份与恢复演练（MariaDB 快照 + 上传目录备份）
+- [ ] 升级 GitHub Actions `actions/checkout` / `actions/setup-node` 到支持 Node 24 的版本，消除 runner 退役告警
 
 ### 文档与交付
 - [ ] 补全 API 文档（可选 OpenAPI）
@@ -155,6 +158,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.56（2026-03-11）：新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期集成测试与 SWIFT 容差边界 API 回归，补齐 `validateAmountTolerance` 单测，并将 coverage threshold 第四轮小步上调到 `42/68/62/62`；GitHub Actions run `22934138981` 最终通过
 - v1.0.55（2026-03-11）：修复 GitHub Actions 中 isolated API 与 isolated E2E 共用 `.next/dev/lock` 导致的 `app not ready`；测试脚本改为独立 `distDir`，并收口 `NEXT_DIST_DIR` 的相对路径规则，避免再次生成仓库内 `Users/...` 编译产物
 - v1.0.54（2026-03-11）：修复 GitHub Actions 对 `jest.config.ts` 的解析失败，将配置切换为 `jest.config.mjs`；第三批模块测试为 `receipt/detail/swift/users` 补齐上传识别、确认创建和异常/取消分支，Jest 扩展到 15 suites / 54 tests，并将这四组 hooks 纳入 coverage 门禁
 - v1.0.53（2026-03-11）：修复 GitHub Actions `npm ci` 的 lockfile 失配；通过 `package.json#overrides` 固定 `@swc/helpers=0.5.19`，并新增 `receipt/detail/swift/users` 第二批 hook/module 测试，Jest 扩展到 15 suites / 36 tests

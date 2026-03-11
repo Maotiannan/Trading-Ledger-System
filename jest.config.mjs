@@ -26,10 +26,10 @@ const customJestConfig = {
   ],
   coverageThreshold: {
     global: {
-      branches: 40,
-      functions: 65,
-      lines: 60,
-      statements: 60,
+      branches: 42,
+      functions: 68,
+      lines: 62,
+      statements: 62,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -38,10 +38,10 @@ const customJestConfig = {
       statements: 100,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-actions.ts': {
-      branches: 45,
-      functions: 70,
-      lines: 55,
-      statements: 55,
+      branches: 50,
+      functions: 75,
+      lines: 58,
+      statements: 58,
     },
     './src/components/workspace/modules/customers/hooks/use-customer-forms.ts': {
       branches: 45,
@@ -50,10 +50,10 @@ const customJestConfig = {
       statements: 70,
     },
     './src/components/workspace/modules/customers/hooks/use-customer-actions.ts': {
-      branches: 22,
-      functions: 45,
-      lines: 35,
-      statements: 35,
+      branches: 23,
+      functions: 50,
+      lines: 39,
+      statements: 39,
     },
     './src/components/workspace/modules/receipts/hooks/use-receipt-actions.ts': {
       branches: 45,
@@ -80,10 +80,10 @@ const customJestConfig = {
       statements: 90,
     },
     './src/components/workspace/modules/settings/hooks/use-settings-actions.ts': {
-      branches: 30,
-      functions: 80,
-      lines: 60,
-      statements: 60,
+      branches: 35,
+      functions: 90,
+      lines: 64,
+      statements: 64,
     },
     './src/components/workspace/modules/users/hooks/use-user-actions.ts': {
       branches: 45,

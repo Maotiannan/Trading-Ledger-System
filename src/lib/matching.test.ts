@@ -1,4 +1,4 @@
-import { calculateOrderBalance } from '@/lib/matching';
+import { calculateOrderBalance, validateAmountTolerance } from '@/lib/matching';
 import { db } from '@/lib/db';
 
 jest.mock('@/lib/db', () => ({
@@ -34,5 +34,36 @@ describe('matching.calculateOrderBalance', () => {
     mockedFindUnique.mockResolvedValue(null);
 
     await expect(calculateOrderBalance('missing')).resolves.toBe(0);
+  });
+});
+
+describe('matching.validateAmountTolerance', () => {
+  it('accepts exact +/-5 boundary without warning', () => {
+    expect(validateAmountTolerance(100, 105)).toEqual({
+      valid: true,
+      hasWarning: false,
+      message: '金额验证通过',
+    });
+  });
+
+  it('warns but allows when difference is above 5 and up to 50', () => {
+    expect(validateAmountTolerance(100, 106)).toEqual({
+      valid: true,
+      hasWarning: true,
+      message: '金额差异 6.00 超出正常容差(±5)，已标红但允许通过',
+    });
+    expect(validateAmountTolerance(100, 150)).toEqual({
+      valid: true,
+      hasWarning: true,
+      message: '金额差异 50.00 超出正常容差(±5)，已标红但允许通过',
+    });
+  });
+
+  it('rejects once difference exceeds 50', () => {
+    expect(validateAmountTolerance(100, 151)).toEqual({
+      valid: false,
+      hasWarning: true,
+      message: '金额差异 51.00 超过允许范围(±50)，无法通过验证',
+    });
   });
 });

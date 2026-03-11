@@ -25,6 +25,12 @@ export const booleanSystemSettingKeys = [
 
 export type BooleanSystemSettingKey = (typeof booleanSystemSettingKeys)[number];
 
+export const secretSystemSettingKeys = [
+  'OCR_API_KEY',
+] as const satisfies readonly EditableSystemSettingKey[];
+
+export type SecretSystemSettingKey = (typeof secretSystemSettingKeys)[number];
+
 export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   OCR_DISABLED: process.env.OCR_DISABLED ?? 'false',
   OCR_API_BASE_URL: process.env.OCR_API_BASE_URL ?? 'https://api.openai.com/v1',

@@ -2,6 +2,7 @@ import { DeletionTargetType, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
 import { testOcrConnectivity } from '@/lib/ocr';
+import { recordAuditEvent } from '@/lib/audit';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -11,6 +12,7 @@ import {
   getSystemSettingsWithDefaults,
   invalidateSystemSettingsCache,
   numericSystemSettingMinimums,
+  secretSystemSettingKeys,
 } from '@/lib/system-settings';
 
 const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'all'] as const;
@@ -101,7 +103,8 @@ function validateNumericSetting(key: string, value: string, min: number): void {
 }
 
 async function validateSettingUpdates(
-  settings: Record<string, unknown>
+  settings: Record<string, unknown>,
+  currentSettings: Record<string, string>
 ): Promise<Array<{ key: string; value: string }>> {
   const updates = editableSystemSettingKeys
     .filter((key) => Object.prototype.hasOwnProperty.call(settings, key))
@@ -121,7 +124,7 @@ async function validateSettingUpdates(
     }
   }
 
-  const merged = await getSystemSettingsWithDefaults(editableSystemSettingKeys);
+  const merged = { ...currentSettings };
   for (const update of updates) {
     merged[update.key as keyof typeof merged] = update.value;
   }
@@ -141,6 +144,13 @@ async function validateSettingUpdates(
   }
 
   return updates;
+}
+
+function normalizeSettingAuditValue(key: string, value: string): string {
+  if ((secretSystemSettingKeys as readonly string[]).includes(key)) {
+    return value ? '[masked]' : '';
+  }
+  return value;
 }
 
 export async function listSettings(currentUser: CurrentUser): Promise<{
@@ -454,10 +464,17 @@ export async function updateSystemSettings(
     });
   }
 
-  const updates = await validateSettingUpdates(settings as Record<string, unknown>);
+  const currentSettings = await getSystemSettingsWithDefaults(editableSystemSettingKeys);
+  const updates = await validateSettingUpdates(settings as Record<string, unknown>, currentSettings);
   if (updates.length === 0) {
     return { message: '无变更' };
   }
+
+  const changeSet = updates.map((item) => ({
+    key: item.key,
+    before: normalizeSettingAuditValue(item.key, currentSettings[item.key as keyof typeof currentSettings] ?? ''),
+    after: normalizeSettingAuditValue(item.key, item.value),
+  }));
 
   await runInTransaction(async (tx) => {
     for (const item of updates) {
@@ -477,5 +494,14 @@ export async function updateSystemSettings(
   });
 
   invalidateSystemSettingsCache();
+  await recordAuditEvent({
+    action: 'SYSTEM_SETTINGS_UPDATE',
+    actorId: currentUser.id,
+    targetType: 'SYSTEM_SETTING',
+    metadata: {
+      updatedKeys: updates.map((item) => item.key),
+      changes: changeSet,
+    },
+  });
   return { message: '配置已更新' };
 }

@@ -29,13 +29,14 @@ const customJestConfig = {
     'src/lib/swift-service.ts',
     'src/lib/receipt-service.ts',
     'src/lib/detail-service.ts',
+    'src/lib/invoice-service.ts',
   ],
   coverageThreshold: {
     global: {
-      branches: 44,
-      functions: 70,
-      lines: 64,
-      statements: 64,
+      branches: 45,
+      functions: 71,
+      lines: 65,
+      statements: 65,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -132,6 +133,12 @@ const customJestConfig = {
       functions: 45,
       lines: 42,
       statements: 42,
+    },
+    './src/lib/invoice-service.ts': {
+      branches: 39,
+      functions: 35,
+      lines: 46,
+      statements: 43,
     },
   },
 };

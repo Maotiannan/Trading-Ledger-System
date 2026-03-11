@@ -9,6 +9,7 @@ import {
 } from '@/lib/settings-service';
 import { verifyPassword } from '@/lib/auth';
 import { testOcrConnectivity } from '@/lib/ocr';
+import { recordAuditEvent } from '@/lib/audit';
 import {
   getSystemSettingsWithDefaults,
   invalidateSystemSettingsCache,
@@ -48,14 +49,20 @@ jest.mock('@/lib/ocr', () => ({
   testOcrConnectivity: jest.fn(),
 }));
 
+jest.mock('@/lib/audit', () => ({
+  recordAuditEvent: jest.fn(),
+}));
+
 jest.mock('@/lib/system-settings', () => ({
   editableSystemSettingKeys: [
     'OCR_DISABLED',
+    'OCR_API_KEY',
     'DETAIL_RECEIPT_MATCH_TOLERANCE',
     'SWIFT_WARNING_TOLERANCE',
     'SWIFT_REJECT_TOLERANCE',
   ],
   booleanSystemSettingKeys: ['OCR_DISABLED'],
+  secretSystemSettingKeys: ['OCR_API_KEY'],
   numericSystemSettingMinimums: {
     DETAIL_RECEIPT_MATCH_TOLERANCE: 0,
     SWIFT_WARNING_TOLERANCE: 0,
@@ -106,6 +113,7 @@ const mockGetSystemSettingsWithDefaults = getSystemSettingsWithDefaults as jest.
 const mockInvalidateSystemSettingsCache = invalidateSystemSettingsCache as jest.Mock;
 const mockVerifyPassword = verifyPassword as jest.Mock;
 const mockTestOcrConnectivity = testOcrConnectivity as jest.Mock;
+const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 
 describe('settings-service', () => {
   beforeEach(() => {
@@ -113,6 +121,7 @@ describe('settings-service', () => {
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockGetSystemSettingsWithDefaults.mockResolvedValue({
       OCR_DISABLED: 'false',
+      OCR_API_KEY: 'old-secret',
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
       SWIFT_WARNING_TOLERANCE: '5',
       SWIFT_REJECT_TOLERANCE: '50',
@@ -154,6 +163,32 @@ describe('settings-service', () => {
     expect(result.message).toBe('配置已更新');
     expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(3);
     expect(mockInvalidateSystemSettingsCache).toHaveBeenCalled();
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_UPDATE',
+      metadata: expect.objectContaining({
+        updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE'],
+      }),
+    }));
+  });
+
+  it('masks secret values in settings audit logs', async () => {
+    mockDb.systemSetting.upsert.mockResolvedValue(undefined);
+
+    await updateSystemSettings(makeUser(), {
+      OCR_API_KEY: 'new-secret',
+    });
+
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        changes: [
+          {
+            key: 'OCR_API_KEY',
+            before: '[masked]',
+            after: '[masked]',
+          },
+        ],
+      }),
+    }));
   });
 
   it('rejects invalid boolean config values', async () => {

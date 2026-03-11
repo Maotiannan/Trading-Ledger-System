@@ -4,16 +4,20 @@ import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
 import { findOrderIdByNoOrAlias, mapOrderIdsByOrderNos, syncOrderAliases } from '@/lib/order-alias-db';
+import type { DbTransactionClient } from '@/lib/transaction';
+import { runInTransaction } from '@/lib/transaction';
+
+type MatchingWriteClient = Pick<DbTransactionClient, 'invoice' | 'order' | 'receipt' | 'systemSetting'>;
 
 // 确保DEPOSIT_POOL发票池存在
-export async function ensureDepositPoolInvoice(userId: string): Promise<string> {
+export async function ensureDepositPoolInvoice(userId: string, client: MatchingWriteClient = db): Promise<string> {
   // 查找或创建DEPOSIT_POOL发票
-  let invoice = await db.invoice.findFirst({
+  let invoice = await client.invoice.findFirst({
     where: { invNo: 'DEPOSIT_POOL' }
   });
 
   if (!invoice) {
-    invoice = await db.invoice.create({
+    invoice = await client.invoice.create({
       data: {
         invNo: 'DEPOSIT_POOL',
         createdBy: userId
@@ -25,14 +29,14 @@ export async function ensureDepositPoolInvoice(userId: string): Promise<string> 
 }
 
 // 确保Un_Associated发票池存在（用于自动创建的订单）
-export async function ensureSystemPoolInvoice(userId: string): Promise<string> {
+export async function ensureSystemPoolInvoice(userId: string, client: MatchingWriteClient = db): Promise<string> {
   // 查找或创建Un_Associated发票
-  let invoice = await db.invoice.findFirst({
+  let invoice = await client.invoice.findFirst({
     where: { invNo: 'Un_Associated' }
   });
 
   if (!invoice) {
-    invoice = await db.invoice.create({
+    invoice = await client.invoice.create({
       data: {
         invNo: 'Un_Associated',
         createdBy: userId
@@ -44,12 +48,29 @@ export async function ensureSystemPoolInvoice(userId: string): Promise<string> {
 }
 
 // 创建新的Order
-export async function createOrder(orderNo: string, userId: string): Promise<string> {
-  const invoiceId = await ensureSystemPoolInvoice(userId);
+export async function createOrder(orderNo: string, userId: string, client?: MatchingWriteClient): Promise<string> {
   const { canonicalOrderNo } = buildOrderNoWithAliases(orderNo);
 
+  if (client) {
+    const invoiceId = await ensureSystemPoolInvoice(userId, client);
+    const created = await client.order.create({
+      data: {
+        invoiceId,
+        orderNo: canonicalOrderNo,
+        tokens: serializeOrderTokens(canonicalOrderNo),
+        amount: 0,
+        orderBalance: 0,
+        createdBy: userId,
+        needsCustomerFix: true,
+      }
+    });
+    await syncOrderAliases(client as DbTransactionClient, created.id, canonicalOrderNo);
+    return created.id;
+  }
+
   try {
-    const order = await db.$transaction(async (tx) => {
+    const order = await runInTransaction(async (tx) => {
+      const invoiceId = await ensureSystemPoolInvoice(userId, tx);
       const created = await tx.order.create({
         data: {
           invoiceId,
@@ -72,17 +93,17 @@ export async function createOrder(orderNo: string, userId: string): Promise<stri
       throw error;
     }
 
-    const existingId = await findOrderIdByNoOrAlias(canonicalOrderNo, { invoiceId });
+    const existingId = await findOrderIdByNoOrAlias(canonicalOrderNo);
     if (existingId) return existingId;
     throw error;
   }
 }
 
 // 查找或创建Order
-export async function findOrCreateOrder(orderNo: string, userId: string): Promise<string> {
+export async function findOrCreateOrder(orderNo: string, userId: string, client?: MatchingWriteClient): Promise<string> {
   const normalizedInput = normalizeOrderNo(orderNo);
   if (!normalizedInput) {
-    return createOrder(orderNo, userId);
+    return createOrder(orderNo, userId, client);
   }
 
   const directId = await findOrderIdByNoOrAlias(orderNo);
@@ -108,7 +129,7 @@ export async function findOrCreateOrder(orderNo: string, userId: string): Promis
   }
 
   // 没找到，创建新的
-  return createOrder(orderNo, userId);
+  return createOrder(orderNo, userId, client);
 }
 
 // 模糊匹配ORDER
@@ -247,8 +268,8 @@ export function findSubsetSum(
 
 // 计算ORDER BALANCE
 // ORDER BALANCE = AMOUNT - 该ORDER下所有收据金额之和
-export async function calculateOrderBalance(orderId: string): Promise<number> {
-  const order = await db.order.findUnique({
+export async function calculateOrderBalance(orderId: string, client: MatchingWriteClient = db): Promise<number> {
+  const order = await client.order.findUnique({
     where: { id: orderId },
     include: { receipts: true }
   });
@@ -263,9 +284,9 @@ export async function calculateOrderBalance(orderId: string): Promise<number> {
 }
 
 // 更新ORDER BALANCE
-export async function updateOrderBalance(orderId: string): Promise<void> {
-  const newBalance = await calculateOrderBalance(orderId);
-  await db.order.update({
+export async function updateOrderBalance(orderId: string, client: MatchingWriteClient = db): Promise<void> {
+  const newBalance = await calculateOrderBalance(orderId, client);
+  await client.order.update({
     where: { id: orderId },
     data: { orderBalance: newBalance }
   });

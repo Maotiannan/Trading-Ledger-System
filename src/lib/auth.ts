@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { runInTransaction } from '@/lib/transaction';
 
 // bcrypt 工作因子（cost factor），值越高越安全但越慢
 const SALT_ROUNDS = 12;
@@ -35,10 +36,10 @@ export async function verifyPassword(password: string, hashedPassword: string): 
 // 迁移旧密码到 bcrypt
 export async function migratePassword(userId: string, newPassword: string): Promise<void> {
   const hashedPassword = await hashPassword(newPassword);
-  await db.user.update({
+  await runInTransaction((tx) => tx.user.update({
     where: { id: userId },
     data: { password: hashedPassword }
-  });
+  }));
 }
 
 // 创建默认管理员账户
@@ -55,7 +56,7 @@ export async function createDefaultAdmin() {
 
   if (!existingAdmin) {
     const hashedPassword = await hashPassword(adminPassword);
-    await db.user.create({
+    await runInTransaction((tx) => tx.user.create({
       data: {
         email: adminEmail,
         password: hashedPassword,
@@ -64,7 +65,7 @@ export async function createDefaultAdmin() {
         level: 1,
         parentId: null,
       }
-    });
+    }));
     console.log(`Default admin created: ${adminEmail}`);
   }
 }

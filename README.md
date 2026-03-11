@@ -960,6 +960,11 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.68 (2026-03-11)
+- 🧱 核心写接口全链路事务边界审计补完：新增 `auth-service / customer-service / customer-fix-service / init-service`，将 `/api/auth /api/customer /api/customer/fixes /api/init` 继续收敛为薄路由；`matching / receipt-service / detail-service / invoice-service(rematch)` 这批残余写路径补齐事务客户端透传，避免多步写入中途失败留下半状态。
+- 🧾 审计目录继续收口：`audit-catalog` 扩展到 `USER / CUSTOMER` 目标类型与创建、更新、删除、导入、修复、密码操作等动作，核心 create/update/delete 链路都已经纳入审计事件。
+- ✅ 回归补强：新增 `auth-service / customer-service / customer-fix-service / init-service` 单测，扩展 `invoice-service(rematch)` 覆盖，并新增 `customer-fix-flow` isolated API case；coverage threshold 第十六次提升到 `56/79/74/72`。
+
 ### v1.0.67 (2026-03-11)
 - 🏷️ 本地运行版本已与仓库同步：`package.json#version` 提升到 `1.0.67`，设置页顶部继续作为强可见版本入口；本地 `docker compose up -d --build` 后容器内版本与仓库版本一致。
 - 🌐 服务端成功摘要继续扩到读接口与模板下载：`/api/customer` 的 owner options / list / create / update 与 `/api/invoice` 的 list / order lookup / receipt lookup / import template 统一补齐本地化成功消息，`customer/invoice` 模板下载也开始返回 `X-Success-Message`。

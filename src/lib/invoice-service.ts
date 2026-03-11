@@ -513,17 +513,20 @@ async function rematchAllOrders(ownerIds: string[]) {
     if (orders.length <= 1) continue;
     const targetOrder = orders.find((row) => row.invoice.invNo !== 'Un_Associated') || orders[0];
     const sourceOrders = orders.filter((row) => row.id !== targetOrder.id);
-    for (const sourceOrder of sourceOrders) {
-      await db.receipt.updateMany({
-        where: { orderId: sourceOrder.id },
-        data: { orderId: targetOrder.id },
-      });
-      await db.order.delete({
-        where: { id: sourceOrder.id },
-      });
-      mergedCount++;
-    }
-    await updateOrderBalance(targetOrder.id);
+    if (sourceOrders.length === 0) continue;
+    await runInTransaction(async (tx) => {
+      for (const sourceOrder of sourceOrders) {
+        await tx.receipt.updateMany({
+          where: { orderId: sourceOrder.id },
+          data: { orderId: targetOrder.id },
+        });
+        await tx.order.delete({
+          where: { id: sourceOrder.id },
+        });
+        mergedCount++;
+      }
+      await updateOrderBalance(targetOrder.id, tx);
+    });
   }
 
   const freshOrders = await db.order.findMany({
@@ -551,19 +554,6 @@ async function rematchAllOrders(ownerIds: string[]) {
     const resolved = grouped.find((row) => row.customerId && !row.needsCustomerFix);
     if (!resolved) continue;
     const targetOrderIds = grouped.map((row) => row.id);
-    const touched = await db.order.updateMany({
-      where: { id: { in: targetOrderIds } },
-      data: {
-        customerId: resolved.customerId,
-        customerMark: resolved.customerMark,
-        customerName: resolved.customerName,
-        customerPhone: resolved.customerPhone,
-        customerCity: resolved.customerCity,
-        needsCustomerFix: false,
-      },
-    });
-    customerSyncedCount += touched.count;
-
     const receiptRows = await db.receipt.findMany({
       where: {
         ...receiptVisibilityWhere,
@@ -574,9 +564,9 @@ async function rematchAllOrders(ownerIds: string[]) {
     const targetReceiptIds = receiptRows
       .filter((row) => deriveOrderGroupKey(row.orderNo) === deriveOrderGroupKey(resolved.orderNo))
       .map((row) => row.id);
-    if (targetReceiptIds.length > 0) {
-      const syncedReceipts = await db.receipt.updateMany({
-        where: { id: { in: targetReceiptIds } },
+    await runInTransaction(async (tx) => {
+      const touched = await tx.order.updateMany({
+        where: { id: { in: targetOrderIds } },
         data: {
           customerId: resolved.customerId,
           customerMark: resolved.customerMark,
@@ -586,8 +576,23 @@ async function rematchAllOrders(ownerIds: string[]) {
           needsCustomerFix: false,
         },
       });
-      customerSyncedCount += syncedReceipts.count;
-    }
+      customerSyncedCount += touched.count;
+
+      if (targetReceiptIds.length > 0) {
+        const syncedReceipts = await tx.receipt.updateMany({
+          where: { id: { in: targetReceiptIds } },
+          data: {
+            customerId: resolved.customerId,
+            customerMark: resolved.customerMark,
+            customerName: resolved.customerName,
+            customerPhone: resolved.customerPhone,
+            customerCity: resolved.customerCity,
+            needsCustomerFix: false,
+          },
+        });
+        customerSyncedCount += syncedReceipts.count;
+      }
+    });
   }
 
   const allReceipts = await db.receipt.findMany({
@@ -601,11 +606,13 @@ async function rematchAllOrders(ownerIds: string[]) {
     if (!receipt.orderNo) continue;
     const sameOrderId = await findOrderIdByNoOrAlias(receipt.orderNo, orderVisibilityWhere);
     if (sameOrderId) {
-      await db.receipt.update({
-        where: { id: receipt.id },
-        data: { orderId: sameOrderId },
+      await runInTransaction(async (tx) => {
+        await tx.receipt.update({
+          where: { id: receipt.id },
+          data: { orderId: sameOrderId },
+        });
+        await updateOrderBalance(sameOrderId, tx);
       });
-      await updateOrderBalance(sameOrderId);
       receiptMatchedCount++;
       continue;
     }
@@ -618,11 +625,13 @@ async function rematchAllOrders(ownerIds: string[]) {
     });
     const matchedByGroup = groupOrders.find((row) => deriveOrderGroupKey(row.orderNo) === key);
     if (matchedByGroup) {
-      await db.receipt.update({
-        where: { id: receipt.id },
-        data: { orderId: matchedByGroup.id },
+      await runInTransaction(async (tx) => {
+        await tx.receipt.update({
+          where: { id: receipt.id },
+          data: { orderId: matchedByGroup.id },
+        });
+        await updateOrderBalance(matchedByGroup.id, tx);
       });
-      await updateOrderBalance(matchedByGroup.id);
       receiptMatchedCount++;
     }
   }
@@ -636,14 +645,14 @@ async function rematchAllOrders(ownerIds: string[]) {
     : [];
   for (const invoice of invoices) {
     if (invoice._count.orders === 0) {
-      await db.invoice.delete({ where: { id: invoice.id } });
+      await runInTransaction((tx) => tx.invoice.delete({ where: { id: invoice.id } }));
       deletedInvoiceCount++;
     }
   }
 
   const orderIds = await db.order.findMany({ where: orderVisibilityWhere, select: { id: true } });
   for (const row of orderIds) {
-    await updateOrderBalance(row.id);
+    await runInTransaction((tx) => updateOrderBalance(row.id, tx));
   }
 
   const zeroOrders = await db.order.findMany({
@@ -662,7 +671,7 @@ async function rematchAllOrders(ownerIds: string[]) {
   });
   for (const order of zeroOrders) {
     if (order._count.receipts > 0) continue;
-    await db.order.delete({ where: { id: order.id } });
+    await runInTransaction((tx) => tx.order.delete({ where: { id: order.id } }));
     deletedZeroOrdersCount++;
   }
 
@@ -794,25 +803,27 @@ async function applyRematchConflicts(
     if (sourceRows.length === 0) continue;
 
     let incrementAmount = 0;
-    for (const source of sourceRows) {
-      await db.receipt.updateMany({
-        where: { orderId: source.id },
-        data: { orderId: keepRow.id },
-      });
-      if (resolution.mode === 'merge') {
-        incrementAmount += Number(source.amount);
+    await runInTransaction(async (tx) => {
+      for (const source of sourceRows) {
+        await tx.receipt.updateMany({
+          where: { orderId: source.id },
+          data: { orderId: keepRow.id },
+        });
+        if (resolution.mode === 'merge') {
+          incrementAmount += Number(source.amount);
+        }
+        await tx.order.delete({ where: { id: source.id } });
+        mergedCount++;
       }
-      await db.order.delete({ where: { id: source.id } });
-      mergedCount++;
-    }
 
-    if (incrementAmount !== 0) {
-      await db.order.update({
-        where: { id: keepRow.id },
-        data: { amount: { increment: incrementAmount } },
-      });
-    }
-    await updateOrderBalance(keepRow.id);
+      if (incrementAmount !== 0) {
+        await tx.order.update({
+          where: { id: keepRow.id },
+          data: { amount: { increment: incrementAmount } },
+        });
+      }
+      await updateOrderBalance(keepRow.id, tx);
+    });
   }
 
   return { mergedCount };

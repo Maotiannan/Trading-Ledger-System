@@ -2,6 +2,8 @@ import { Prisma, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import type { CurrentUser } from '@/lib/request-auth';
 
+type CustomerScopeDbClient = Pick<typeof db, 'user' | 'customer'>;
+
 export type CustomerUniqueInput = {
   orderName: string;
   phone: string;
@@ -59,7 +61,11 @@ export function canMutateCustomer(currentUser: CurrentUser, ownerId: string): bo
   return ownerId === currentUser.id;
 }
 
-export async function resolveCustomerOwnerId(currentUser: CurrentUser, requestedOwnerId?: string | null): Promise<string> {
+export async function resolveCustomerOwnerId(
+  currentUser: CurrentUser,
+  requestedOwnerId?: string | null,
+  client: CustomerScopeDbClient = db,
+): Promise<string> {
   const candidate = (requestedOwnerId || '').trim();
   if (currentUser.role !== UserRole.ADMIN) {
     return currentUser.id;
@@ -68,7 +74,7 @@ export async function resolveCustomerOwnerId(currentUser: CurrentUser, requested
     return currentUser.id;
   }
 
-  const owner = await db.user.findUnique({
+  const owner = await client.user.findUnique({
     where: { id: candidate },
     select: { id: true, role: true },
   });
@@ -85,7 +91,8 @@ async function findScopeCollisions(
   ownerId: string,
   input: CustomerUniqueInput,
   excludeId?: string,
-  options?: { includePhone?: boolean }
+  options?: { includePhone?: boolean },
+  client: CustomerScopeDbClient = db,
 ): Promise<CustomerCollision[]> {
   const conditions: Prisma.CustomerWhereInput[] = [
     { orderName: { equals: input.orderName } },
@@ -97,7 +104,7 @@ async function findScopeCollisions(
     conditions.push({ companyName: { equals: input.companyName } });
   }
 
-  return db.customer.findMany({
+  return client.customer.findMany({
     where: {
       ownerId,
       ...(excludeId ? { id: { not: excludeId } } : {}),
@@ -112,9 +119,14 @@ async function findScopeCollisions(
   });
 }
 
-export async function assertNoCustomerScopeConflict(ownerId: string, input: CustomerUniqueInput, excludeId?: string): Promise<void> {
+export async function assertNoCustomerScopeConflict(
+  ownerId: string,
+  input: CustomerUniqueInput,
+  excludeId?: string,
+  client: CustomerScopeDbClient = db,
+): Promise<void> {
   const companyName = normalizeCompanyName(input.companyName);
-  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, excludeId, { includePhone: false });
+  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, excludeId, { includePhone: false }, client);
   if (collisions.length === 0) return;
 
   const duplicatedFields = new Set<string>();
@@ -130,9 +142,13 @@ export async function assertNoCustomerScopeConflict(ownerId: string, input: Cust
   throw new Error(`同一绑定池内 ${fields.join('/')} 不允许重复`);
 }
 
-export async function resolveCustomerUpsertTargetId(ownerId: string, input: CustomerUniqueInput): Promise<string | null> {
+export async function resolveCustomerUpsertTargetId(
+  ownerId: string,
+  input: CustomerUniqueInput,
+  client: CustomerScopeDbClient = db,
+): Promise<string | null> {
   const companyName = normalizeCompanyName(input.companyName);
-  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, undefined, { includePhone: true });
+  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, undefined, { includePhone: true }, client);
   if (collisions.length === 0) return null;
 
   const byId = new Map<string, CustomerCollision>();
@@ -158,14 +174,15 @@ export async function resolveCustomerUpsertTargetId(ownerId: string, input: Cust
 export async function findDuplicateCustomersInScope(
   ownerId: string,
   input: { mark: string; name: string; phone: string },
-  excludeId?: string
+  excludeId?: string,
+  client: CustomerScopeDbClient = db,
 ): Promise<CustomerDuplicateSummary[]> {
   const normalizedMark = normalizeMatchText(input.mark);
   const normalizedName = normalizeMatchText(input.name);
   const inputPhoneTokens = splitPhoneCandidates(input.phone);
   if (!normalizedMark && !normalizedName && inputPhoneTokens.length === 0) return [];
 
-  const rows = await db.customer.findMany({
+  const rows = await client.customer.findMany({
     where: {
       ownerId,
       ...(excludeId ? { id: { not: excludeId } } : {}),

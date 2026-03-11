@@ -48,8 +48,12 @@ async function resolveDetailItemCustomer(mark: string | null) {
   };
 }
 
-async function getAccessibleReceipt(receiptId: string, currentUser: CurrentUser) {
-  const receipt = await db.receipt.findUnique({
+async function getAccessibleReceipt(
+  receiptId: string,
+  currentUser: CurrentUser,
+  client: DbTransactionClient | typeof db = db,
+) {
+  const receipt = await client.receipt.findUnique({
     where: { id: receiptId },
     select: { id: true, createdBy: true, imageUrl: true, imageName: true },
   });
@@ -71,13 +75,14 @@ async function getAccessibleReceipt(receiptId: string, currentUser: CurrentUser)
 }
 
 async function maybeAttachReceiptImage(
+  client: DbTransactionClient | typeof db,
   receiptId: string,
   current: { imageUrl: string | null; imageName: string | null },
   imagePath: string | null,
   imageName: string | null
 ): Promise<void> {
   if (!imagePath || current.imageUrl) return;
-  await db.receipt.update({
+  await client.receipt.update({
     where: { id: receiptId },
     data: {
       imageUrl: imagePath,
@@ -97,30 +102,32 @@ async function processDetailItems(params: {
   imagePath: string | null;
   imageName: string | null;
   autoCreateNote: string;
-}): Promise<DetailProcessedItem[]> {
+  tx: DbTransactionClient;
+}): Promise<{ items: DetailProcessedItem[]; touchedOrderIds: string[] }> {
   const processedItems: DetailProcessedItem[] = [];
+  const touchedOrderIds = new Set<string>();
 
   for (const item of params.items) {
     let receiptId = item.receiptId;
 
     if (receiptId) {
-      const receipt = await getAccessibleReceipt(receiptId, params.currentUser);
-      await maybeAttachReceiptImage(receiptId, receipt, params.imagePath, params.imageName);
+      const receipt = await getAccessibleReceipt(receiptId, params.currentUser, params.tx);
+      await maybeAttachReceiptImage(params.tx, receiptId, receipt, params.imagePath, params.imageName);
     }
 
     if (!receiptId && item.orderNo) {
       const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount);
       if (autoMatchedReceiptId) {
-        const matchedReceipt = await getAccessibleReceipt(autoMatchedReceiptId, params.currentUser);
+        const matchedReceipt = await getAccessibleReceipt(autoMatchedReceiptId, params.currentUser, params.tx);
         receiptId = autoMatchedReceiptId;
-        await maybeAttachReceiptImage(receiptId, matchedReceipt, params.imagePath, params.imageName);
+        await maybeAttachReceiptImage(params.tx, receiptId, matchedReceipt, params.imagePath, params.imageName);
       }
     }
 
     if (!receiptId && item.orderNo) {
-      const orderId = await findOrCreateOrder(item.orderNo, params.currentUser.id);
+      const orderId = await findOrCreateOrder(item.orderNo, params.currentUser.id, params.tx);
       const customerInfo = await resolveDetailItemCustomer(item.mark);
-      const newReceipt = await db.receipt.create({
+      const newReceipt = await params.tx.receipt.create({
         data: {
           orderNo: item.orderNo,
           usd: item.amount,
@@ -139,8 +146,9 @@ async function processDetailItems(params: {
         },
       });
       receiptId = newReceipt.id;
+      touchedOrderIds.add(orderId);
 
-      await db.order.update({
+      await params.tx.order.update({
         where: { id: orderId },
         data: {
           customerId: customerInfo.customerId,
@@ -151,7 +159,6 @@ async function processDetailItems(params: {
           needsCustomerFix: customerInfo.needsCustomerFix,
         },
       });
-      await updateOrderBalance(orderId);
     }
 
     processedItems.push({
@@ -162,7 +169,7 @@ async function processDetailItems(params: {
     });
   }
 
-  return processedItems;
+  return { items: processedItems, touchedOrderIds: Array.from(touchedOrderIds) };
 }
 
 function normalizeItems(payload: DetailPayload) {
@@ -190,13 +197,6 @@ export async function createDetailRecord(params: {
   mode: 'confirm' | 'direct-create';
 }) {
   const { currentUser, payload, imagePath, imageName, mode } = params;
-  const processedItems = await processDetailItems({
-    items: normalizeItems(payload),
-    currentUser,
-    imagePath: imagePath || null,
-    imageName: imageName || null,
-    autoCreateNote: mode === 'direct-create' ? '由付款明细直接创建' : '由付款明细自动创建',
-  });
 
   const effectiveDate = payload.date
     ? new Date(payload.date)
@@ -208,17 +208,25 @@ export async function createDetailRecord(params: {
         })()
       : null);
 
-  const detail = await runInTransaction(async (tx) => {
+  const result = await runInTransaction(async (tx) => {
+    const processedItems = await processDetailItems({
+      items: normalizeItems(payload),
+      currentUser,
+      imagePath: imagePath || null,
+      imageName: imageName || null,
+      autoCreateNote: mode === 'direct-create' ? '由付款明细直接创建' : '由付款明细自动创建',
+      tx,
+    });
     const created = await tx.detail.create({
       data: {
         date: effectiveDate,
         status: DetailStatus.Waiting_SWIFT,
         imageUrl: mode === 'direct-create' ? null : (imagePath || null),
         imageName: mode === 'direct-create' ? null : (imageName || null),
-        totalAmount: processedItems.reduce((sum, item) => sum + item.amount, 0),
+        totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),
         createdBy: currentUser.id,
         items: {
-          create: processedItems,
+          create: processedItems.items,
         },
       },
       include: {
@@ -232,18 +240,22 @@ export async function createDetailRecord(params: {
       .filter((receiptId): receiptId is string => Boolean(receiptId));
     await setReceiptsWaitingSwift(tx, receiptIds);
 
-    return created;
+    return { detail: created, touchedOrderIds: processedItems.touchedOrderIds };
   });
+
+  for (const orderId of result.touchedOrderIds) {
+    await updateOrderBalance(orderId);
+  }
 
   await recordAuditEvent({
     action: mode === 'direct-create' ? auditActions.DETAIL_CREATE_DIRECT : auditActions.DETAIL_CREATE,
     actorId: currentUser.id,
     targetType: auditTargetTypes.DETAIL,
-    targetId: detail.id,
+    targetId: result.detail.id,
   });
 
   return {
-    data: detail,
+    data: result.detail,
     message: mode === 'direct-create' ? '付款明细已直接创建' : undefined,
   };
 }
@@ -285,15 +297,15 @@ export async function updateDetailRecord(params: {
     throw badRequest('Bank_Transfer状态下禁止修改', { detailId, status: existingDetail.status });
   }
 
-  const processedItems = await processDetailItems({
-    items: normalizeItems(payload),
-    currentUser,
-    imagePath: imagePath || existingDetail.imageUrl || null,
-    imageName: imageName || existingDetail.imageName || null,
-    autoCreateNote: '由付款明细自动创建',
-  });
-
-  const updated = await runInTransaction(async (tx) => {
+  const result = await runInTransaction(async (tx) => {
+    const processedItems = await processDetailItems({
+      items: normalizeItems(payload),
+      currentUser,
+      imagePath: imagePath || existingDetail.imageUrl || null,
+      imageName: imageName || existingDetail.imageName || null,
+      autoCreateNote: '由付款明细自动创建',
+      tx,
+    });
     await tx.detailHistory.create({
       data: {
         detailId,
@@ -315,9 +327,9 @@ export async function updateDetailRecord(params: {
         date: payload.date ? new Date(payload.date) : null,
         imageUrl: imagePath || existingDetail.imageUrl,
         imageName: imageName || existingDetail.imageName,
-        totalAmount: processedItems.reduce((sum, item) => sum + item.amount, 0),
+        totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),
         items: {
-          create: processedItems,
+          create: processedItems.items,
         },
       },
       include: {
@@ -330,8 +342,12 @@ export async function updateDetailRecord(params: {
       .filter((receiptId): receiptId is string => Boolean(receiptId));
     await setReceiptsWaitingSwift(tx, receiptIds);
 
-    return nextDetail;
+    return { detail: nextDetail, touchedOrderIds: processedItems.touchedOrderIds };
   });
+
+  for (const orderId of result.touchedOrderIds) {
+    await updateOrderBalance(orderId);
+  }
 
   await recordAuditEvent({
     action: auditActions.DETAIL_UPDATE,
@@ -340,5 +356,5 @@ export async function updateDetailRecord(params: {
     targetId: detailId,
   });
 
-  return { data: updated };
+  return { data: result.detail };
 }

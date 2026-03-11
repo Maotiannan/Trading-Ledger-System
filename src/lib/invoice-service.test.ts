@@ -6,10 +6,13 @@ import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { updateOrderBalance } from '@/lib/matching';
 import {
   addInvoiceOrder,
+  applyInvoiceRematch,
   createInvoiceRecord,
   deleteInvoiceOrder,
   deleteInvoiceRecord,
   processInvoiceImportRows,
+  previewInvoiceRematch,
+  rematchInvoices,
   transferInvoiceBalance,
   updateInvoiceOrder,
   updateInvoiceDates,
@@ -28,6 +31,7 @@ jest.mock('@/lib/db', () => ({
     },
     invoice: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
@@ -102,6 +106,7 @@ const mockDb = db as unknown as {
   };
   invoice: {
     findFirst: jest.Mock;
+    findMany: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
     delete: jest.Mock;
@@ -138,7 +143,7 @@ const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 
 describe('invoice-service', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockGetHierarchyScope.mockResolvedValue({
       ownerVisibleIds: new Set(['sales-1']),
@@ -315,6 +320,113 @@ describe('invoice-service', () => {
     expect(result.success).toBe(false);
     expect(result.message).toBe('没有可导入的数据行');
     expect(result.importedOrderNos).toEqual([]);
+  });
+
+  it('previews rematch conflicts within visible owner scope', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-1',
+        orderNo: 'IB-01',
+        amount: 100,
+        orderBalance: 50,
+        createdAt: new Date('2026-03-11T00:00:00.000Z'),
+        invoice: { id: 'inv-1', invNo: 'INV-1' },
+        _count: { receipts: 0 },
+      },
+      {
+        id: 'order-2',
+        orderNo: 'IB-01',
+        amount: 120,
+        orderBalance: 20,
+        createdAt: new Date('2026-03-11T00:01:00.000Z'),
+        invoice: { id: 'inv-2', invNo: 'INV-2' },
+        _count: { receipts: 1 },
+      },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    const result = await previewInvoiceRematch(makeUser());
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(expect.objectContaining({
+      groupType: 'exact',
+      groupKey: 'ib-01',
+    }));
+  });
+
+  it('rematches invoices, returns summary, and records audit', async () => {
+    mockDb.order.findMany
+      .mockResolvedValueOnce([]) // allOrders
+      .mockResolvedValueOnce([]) // freshOrders
+      .mockResolvedValueOnce([]) // allReceipts groupOrders path not used
+      .mockResolvedValueOnce([]) // touched orderIds
+      .mockResolvedValueOnce([]); // zeroOrders
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    mockDb.invoice.findMany.mockResolvedValueOnce([]);
+    mockConsolidateGroupedOrders.mockResolvedValueOnce({
+      mergedGroups: 0,
+      mergedOrders: 0,
+      createdGroups: 0,
+      syncedAliases: 0,
+    });
+
+    const result = await rematchInvoices(makeUser());
+
+    expect(result.message).toContain('重新匹配完成');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'INVOICE_REMATCH',
+      metadata: expect.objectContaining({
+        mergedCount: 0,
+        receiptMatchedCount: 0,
+      }),
+    }));
+  });
+
+  it('applies manual rematch resolution and records audit summary', async () => {
+    mockDb.order.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'order-1',
+          amount: 100,
+          receipts: [],
+        },
+        {
+          id: 'order-2',
+          amount: 50,
+          receipts: [],
+        },
+      ])
+      .mockResolvedValueOnce([]) // allOrders after manual merge
+      .mockResolvedValueOnce([]) // freshOrders
+      .mockResolvedValueOnce([]) // orderIds
+      .mockResolvedValueOnce([]); // zeroOrders
+    mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 0 });
+    mockDb.order.delete.mockResolvedValueOnce({ id: 'order-2' });
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    mockDb.invoice.findMany.mockResolvedValueOnce([]);
+    mockConsolidateGroupedOrders.mockResolvedValueOnce({
+      mergedGroups: 0,
+      mergedOrders: 0,
+      createdGroups: 0,
+      syncedAliases: 0,
+    });
+
+    const result = await applyInvoiceRematch(makeUser(), [
+      {
+        groupId: 'exact:ib-01',
+        keepOrderId: 'order-1',
+        mode: 'keep',
+        orderIds: ['order-1', 'order-2'],
+      },
+    ]);
+
+    expect(result.message).toContain('冲突处理完成');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'INVOICE_REMATCH_APPLY',
+      metadata: expect.objectContaining({
+        manualMerged: 1,
+      }),
+    }));
   });
 
   it('updates invoice dates in transaction and records before/after audit values', async () => {

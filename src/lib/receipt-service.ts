@@ -4,8 +4,8 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
-import { runInTransaction } from '@/lib/transaction';
-import { createOrder, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
+import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { createOrder, ensureDepositPoolInvoice, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -19,7 +19,7 @@ function forbidden(message: string, detail?: unknown) {
   return createApiError({ code: 'FORBIDDEN', status: 403, message, detail });
 }
 
-async function createDepositOrder(params: {
+async function createDepositOrder(tx: DbTransactionClient, params: {
   orderNo: string;
   usd: number;
   customerId: string | null;
@@ -30,22 +30,10 @@ async function createDepositOrder(params: {
   needsCustomerFix: boolean;
   currentUserId: string;
 }): Promise<string> {
-  let defaultInvoice = await db.invoice.findFirst({
-    where: { invNo: 'DEPOSIT_POOL' },
-  });
-
-  if (!defaultInvoice) {
-    defaultInvoice = await db.invoice.create({
-      data: {
-        invNo: 'DEPOSIT_POOL',
-        createdBy: params.currentUserId,
-      },
-    });
-  }
-
-  const depositOrder = await db.order.create({
+  const defaultInvoiceId = await ensureDepositPoolInvoice(params.currentUserId, tx);
+  const depositOrder = await tx.order.create({
     data: {
-      invoiceId: defaultInvoice.id,
+      invoiceId: defaultInvoiceId,
       orderNo: params.orderNo,
       amount: 0,
       orderBalance: -params.usd,
@@ -58,7 +46,7 @@ async function createDepositOrder(params: {
       needsCustomerFix: params.needsCustomerFix,
     },
   });
-  await syncOrderAliases(db, depositOrder.id, params.orderNo);
+  await syncOrderAliases(tx, depositOrder.id, params.orderNo);
   return depositOrder.id;
 }
 
@@ -111,25 +99,6 @@ export async function createReceiptRecord(params: {
     customerId: customerId || null,
   });
 
-  let orderId: string | null = matchedOrder?.orderId || null;
-  if (payload.isDeposit && normalizedOrderNo && !matchedOrder) {
-    orderId = await createDepositOrder({
-      orderNo: normalizedOrderNo,
-      usd,
-      customerId: customerResolution.customerId,
-      customerMark: customerResolution.customerMark,
-      customerName: customerResolution.customerName,
-      customerPhone: customerResolution.customerPhone,
-      customerCity: customerResolution.customerCity,
-      needsCustomerFix: customerResolution.needsCustomerFix,
-      currentUserId: currentUser.id,
-    });
-  }
-
-  if (!orderId && normalizedOrderNo) {
-    orderId = await createOrder(normalizedOrderNo, currentUser.id);
-  }
-
   const effectiveDate = payload.date
     ? new Date(payload.date)
     : (mode === 'direct-create'
@@ -141,6 +110,25 @@ export async function createReceiptRecord(params: {
       : null);
 
   const receipt = await runInTransaction(async (tx) => {
+    let orderId: string | null = matchedOrder?.orderId || null;
+    if (payload.isDeposit && normalizedOrderNo && !matchedOrder) {
+      orderId = await createDepositOrder(tx, {
+        orderNo: normalizedOrderNo,
+        usd,
+        customerId: customerResolution.customerId,
+        customerMark: customerResolution.customerMark,
+        customerName: customerResolution.customerName,
+        customerPhone: customerResolution.customerPhone,
+        customerCity: customerResolution.customerCity,
+        needsCustomerFix: customerResolution.needsCustomerFix,
+        currentUserId: currentUser.id,
+      });
+    }
+
+    if (!orderId && normalizedOrderNo) {
+      orderId = await createOrder(normalizedOrderNo, currentUser.id, tx);
+    }
+
     const created = await tx.receipt.create({
       data: {
         receiptNo: receiptNo?.trim() || null,
@@ -182,23 +170,23 @@ export async function createReceiptRecord(params: {
       });
     }
 
-    return created;
+    return { created, orderId };
   });
 
-  if (orderId) {
-    await updateOrderBalance(orderId);
+  if (receipt.orderId) {
+    await updateOrderBalance(receipt.orderId);
   }
 
   await recordAuditEvent({
     action: auditActions.RECEIPT_CREATE,
     actorId: currentUser.id,
     targetType: auditTargetTypes.RECEIPT,
-    targetId: receipt.id,
+    targetId: receipt.created.id,
     metadata: { mode },
   });
 
   return {
-    data: receipt,
+    data: receipt.created,
     message: customerResolution.needsCustomerFix
       ? '请修复客户信息'
       : (mode === 'direct-create' ? '收据已直接创建' : undefined),

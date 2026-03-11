@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { hashPassword } from '@/lib/auth';
-import { Prisma, UserRole } from '@prisma/client';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { initializePrimaryAdmin } from '@/lib/init-service';
 
 // 初始化默认管理员账户
 export async function POST(request: Request) {
@@ -26,45 +24,13 @@ export async function POST(request: Request) {
       return createApiErrorResponse({ code: apiErrorCodes.INIT_CONFIG_MISSING, status: 400, message: '缺少初始化管理员配置' }, request);
     }
 
-    const existingAdmin = await db.user.findUnique({
-      where: { email: adminEmail },
-      select: { id: true, level: true, parentId: true, createdById: true },
+    const result = await initializePrimaryAdmin({
+      email: adminEmail,
+      password: adminPassword,
+      name: 'Admin',
     });
-
-    const hashedPassword = await hashPassword(adminPassword);
-    await db.user.upsert({
-      where: { email: adminEmail },
-      create: {
-        email: adminEmail,
-        password: hashedPassword!,
-        name: 'Admin',
-        role: UserRole.ADMIN,
-        level: 1,
-        parentId: null,
-        createdById: null,
-      },
-      update: {
-        role: UserRole.ADMIN,
-        level: 1,
-        parentId: null,
-        createdById: null,
-      },
-    });
-
-    return createApiSuccessResponse({ message: existingAdmin ? '管理员已存在' : '管理员初始化成功' }, request);
+    return createApiSuccessResponse({ message: result.message, data: result.data }, request);
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      await db.user.updateMany({
-        where: { email: process.env.INIT_ADMIN_EMAIL || 'admin@example.com' },
-        data: {
-          role: UserRole.ADMIN,
-          level: 1,
-          parentId: null,
-          createdById: null,
-        },
-      });
-      return createApiSuccessResponse({ message: '管理员已存在' }, request);
-    }
     console.error('Init error:', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,

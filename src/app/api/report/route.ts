@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
+import { localizeApiSuccessMessage } from '@/lib/api-success-response';
 import { withAuth } from '@/lib/route-auth';
 import { db } from '@/lib/db';
 import { buildDetailVisibilityWhere, buildInvoiceVisibilityWhere, buildOrderVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds } from '@/lib/resource-visibility';
@@ -166,6 +167,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${buildFileName(format === 'excel' ? 'xlsx' : 'pdf')}"`,
+        'X-Success-Message': encodeURIComponent(localizeApiSuccessMessage('报表导出已生成', request) || ''),
       },
     });
   } catch (error) {

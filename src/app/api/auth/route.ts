@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         return unauthorized(request, '邮箱或密码错误', apiErrorCodes.INVALID_CREDENTIALS);
       }
 
-      const response = NextResponse.json({ success: true, data: user });
+      const response = createApiSuccessResponse({ data: user, message: '登录成功' }, request);
       const token = createSessionToken(user.id);
       setSessionCookie(response, token);
       return response;
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       if (!user) {
         return unauthorized(request, '未登录');
       }
-      return NextResponse.json({ success: true, data: user });
+      return createApiSuccessResponse({ data: user, message: '当前用户信息已加载' }, request);
     }
 
     // 创建用户 (管理员/销售)
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
         select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true }
       });
 
-      return NextResponse.json({ success: true, data: newUser });
+      return createApiSuccessResponse({ data: newUser, message: '用户已创建' }, request);
     }
 
     // 更新用户角色（仅管理员）
@@ -246,7 +246,7 @@ export async function POST(request: NextRequest) {
         );
       });
 
-      return NextResponse.json({ success: true, data: filtered });
+      return createApiSuccessResponse({ data: filtered, message: `可选上级账户已加载，共 ${filtered.length} 个候选账号` }, request);
     }
 
     // 获取用户列表 (管理员/销售)
@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
         orderBy: { createdAt: 'desc' }
       });
 
-      return NextResponse.json({ success: true, data: users });
+      return createApiSuccessResponse({ data: users, message: `用户列表已加载，共 ${users.length} 个账号` }, request);
     }
 
     // 删除用户 (管理员/销售)

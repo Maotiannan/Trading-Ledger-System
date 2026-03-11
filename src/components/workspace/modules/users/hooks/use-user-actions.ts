@@ -79,6 +79,9 @@ export function useUserActions({
         setShowCreate(false);
         setNewUser({ email: '', password: '', name: '', role: creatableRoles[0] || 'USER', parentId: '' });
         setParentOptions([]);
+        if (result.message) {
+          alert(result.message);
+        }
         await loadUsers();
       }
     } catch (error) {
@@ -96,7 +99,7 @@ export function useUserActions({
     if (!result.success) {
       alert(getErrorMessage(result, tx('重置失败', 'Reset failed')));
     } else {
-      alert(tx('密码已重置', 'Password has been reset.'));
+      alert(result.message || tx('密码已重置', 'Password has been reset.'));
     }
   }, [tx]);
 
@@ -122,6 +125,9 @@ export function useUserActions({
     if (!result.success) {
       alert(getErrorMessage(result, tx('角色更新失败', 'Failed to update role')));
       return;
+    }
+    if (result.message) {
+      alert(result.message);
     }
     await loadUsers();
   }, [loadUsers, tx]);

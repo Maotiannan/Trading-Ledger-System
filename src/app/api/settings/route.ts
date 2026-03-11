@@ -3,7 +3,7 @@ import { withAuth } from '@/lib/route-auth';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { resolveRequestLocale } from '@/lib/api-response-locale';
-import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import {
   listAllSystemSettingsAuditLogs,
   listSettings,
@@ -82,13 +82,19 @@ export const GET = withAuth(async (_request, currentUser) => {
         });
         const locale = resolveRequestLocale(_request);
         const csv = buildSettingsAuditCsv(result.items, locale);
+        const exportSummary = localizeApiSuccessMessage(
+          `配置审计导出完成：已导出 ${result.items.length} 条（服务端上限 ${result.maxExportRows}${result.truncated ? '，结果已截断' : ''}）`,
+          _request,
+        ) || '';
         return new NextResponse(csv, {
           headers: {
             'Content-Type': 'text/csv; charset=utf-8',
             'Content-Disposition': `attachment; filename="settings-audit-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv"`,
+            'X-Export-Row-Count': String(result.items.length),
             'X-Export-Limit-Applied': String(result.exportLimit),
             'X-Export-Limit-Max': String(result.maxExportRows),
             'X-Export-Truncated': result.truncated ? 'true' : 'false',
+            'X-Export-Summary': encodeURIComponent(exportSummary),
           },
         });
       }
@@ -100,11 +106,11 @@ export const GET = withAuth(async (_request, currentUser) => {
         dateFrom,
         dateTo,
       });
-      return NextResponse.json({ success: true, data });
+      return createApiSuccessResponse({ data, message: `配置审计已加载，共 ${data.items.length} 条记录` }, _request);
     }
 
     const data = await listSettings(currentUser);
-    return NextResponse.json({ success: true, data });
+    return createApiSuccessResponse({ data, message: '设置已加载' }, _request);
   } catch (error) {
     console.error('Settings GET error:', error);
     return toApiErrorResponse(error, {

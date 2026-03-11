@@ -248,6 +248,7 @@ export function useSettingsActions({
     if (!canViewAudit) return;
     setAuditExporting(true);
     setError(null);
+    setMessage(null);
     try {
       const response = await fetch(`/api/settings?${buildAuditQuery(auditFilters, null, { format: 'csv', includeLimit: false })}`, {
         method: 'GET',
@@ -261,16 +262,35 @@ export function useSettingsActions({
       const link = document.createElement('a');
       const contentDisposition = response.headers.get('content-disposition') || '';
       const fileName = /filename="([^"]+)"/.exec(contentDisposition)?.[1] || 'settings-audit.csv';
+      const exportCount = Number(response.headers.get('x-export-row-count') || 0);
+      const exportLimit = Number(response.headers.get('x-export-limit-applied') || auditFilters.exportLimit || 0);
+      const maxExportRows = Number(response.headers.get('x-export-limit-max') || auditMeta.maxExportRows || 0);
+      const truncated = response.headers.get('x-export-truncated') === 'true';
+      const exportSummary = response.headers.get('x-export-summary');
+      let decodedExportSummary: string | null = null;
+      if (exportSummary) {
+        try {
+          decodedExportSummary = decodeURIComponent(exportSummary);
+        } catch {
+          decodedExportSummary = exportSummary;
+        }
+      }
       link.href = url;
       link.download = fileName;
       link.click();
       URL.revokeObjectURL(url);
+      setMessage(
+        decodedExportSummary || tx(
+          `配置审计导出完成：已导出 ${exportCount} 条（服务端上限 ${maxExportRows || exportLimit}${truncated ? '，结果已截断' : ''}）`,
+          `Configuration audit export completed: exported ${exportCount} rows (server cap ${maxExportRows || exportLimit}${truncated ? ', truncated' : ''})`,
+        ),
+      );
     } catch (err) {
       setError(getApiErrorMessage(err, tx('导出配置审计失败', 'Failed to export configuration audit')));
     } finally {
       setAuditExporting(false);
     }
-  }, [auditFilters, canViewAudit, setAuditExporting, setError, tx]);
+  }, [auditFilters, auditMeta.maxExportRows, canViewAudit, setAuditExporting, setError, setMessage, tx]);
 
   const handleSaveConfig = useCallback(async () => {
     if (!canEditConfig) return;

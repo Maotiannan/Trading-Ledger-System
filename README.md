@@ -959,6 +959,13 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.66 (2026-03-11)
+- 🏷️ 页面版本号改为“设置页顶部强可见 + `package.json` 单一来源”：`Settings` 页面最上方新增当前版本号展示，继续通过 `src/lib/app-version.ts` 统一读取 `package.json#version`，避免版本信息只出现在页脚。
+- 🌐 服务端成功消息继续扩到用户管理与查询/导出动作：`/api/auth` 的 `login / me / create / parent-options / list` 统一返回本地化 `message`；`/api/settings?view=audit` 的列表与 CSV 导出补齐成功摘要；`/api/report` 导出补齐统一成功头，前端报表下载开始消费服务端成功消息。
+- 📄 设置审计导出前端补齐“导出摘要/超限提示”：CSV 导出后会根据服务端返回的 `X-Export-Summary / X-Export-Row-Count / X-Export-Limit-*` 展示“实际导出多少条、服务端上限多少、是否被截断”的摘要，不再只下载文件不反馈结果。
+- 🧪 回归继续向 `invoice-service + use-settings-actions` 倾斜：新增 `updateInvoiceOrder / deleteInvoiceOrder` 分支测试、设置审计导出摘要测试、用户管理成功消息测试与 success catalog 动态摘要翻译测试；Jest 扩展到 `27 suites / 162 tests`。
+- 📈 coverage threshold 第十四次小步上调：global 提升到 `54 / 78 / 72 / 70`，并优先提高 `invoice-service` 到 `45 / 50 / 52 / 50`、`use-settings-actions` 到 `45 / 93 / 70 / 70`。
+
 ### v1.0.65 (2026-03-11)
 - 🏷️ 前端底部版本号正式落地：新增 `src/lib/app-version.ts` 作为单一版本来源，直接读取 `package.json#version`；登录页与 workspace 页面底部都会固定显示当前版本号，后续每次小版本更新只需同步 `package.json + README + todolist`。
 - 🌐 服务端成功消息继续扩到批处理提示：`api-success-catalog` 新增 OCR 配置测试、客户导入摘要、重匹配摘要、余额转移、账单内加单/改单等成功文案；`invoice import` 与 `customer import` 这两条历史批量接口也开始按请求语言本地化成功消息，不再只翻译错误。
@@ -1162,7 +1169,8 @@ src/
   - `deletions / dashboard` 后续仅在体量或职责明显膨胀时再拆，避免为模块化而引入额外维护成本。
 
 ### 6. 版本号规则
-- 前端底部显示的版本号以 `package.json#version` 为单一来源。
+- 前端版本号以 `package.json#version` 为单一来源。
+- 设置页顶部必须展示当前版本号；页脚版本号可以保留，但不能作为唯一可见入口。
 - 每次小版本更新必须同步更新：
   - `package.json#version`
   - `README.md` 版本记录

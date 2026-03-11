@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.65  
+> 当前版本：v1.0.66  
 > 最后更新：2026-03-11
 
 ## P0（本周必须完成）
@@ -178,6 +178,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.66（2026-03-11）：设置页最上方新增当前版本号展示，版本仍以 `package.json#version` 为唯一来源；服务端成功消息继续扩展到 `auth` 用户管理查询/创建动作、配置审计列表与 CSV 导出、报表导出摘要；设置页前端新增配置审计导出摘要/超限提示展示；补齐 `invoice-service / use-settings-actions / use-user-actions / api-success-catalog` 回归，coverage threshold 第十四次提升到 `54/78/72/70`，其中 `invoice-service` 提升到 `45/50/52/50`、`use-settings-actions` 提升到 `45/93/70/70`
 - v1.0.65（2026-03-11）：前端底部版本号改为直接显示 `package.json#version`，登录页与 workspace 页面统一可见；服务端成功消息继续扩展到客户导入/账单导入/重匹配/余额转移/OCR 配置测试等批处理提示；设置页配置审计新增服务端 `auditCapabilities` 元信息、`SETTINGS_AUDIT_MAX_PAGE_SIZE / SETTINGS_AUDIT_EXPORT_MAX_ROWS` 配置化与 `exportLimit` 导出控制；新增 `invoice-write` 与 `settings-service` 关键分支回归，coverage threshold 第十三次提升到 `53/77/71/69`，其中 `invoice-write` 提升到 `60/90/80/80`、`settings-service` 提升到 `45/60/55/55`
 - v1.0.64（2026-03-11）：服务端成功消息开始统一字典化，新增 `api-success-catalog + api-success-response + api-response-locale`，并将 `auth/init/settings/invoice/deletion/customer-fixes/receipt/detail/swift` 这批成功响应接入请求级本地化；设置页配置审计新增分页大小与 CSV 导出；新增 `api-success-catalog.test.ts` 与 `settings-service / use-settings-actions / use-invoice-actions / invoice-service / invoice-write` 回归，coverage threshold 第十二次提升到 `52/76/70/68`，其中 `use-invoice-actions` 提升到 `60/80/65/65`、`invoice-service` 提升到 `42/40/49/46`
 - v1.0.63（2026-03-11）：服务端错误字典继续下沉到 `api-error-catalog + api-error-response`，后端开始按 `NEXT_LOCALE / Accept-Language` 直接返回本地化错误；设置页配置审计新增按操作者/配置键/时间范围筛选；前端 workspace API client 改为优先保留服务端详细错误，再用错误码兜底；新增 `api-error-catalog.test.ts` 与更多 `settings-service / use-settings-actions / use-customer-actions / invoice-service` 回归，coverage threshold 第十一次提升到 `50/75/69/67`，其中 `customer-actions` 提升到 `40/65/50/50`、`invoice-service` 提升到 `39/38/47/44`

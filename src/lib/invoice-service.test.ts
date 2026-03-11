@@ -7,9 +7,11 @@ import { updateOrderBalance } from '@/lib/matching';
 import {
   addInvoiceOrder,
   createInvoiceRecord,
+  deleteInvoiceOrder,
   deleteInvoiceRecord,
   processInvoiceImportRows,
   transferInvoiceBalance,
+  updateInvoiceOrder,
   updateInvoiceDates,
 } from '@/lib/invoice-service';
 import {
@@ -357,6 +359,74 @@ describe('invoice-service', () => {
     }));
   });
 
+  it('updates invoice order fields, clears customer ownership when mark is empty, and syncs linked receipts', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-1',
+      orderNo: 'IB-01',
+      amount: 100,
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'IB',
+      customerPhone: '+224620000000',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+    mockDb.order.update.mockResolvedValueOnce({
+      id: 'order-1',
+      orderNo: 'IB-01',
+      amount: 120,
+      customerId: null,
+      customerMark: null,
+      customerName: null,
+      customerPhone: null,
+      customerCity: null,
+      needsCustomerFix: true,
+    });
+
+    const result = await updateInvoiceOrder(makeUser(), {
+      orderId: 'order-1',
+      orderNo: 'IB-01',
+      amount: 120,
+      customerMark: '',
+      customerName: '',
+      customerPhone: '',
+      customerCity: '',
+    });
+
+    expect(result.message).toBe('订单已更新');
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(mockDb.order.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        orderNo: 'IB-01',
+        amount: 120,
+        customerId: null,
+        customerMark: null,
+        customerName: null,
+        customerPhone: null,
+        customerCity: null,
+        needsCustomerFix: true,
+      }),
+    }));
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { orderId: 'order-1' },
+      data: {
+        orderNo: 'IB-01',
+        customerId: null,
+        customerMark: null,
+        customerName: null,
+        customerPhone: null,
+        customerCity: null,
+        needsCustomerFix: true,
+      },
+    });
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_UPDATE',
+      targetId: 'order-1',
+    }));
+  });
+
   it('blocks invoice deletion when a visible receipt already exists', async () => {
     mockDb.invoice.findFirst.mockResolvedValueOnce({
       id: 'inv-1',
@@ -390,6 +460,28 @@ describe('invoice-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_DELETE',
       targetId: 'inv-1',
+    }));
+  });
+
+  it('deletes an order and removes its invoice when it is the last remaining order', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-1',
+      invoiceId: 'inv-1',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+    mockDb.order.count.mockResolvedValueOnce(0);
+    mockDb.order.delete.mockResolvedValueOnce({ id: 'order-1' });
+    mockDb.invoice.delete.mockResolvedValueOnce({ id: 'inv-1' });
+
+    const result = await deleteInvoiceOrder(makeUser(), 'order-1');
+
+    expect(result).toEqual({ message: '订单已删除' });
+    expect(mockDb.order.delete).toHaveBeenCalledWith({ where: { id: 'order-1' } });
+    expect(mockDb.invoice.delete).toHaveBeenCalledWith({ where: { id: 'inv-1' } });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_DELETE',
+      targetId: 'order-1',
+      metadata: { invoiceId: 'inv-1' },
     }));
   });
 

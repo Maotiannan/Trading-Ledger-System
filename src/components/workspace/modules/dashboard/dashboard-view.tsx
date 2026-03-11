@@ -85,6 +85,14 @@ export function Dashboard() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+      const successMessage = response.headers.get('x-success-message');
+      if (successMessage) {
+        try {
+          alert(decodeURIComponent(successMessage));
+        } catch {
+          alert(successMessage);
+        }
+      }
     } catch {
       alert(t('exportFailedRetry'));
     } finally {

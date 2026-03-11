@@ -1,7 +1,10 @@
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '@/lib/i18n';
 
 const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
+  '登录成功': { zh: '登录成功', en: 'Signed in' },
   '已退出登录': { zh: '已退出登录', en: 'Signed out' },
+  '当前用户信息已加载': { zh: '当前用户信息已加载', en: 'Current user loaded' },
+  '用户已创建': { zh: '用户已创建', en: 'User created' },
   '角色已更新': { zh: '角色已更新', en: 'Role updated' },
   '用户已删除': { zh: '用户已删除', en: 'User deleted' },
   '密码已重置': { zh: '密码已重置', en: 'Password reset' },
@@ -37,6 +40,8 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
     zh: '业务数据已清空（系统配置/用户数据保留）',
     en: 'Business data purged (system settings and user data preserved)',
   },
+  '设置已加载': { zh: '设置已加载', en: 'Settings loaded' },
+  '报表导出已生成': { zh: '报表导出已生成', en: 'Report export generated' },
 };
 
 const containsSuccessMessages: Array<[string, Record<SupportedLocale, string>]> = [
@@ -90,6 +95,29 @@ export function translateApiSuccessMessage(raw: string, locale: SupportedLocale)
   const exact = reverseLookup.get(raw);
   if (exact) {
     return exact[locale];
+  }
+
+  if (locale === 'en') {
+    const userListMatch = /^用户列表已加载，共 (\d+) 个账号$/.exec(raw);
+    if (userListMatch) {
+      return `User list loaded: ${userListMatch[1]} users`;
+    }
+
+    const parentOptionsMatch = /^可选上级账户已加载，共 (\d+) 个候选账号$/.exec(raw);
+    if (parentOptionsMatch) {
+      return `Parent account options loaded: ${parentOptionsMatch[1]} parent options`;
+    }
+
+    const auditLoadedMatch = /^配置审计已加载，共 (\d+) 条记录$/.exec(raw);
+    if (auditLoadedMatch) {
+      return `Configuration audit loaded: ${auditLoadedMatch[1]} entries`;
+    }
+
+    const auditExportMatch = /^配置审计导出完成：已导出 (\d+) 条（服务端上限 (\d+)(，结果已截断)?）$/.exec(raw);
+    if (auditExportMatch) {
+      const [, rowCount, maxRows, truncated] = auditExportMatch;
+      return `Configuration audit export completed: exported ${rowCount} rows (server cap ${maxRows}${truncated ? ', truncated' : ''})`;
+    }
   }
 
   let translated = raw;

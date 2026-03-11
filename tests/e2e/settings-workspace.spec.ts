@@ -6,6 +6,8 @@ test('settings page renders password, user management, and system config section
   await loginAsAdmin(page);
 
   await page.goto('/settings');
+  await expect(page.getByText(/当前版本|Current Version/i)).toBeVisible();
+  await expect(page.getByText(/v\d+\.\d+\.\d+/i).first()).toBeVisible();
   await expect(page.getByText(/修改密码|Change Password/i)).toBeVisible();
   await expect(page.getByText(/用户管理|User Management/i).first()).toBeVisible();
   await expect(page.getByText(/系统配置|System Configuration/i).first()).toBeVisible();

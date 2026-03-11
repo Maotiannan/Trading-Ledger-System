@@ -30,4 +30,16 @@ describe('api-success-catalog', () => {
     ).toBe('Rematch completed (visible scope): duplicate orders merged 1, grouped merged 2, receipts matched 3, customers synced 4, empty invoices removed 5, zero-amount orders removed 6');
     expect(translateApiSuccessMessage('OCR配置连通成功', 'en')).toBe('OCR configuration test passed');
   });
+
+  it('translates user query and settings export summaries', () => {
+    expect(
+      translateApiSuccessMessage('用户列表已加载，共 3 个账号', 'en'),
+    ).toBe('User list loaded: 3 users');
+    expect(
+      translateApiSuccessMessage('可选上级账户已加载，共 2 个候选账号', 'en'),
+    ).toBe('Parent account options loaded: 2 parent options');
+    expect(
+      translateApiSuccessMessage('配置审计导出完成：已导出 88 条（服务端上限 5000，结果已截断）', 'en'),
+    ).toBe('Configuration audit export completed: exported 88 rows (server cap 5000, truncated)');
+  });
 });

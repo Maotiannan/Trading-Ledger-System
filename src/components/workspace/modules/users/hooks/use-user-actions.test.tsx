@@ -90,7 +90,7 @@ describe('useUserActions', () => {
   });
 
   it('forces sales-created account role to USER on create', async () => {
-    mockApiCall.mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: true, data: [] });
+    mockApiCall.mockResolvedValueOnce({ success: true, message: '用户已创建' }).mockResolvedValueOnce({ success: true, data: [] });
     const { result } = renderHook(() => useUserActions(createDeps()));
 
     await act(async () => {
@@ -109,6 +109,7 @@ describe('useUserActions', () => {
       }),
     }));
     expect(setShowCreate).toHaveBeenCalledWith(false);
+    expect(window.alert).toHaveBeenCalledWith('用户已创建');
   });
 
   it('alerts when create fails with structured api error', async () => {
@@ -160,7 +161,7 @@ describe('useUserActions', () => {
   });
 
   it('resets password and shows success alert', async () => {
-    mockApiCall.mockResolvedValue({ success: true });
+    mockApiCall.mockResolvedValue({ success: true, message: '密码已重置' });
     const { result } = renderHook(() => useUserActions(createDeps()));
 
     await act(async () => {
@@ -172,6 +173,21 @@ describe('useUserActions', () => {
       body: JSON.stringify({ action: 'reset-password', userId: 'user-1', password: 'Reset@2026!' }),
     }));
     expect(window.alert).toHaveBeenCalledWith('密码已重置');
+  });
+
+  it('shows backend role update success message before refreshing list', async () => {
+    mockApiCall
+      .mockResolvedValueOnce({ success: true, message: '角色已更新' })
+      .mockResolvedValueOnce({ success: true, data: [] });
+
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleChangeRole('user-1', 'USER');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('角色已更新');
+    expect(setUsers).toHaveBeenCalledWith([]);
   });
 
   it('does not delete user when confirmation is cancelled', async () => {

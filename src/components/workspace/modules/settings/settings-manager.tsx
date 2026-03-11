@@ -5,6 +5,7 @@ import { useStore } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUiText } from '@/components/workspace/shared';
+import { APP_VERSION } from '@/lib/app-version';
 import { BranchPurgeCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
 import { useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
@@ -123,7 +124,12 @@ export function SettingsManager() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">{tx('设置', 'Settings')}</h2>
+      <div className="space-y-1">
+        <h2 className="text-2xl font-bold">{tx('设置', 'Settings')}</h2>
+        <p className="text-sm text-gray-500">
+          {tx('当前版本', 'Current Version')}: <span className="font-mono">{APP_VERSION}</span>
+        </p>
+      </div>
       {(error || message) && (
         <Alert variant={error ? 'destructive' : 'default'}>
           <AlertDescription>{error || message}</AlertDescription>

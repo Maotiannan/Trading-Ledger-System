@@ -389,7 +389,9 @@ describe('useSettingsActions', () => {
         get: (name: string) => (
           name.toLowerCase() === 'content-disposition'
             ? 'attachment; filename="settings-audit.csv"'
-            : null
+            : name.toLowerCase() === 'x-export-summary'
+              ? encodeURIComponent('配置审计导出完成：已导出 88 条（服务端上限 5000，结果已截断）')
+              : null
         ),
       },
     } as unknown as Response);
@@ -413,6 +415,55 @@ describe('useSettingsActions', () => {
     );
     expect(anchor.download).toBe('settings-audit.csv');
     expect(clickSpy).toHaveBeenCalled();
+    expect(deps.setMessage).toHaveBeenCalledWith('配置审计导出完成：已导出 88 条（服务端上限 5000，结果已截断）');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
+  });
+
+  it('builds export summary from headers when server summary is absent', async () => {
+    const deps = createDeps();
+    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const anchor = originalCreateElement('a');
+    jest.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(new Blob(['time,actor\n'])),
+      headers: {
+        get: (name: string) => {
+          switch (name.toLowerCase()) {
+            case 'content-disposition':
+              return 'attachment; filename="settings-audit.csv"';
+            case 'x-export-row-count':
+              return '20';
+            case 'x-export-limit-applied':
+              return '20';
+            case 'x-export-limit-max':
+              return '5000';
+            case 'x-export-truncated':
+              return 'false';
+            default:
+              return null;
+          }
+        },
+      },
+    } as unknown as Response);
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName.toLowerCase() === 'a') return anchor;
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: jest.fn(() => 'blob:audit') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: jest.fn() });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.exportSettingsAudit();
+    });
+
+    expect(deps.setMessage).toHaveBeenCalledWith('配置审计导出完成：已导出 20 条（服务端上限 5000）');
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });

@@ -1,7 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import type { BranchPurgeTarget, PasswordFormState, PurgeFormState, SettingsAuditEntry } from '../types';
+import type {
+  BranchPurgeTarget,
+  PasswordFormState,
+  PurgeFormState,
+  SettingsAuditEntry,
+  SettingsAuditFilterState,
+} from '../types';
+
+const emptySettingsAuditFilters: SettingsAuditFilterState = {
+  actorQuery: '',
+  settingKey: '',
+  dateFrom: '',
+  dateTo: '',
+};
 
 export function useSettingsForms() {
   const [loading, setLoading] = useState(false);
@@ -22,6 +35,7 @@ export function useSettingsForms() {
   const [settingsAuditEntries, setSettingsAuditEntries] = useState<SettingsAuditEntry[]>([]);
   const [settingsAuditCursor, setSettingsAuditCursor] = useState<string | null>(null);
   const [settingsAuditHasMore, setSettingsAuditHasMore] = useState(false);
+  const [settingsAuditFilters, setSettingsAuditFilters] = useState<SettingsAuditFilterState>(emptySettingsAuditFilters);
   const [purgeForm, setPurgeForm] = useState<PurgeFormState>({
     targetUserId: '',
     password: '',
@@ -85,11 +99,14 @@ export function useSettingsForms() {
     setSettingsAuditCursor,
     settingsAuditHasMore,
     setSettingsAuditHasMore,
+    settingsAuditFilters,
+    setSettingsAuditFilters,
     purgeForm,
     setPurgeForm,
     pwd,
     setPwd,
     updateConfigField,
     togglePurgeModule,
+    emptySettingsAuditFilters,
   };
 }

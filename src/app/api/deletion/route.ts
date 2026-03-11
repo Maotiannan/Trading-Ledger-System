@@ -9,7 +9,7 @@ import {
 } from '@/lib/deletion-service';
 
 // 获取删除申请列表
-export const GET = withAuth(async (_request: NextRequest, currentUser) => {
+export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const requests = await listDeletionRequests(currentUser);
     return NextResponse.json({ success: true, data: requests });
@@ -19,7 +19,7 @@ export const GET = withAuth(async (_request: NextRequest, currentUser) => {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 });
 
@@ -62,6 +62,6 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 });

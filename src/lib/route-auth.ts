@@ -14,7 +14,7 @@ export function withAuth(handler: AuthedHandler) {
         code: apiErrorCodes.AUTH_REQUIRED,
         status: 401,
         message: '未登录',
-      });
+      }, request);
     }
     return handler(request, currentUser);
   };
@@ -28,7 +28,7 @@ export function withRole(role: UserRole | UserRole[], handler: AuthedHandler, me
         code: apiErrorCodes.FORBIDDEN,
         status: 403,
         message,
-      });
+      }, request);
     }
     return handler(request, currentUser);
   });

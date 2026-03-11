@@ -258,7 +258,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 });
 
@@ -386,7 +386,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 }, '只有管理员和销售代表可以创建账单');
 
@@ -401,7 +401,7 @@ export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request:
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 }, '只有管理员和销售代表可以删除账单');
 
@@ -465,6 +465,6 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 }, '只有管理员和销售代表可以修改订单');

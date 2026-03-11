@@ -17,10 +17,18 @@ export const GET = withAuth(async (_request, currentUser) => {
     if (view === 'audit') {
       const cursor = _request.nextUrl.searchParams.get('cursor');
       const limitRaw = _request.nextUrl.searchParams.get('limit');
+      const actor = _request.nextUrl.searchParams.get('actor');
+      const key = _request.nextUrl.searchParams.get('key');
+      const dateFrom = _request.nextUrl.searchParams.get('dateFrom');
+      const dateTo = _request.nextUrl.searchParams.get('dateTo');
       const limit = limitRaw ? Number(limitRaw) : undefined;
       const data = await listSystemSettingsAuditLogs(currentUser, {
         cursor,
         limit,
+        actor,
+        key,
+        dateFrom,
+        dateTo,
       });
       return NextResponse.json({ success: true, data });
     }
@@ -33,7 +41,7 @@ export const GET = withAuth(async (_request, currentUser) => {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, _request);
   }
 });
 
@@ -78,6 +86,6 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 });

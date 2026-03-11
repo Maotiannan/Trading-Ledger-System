@@ -1,4 +1,4 @@
-import { DeletionTargetType, UserRole } from '@prisma/client';
+import { DeletionTargetType, Prisma, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
 import { testOcrConnectivity } from '@/lib/ocr';
@@ -48,6 +48,15 @@ export type SystemSettingsAuditEntry = {
   changes: SystemSettingsAuditChange[];
 };
 
+export type SystemSettingsAuditFilters = {
+  cursor?: string | null;
+  limit?: number;
+  actor?: string | null;
+  key?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+};
+
 function normalizeAuditChanges(metadata: unknown): SystemSettingsAuditChange[] {
   if (!metadata || typeof metadata !== 'object') return [];
   const changes = (metadata as { changes?: unknown }).changes;
@@ -76,6 +85,51 @@ function normalizeAuditUpdatedKeys(metadata: unknown, changes: SystemSettingsAud
     }
   }
   return changes.map((item) => item.key);
+}
+
+function parseAuditDateInput(value: string | null | undefined, label: string, endOfRange = false): Date | null {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  const raw = normalized.includes('T')
+    ? normalized
+    : `${normalized}${endOfRange ? 'T23:59:59.999' : 'T00:00:00.000'}`;
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: `${label} 格式错误`,
+      detail: { value: normalized },
+    });
+  }
+  return date;
+}
+
+function matchesAuditKeyFilter(metadata: unknown, keyQuery: string): boolean {
+  if (!keyQuery) return true;
+  const normalizedKey = keyQuery.toLowerCase();
+  const changes = normalizeAuditChanges(metadata);
+  const updatedKeys = normalizeAuditUpdatedKeys(metadata, changes);
+  return updatedKeys.some((key) => key.toLowerCase().includes(normalizedKey))
+    || changes.some((change) => change.key.toLowerCase().includes(normalizedKey));
+}
+
+function matchesAuditActorFilter(
+  actor: { id: string; email: string; name: string | null } | null,
+  actorQuery: string,
+): boolean {
+  if (!actorQuery) return true;
+  if (!actor) return false;
+  const normalized = actorQuery.toLowerCase();
+  return actor.id === actorQuery
+    || actor.email.toLowerCase().includes(normalized)
+    || String(actor.name || '').toLowerCase().includes(normalized);
+}
+
+function matchesAuditDateFilter(createdAt: Date, dateFrom: Date | null, dateTo: Date | null): boolean {
+  if (dateFrom && createdAt.getTime() < dateFrom.getTime()) return false;
+  if (dateTo && createdAt.getTime() > dateTo.getTime()) return false;
+  return true;
 }
 
 function assertAdmin(currentUser: CurrentUser, message: string): void {
@@ -235,7 +289,7 @@ export async function listSettings(currentUser: CurrentUser): Promise<{
 
 export async function listSystemSettingsAuditLogs(
   currentUser: CurrentUser,
-  options: { cursor?: string | null; limit?: number } = {}
+  options: SystemSettingsAuditFilters = {}
 ): Promise<{
   items: SystemSettingsAuditEntry[];
   nextCursor: string | null;
@@ -244,30 +298,93 @@ export async function listSystemSettingsAuditLogs(
   assertAdmin(currentUser, '只有管理员可以查看系统配置审计');
 
   const limit = Math.min(Math.max(Number(options.limit) || SETTINGS_AUDIT_PAGE_SIZE, 1), 50);
-  const rows = await db.auditLog.findMany({
-    where: {
-      action: auditActions.SYSTEM_SETTINGS_UPDATE,
-      targetType: auditTargetTypes.SYSTEM_SETTING,
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
-    take: limit + 1,
-    select: {
-      id: true,
-      createdAt: true,
-      metadata: true,
-      actor: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
+  const actorQuery = String(options.actor || '').trim();
+  const keyQuery = String(options.key || '').trim();
+  const dateFrom = parseAuditDateInput(options.dateFrom, 'dateFrom');
+  const dateTo = parseAuditDateInput(options.dateTo, 'dateTo', true);
+
+  if (dateFrom && dateTo && dateTo.getTime() < dateFrom.getTime()) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '结束时间不能早于开始时间',
+      detail: {
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
+      },
+    });
+  }
+
+  const where: Prisma.AuditLogWhereInput = {
+    action: auditActions.SYSTEM_SETTINGS_UPDATE,
+    targetType: auditTargetTypes.SYSTEM_SETTING,
+  };
+
+  if (dateFrom || dateTo) {
+    where.createdAt = {
+      ...(dateFrom ? { gte: dateFrom } : {}),
+      ...(dateTo ? { lte: dateTo } : {}),
+    };
+  }
+
+  if (actorQuery) {
+    where.actor = {
+      is: {
+        OR: [
+          { id: actorQuery },
+          { email: { contains: actorQuery } },
+          { name: { contains: actorQuery } },
+        ],
+      },
+    };
+  }
+
+  const take = Math.max(limit * 3, 50);
+  const filteredRows: Array<{
+    id: string;
+    createdAt: Date;
+    metadata: unknown;
+    actor: {
+      id: string;
+      email: string;
+      name: string | null;
+    } | null;
+  }> = [];
+
+  let cursor = options.cursor || null;
+  let exhausted = false;
+  while (filteredRows.length < limit + 1 && !exhausted) {
+    const rows = await db.auditLog.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take,
+      select: {
+        id: true,
+        createdAt: true,
+        metadata: true,
+        actor: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  const hasMore = rows.length > limit;
-  const items = rows.slice(0, limit).map((row) => {
+    if (rows.length === 0) break;
+    filteredRows.push(...rows.filter((row) => (
+      matchesAuditActorFilter(row.actor, actorQuery)
+      && matchesAuditDateFilter(row.createdAt, dateFrom, dateTo)
+      && matchesAuditKeyFilter(row.metadata, keyQuery)
+    )));
+    cursor = rows[rows.length - 1]?.id || null;
+    exhausted = rows.length < take;
+  }
+
+  const hasMore = filteredRows.length > limit;
+  const items = filteredRows.slice(0, limit).map((row) => {
     const changes = normalizeAuditChanges(row.metadata);
     return {
       id: row.id,

@@ -73,6 +73,7 @@ describe('useCustomerActions', () => {
       ownerId: '',
     };
     jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
   afterEach(() => {
@@ -227,6 +228,148 @@ describe('useCustomerActions', () => {
 
     expect(window.alert).toHaveBeenCalledWith('保存失败');
     expect(loadCustomers).not.toHaveBeenCalled();
+  });
+
+  it('uses default owner for non-admin owner options', async () => {
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: [{ id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: 'SALES', level: 3 }],
+    });
+
+    const setImportOwnerId = jest.fn((value: string | ((prev: string) => string)) => {
+      importOwnerId = typeof value === 'function' ? value(importOwnerId) : value;
+    });
+    const setForm = jest.fn((value: CustomerFormState | ((prev: CustomerFormState) => CustomerFormState)) => {
+      formState = typeof value === 'function' ? value(formState) : value;
+    });
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: false,
+      defaultOwnerId: 'sales-1',
+      importOwnerId,
+      editing: null,
+      fixingTarget: null,
+      form: formState,
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.loadOwnerOptions();
+    });
+
+    expect(importOwnerId).toBe('sales-1');
+    expect(formState.ownerId).toBe('sales-1');
+  });
+
+  it('deletes customer after confirmation and refreshes list', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: true });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleDelete('cust-1');
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('customer', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'delete', id: 'cust-1' }),
+    });
+    expect(loadCustomers).toHaveBeenCalled();
+  });
+
+  it('submits customer fix and refreshes both lists', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: true });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: { type: 'receipt', id: 'receipt-1' },
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.submitFix();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('customer/fixes', expect.objectContaining({
+      method: 'POST',
+    }));
+    const requestBody = JSON.parse(String(mockApiCall.mock.calls[0][1].body));
+    expect(requestBody).toEqual(expect.objectContaining({
+      action: 'resolve-receipt',
+      receiptId: 'receipt-1',
+      ownerId: 'sales-1',
+    }));
+    expect(setFixingTarget).toHaveBeenCalledWith(null);
+    expect(resetForm).toHaveBeenCalled();
+    expect(loadCustomers).toHaveBeenCalled();
+    expect(loadFixes).toHaveBeenCalled();
   });
 
   it('retries failed import rows and updates import message', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { translateApiErrorCode } from '@/i18n/workspace/api-error-map';
+import { translateApiErrorCode, translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 
 const DECIMAL_KEYS = new Set([
@@ -78,9 +78,9 @@ function extractApiErrorLike(input: unknown): { message: string; code?: string; 
       ? value.error
       : (typeof value.message === 'string' ? value.message : '');
     const code = typeof value.code === 'string' ? value.code : undefined;
-    const message = locale.startsWith('en')
-      ? translateApiErrorCode(code, rawMessage)
-      : rawMessage;
+    const message = rawMessage
+      ? (locale.startsWith('en') ? translateApiErrorMessage(rawMessage) : rawMessage)
+      : (locale.startsWith('en') ? translateApiErrorCode(code, '') : '');
     return {
       message,
       code,
@@ -94,10 +94,11 @@ function extractApiErrorLike(input: unknown): { message: string; code?: string; 
 function toWorkspaceApiError(input: unknown, status?: number, fallback?: string): WorkspaceApiError {
   const locale = getCurrentLocale();
   const extracted = extractApiErrorLike(input);
-  const baseMessage = extracted.message || fallback || `HTTP ${status || 500}`;
-  const translated = locale.startsWith('en')
-    ? translateApiErrorCode(extracted.code, baseMessage)
-    : baseMessage;
+  const fallbackMessage = fallback || `HTTP ${status || 500}`;
+  const baseMessage = extracted.message || fallbackMessage;
+  const translated = extracted.message
+    ? baseMessage
+    : (locale.startsWith('en') ? translateApiErrorCode(extracted.code, fallbackMessage) : baseMessage);
   return new WorkspaceApiError(translated, {
     code: extracted.code,
     detail: extracted.detail,

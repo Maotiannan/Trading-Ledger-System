@@ -2,7 +2,13 @@
 
 import { useCallback } from 'react';
 import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
-import type { BranchPurgeTarget, PasswordFormState, PurgeFormState, SettingsAuditEntry } from '../types';
+import type {
+  BranchPurgeTarget,
+  PasswordFormState,
+  PurgeFormState,
+  SettingsAuditEntry,
+  SettingsAuditFilterState,
+} from '../types';
 
 export type SettingsActionText = (zh: string, en: string) => string;
 
@@ -17,6 +23,7 @@ export type SettingsActionDeps = {
   purgeForm: PurgeFormState;
   pwd: PasswordFormState;
   auditCursor: string | null;
+  auditFilters: SettingsAuditFilterState;
   setLoading: (value: boolean) => void;
   setSavingConfig: (value: boolean) => void;
   setTestingConfig: (value: boolean) => void;
@@ -35,9 +42,27 @@ export type SettingsActionDeps = {
   setSettingsAuditEntries: React.Dispatch<React.SetStateAction<SettingsAuditEntry[]>>;
   setSettingsAuditCursor: (value: string | null) => void;
   setSettingsAuditHasMore: (value: boolean) => void;
+  setSettingsAuditFilters: React.Dispatch<React.SetStateAction<SettingsAuditFilterState>>;
   setPurgeForm: React.Dispatch<React.SetStateAction<PurgeFormState>>;
   setPwd: (value: PasswordFormState) => void;
 };
+
+const emptyAuditFilters: SettingsAuditFilterState = {
+  actorQuery: '',
+  settingKey: '',
+  dateFrom: '',
+  dateTo: '',
+};
+
+function buildAuditQuery(filters: SettingsAuditFilterState, cursor?: string | null) {
+  const query = new URLSearchParams({ view: 'audit', limit: '20' });
+  if (cursor) query.set('cursor', cursor);
+  if (filters.actorQuery.trim()) query.set('actor', filters.actorQuery.trim());
+  if (filters.settingKey.trim()) query.set('key', filters.settingKey.trim());
+  if (filters.dateFrom.trim()) query.set('dateFrom', filters.dateFrom.trim());
+  if (filters.dateTo.trim()) query.set('dateTo', filters.dateTo.trim());
+  return query.toString();
+}
 
 export function useSettingsActions({
   tx,
@@ -49,6 +74,7 @@ export function useSettingsActions({
   purgeForm,
   pwd,
   auditCursor,
+  auditFilters,
   setLoading,
   setSavingConfig,
   setTestingConfig,
@@ -67,6 +93,7 @@ export function useSettingsActions({
   setSettingsAuditEntries,
   setSettingsAuditCursor,
   setSettingsAuditHasMore,
+  setSettingsAuditFilters,
   setPurgeForm,
   setPwd,
 }: SettingsActionDeps) {
@@ -101,7 +128,7 @@ export function useSettingsActions({
     }
   }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setError, setLoading, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditHasMore, tx]);
 
-  const loadSettingsAudit = useCallback(async (options: { append?: boolean } = {}) => {
+  const loadSettingsAudit = useCallback(async (options: { append?: boolean; filters?: SettingsAuditFilterState } = {}) => {
     if (!canViewAudit) {
       setSettingsAuditEntries([]);
       setSettingsAuditCursor(null);
@@ -110,14 +137,13 @@ export function useSettingsActions({
     }
 
     const append = Boolean(options.append);
+    const filters = options.filters || emptyAuditFilters;
     const cursor = append ? auditCursor : null;
     if (append) setAuditLoadingMore(true);
     else setAuditLoading(true);
 
     try {
-      const query = new URLSearchParams({ view: 'audit', limit: '20' });
-      if (cursor) query.set('cursor', cursor);
-      const result = await apiCall(`settings?${query.toString()}`);
+      const result = await apiCall(`settings?${buildAuditQuery(filters, cursor)}`);
       if (result.success) {
         const items = Array.isArray(result.data?.items) ? result.data.items : [];
         setSettingsAuditEntries((prev) => (append ? [...prev, ...items] : items));
@@ -142,6 +168,15 @@ export function useSettingsActions({
     tx,
   ]);
 
+  const applyAuditFilters = useCallback(async () => {
+    await loadSettingsAudit({ filters: auditFilters });
+  }, [auditFilters, loadSettingsAudit]);
+
+  const resetAuditFilters = useCallback(async () => {
+    setSettingsAuditFilters(emptyAuditFilters);
+    await loadSettingsAudit({ filters: emptyAuditFilters });
+  }, [loadSettingsAudit, setSettingsAuditFilters]);
+
   const handleSaveConfig = useCallback(async () => {
     if (!canEditConfig) return;
     setSavingConfig(true);
@@ -154,7 +189,7 @@ export function useSettingsActions({
       });
       if (result.success) {
         setMessage(result.message || tx('配置已保存', 'Configuration saved'));
-        await loadSettingsAudit();
+        await loadSettingsAudit({ filters: auditFilters });
       } else {
         setError(getApiErrorMessage(result, tx('保存失败', 'Save failed')));
       }
@@ -163,7 +198,7 @@ export function useSettingsActions({
     } finally {
       setSavingConfig(false);
     }
-  }, [canEditConfig, config, loadSettingsAudit, setError, setMessage, setSavingConfig, tx]);
+  }, [auditFilters, canEditConfig, config, loadSettingsAudit, setError, setMessage, setSavingConfig, tx]);
 
   const handleTestOcrConfig = useCallback(async () => {
     if (!canEditConfig) return;
@@ -290,5 +325,7 @@ export function useSettingsActions({
     handleChangePassword,
     handlePurgeBranch,
     loadSettingsAudit,
+    applyAuditFilters,
+    resetAuditFilters,
   };
 }

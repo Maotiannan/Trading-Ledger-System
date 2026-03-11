@@ -952,6 +952,13 @@ src/
 - 🧪 Jest 扩展到 `25 suites / 128 tests`。
 - 📈 coverage threshold 第十轮小步上调：global 提升到 `48 / 74 / 68 / 66`，`use-user-actions` 局部门禁同步提升到 `50 / 100 / 88 / 85`。
 
+### v1.0.63 (2026-03-11)
+- 🌐 服务端错误字典/i18n 继续下沉：新增 `src/lib/api-error-catalog.ts` 统一维护错误码与中文动态消息翻译，`api-error-response` 现在会基于 `NEXT_LOCALE / Accept-Language` 在服务端直接返回本地化错误；`invoice/receipt/detail/swift/deletion/init` 等剩余路由全部接入请求级本地化响应。
+- 🧾 设置审计补齐筛选能力：`/api/settings?view=audit` 新增 `actor / key / dateFrom / dateTo` 过滤参数，设置页审计卡片新增操作者、配置键、时间范围筛选与重置；后端同时补了后置过滤，避免数据库过滤与游标分页之间的边界偏差。
+- 🧠 前端错误消费收口为“保留服务端具体文案，错误码只做兜底”：`workspace api client` 不再把详细错误覆写成 `Invalid request` 这类通用文案，避免丢失 `OCR_DISABLED`、容差边界等关键细节。
+- 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
+- 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
+
 ### v1.0.58 (2026-03-11)
 - 🧱 `settings / receipt / detail / swift` 写接口继续统一：新增 `settings-service / receipt-service / detail-service / swift-service`，路由层只保留请求解析、OCR 识别和响应封装。
 - ⚙️ SWIFT 容差正式配置化：新增 `SWIFT_WARNING_TOLERANCE` 与 `SWIFT_REJECT_TOLERANCE`，后端从 `/api/settings` 读取，前端设置页同步可编辑。

@@ -137,21 +137,21 @@ type ImportExistingCustomer = {
   ownerId: string;
 };
 
-function managerOnly(userRole: UserRole): NextResponse | null {
+function managerOnly(userRole: UserRole, request?: NextRequest): NextResponse | null {
   if (userRole === UserRole.ADMIN || userRole === UserRole.SALES) return null;
-  return createApiErrorResponse({ code: apiErrorCodes.FORBIDDEN, status: 403, message: '无权限' });
+  return createApiErrorResponse({ code: apiErrorCodes.FORBIDDEN, status: 403, message: '无权限' }, request);
 }
 
-function badRequest(message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown) {
-  return createApiErrorResponse({ code, status: 400, message, detail });
+function badRequest(message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown, request?: NextRequest) {
+  return createApiErrorResponse({ code, status: 400, message, detail }, request);
 }
 
-function forbidden(message: string, code: ApiErrorCode = apiErrorCodes.FORBIDDEN, detail?: unknown) {
-  return createApiErrorResponse({ code, status: 403, message, detail });
+function forbidden(message: string, code: ApiErrorCode = apiErrorCodes.FORBIDDEN, detail?: unknown, request?: NextRequest) {
+  return createApiErrorResponse({ code, status: 403, message, detail }, request);
 }
 
-function notFound(message: string, detail?: unknown) {
-  return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message, detail });
+function notFound(message: string, detail?: unknown, request?: NextRequest) {
+  return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message, detail }, request);
 }
 
 function parsePayload(body: Record<string, unknown>): CustomerPayload {
@@ -468,7 +468,7 @@ async function processCustomerImportRows(
 }
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
-  const denied = managerOnly(currentUser.role as UserRole);
+  const denied = managerOnly(currentUser.role as UserRole, request);
   if (denied) return denied;
 
   const { searchParams } = new URL(request.url);
@@ -554,7 +554,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
-  const denied = managerOnly(currentUser.role as UserRole);
+  const denied = managerOnly(currentUser.role as UserRole, request);
   if (denied) return denied;
 
   const contentType = request.headers.get('content-type') || '';
@@ -562,19 +562,19 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const formData = await request.formData();
     const action = trimStr(formData.get('action'));
     if (action !== 'import-excel') {
-      return badRequest('未知上传操作', apiErrorCodes.INVALID_ACTION, { action });
+      return badRequest('未知上传操作', apiErrorCodes.INVALID_ACTION, { action }, request);
     }
 
     const file = formData.get('file');
     if (!(file instanceof File)) {
-      return badRequest('请上传Excel文件', apiErrorCodes.INVALID_FILE_TYPE);
+      return badRequest('请上传Excel文件', apiErrorCodes.INVALID_FILE_TYPE, undefined, request);
     }
 
     let ownerId: string;
     try {
       ownerId = await resolveCustomerOwnerId(currentUser, trimStr(formData.get('ownerId')) || null);
     } catch (error) {
-      return badRequest(mapPrismaWriteError(error));
+      return badRequest(mapPrismaWriteError(error), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -583,7 +583,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     await workbook.xlsx.load(workbookBuffer);
     const sheet = workbook.worksheets[0];
     if (!sheet) {
-      return badRequest('Excel为空', apiErrorCodes.IMPORT_EMPTY_FILE);
+      return badRequest('Excel为空', apiErrorCodes.IMPORT_EMPTY_FILE, undefined, request);
     }
 
     const headerRow = sheet.getRow(1);
@@ -595,7 +595,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const requiredHeaders = ['MARK', 'ORDER_NAME', 'NAME', 'PHONE', 'CITY', 'CONSIGNEE'];
     const missing = requiredHeaders.filter((h) => !headerMap.has(h));
     if (missing.length > 0) {
-      return badRequest(`模板缺少列: ${missing.join(', ')}`, apiErrorCodes.IMPORT_TEMPLATE_INVALID, { missing });
+      return badRequest(`模板缺少列: ${missing.join(', ')}`, apiErrorCodes.IMPORT_TEMPLATE_INVALID, { missing }, request);
     }
 
     const rows: ImportRow[] = [];
@@ -629,7 +629,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (rows.length === 0) {
-      return badRequest('没有可导入的数据行', apiErrorCodes.NO_IMPORT_ROWS);
+      return badRequest('没有可导入的数据行', apiErrorCodes.NO_IMPORT_ROWS, undefined, request);
     }
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
@@ -681,14 +681,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       };
     });
     if (rows.length === 0) {
-      return badRequest('没有可导入的数据行', apiErrorCodes.NO_IMPORT_ROWS);
+      return badRequest('没有可导入的数据行', apiErrorCodes.NO_IMPORT_ROWS, undefined, request);
     }
 
     let ownerId: string;
     try {
       ownerId = await resolveCustomerOwnerId(currentUser, trimStr(body.ownerId) || null);
     } catch (innerError) {
-      return badRequest(mapPrismaWriteError(innerError));
+      return badRequest(mapPrismaWriteError(innerError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
     const processed = await processCustomerImportRows(rows, currentUser as { id: string; role: UserRole }, ownerId, showExtended);
@@ -716,7 +716,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   if (action === 'create') {
     const payload = parsePayload(body);
     const error = validateRequired(payload);
-    if (error) return badRequest(error, apiErrorCodes.VALIDATION_ERROR);
+    if (error) return badRequest(error, apiErrorCodes.VALIDATION_ERROR, undefined, request);
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
 
@@ -729,7 +729,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         phone: payload.phone!,
       });
       if (duplicates.length > 0) {
-        return badRequest(formatDuplicateCustomerMessage(duplicates), apiErrorCodes.CUSTOMER_DUPLICATE);
+        return badRequest(formatDuplicateCustomerMessage(duplicates), apiErrorCodes.CUSTOMER_DUPLICATE, undefined, request);
       }
       await assertNoCustomerScopeConflict(ownerId, {
         orderName: payload.orderName!,
@@ -737,7 +737,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         companyName: showExtended ? payload.companyName || null : null,
       });
     } catch (innerError) {
-      return badRequest(mapPrismaWriteError(innerError));
+      return badRequest(mapPrismaWriteError(innerError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
 
     try {
@@ -762,28 +762,28 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
       return NextResponse.json({ success: true, data: toSalesView(created as Record<string, unknown>, showExtended) });
     } catch (createError) {
-      return badRequest(mapPrismaWriteError(createError));
+      return badRequest(mapPrismaWriteError(createError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
   }
 
   if (action === 'update') {
     const id = trimStr(body.id);
-    if (!id) return badRequest('客户ID不能为空', apiErrorCodes.VALIDATION_ERROR);
+    if (!id) return badRequest('客户ID不能为空', apiErrorCodes.VALIDATION_ERROR, undefined, request);
 
     const existing = await db.customer.findUnique({
       where: { id },
       select: { id: true, ownerId: true },
     });
     if (!existing) {
-      return notFound('客户不存在');
+      return notFound('客户不存在', undefined, request);
     }
     if (!canMutateCustomer(currentUser, existing.ownerId)) {
-      return forbidden('无权修改该客户', apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN);
+      return forbidden('无权修改该客户', apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, undefined, request);
     }
 
     const payload = parsePayload(body);
     const error = validateRequired(payload);
-    if (error) return badRequest(error, apiErrorCodes.VALIDATION_ERROR);
+    if (error) return badRequest(error, apiErrorCodes.VALIDATION_ERROR, undefined, request);
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
 
@@ -796,7 +796,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         phone: payload.phone!,
       }, id);
       if (duplicates.length > 0) {
-        return badRequest(formatDuplicateCustomerMessage(duplicates), apiErrorCodes.CUSTOMER_DUPLICATE);
+        return badRequest(formatDuplicateCustomerMessage(duplicates), apiErrorCodes.CUSTOMER_DUPLICATE, undefined, request);
       }
       await assertNoCustomerScopeConflict(
         ownerId,
@@ -808,7 +808,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         id
       );
     } catch (innerError) {
-      return badRequest(mapPrismaWriteError(innerError));
+      return badRequest(mapPrismaWriteError(innerError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
 
     try {
@@ -837,25 +837,25 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       }
       return NextResponse.json({ success: true, data: toSalesView(updated as Record<string, unknown>, showExtended) });
     } catch (updateError) {
-      return badRequest(mapPrismaWriteError(updateError));
+      return badRequest(mapPrismaWriteError(updateError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
   }
 
   if (action === 'delete') {
     if (currentUser.role !== UserRole.ADMIN) {
-      return forbidden('只有管理员可删除客户', apiErrorCodes.ROLE_NOT_ALLOWED);
+      return forbidden('只有管理员可删除客户', apiErrorCodes.ROLE_NOT_ALLOWED, undefined, request);
     }
     const id = trimStr(body.id);
-    if (!id) return badRequest('客户ID不能为空', apiErrorCodes.VALIDATION_ERROR);
+    if (!id) return badRequest('客户ID不能为空', apiErrorCodes.VALIDATION_ERROR, undefined, request);
 
     const existing = await db.customer.findUnique({ where: { id }, select: { id: true } });
     if (!existing) {
-      return notFound('客户不存在');
+      return notFound('客户不存在', undefined, request);
     }
 
     await db.customer.delete({ where: { id } });
     return NextResponse.json({ success: true, message: '客户已删除' });
   }
 
-  return badRequest('未知操作', apiErrorCodes.INVALID_ACTION, { action });
+  return badRequest('未知操作', apiErrorCodes.INVALID_ACTION, { action }, request);
 });

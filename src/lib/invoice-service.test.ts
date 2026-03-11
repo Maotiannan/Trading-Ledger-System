@@ -352,6 +352,24 @@ describe('invoice-service', () => {
     });
   });
 
+  it('deletes invoice in a transaction and records audit when no receipts remain', async () => {
+    mockDb.invoice.findFirst.mockResolvedValueOnce({
+      id: 'inv-1',
+      orders: [{ id: 'order-1' }],
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+    mockDb.invoice.delete.mockResolvedValueOnce({ id: 'inv-1' });
+
+    const result = await deleteInvoiceRecord(makeUser(), 'inv-1');
+
+    expect(result).toEqual({ message: '账单已删除' });
+    expect(mockDb.invoice.delete).toHaveBeenCalledWith({ where: { id: 'inv-1' } });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'INVOICE_DELETE',
+      targetId: 'inv-1',
+    }));
+  });
+
   it('adds orders by merging into an existing visible order and records audit', async () => {
     mockDb.invoice.findFirst.mockResolvedValueOnce({ id: 'inv-1' });
     mockResolveCustomer.mockResolvedValueOnce({
@@ -439,5 +457,28 @@ describe('invoice-service', () => {
         transferAmount: 30,
       }),
     }));
+  });
+
+  it('rejects balance transfer when source order has no overpaid amount', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-from',
+      orderNo: 'IB-01',
+      amount: 100,
+      createdBy: 'sales-1',
+    });
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ usd: 80 }]);
+
+    await expect(transferInvoiceBalance(makeUser(), {
+      fromOrderId: 'order-from',
+      toOrderNo: 'IB-02',
+      transferAmount: 10,
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '该订单没有多付余额可转移',
+      detail: expect.objectContaining({
+        fromOrderId: 'order-from',
+        fromBalance: 20,
+      }),
+    });
   });
 });

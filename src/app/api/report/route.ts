@@ -151,7 +151,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       status: 400,
       message: 'format must be excel or pdf',
       detail: { format },
-    });
+    }, request);
   }
 
   try {
@@ -174,6 +174,6 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       code: apiErrorCodes.REPORT_EXPORT_FAILED,
       status: 500,
       message: '报表导出失败',
-    });
+    }, request);
   }
 });

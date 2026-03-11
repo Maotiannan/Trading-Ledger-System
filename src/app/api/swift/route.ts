@@ -87,7 +87,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 });
 
@@ -175,12 +175,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         code: 'BAD_REQUEST',
         status: 400,
         message: error.message,
-      });
+      }, request);
     }
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
       message: '服务器错误',
-    });
+    }, request);
   }
 });

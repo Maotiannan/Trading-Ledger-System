@@ -161,7 +161,8 @@ export default async function run(t) {
     role: 'USER',
     name: 'Blocked User',
   }, 403);
-  t.assertMatch(userCreateDenied.data?.error || userCreateDenied.text, /无权限/, 'user cannot create accounts');
+  t.assertEqual(String(userCreateDenied.data?.code || ''), 'FORBIDDEN', 'user create denial returns FORBIDDEN code');
+  t.assertMatch(userCreateDenied.data?.error || userCreateDenied.text, /无权限|Permission denied/, 'user cannot create accounts');
 
   await t.logout();
 }

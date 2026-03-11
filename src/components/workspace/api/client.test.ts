@@ -12,7 +12,7 @@ describe('workspace api client', () => {
     document.documentElement.lang = originalLang;
   });
 
-  it('prefers error code translation over raw message when available', () => {
+  it('translates generic coded messages for english locale', () => {
     const message = getApiErrorMessage(
       { code: 'FORBIDDEN', error: '无权限' },
       'fallback',
@@ -29,6 +29,15 @@ describe('workspace api client', () => {
     );
 
     expect(message).toBe('Invalid email or password');
+  });
+
+  it('preserves specific server-side messages instead of collapsing them to generic code text', () => {
+    const message = getApiErrorMessage(
+      { code: 'BAD_REQUEST', error: 'SWIFT reject tolerance cannot be lower than warning tolerance' },
+      'fallback',
+    );
+
+    expect(message).toBe('SWIFT reject tolerance cannot be lower than warning tolerance');
   });
 
   it('appends detail text when requested', () => {

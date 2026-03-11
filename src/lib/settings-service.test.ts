@@ -167,7 +167,7 @@ describe('settings-service', () => {
     const result = await listSystemSettingsAuditLogs(makeUser(), { limit: 1 });
 
     expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      take: 2,
+      take: 50,
       where: expect.objectContaining({
         action: 'SYSTEM_SETTINGS_UPDATE',
         targetType: 'SYSTEM_SETTING',
@@ -180,6 +180,82 @@ describe('settings-service', () => {
       changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
     }));
     expect(result.nextCursor).toBe('audit-2');
+  });
+
+  it('filters system setting audit logs by actor, time range, and setting key', async () => {
+    mockDb.auditLog.findMany.mockResolvedValueOnce([
+      {
+        id: 'audit-3',
+        createdAt: new Date('2026-03-11T08:10:00.000Z'),
+        metadata: {
+          updatedKeys: ['OCR_DISABLED'],
+          changes: [{ key: 'OCR_DISABLED', before: 'false', after: 'true' }],
+        },
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+      {
+        id: 'audit-2',
+        createdAt: new Date('2026-03-11T08:00:00.000Z'),
+        metadata: {
+          updatedKeys: ['SWIFT_WARNING_TOLERANCE'],
+          changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
+        },
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+      {
+        id: 'audit-1',
+        createdAt: new Date('2026-03-11T07:30:00.000Z'),
+        metadata: {
+          updatedKeys: ['OCR_DISABLED'],
+          changes: [{ key: 'OCR_DISABLED', before: 'true', after: 'false' }],
+        },
+        actor: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+      },
+    ]);
+
+    const result = await listSystemSettingsAuditLogs(makeUser(), {
+      actor: 'admin@example.com',
+      key: 'OCR_DISABLED',
+      dateFrom: '2026-03-11',
+      dateTo: '2026-03-11',
+      limit: 20,
+    });
+
+    expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        action: 'SYSTEM_SETTINGS_UPDATE',
+        targetType: 'SYSTEM_SETTING',
+        createdAt: expect.objectContaining({
+          gte: new Date('2026-03-11T00:00:00.000'),
+          lte: new Date('2026-03-11T23:59:59.999'),
+        }),
+        actor: {
+          is: {
+            OR: [
+              { id: 'admin@example.com' },
+              { email: { contains: 'admin@example.com' } },
+              { name: { contains: 'admin@example.com' } },
+            ],
+          },
+        },
+      }),
+    }));
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'audit-3',
+        updatedKeys: ['OCR_DISABLED'],
+      }),
+    ]);
+  });
+
+  it('rejects reversed audit date ranges', async () => {
+    await expect(listSystemSettingsAuditLogs(makeUser(), {
+      dateFrom: '2026-03-11T09:00',
+      dateTo: '2026-03-11T08:00',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '结束时间不能早于开始时间',
+    });
   });
 
   it('validates swift tolerance ordering before saving config', async () => {

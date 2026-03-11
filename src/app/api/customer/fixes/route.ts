@@ -17,9 +17,9 @@ function trimStr(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function managerOnly(role: UserRole): NextResponse | null {
+function managerOnly(role: UserRole, request?: NextRequest): NextResponse | null {
   if (role === UserRole.ADMIN || role === UserRole.SALES) return null;
-  return createApiErrorResponse({ code: apiErrorCodes.FORBIDDEN, status: 403, message: '无权限' });
+  return createApiErrorResponse({ code: apiErrorCodes.FORBIDDEN, status: 403, message: '无权限' }, request);
 }
 
 async function salesCanEditExtended(): Promise<boolean> {
@@ -191,7 +191,7 @@ async function syncSameGroupCustomer(
 }
 
 export const GET = withAuth(async (_request: NextRequest, currentUser) => {
-  const denied = managerOnly(currentUser.role as UserRole);
+  const denied = managerOnly(currentUser.role as UserRole, _request);
   if (denied) return denied;
 
   const [orders, receipts] = await Promise.all([
@@ -234,7 +234,7 @@ export const GET = withAuth(async (_request: NextRequest, currentUser) => {
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
-  const denied = managerOnly(currentUser.role as UserRole);
+  const denied = managerOnly(currentUser.role as UserRole, request);
   if (denied) return denied;
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -246,12 +246,12 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       status: 400,
       message: '未知操作',
       detail: { action },
-    });
+    }, request);
   }
 
   const parsed = parsePayload(body);
   if ('error' in parsed) {
-    return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: parsed.error });
+    return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: parsed.error }, request);
   }
 
   let ownerId: string;
@@ -262,7 +262,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       code: apiErrorCodes.BAD_REQUEST,
       status: 400,
       message: mapPrismaWriteError(error),
-    });
+    }, request);
   }
 
   let customer;
@@ -273,20 +273,20 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       code: apiErrorCodes.BAD_REQUEST,
       status: 400,
       message: mapPrismaWriteError(error),
-    });
+    }, request);
   }
 
   if (action === 'resolve-order') {
     const orderId = trimStr(body.orderId);
-    if (!orderId) return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'orderId不能为空' });
+    if (!orderId) return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'orderId不能为空' }, request);
 
     const existingOrder = await db.order.findUnique({
       where: { id: orderId },
       select: { id: true, createdBy: true },
     });
-    if (!existingOrder) return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '订单不存在' });
+    if (!existingOrder) return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '订单不存在' }, request);
     if (currentUser.role === UserRole.SALES && existingOrder.createdBy !== currentUser.id) {
-      return createApiErrorResponse({ code: apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, status: 403, message: '无权修复该订单' });
+      return createApiErrorResponse({ code: apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, status: 403, message: '无权修复该订单' }, request);
     }
 
     const order = await db.order.update({
@@ -308,15 +308,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   }
 
   const receiptId = trimStr(body.receiptId);
-  if (!receiptId) return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'receiptId不能为空' });
+  if (!receiptId) return createApiErrorResponse({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'receiptId不能为空' }, request);
 
   const existingReceipt = await db.receipt.findUnique({
     where: { id: receiptId },
     select: { id: true, createdBy: true },
   });
-  if (!existingReceipt) return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '收据不存在' });
+  if (!existingReceipt) return createApiErrorResponse({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '收据不存在' }, request);
   if (currentUser.role === UserRole.SALES && existingReceipt.createdBy !== currentUser.id) {
-    return createApiErrorResponse({ code: apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, status: 403, message: '无权修复该收据' });
+    return createApiErrorResponse({ code: apiErrorCodes.CUSTOMER_SCOPE_FORBIDDEN, status: 403, message: '无权修复该收据' }, request);
   }
 
   const receipt = await db.receipt.update({

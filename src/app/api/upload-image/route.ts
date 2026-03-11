@@ -24,18 +24,18 @@ export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
     if (!currentUser) {
-      return createApiErrorResponse({ code: apiErrorCodes.AUTH_REQUIRED, status: 401, message: '未登录' });
+      return createApiErrorResponse({ code: apiErrorCodes.AUTH_REQUIRED, status: 401, message: '未登录' }, request);
     }
 
     const { searchParams } = new URL(request.url);
     const rawPath = searchParams.get('path') || '';
     if (!rawPath.startsWith(PUBLIC_UPLOAD_PREFIX)) {
-      return createApiErrorResponse({ code: apiErrorCodes.INVALID_FILE_PATH, status: 400, message: '无效图片路径' });
+      return createApiErrorResponse({ code: apiErrorCodes.INVALID_FILE_PATH, status: 400, message: '无效图片路径' }, request);
     }
 
     const relativePath = rawPath.slice(PUBLIC_UPLOAD_PREFIX.length);
     if (!relativePath || relativePath.includes('..')) {
-      return createApiErrorResponse({ code: apiErrorCodes.INVALID_FILE_PATH, status: 400, message: '无效图片路径' });
+      return createApiErrorResponse({ code: apiErrorCodes.INVALID_FILE_PATH, status: 400, message: '无效图片路径' }, request);
     }
 
     const ownerIds = await getOwnerVisibleIds(currentUser);
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
     if (!receipt && !detail && !swift) {
-      return createApiErrorResponse({ code: apiErrorCodes.FILE_ACCESS_DENIED, status: 403, message: '无权访问该图片' });
+      return createApiErrorResponse({ code: apiErrorCodes.FILE_ACCESS_DENIED, status: 403, message: '无权访问该图片' }, request);
     }
 
     const uploadDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
@@ -83,6 +83,6 @@ export async function GET(request: NextRequest) {
       code: apiErrorCodes.FILE_READ_FAILED,
       status: 404,
       message: '图片读取失败',
-    });
+    }, request);
   }
 }

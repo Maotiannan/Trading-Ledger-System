@@ -50,6 +50,8 @@ export function SettingsManager() {
     setSettingsAuditCursor,
     settingsAuditHasMore,
     setSettingsAuditHasMore,
+    settingsAuditFilters,
+    setSettingsAuditFilters,
     purgeForm,
     setPurgeForm,
     pwd,
@@ -61,6 +63,8 @@ export function SettingsManager() {
   const {
     loadSettings,
     loadSettingsAudit,
+    applyAuditFilters,
+    resetAuditFilters,
     handleSaveConfig,
     handleTestOcrConfig,
     handleChangePassword,
@@ -76,6 +80,7 @@ export function SettingsManager() {
     purgeForm,
     pwd,
     auditCursor: settingsAuditCursor,
+    auditFilters: settingsAuditFilters,
     setLoading,
     setSavingConfig,
     setTestingConfig,
@@ -94,6 +99,7 @@ export function SettingsManager() {
     setSettingsAuditEntries,
     setSettingsAuditCursor,
     setSettingsAuditHasMore,
+    setSettingsAuditFilters,
     setPurgeForm,
     setPwd,
   });
@@ -168,8 +174,13 @@ export function SettingsManager() {
         loadingMore={auditLoadingMore}
         hasMore={settingsAuditHasMore}
         entries={settingsAuditEntries}
-        onRefresh={() => { void loadSettingsAudit(); }}
-        onLoadMore={() => { void loadSettingsAudit({ append: true }); }}
+        filters={settingsAuditFilters}
+        keyOptions={Object.keys(config).sort()}
+        onFilterChange={setSettingsAuditFilters}
+        onApplyFilters={() => { void applyAuditFilters(); }}
+        onResetFilters={() => { void resetAuditFilters(); }}
+        onRefresh={() => { void loadSettingsAudit({ filters: settingsAuditFilters }); }}
+        onLoadMore={() => { void loadSettingsAudit({ append: true, filters: settingsAuditFilters }); }}
       />
     </div>
   );

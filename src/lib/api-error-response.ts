@@ -1,16 +1,60 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { type ApiErrorCode, apiErrorCodes, isApiError } from '@/lib/api-error';
+import { defaultLocale, isSupportedLocale, type SupportedLocale } from '@/lib/i18n';
+import { translateApiErrorCode, translateApiErrorMessage } from '@/lib/api-error-catalog';
+
+type RequestLike = Request | NextRequest | {
+  headers?: Headers | { get(name: string): string | null | undefined };
+  cookies?: { get(name: string): { value?: string | null } | undefined };
+} | null | undefined;
+
+function readCookieFromHeader(cookieHeader: string, key: string): string | null {
+  const cookies = cookieHeader.split(';');
+  for (const row of cookies) {
+    const [name, ...rest] = row.split('=');
+    if (name?.trim() !== key) continue;
+    return decodeURIComponent(rest.join('=').trim());
+  }
+  return null;
+}
+
+function resolveRequestLocale(request?: RequestLike): SupportedLocale {
+  const cookieStore = request && typeof request === 'object' && 'cookies' in request
+    ? request.cookies
+    : undefined;
+  const cookieLocale = cookieStore?.get?.('NEXT_LOCALE')?.value
+    || readCookieFromHeader(request?.headers?.get?.('cookie') || '', 'NEXT_LOCALE');
+  if (isSupportedLocale(cookieLocale)) return cookieLocale;
+
+  const acceptLanguage = request?.headers?.get?.('accept-language') || '';
+  const firstToken = acceptLanguage.split(',')[0]?.trim().slice(0, 2);
+  if (isSupportedLocale(firstToken)) return firstToken;
+  return defaultLocale;
+}
+
+function localizeApiErrorMessage(
+  code: ApiErrorCode,
+  message: string,
+  locale: SupportedLocale,
+): string {
+  if (message) {
+    return translateApiErrorMessage(message, locale);
+  }
+  return translateApiErrorCode(code, message, locale);
+}
 
 export function createApiErrorResponse(config: {
   code: ApiErrorCode;
   status: number;
   message: string;
   detail?: unknown;
-}): NextResponse {
+}, request?: RequestLike): NextResponse {
+  const locale = resolveRequestLocale(request);
+  const message = localizeApiErrorMessage(config.code, config.message, locale);
   return NextResponse.json(
     {
       success: false,
-      error: config.message,
+      error: message,
       code: config.code,
       detail: config.detail ?? null,
     },
@@ -22,6 +66,7 @@ export function createApiErrorResponseByStatus(
   status: number,
   message: string,
   detail?: unknown,
+  request?: RequestLike,
 ): NextResponse {
   const code =
     status === 400
@@ -36,7 +81,7 @@ export function createApiErrorResponseByStatus(
               ? apiErrorCodes.CONFLICT
               : apiErrorCodes.INTERNAL_ERROR;
 
-  return createApiErrorResponse({ code, status, message, detail });
+  return createApiErrorResponse({ code, status, message, detail }, request);
 }
 
 export function toApiErrorResponse(
@@ -46,13 +91,16 @@ export function toApiErrorResponse(
     status?: number;
     message?: string;
     detail?: unknown;
-  } = {}
+  } = {},
+  request?: RequestLike,
 ): NextResponse {
+  const locale = resolveRequestLocale(request);
   if (isApiError(error)) {
+    const message = localizeApiErrorMessage(error.code, error.message, locale);
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
+        error: message,
         code: error.code,
         detail: error.detail ?? null,
       },
@@ -60,11 +108,13 @@ export function toApiErrorResponse(
     );
   }
 
+  const fallbackCode = fallback.code || 'INTERNAL_ERROR';
+  const fallbackMessage = fallback.message || '服务器错误';
   return NextResponse.json(
     {
       success: false,
-      error: fallback.message || '服务器错误',
-      code: fallback.code || 'INTERNAL_ERROR',
+      error: localizeApiErrorMessage(fallbackCode, fallbackMessage, locale),
+      code: fallbackCode,
       detail: fallback.detail ?? null,
     },
     { status: fallback.status ?? 500 }

@@ -2,9 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, RefreshCw } from 'lucide-react';
-import type { SettingsAuditEntry } from '../types';
+import type { SettingsAuditEntry, SettingsAuditFilterState } from '../types';
 
 export type SettingsAuditCardProps = {
   tx: (zh: string, en: string) => string;
@@ -13,6 +15,11 @@ export type SettingsAuditCardProps = {
   loadingMore: boolean;
   hasMore: boolean;
   entries: SettingsAuditEntry[];
+  filters: SettingsAuditFilterState;
+  keyOptions: string[];
+  onFilterChange: React.Dispatch<React.SetStateAction<SettingsAuditFilterState>>;
+  onApplyFilters: () => void;
+  onResetFilters: () => void;
   onRefresh: () => void;
   onLoadMore: () => void;
 };
@@ -28,6 +35,11 @@ export function SettingsAuditCard({
   loadingMore,
   hasMore,
   entries,
+  filters,
+  keyOptions,
+  onFilterChange,
+  onApplyFilters,
+  onResetFilters,
   onRefresh,
   onLoadMore,
 }: SettingsAuditCardProps) {
@@ -53,9 +65,105 @@ export function SettingsAuditCard({
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : entries.length === 0 ? (
-          <p className="text-sm text-gray-500">{tx('暂无配置审计记录。', 'No configuration audit logs yet.')}</p>
+          <>
+            <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1">
+                <Label>{tx('操作者', 'Actor')}</Label>
+                <Input
+                  value={filters.actorQuery}
+                  placeholder={tx('邮箱 / 名称 / ID', 'Email / name / ID')}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, actorQuery: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{tx('配置键', 'Setting Key')}</Label>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={filters.settingKey}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, settingKey: event.target.value }))}
+                >
+                  <option value="">{tx('全部配置键', 'All Setting Keys')}</option>
+                  {keyOptions.map((key) => (
+                    <option key={key} value={key}>{key}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>{tx('开始时间', 'Date From')}</Label>
+                <Input
+                  type="datetime-local"
+                  value={filters.dateFrom}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateFrom: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{tx('结束时间', 'Date To')}</Label>
+                <Input
+                  type="datetime-local"
+                  value={filters.dateTo}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateTo: event.target.value }))}
+                />
+              </div>
+              <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
+                <Button variant="outline" onClick={onApplyFilters}>
+                  {tx('应用筛选', 'Apply Filters')}
+                </Button>
+                <Button variant="ghost" onClick={onResetFilters}>
+                  {tx('重置筛选', 'Reset Filters')}
+                </Button>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500">{tx('暂无配置审计记录。', 'No configuration audit logs yet.')}</p>
+          </>
         ) : (
           <>
+            <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-1">
+                <Label>{tx('操作者', 'Actor')}</Label>
+                <Input
+                  value={filters.actorQuery}
+                  placeholder={tx('邮箱 / 名称 / ID', 'Email / name / ID')}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, actorQuery: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{tx('配置键', 'Setting Key')}</Label>
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={filters.settingKey}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, settingKey: event.target.value }))}
+                >
+                  <option value="">{tx('全部配置键', 'All Setting Keys')}</option>
+                  {keyOptions.map((key) => (
+                    <option key={key} value={key}>{key}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <Label>{tx('开始时间', 'Date From')}</Label>
+                <Input
+                  type="datetime-local"
+                  value={filters.dateFrom}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateFrom: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>{tx('结束时间', 'Date To')}</Label>
+                <Input
+                  type="datetime-local"
+                  value={filters.dateTo}
+                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateTo: event.target.value }))}
+                />
+              </div>
+              <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
+                <Button variant="outline" onClick={onApplyFilters}>
+                  {tx('应用筛选', 'Apply Filters')}
+                </Button>
+                <Button variant="ghost" onClick={onResetFilters}>
+                  {tx('重置筛选', 'Reset Filters')}
+                </Button>
+              </div>
+            </div>
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>

@@ -178,6 +178,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.63（2026-03-11）：服务端错误字典继续下沉到 `api-error-catalog + api-error-response`，后端开始按 `NEXT_LOCALE / Accept-Language` 直接返回本地化错误；设置页配置审计新增按操作者/配置键/时间范围筛选；前端 workspace API client 改为优先保留服务端详细错误，再用错误码兜底；新增 `api-error-catalog.test.ts` 与更多 `settings-service / use-settings-actions / use-customer-actions / invoice-service` 回归，coverage threshold 第十一次提升到 `50/75/69/67`，其中 `customer-actions` 提升到 `40/65/50/50`、`invoice-service` 提升到 `39/38/47/44`
 - v1.0.58（2026-03-11）：`settings / receipt / detail / swift` 写接口继续迁到 `service + ApiError + runInTransaction`；新增 `SWIFT_WARNING_TOLERANCE / SWIFT_REJECT_TOLERANCE` 系统配置与设置页编辑，修复 `system-settings` 热缓存缺陷，并补齐 `settings-service / receipt-service / detail-service / swift-service / system-settings` 单测；isolated API 已验证设置修改后 SWIFT 容差立即生效，coverage threshold 第六轮提升到 `44/70/64/64`
 - v1.0.59（2026-03-11）：`invoice` 写接口继续迁到 `invoice-service + ApiError + runInTransaction`，`/api/invoice` 路由收敛为薄路由；系统配置更新审计新增“前后值 + 操作人”记录并对敏感值脱敏；新增 `invoice-service` 单测与导入推断/冲突回归，coverage threshold 第七轮提升到 `45/71/65/65`
 - v1.0.60（2026-03-11）：`invoice-write` 继续事务化，整批订单先校验再统一写入 invoice/order/orderAlias，并在提交后执行 grouped order consolidate、deposit 补挂与余额重算；新增 `audit-catalog.ts` 与 `apiErrorCodes`，把 `deletion/settings/receipt/detail/swift/invoice` 统一切到审计动作/目标类型与错误码常量目录；新增 `invoice-write` 单测并把 coverage threshold 第八轮提升到 `46/72/66/66`

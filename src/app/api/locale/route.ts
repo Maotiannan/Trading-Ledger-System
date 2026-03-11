@@ -24,6 +24,6 @@ export async function POST(request: NextRequest) {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,
       message: '设置语言失败',
-    });
+    }, request);
   }
 }

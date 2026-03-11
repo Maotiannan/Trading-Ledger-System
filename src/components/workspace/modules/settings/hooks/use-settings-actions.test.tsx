@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useSettingsActions } from './use-settings-actions';
-import type { PasswordFormState, PurgeFormState } from '../types';
+import type { PasswordFormState, PurgeFormState, SettingsAuditFilterState } from '../types';
 import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
@@ -23,12 +23,14 @@ describe('useSettingsActions', () => {
   const tx = (zh: string, _en: string) => zh;
   let purgeFormState: PurgeFormState;
   let pwdState: PasswordFormState;
+  let auditFiltersState: SettingsAuditFilterState;
 
   beforeEach(() => {
     mockApiCall.mockReset();
     mockGetApiErrorMessage.mockClear();
     purgeFormState = { targetUserId: 'sales-1', password: 'Admin@2026!', modules: ['customer'] };
     pwdState = { oldPassword: 'old-pass', newPassword: 'new-pass-1', confirmPassword: 'new-pass-1' };
+    auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '' };
     jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
@@ -48,6 +50,7 @@ describe('useSettingsActions', () => {
       purgeForm: purgeFormState,
       pwd: pwdState,
       auditCursor: null,
+      auditFilters: auditFiltersState,
       setLoading: jest.fn(),
       setSavingConfig: jest.fn(),
       setTestingConfig: jest.fn(),
@@ -66,6 +69,9 @@ describe('useSettingsActions', () => {
       setSettingsAuditEntries: jest.fn(),
       setSettingsAuditCursor: jest.fn(),
       setSettingsAuditHasMore: jest.fn(),
+      setSettingsAuditFilters: jest.fn((value: SettingsAuditFilterState | ((prev: SettingsAuditFilterState) => SettingsAuditFilterState)) => {
+        auditFiltersState = typeof value === 'function' ? value(auditFiltersState) : value;
+      }),
       setPurgeForm: jest.fn((value: PurgeFormState | ((prev: PurgeFormState) => PurgeFormState)) => {
         purgeFormState = typeof value === 'function' ? value(purgeFormState) : value;
       }),
@@ -244,6 +250,53 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditEntries).toHaveBeenCalledWith(expect.any(Function));
     expect(deps.setSettingsAuditCursor).toHaveBeenCalledWith('audit-1');
     expect(deps.setSettingsAuditHasMore).toHaveBeenCalledWith(true);
+  });
+
+  it('includes audit filters when applying audit filters', async () => {
+    auditFiltersState = {
+      actorQuery: 'admin@example.com',
+      settingKey: 'OCR_DISABLED',
+      dateFrom: '2026-03-11T07:00',
+      dateTo: '2026-03-11T08:00',
+    };
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: { items: [], nextCursor: null },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.applyAuditFilters();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith(
+      'settings?view=audit&limit=20&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
+    );
+  });
+
+  it('resets audit filters and reloads unfiltered audit logs', async () => {
+    auditFiltersState = {
+      actorQuery: 'admin@example.com',
+      settingKey: 'OCR_DISABLED',
+      dateFrom: '2026-03-11T07:00',
+      dateTo: '2026-03-11T08:00',
+    };
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: { items: [], nextCursor: null },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.resetAuditFilters();
+    });
+
+    expect(auditFiltersState).toEqual({ actorQuery: '', settingKey: '', dateFrom: '', dateTo: '' });
+    expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit&limit=20');
   });
 
   it('clears audit state without requesting backend when audit is not allowed', async () => {

@@ -36,3 +36,10 @@ export type SettingsAuditEntry = {
   updatedKeys: string[];
   changes: SettingsAuditChange[];
 };
+
+export type SettingsAuditFilterState = {
+  actorQuery: string;
+  settingKey: string;
+  dateFrom: string;
+  dateTo: string;
+};

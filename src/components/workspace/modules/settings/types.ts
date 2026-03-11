@@ -18,3 +18,21 @@ export type PasswordFormState = {
   newPassword: string;
   confirmPassword: string;
 };
+
+export type SettingsAuditChange = {
+  key: string;
+  before: string;
+  after: string;
+};
+
+export type SettingsAuditEntry = {
+  id: string;
+  createdAt: string;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  updatedKeys: string[];
+  changes: SettingsAuditChange[];
+};

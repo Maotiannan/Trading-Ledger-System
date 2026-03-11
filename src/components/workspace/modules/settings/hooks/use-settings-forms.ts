@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { BranchPurgeTarget, PasswordFormState, PurgeFormState } from '../types';
+import type { BranchPurgeTarget, PasswordFormState, PurgeFormState, SettingsAuditEntry } from '../types';
 
 export function useSettingsForms() {
   const [loading, setLoading] = useState(false);
@@ -12,10 +12,16 @@ export function useSettingsForms() {
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [canEditConfig, setCanEditConfig] = useState(false);
+  const [canViewAudit, setCanViewAudit] = useState(false);
   const [canPurgeBranch, setCanPurgeBranch] = useState(false);
   const [branchPurgeTargets, setBranchPurgeTargets] = useState<BranchPurgeTarget[]>([]);
   const [purgeModuleKeys, setPurgeModuleKeys] = useState<string[]>([]);
   const [purgingBranch, setPurgingBranch] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+  const [settingsAuditEntries, setSettingsAuditEntries] = useState<SettingsAuditEntry[]>([]);
+  const [settingsAuditCursor, setSettingsAuditCursor] = useState<string | null>(null);
+  const [settingsAuditHasMore, setSettingsAuditHasMore] = useState(false);
   const [purgeForm, setPurgeForm] = useState<PurgeFormState>({
     targetUserId: '',
     password: '',
@@ -59,6 +65,8 @@ export function useSettingsForms() {
     setConfig,
     canEditConfig,
     setCanEditConfig,
+    canViewAudit,
+    setCanViewAudit,
     canPurgeBranch,
     setCanPurgeBranch,
     branchPurgeTargets,
@@ -67,6 +75,16 @@ export function useSettingsForms() {
     setPurgeModuleKeys,
     purgingBranch,
     setPurgingBranch,
+    auditLoading,
+    setAuditLoading,
+    auditLoadingMore,
+    setAuditLoadingMore,
+    settingsAuditEntries,
+    setSettingsAuditEntries,
+    settingsAuditCursor,
+    setSettingsAuditCursor,
+    settingsAuditHasMore,
+    setSettingsAuditHasMore,
     purgeForm,
     setPurgeForm,
     pwd,

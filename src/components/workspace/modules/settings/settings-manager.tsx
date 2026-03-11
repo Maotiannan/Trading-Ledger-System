@@ -5,7 +5,7 @@ import { useStore } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUiText } from '@/components/workspace/shared';
-import { BranchPurgeCard, PasswordSettingsCard, SystemConfigCard } from './components';
+import { BranchPurgeCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
 import { useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
 
@@ -30,6 +30,8 @@ export function SettingsManager() {
     setConfig,
     canEditConfig,
     setCanEditConfig,
+    canViewAudit,
+    setCanViewAudit,
     canPurgeBranch,
     setCanPurgeBranch,
     branchPurgeTargets,
@@ -38,6 +40,16 @@ export function SettingsManager() {
     setPurgeModuleKeys,
     purgingBranch,
     setPurgingBranch,
+    auditLoading,
+    setAuditLoading,
+    auditLoadingMore,
+    setAuditLoadingMore,
+    settingsAuditEntries,
+    setSettingsAuditEntries,
+    settingsAuditCursor,
+    setSettingsAuditCursor,
+    settingsAuditHasMore,
+    setSettingsAuditHasMore,
     purgeForm,
     setPurgeForm,
     pwd,
@@ -48,6 +60,7 @@ export function SettingsManager() {
 
   const {
     loadSettings,
+    loadSettingsAudit,
     handleSaveConfig,
     handleTestOcrConfig,
     handleChangePassword,
@@ -56,30 +69,43 @@ export function SettingsManager() {
     tx,
     userEmail: user?.email,
     canEditConfig,
+    canViewAudit,
     canPurgeBranch,
     config,
     branchPurgeTargets,
     purgeForm,
     pwd,
+    auditCursor: settingsAuditCursor,
     setLoading,
     setSavingConfig,
     setTestingConfig,
     setPasswordLoading,
+    setAuditLoading,
+    setAuditLoadingMore,
     setMessage,
     setError,
     setConfig,
     setCanEditConfig,
+    setCanViewAudit,
     setCanPurgeBranch,
     setBranchPurgeTargets,
     setPurgeModuleKeys,
     setPurgingBranch,
+    setSettingsAuditEntries,
+    setSettingsAuditCursor,
+    setSettingsAuditHasMore,
     setPurgeForm,
     setPwd,
   });
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (!canViewAudit) return;
+    void loadSettingsAudit();
+  }, [canViewAudit, loadSettingsAudit]);
 
   return (
     <div className="space-y-6">
@@ -133,6 +159,17 @@ export function SettingsManager() {
         onConfigFieldChange={updateConfigField}
         onTestOcrConfig={handleTestOcrConfig}
         onSaveConfig={handleSaveConfig}
+      />
+
+      <SettingsAuditCard
+        tx={tx}
+        canViewAudit={canViewAudit}
+        loading={auditLoading}
+        loadingMore={auditLoadingMore}
+        hasMore={settingsAuditHasMore}
+        entries={settingsAuditEntries}
+        onRefresh={() => { void loadSettingsAudit(); }}
+        onLoadMore={() => { void loadSettingsAudit({ append: true }); }}
       />
     </div>
   );

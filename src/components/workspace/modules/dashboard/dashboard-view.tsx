@@ -19,6 +19,7 @@ import {
   apiCall,
   fetchCustomerCandidatesByMark,
   fetchServerDate,
+  getApiResponseErrorMessage,
   getDisplayImageUrl,
   getErrorMessage,
   initCustomerImportRowViews,
@@ -70,8 +71,7 @@ export function Dashboard() {
         credentials: 'include',
       });
       if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        alert(error.error || t('exportFailed'));
+        alert(await getApiResponseErrorMessage(response, t('exportFailed')));
         return;
       }
 
@@ -172,4 +172,3 @@ export function Dashboard() {
     </div>
   );
 }
-

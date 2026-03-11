@@ -4,6 +4,7 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import {
   listSettings,
+  listSystemSettingsAuditLogs,
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
@@ -12,6 +13,18 @@ import {
 
 export const GET = withAuth(async (_request, currentUser) => {
   try {
+    const view = _request.nextUrl.searchParams.get('view');
+    if (view === 'audit') {
+      const cursor = _request.nextUrl.searchParams.get('cursor');
+      const limitRaw = _request.nextUrl.searchParams.get('limit');
+      const limit = limitRaw ? Number(limitRaw) : undefined;
+      const data = await listSystemSettingsAuditLogs(currentUser, {
+        cursor,
+        limit,
+      });
+      return NextResponse.json({ success: true, data });
+    }
+
     const data = await listSettings(currentUser);
     return NextResponse.json({ success: true, data });
   } catch (error) {

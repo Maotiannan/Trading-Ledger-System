@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, getErrorMessage } from '@/components/workspace/shared';
 import type { DetailDirectItemForm, DetailOcrResult } from '../types';
 
 export type DetailActionText = (zh: string, en: string) => string;
@@ -72,12 +72,12 @@ export function useDetailActions({
         setSavedImagePath(result.data.image || null);
       } else {
         setSavedImagePath(null);
-        setError(result.error || tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
+        setError(getErrorMessage(result, tx('AI识别失败，请重试', 'AI recognition failed, please retry.')));
       }
     } catch (err) {
       console.error('OCR error:', err);
       setSavedImagePath(null);
-      setError(tx('网络错误，请重试', 'Network error, please retry.'));
+      setError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
     }
     setUploading(false);
   };
@@ -106,11 +106,11 @@ export function useDetailActions({
         setSavedImagePath(null);
         await loadDetails();
       } else {
-        setError(result.error || tx('创建失败，请重试', 'Create failed, please retry.'));
+        setError(getErrorMessage(result, tx('创建失败，请重试', 'Create failed, please retry.')));
       }
     } catch (err) {
       console.error('Confirm error:', err);
-      setError(tx('网络错误，请重试', 'Network error, please retry.'));
+      setError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
     } finally {
       setSubmitting(false);
     }
@@ -134,7 +134,7 @@ export function useDetailActions({
       alert(tx('删除申请已提交，等待管理员审批', 'Deletion request submitted. Waiting for admin approval.'));
       await loadDetails();
     } else {
-      alert(result.error || tx('申请失败', 'Request failed'));
+      alert(getErrorMessage(result, tx('申请失败', 'Request failed')));
     }
   };
 
@@ -163,10 +163,10 @@ export function useDetailActions({
         resetDirectForm();
         await loadDetails();
       } else {
-        setError(result.error || tx('创建失败', 'Create failed'));
+        setError(getErrorMessage(result, tx('创建失败', 'Create failed')));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : tx('创建失败', 'Create failed'));
+      setError(getErrorMessage(err, tx('创建失败', 'Create failed')));
     }
   };
 

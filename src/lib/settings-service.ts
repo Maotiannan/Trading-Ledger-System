@@ -19,6 +19,7 @@ import {
 const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'all'] as const;
 type PurgeModuleKey = typeof purgeModuleKeys[number];
 type SelectedPurgeModule = Exclude<PurgeModuleKey, 'all'>;
+const SETTINGS_AUDIT_PAGE_SIZE = 20;
 
 type BranchPurgeTarget = {
   id: string;
@@ -28,6 +29,54 @@ type BranchPurgeTarget = {
   role: UserRole;
   parentId: string | null;
 };
+
+export type SystemSettingsAuditChange = {
+  key: string;
+  before: string;
+  after: string;
+};
+
+export type SystemSettingsAuditEntry = {
+  id: string;
+  createdAt: string;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  updatedKeys: string[];
+  changes: SystemSettingsAuditChange[];
+};
+
+function normalizeAuditChanges(metadata: unknown): SystemSettingsAuditChange[] {
+  if (!metadata || typeof metadata !== 'object') return [];
+  const changes = (metadata as { changes?: unknown }).changes;
+  if (!Array.isArray(changes)) return [];
+  return changes
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const key = typeof row.key === 'string' ? row.key : '';
+      if (!key) return null;
+      return {
+        key,
+        before: typeof row.before === 'string' ? row.before : '',
+        after: typeof row.after === 'string' ? row.after : '',
+      };
+    })
+    .filter((item): item is SystemSettingsAuditChange => Boolean(item));
+}
+
+function normalizeAuditUpdatedKeys(metadata: unknown, changes: SystemSettingsAuditChange[]): string[] {
+  if (metadata && typeof metadata === 'object') {
+    const updatedKeys = (metadata as { updatedKeys?: unknown }).updatedKeys;
+    if (Array.isArray(updatedKeys)) {
+      const keys = updatedKeys.map((item) => String(item || '').trim()).filter(Boolean);
+      if (keys.length > 0) return keys;
+    }
+  }
+  return changes.map((item) => item.key);
+}
 
 function assertAdmin(currentUser: CurrentUser, message: string): void {
   if (currentUser.role !== UserRole.ADMIN) {
@@ -161,6 +210,7 @@ export async function listSettings(currentUser: CurrentUser): Promise<{
   branchPurgeTargets: BranchPurgeTarget[];
   canPurgeBranch: boolean;
   purgeModuleKeys: readonly PurgeModuleKey[];
+  canViewAudit: boolean;
 }> {
   const settings = await getSystemSettingsWithDefaults(editableSystemSettingKeys);
 
@@ -179,6 +229,59 @@ export async function listSettings(currentUser: CurrentUser): Promise<{
     branchPurgeTargets,
     canPurgeBranch: currentUser.role === UserRole.ADMIN,
     purgeModuleKeys,
+    canViewAudit: currentUser.role === UserRole.ADMIN,
+  };
+}
+
+export async function listSystemSettingsAuditLogs(
+  currentUser: CurrentUser,
+  options: { cursor?: string | null; limit?: number } = {}
+): Promise<{
+  items: SystemSettingsAuditEntry[];
+  nextCursor: string | null;
+  limit: number;
+}> {
+  assertAdmin(currentUser, '只有管理员可以查看系统配置审计');
+
+  const limit = Math.min(Math.max(Number(options.limit) || SETTINGS_AUDIT_PAGE_SIZE, 1), 50);
+  const rows = await db.auditLog.findMany({
+    where: {
+      action: auditActions.SYSTEM_SETTINGS_UPDATE,
+      targetType: auditTargetTypes.SYSTEM_SETTING,
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
+    take: limit + 1,
+    select: {
+      id: true,
+      createdAt: true,
+      metadata: true,
+      actor: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  const hasMore = rows.length > limit;
+  const items = rows.slice(0, limit).map((row) => {
+    const changes = normalizeAuditChanges(row.metadata);
+    return {
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+      actor: row.actor,
+      updatedKeys: normalizeAuditUpdatedKeys(row.metadata, changes),
+      changes,
+    };
+  });
+
+  return {
+    items,
+    nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    limit,
   };
 }
 

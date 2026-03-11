@@ -1,15 +1,17 @@
 import { act, renderHook } from '@testing-library/react';
 import { useInvoiceActions } from './use-invoice-actions';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiResponseErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
   return {
     apiCall: jest.fn(),
+    getApiResponseErrorMessage: jest.fn(async (_response: Response, fallback: string) => fallback),
     getErrorMessage: jest.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback),
   };
 });
 
 const mockApiCall = apiCall as jest.Mock;
+const mockGetApiResponseErrorMessage = getApiResponseErrorMessage as jest.Mock;
 const mockGetErrorMessage = getErrorMessage as jest.Mock;
 
 describe('useInvoiceActions', () => {
@@ -26,6 +28,7 @@ describe('useInvoiceActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockGetApiResponseErrorMessage.mockClear();
     mockGetErrorMessage.mockClear();
     loadInvoices.mockClear();
     setFormError.mockClear();

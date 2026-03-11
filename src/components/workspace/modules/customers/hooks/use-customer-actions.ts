@@ -3,6 +3,8 @@
 import { useCallback } from 'react';
 import {
   apiCall,
+  getApiResponseErrorMessage,
+  getErrorMessage,
   initCustomerImportRowViews,
   mergeCustomerImportRowViews,
   toCustomerImportRowResults,
@@ -100,7 +102,7 @@ export function useCustomerActions({
     };
     const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
-      alert(result.error || tx('保存失败', 'Save failed'));
+      alert(getErrorMessage(result, tx('保存失败', 'Save failed')));
       return;
     }
     setShowCreate(false);
@@ -114,7 +116,7 @@ export function useCustomerActions({
     if (!confirm(tx('确定删除该客户吗？', 'Delete this customer?'))) return;
     const result = await apiCall('customer', { method: 'POST', body: JSON.stringify({ action: 'delete', id }) });
     if (!result.success) {
-      alert(result.error || tx('删除失败', 'Delete failed'));
+      alert(getErrorMessage(result, tx('删除失败', 'Delete failed')));
       return;
     }
     await loadCustomers();
@@ -138,7 +140,7 @@ export function useCustomerActions({
     };
     const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
     if (!result.success) {
-      alert(result.error || tx('修复失败', 'Fix failed'));
+      alert(getErrorMessage(result, tx('修复失败', 'Fix failed')));
       return;
     }
     setFixingTarget(null);
@@ -153,7 +155,9 @@ export function useCustomerActions({
         method: 'GET',
         credentials: 'include',
       });
-      if (!response.ok) throw new Error(tx('模板下载失败', 'Failed to download template'));
+      if (!response.ok) {
+        throw new Error(await getApiResponseErrorMessage(response, tx('模板下载失败', 'Failed to download template')));
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -183,14 +187,14 @@ export function useCustomerActions({
       const result = await response.json().catch(() => ({}));
       if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
 
       const rowResults = toCustomerImportRowResults(result?.rowResults);
       const fallbackResults = rowResults.length > 0 ? rowResults : toCustomerImportRowResultsFromIssues(result?.issueRows);
       if (fallbackResults.length === 0) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       setCustomerImportRows(initCustomerImportRowViews(fallbackResults));
       resetImportTable();
@@ -198,7 +202,7 @@ export function useCustomerActions({
       setShowCustomerImportIssues(true);
       await loadCustomers();
     } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
+      alert(getErrorMessage(error, tx('导入失败', 'Import failed')));
     } finally {
       setCustomerImporting(false);
       if (customerImportInputRef.current) customerImportInputRef.current.value = '';
@@ -246,19 +250,19 @@ export function useCustomerActions({
       const result = await response.json().catch(() => ({}));
       if (!response.ok && !Array.isArray(result?.rowResults) && !Array.isArray(result?.issueRows)) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       const rowResults = toCustomerImportRowResults(result?.rowResults);
       const fallbackResults = rowResults.length > 0 ? rowResults : toCustomerImportRowResultsFromIssues(result?.issueRows);
       if (fallbackResults.length === 0) {
         const details = Array.isArray(result?.details) ? `\n${result.details.join('\n')}` : '';
-        throw new Error(`${result?.error || tx('导入失败', 'Import failed')}${details}`);
+        throw new Error(`${getErrorMessage(result, tx('导入失败', 'Import failed'))}${details}`);
       }
       setCustomerImportRows((prev) => mergeCustomerImportRowViews(prev, fallbackResults));
       setCustomerImportMessage(String(result?.message || tx('重试完成', 'Retry completed')));
       await loadCustomers();
     } catch (error) {
-      alert(error instanceof Error ? error.message : tx('导入失败', 'Import failed'));
+      alert(getErrorMessage(error, tx('导入失败', 'Import failed')));
     } finally {
       setCustomerIssueSubmitting(false);
     }

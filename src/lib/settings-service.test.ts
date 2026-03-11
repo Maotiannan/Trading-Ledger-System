@@ -2,6 +2,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
   listSettings,
+  listSystemSettingsAuditLogs,
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
@@ -36,7 +37,7 @@ jest.mock('@/lib/db', () => ({
     invoice: { deleteMany: jest.fn(), findMany: jest.fn() },
     customer: { deleteMany: jest.fn(), findMany: jest.fn() },
     deletionRequest: { deleteMany: jest.fn() },
-    auditLog: { deleteMany: jest.fn() },
+    auditLog: { deleteMany: jest.fn(), findMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -105,7 +106,7 @@ const mockDb = db as unknown as {
   invoice: { deleteMany: jest.Mock; findMany: jest.Mock };
   customer: { deleteMany: jest.Mock; findMany: jest.Mock };
   deletionRequest: { deleteMany: jest.Mock };
-  auditLog: { deleteMany: jest.Mock };
+  auditLog: { deleteMany: jest.Mock; findMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -137,8 +138,48 @@ describe('settings-service', () => {
 
     expect(result.settings.SWIFT_WARNING_TOLERANCE).toBe('5');
     expect(result.canEdit).toBe(true);
+    expect(result.canViewAudit).toBe(true);
     expect(result.canPurgeBranch).toBe(true);
     expect(result.branchPurgeTargets).toHaveLength(1);
+  });
+
+  it('lists system setting audit logs with actor and changes', async () => {
+    mockDb.auditLog.findMany.mockResolvedValueOnce([
+      {
+        id: 'audit-2',
+        createdAt: new Date('2026-03-11T07:20:00.000Z'),
+        metadata: {
+          updatedKeys: ['SWIFT_WARNING_TOLERANCE'],
+          changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
+        },
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+      {
+        id: 'audit-1',
+        createdAt: new Date('2026-03-11T07:10:00.000Z'),
+        metadata: {
+          changes: [{ key: 'OCR_DISABLED', before: 'false', after: 'true' }],
+        },
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+    ]);
+
+    const result = await listSystemSettingsAuditLogs(makeUser(), { limit: 1 });
+
+    expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 2,
+      where: expect.objectContaining({
+        action: 'SYSTEM_SETTINGS_UPDATE',
+        targetType: 'SYSTEM_SETTING',
+      }),
+    }));
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      id: 'audit-2',
+      updatedKeys: ['SWIFT_WARNING_TOLERANCE'],
+      changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
+    }));
+    expect(result.nextCursor).toBe('audit-2');
   });
 
   it('validates swift tolerance ordering before saving config', async () => {

@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback } from 'react';
-import { apiCall } from '@/components/workspace/shared';
-import type { BranchPurgeTarget, PasswordFormState, PurgeFormState } from '../types';
+import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
+import type { BranchPurgeTarget, PasswordFormState, PurgeFormState, SettingsAuditEntry } from '../types';
 
 export type SettingsActionText = (zh: string, en: string) => string;
 
@@ -12,21 +12,29 @@ export type SettingsActionDeps = {
   canEditConfig: boolean;
   canPurgeBranch: boolean;
   config: Record<string, string>;
+  canViewAudit: boolean;
   branchPurgeTargets: BranchPurgeTarget[];
   purgeForm: PurgeFormState;
   pwd: PasswordFormState;
+  auditCursor: string | null;
   setLoading: (value: boolean) => void;
   setSavingConfig: (value: boolean) => void;
   setTestingConfig: (value: boolean) => void;
   setPasswordLoading: (value: boolean) => void;
+  setAuditLoading: (value: boolean) => void;
+  setAuditLoadingMore: (value: boolean) => void;
   setMessage: (value: string | null) => void;
   setError: (value: string | null) => void;
   setConfig: (value: Record<string, string>) => void;
   setCanEditConfig: (value: boolean) => void;
+  setCanViewAudit: (value: boolean) => void;
   setCanPurgeBranch: (value: boolean) => void;
   setBranchPurgeTargets: (value: BranchPurgeTarget[]) => void;
   setPurgeModuleKeys: (value: string[]) => void;
   setPurgingBranch: (value: boolean) => void;
+  setSettingsAuditEntries: React.Dispatch<React.SetStateAction<SettingsAuditEntry[]>>;
+  setSettingsAuditCursor: (value: string | null) => void;
+  setSettingsAuditHasMore: (value: boolean) => void;
   setPurgeForm: React.Dispatch<React.SetStateAction<PurgeFormState>>;
   setPwd: (value: PasswordFormState) => void;
 };
@@ -34,23 +42,31 @@ export type SettingsActionDeps = {
 export function useSettingsActions({
   tx,
   canEditConfig,
+  canViewAudit,
   canPurgeBranch,
   config,
   branchPurgeTargets,
   purgeForm,
   pwd,
+  auditCursor,
   setLoading,
   setSavingConfig,
   setTestingConfig,
   setPasswordLoading,
+  setAuditLoading,
+  setAuditLoadingMore,
   setMessage,
   setError,
   setConfig,
   setCanEditConfig,
+  setCanViewAudit,
   setCanPurgeBranch,
   setBranchPurgeTargets,
   setPurgeModuleKeys,
   setPurgingBranch,
+  setSettingsAuditEntries,
+  setSettingsAuditCursor,
+  setSettingsAuditHasMore,
   setPurgeForm,
   setPwd,
 }: SettingsActionDeps) {
@@ -62,21 +78,69 @@ export function useSettingsActions({
       if (result.success) {
         setConfig(result.data.settings || {});
         setCanEditConfig(Boolean(result.data.canEdit));
+        const nextCanViewAudit = Boolean(result.data.canViewAudit);
+        setCanViewAudit(nextCanViewAudit);
         setCanPurgeBranch(Boolean(result.data.canPurgeBranch));
         const targets = Array.isArray(result.data.branchPurgeTargets) ? result.data.branchPurgeTargets : [];
         setBranchPurgeTargets(targets);
         setPurgeModuleKeys(Array.isArray(result.data.purgeModuleKeys) ? result.data.purgeModuleKeys : []);
+        if (!nextCanViewAudit) {
+          setSettingsAuditEntries([]);
+          setSettingsAuditCursor(null);
+          setSettingsAuditHasMore(false);
+        }
         setPurgeForm((prev) => ({
           ...prev,
           targetUserId: targets.some((row) => row.id === prev.targetUserId) ? prev.targetUserId : (targets[0]?.id || ''),
         }));
       }
     } catch (err) {
-      if (err instanceof Error) setError(err.message);
+      setError(getApiErrorMessage(err, tx('加载设置失败', 'Failed to load settings')));
     } finally {
       setLoading(false);
     }
-  }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setConfig, setError, setLoading, setPurgeForm, setPurgeModuleKeys]);
+  }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setError, setLoading, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditHasMore, tx]);
+
+  const loadSettingsAudit = useCallback(async (options: { append?: boolean } = {}) => {
+    if (!canViewAudit) {
+      setSettingsAuditEntries([]);
+      setSettingsAuditCursor(null);
+      setSettingsAuditHasMore(false);
+      return;
+    }
+
+    const append = Boolean(options.append);
+    const cursor = append ? auditCursor : null;
+    if (append) setAuditLoadingMore(true);
+    else setAuditLoading(true);
+
+    try {
+      const query = new URLSearchParams({ view: 'audit', limit: '20' });
+      if (cursor) query.set('cursor', cursor);
+      const result = await apiCall(`settings?${query.toString()}`);
+      if (result.success) {
+        const items = Array.isArray(result.data?.items) ? result.data.items : [];
+        setSettingsAuditEntries((prev) => (append ? [...prev, ...items] : items));
+        setSettingsAuditCursor(typeof result.data?.nextCursor === 'string' && result.data.nextCursor ? result.data.nextCursor : null);
+        setSettingsAuditHasMore(Boolean(result.data?.nextCursor));
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, tx('加载配置审计失败', 'Failed to load configuration audit')));
+    } finally {
+      if (append) setAuditLoadingMore(false);
+      else setAuditLoading(false);
+    }
+  }, [
+    auditCursor,
+    canViewAudit,
+    setAuditLoading,
+    setAuditLoadingMore,
+    setError,
+    setSettingsAuditCursor,
+    setSettingsAuditEntries,
+    setSettingsAuditHasMore,
+    tx,
+  ]);
 
   const handleSaveConfig = useCallback(async () => {
     if (!canEditConfig) return;
@@ -90,15 +154,16 @@ export function useSettingsActions({
       });
       if (result.success) {
         setMessage(result.message || tx('配置已保存', 'Configuration saved'));
+        await loadSettingsAudit();
       } else {
-        setError(result.error || tx('保存失败', 'Save failed'));
+        setError(getApiErrorMessage(result, tx('保存失败', 'Save failed')));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : tx('保存失败', 'Save failed'));
+      setError(getApiErrorMessage(err, tx('保存失败', 'Save failed')));
     } finally {
       setSavingConfig(false);
     }
-  }, [canEditConfig, config, setError, setMessage, setSavingConfig, tx]);
+  }, [canEditConfig, config, loadSettingsAudit, setError, setMessage, setSavingConfig, tx]);
 
   const handleTestOcrConfig = useCallback(async () => {
     if (!canEditConfig) return;
@@ -114,11 +179,10 @@ export function useSettingsActions({
         const detail = typeof result.detail === 'string' && result.detail ? ` | ${result.detail}` : '';
         setMessage(`${result.message || tx('OCR 测试成功', 'OCR test succeeded')}${detail}`);
       } else {
-        const detail = typeof result.detail === 'string' && result.detail ? ` | ${result.detail}` : '';
-        setError(`${result.error || tx('OCR 测试失败', 'OCR test failed')}${detail}`);
+        setError(getApiErrorMessage(result, tx('OCR 测试失败', 'OCR test failed'), { appendDetail: true }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : tx('OCR 测试失败', 'OCR test failed'));
+      setError(getApiErrorMessage(err, tx('OCR 测试失败', 'OCR test failed'), { appendDetail: true }));
     } finally {
       setTestingConfig(false);
     }
@@ -149,10 +213,10 @@ export function useSettingsActions({
         setPwd({ oldPassword: '', newPassword: '', confirmPassword: '' });
         setMessage(result.message || tx('密码修改成功', 'Password updated successfully'));
       } else {
-        setError(result.error || tx('密码修改失败', 'Password update failed'));
+        setError(getApiErrorMessage(result, tx('密码修改失败', 'Password update failed')));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : tx('密码修改失败', 'Password update failed'));
+      setError(getApiErrorMessage(err, tx('密码修改失败', 'Password update failed')));
     } finally {
       setPasswordLoading(false);
     }
@@ -210,10 +274,10 @@ export function useSettingsActions({
         setMessage(result.message || tx('分支业务数据已清空', 'Branch business data has been purged'));
         setPurgeForm((prev) => ({ ...prev, password: '' }));
       } else {
-        setError(result.error || tx('清库失败', 'Purge failed'));
+        setError(getApiErrorMessage(result, tx('清库失败', 'Purge failed')));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : tx('清库失败', 'Purge failed'));
+      setError(getApiErrorMessage(err, tx('清库失败', 'Purge failed')));
     } finally {
       setPurgingBranch(false);
     }
@@ -225,5 +289,6 @@ export function useSettingsActions({
     handleTestOcrConfig,
     handleChangePassword,
     handlePurgeBranch,
+    loadSettingsAudit,
   };
 }

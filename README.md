@@ -26,7 +26,7 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
-- 当前 Jest 已扩展到 `24 suites / 114 tests`；coverage global threshold 已小步提升到 `branches 46 / functions 72 / lines 66 / statements 66`
+- 当前 Jest 已扩展到 `25 suites / 124 tests`；coverage global threshold 已小步提升到 `branches 47 / functions 73 / lines 67 / statements 66`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -39,6 +39,8 @@
 - `system-settings` 已修复“热缓存只记住首批 key 子集”的缺陷，后续不同 key 的设置读取会增量补齐缓存，不再错误回退到环境默认值
 - 系统配置更新现写入审计日志：记录操作人、变更 key、前后值；敏感配置（如 `OCR_API_KEY`）会自动脱敏
 - 审计与错误目录已开始统一常量化：新增 `audit-catalog.ts` 与 `apiErrorCodes`，`deletion/settings/receipt/detail/swift/invoice` 这批 service 已先接入统一动作/目标类型常量
+- 前端 workspace 的 API 错误消费已开始从字符串文案切到 `code/detail/message` 统一解析：共享 API client 现支持 `WorkspaceApiError`、错误码翻译、detail 拼接与上传接口统一错误读取
+- 设置页已新增独立“配置变更审计”工作区：支持单独查询最近配置修改记录，展示操作人、更新时间、更新键与前后值
 - `/api/init` 已补齐根管理员初始化幂等与层级归一，避免并发初始化或历史脏数据导致根账号层级错误
 - `/api/invoice` 已修复 grouped order 合并后继续对旧 orderId 重算余额导致的潜在 500
 
@@ -936,6 +938,12 @@ src/
 - 🗂️ 审计/错误目录继续统一：新增 `src/lib/audit-catalog.ts` 与 `apiErrorCodes`，并把 `deletion/settings/receipt/detail/swift/invoice` 这批 service 的审计动作/目标类型切到统一常量目录。
 - 🧪 新增 `invoice-write` 单测，覆盖“坏数据不进事务”和“正常保存走事务 + 提交后对账”边界；Jest 扩展到 `24 suites / 114 tests`。
 - 📈 coverage threshold 第八轮小步上调：global 提升到 `46 / 72 / 66 / 66`，并把 `invoice-write` 纳入局部门禁（`50 / 80 / 72 / 70`），本地 `build + test:ci` 全绿。
+
+### v1.0.61 (2026-03-11)
+- 🧭 前端错误消费继续工程化：`src/components/workspace/api/client.ts` 现统一输出 `WorkspaceApiError`、`getApiErrorMessage/getApiErrorCode/getApiResponseErrorMessage`，`invoice/customer/settings/receipt/detail/swift/users/dashboard` 这批入口已不再直接依赖原始中文错误文案。
+- 📜 设置页新增独立配置审计查询与展示：`/api/settings?view=audit` 返回配置变更分页结果，设置页新增审计卡片，展示操作人、时间、更新键与前后值。
+- 🧪 新增 `client.test.ts` 与更多 `use-settings-actions` 分支测试，Jest 扩展到 `25 suites / 124 tests`。
+- 📈 coverage threshold 第九轮小步上调：global 提升到 `47 / 73 / 67 / 66`，`use-settings-actions` 局部门禁同步提升到 `40 / 92 / 68 / 68`。
 
 ### v1.0.58 (2026-03-11)
 - 🧱 `settings / receipt / detail / swift` 写接口继续统一：新增 `settings-service / receipt-service / detail-service / swift-service`，路由层只保留请求解析、OCR 识别和响应封装。

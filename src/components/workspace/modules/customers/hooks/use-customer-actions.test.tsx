@@ -1,11 +1,18 @@
 import { act, renderHook } from '@testing-library/react';
 import { useCustomerActions } from './use-customer-actions';
 import type { CustomerFormState } from '../types';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, getApiResponseErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
   return {
     apiCall: jest.fn(),
+    getApiResponseErrorMessage: jest.fn(async (_response: Response, fallback: string) => fallback),
+    getErrorMessage: jest.fn((error: unknown, fallback: string) => {
+      if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
+        return String((error as Record<string, unknown>).error || fallback);
+      }
+      return error instanceof Error ? error.message : fallback;
+    }),
     initCustomerImportRowViews: jest.fn((rows) => rows),
     mergeCustomerImportRowViews: jest.fn((prev, next) => [...prev, ...next]),
     toCustomerImportRowResults: jest.fn((rows) => rows || []),
@@ -14,6 +21,8 @@ jest.mock('@/components/workspace/shared', () => {
 });
 
 const mockApiCall = apiCall as jest.Mock;
+const mockGetApiResponseErrorMessage = getApiResponseErrorMessage as jest.Mock;
+const mockGetErrorMessage = getErrorMessage as jest.Mock;
 
 describe('useCustomerActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -35,6 +44,8 @@ describe('useCustomerActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockGetApiResponseErrorMessage.mockClear();
+    mockGetErrorMessage.mockClear();
     loadCustomers.mockClear();
     loadFixes.mockClear();
     setOwnerOptions.mockClear();

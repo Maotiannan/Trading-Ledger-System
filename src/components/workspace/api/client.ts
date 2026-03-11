@@ -1,6 +1,6 @@
 'use client';
 
-import { translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
+import { translateApiErrorCode } from '@/i18n/workspace/api-error-map';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 
 const DECIMAL_KEYS = new Set([
@@ -12,6 +12,106 @@ const DECIMAL_KEYS = new Set([
   'invBalance',
   'credit',
 ]);
+
+type ApiErrorLike = {
+  error?: unknown;
+  message?: unknown;
+  code?: unknown;
+  detail?: unknown;
+};
+
+export class WorkspaceApiError extends Error {
+  readonly code?: string;
+  readonly detail?: unknown;
+  readonly status?: number;
+
+  constructor(message: string, options: { code?: string; detail?: unknown; status?: number } = {}) {
+    super(message);
+    this.name = 'WorkspaceApiError';
+    this.code = options.code;
+    this.detail = options.detail;
+    this.status = options.status;
+  }
+}
+
+function getCurrentLocale(): string {
+  if (typeof document !== 'undefined' && document.documentElement.lang) {
+    return document.documentElement.lang;
+  }
+  return 'zh';
+}
+
+function formatApiErrorDetail(detail: unknown): string {
+  if (typeof detail === 'string') return detail.trim();
+  if (Array.isArray(detail)) {
+    const values = detail.map((item) => String(item || '').trim()).filter(Boolean);
+    return values.join(', ');
+  }
+  if (detail && typeof detail === 'object') {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+function extractApiErrorLike(input: unknown): { message: string; code?: string; detail?: unknown; status?: number } {
+  if (input instanceof WorkspaceApiError) {
+    return {
+      message: input.message,
+      code: input.code,
+      detail: input.detail,
+      status: input.status,
+    };
+  }
+
+  if (input instanceof Error) {
+    return { message: input.message };
+  }
+
+  if (input && typeof input === 'object') {
+    const value = input as ApiErrorLike;
+    const locale = getCurrentLocale();
+    const rawMessage = typeof value.error === 'string'
+      ? value.error
+      : (typeof value.message === 'string' ? value.message : '');
+    const code = typeof value.code === 'string' ? value.code : undefined;
+    const message = locale.startsWith('en')
+      ? translateApiErrorCode(code, rawMessage)
+      : rawMessage;
+    return {
+      message,
+      code,
+      detail: value.detail,
+    };
+  }
+
+  return { message: '' };
+}
+
+function toWorkspaceApiError(input: unknown, status?: number, fallback?: string): WorkspaceApiError {
+  const locale = getCurrentLocale();
+  const extracted = extractApiErrorLike(input);
+  const baseMessage = extracted.message || fallback || `HTTP ${status || 500}`;
+  const translated = locale.startsWith('en')
+    ? translateApiErrorCode(extracted.code, baseMessage)
+    : baseMessage;
+  return new WorkspaceApiError(translated, {
+    code: extracted.code,
+    detail: extracted.detail,
+    status,
+  });
+}
+
+async function parseApiResponse(response: Response) {
+  const json = normalizeNumericPayload(await response.json().catch(() => ({})));
+  if (!response.ok) {
+    throw toWorkspaceApiError(json, response.status);
+  }
+  return json;
+}
 
 export async function apiCall(endpoint: string, options: RequestInit = {}) {
   const headers = {
@@ -25,23 +125,52 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
     headers,
   });
 
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const locale =
-      typeof document !== 'undefined' && document.documentElement.lang
-        ? document.documentElement.lang
-        : 'zh';
-    const message =
-      typeof json?.error === 'string' ? json.error : `HTTP ${response.status}`;
-    throw new Error(locale.startsWith('en') ? translateApiErrorMessage(message) : message);
-  }
+  return parseApiResponse(response);
+}
 
-  return normalizeNumericPayload(json);
+export async function apiUploadCall(endpoint: string, formData: FormData, options: Omit<RequestInit, 'body' | 'headers'> = {}) {
+  const response = await fetch(`/api/${endpoint}`, {
+    ...options,
+    body: formData,
+    credentials: 'include',
+  });
+
+  return parseApiResponse(response);
+}
+
+export async function getApiResponseErrorMessage(response: Response, fallback: string): Promise<string> {
+  const json = normalizeNumericPayload(await response.json().catch(() => ({})));
+  return getApiErrorMessage(json, fallback);
+}
+
+export function getApiErrorCode(input: unknown): string | undefined {
+  return extractApiErrorLike(input).code;
+}
+
+export function getApiErrorDetail(input: unknown): unknown {
+  return extractApiErrorLike(input).detail;
+}
+
+export function isApiErrorCode(input: unknown, ...codes: string[]): boolean {
+  const code = getApiErrorCode(input);
+  return Boolean(code && codes.includes(code));
+}
+
+export function getApiErrorMessage(
+  error: unknown,
+  fallback: string,
+  options: { appendDetail?: boolean } = {}
+): string {
+  const extracted = extractApiErrorLike(error);
+  const message = extracted.message || fallback;
+  if (!options.appendDetail) return message;
+  const detailText = formatApiErrorDetail(extracted.detail);
+  if (!detailText || detailText === message) return message;
+  return `${message} | ${detailText}`;
 }
 
 export function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
+  return getApiErrorMessage(error, fallback);
 }
 
 export function normalizeNumericPayload<T>(input: T): T {

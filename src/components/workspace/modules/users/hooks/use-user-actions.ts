@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, getErrorMessage } from '@/components/workspace/shared';
 import type { User } from '@/lib/store';
 import type { ManagedUserRole, NewUserForm, ParentOption } from '../types';
 
@@ -86,7 +86,7 @@ export function useUserActions({
       body: JSON.stringify({ action: 'reset-password', userId, password }),
     });
     if (!result.success) {
-      alert(result.error || tx('重置失败', 'Reset failed'));
+      alert(getErrorMessage(result, tx('重置失败', 'Reset failed')));
     } else {
       alert(tx('密码已重置', 'Password has been reset.'));
     }
@@ -108,7 +108,7 @@ export function useUserActions({
       body: JSON.stringify({ action: 'update-role', userId, role }),
     });
     if (!result.success) {
-      alert(result.error || tx('角色更新失败', 'Failed to update role'));
+      alert(getErrorMessage(result, tx('角色更新失败', 'Failed to update role')));
       return;
     }
     await loadUsers();

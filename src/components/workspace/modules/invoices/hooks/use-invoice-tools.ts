@@ -77,10 +77,10 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
         handleTransferDialogOpenChange(false);
         await loadInvoices();
       } else {
-        setTransferError(result.error || tx('转移失败', 'Transfer failed'));
+        setTransferError(getErrorMessage(result, tx('转移失败', 'Transfer failed')));
       }
     } catch (err) {
-      setTransferError(tx('网络错误，请重试', 'Network error, please retry.'));
+      setTransferError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
       console.error(err);
     } finally {
       setTransferSubmitting(false);
@@ -117,7 +117,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
         }),
       });
       if (!result.success) {
-        alert(result.error || tx('保存失败', 'Save failed'));
+        alert(getErrorMessage(result, tx('保存失败', 'Save failed')));
         return;
       }
       cancelInvoiceDateEditor();
@@ -178,7 +178,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
         setRematchSelections(defaultSelections);
         setShowRematchDialog(true);
       } else {
-        alert(result.error || tx('刷新失败', 'Rematch failed'));
+        alert(getErrorMessage(result, tx('刷新失败', 'Rematch failed')));
       }
     } catch (err) {
       alert(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
@@ -202,7 +202,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
         body: JSON.stringify({ action: 'rematch-apply', resolutions }),
       });
       if (!result.success) {
-        alert(result.error || tx('应用失败', 'Apply rematch failed'));
+        alert(getErrorMessage(result, tx('应用失败', 'Apply rematch failed')));
         return;
       }
       alert(result.message || tx('刷新成功', 'Rematch completed'));

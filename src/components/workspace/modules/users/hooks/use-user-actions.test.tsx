@@ -1,13 +1,20 @@
 import { act, renderHook } from '@testing-library/react';
 import { useUserActions } from './use-user-actions';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, getErrorMessage } from '@/components/workspace/shared';
 import type { ManagedUserRole } from '../types';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  getErrorMessage: jest.fn((error: unknown, fallback: string) => {
+    if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
+      return String((error as Record<string, unknown>).error || fallback);
+    }
+    return error instanceof Error ? error.message : fallback;
+  }),
 }));
 
 const mockApiCall = apiCall as jest.Mock;
+const mockGetErrorMessage = getErrorMessage as jest.Mock;
 
 describe('useUserActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -22,6 +29,7 @@ describe('useUserActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockGetErrorMessage.mockClear();
     setUsers.mockClear();
     setShowCreate.mockClear();
     setNewUser.mockClear();

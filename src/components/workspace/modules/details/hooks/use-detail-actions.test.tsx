@@ -1,12 +1,19 @@
 import { act, renderHook } from '@testing-library/react';
 import { useDetailActions } from './use-detail-actions';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, getErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  getErrorMessage: jest.fn((error: unknown, fallback: string) => {
+    if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
+      return String((error as Record<string, unknown>).error || fallback);
+    }
+    return error instanceof Error ? error.message : fallback;
+  }),
 }));
 
 const mockApiCall = apiCall as jest.Mock;
+const mockGetErrorMessage = getErrorMessage as jest.Mock;
 
 describe('useDetailActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -36,6 +43,7 @@ describe('useDetailActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockGetErrorMessage.mockClear();
     mockFetch.mockReset();
     loadDetails.mockClear();
     setOcrResult.mockClear();

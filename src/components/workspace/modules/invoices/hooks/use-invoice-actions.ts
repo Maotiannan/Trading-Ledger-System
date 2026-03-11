@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiResponseErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import type { InvoiceDraftOrder } from '../types';
 
 export type InvoiceActionText = (zh: string, en: string) => string;
@@ -70,7 +70,9 @@ export function useInvoiceActions({
         method: 'GET',
         credentials: 'include',
       });
-      if (!response.ok) throw new Error(tx('模板下载失败', 'Failed to download template'));
+      if (!response.ok) {
+        throw new Error(await getApiResponseErrorMessage(response, tx('模板下载失败', 'Failed to download template')));
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -124,10 +126,10 @@ export function useInvoiceActions({
         }
         await loadInvoices();
       } else {
-        setFormError(result.error || tx('创建失败', 'Create failed'));
+        setFormError(getErrorMessage(result, tx('创建失败', 'Create failed')));
       }
     } catch (err) {
-      setFormError(tx('网络错误，请重试', 'Network error, please retry.'));
+      setFormError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -167,10 +169,10 @@ export function useInvoiceActions({
         handleOrderDialogOpenChange(false);
         await loadInvoices();
       } else {
-        setOrderFormError(result.error || tx('修改失败', 'Update failed'));
+        setOrderFormError(getErrorMessage(result, tx('修改失败', 'Update failed')));
       }
     } catch (err) {
-      setOrderFormError(tx('网络错误，请重试', 'Network error, please retry.'));
+      setOrderFormError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -192,7 +194,7 @@ export function useInvoiceActions({
       if (result.success) {
         await loadInvoices();
       } else {
-        alert(result.error || tx('删除失败', 'Delete failed'));
+        alert(getErrorMessage(result, tx('删除失败', 'Delete failed')));
       }
     } catch (err) {
       alert(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
@@ -235,10 +237,10 @@ export function useInvoiceActions({
         resetAddOrderForm();
         await loadInvoices();
       } else {
-        setAddError(result.error || tx('添加失败', 'Add failed'));
+        setAddError(getErrorMessage(result, tx('添加失败', 'Add failed')));
       }
     } catch (err) {
-      setAddError(tx('网络错误，请重试', 'Network error, please retry.'));
+      setAddError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
       console.error(err);
     } finally {
       setSubmitting(false);

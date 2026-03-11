@@ -1,3 +1,18 @@
+const codeMap: Record<string, string> = {
+  BAD_REQUEST: 'Invalid request',
+  FORBIDDEN: 'Permission denied',
+  RESOURCE_NOT_FOUND: 'Resource not found',
+  CONFLICT: 'Conflict detected',
+  INVALID_ACTION: 'Unknown action',
+  INVALID_TARGET_TYPE: 'Invalid target type',
+  DELETION_NOT_ALLOWED: 'Deletion is not allowed in the current state',
+  DELETION_REQUEST_EXISTS: 'Deletion request already exists',
+  DELETION_REQUEST_NOT_FOUND: 'Deletion request not found',
+  DELETION_REQUEST_ALREADY_PROCESSED: 'Deletion request has already been processed',
+  DELETION_REQUEST_STATE_CHANGED: 'Deletion request state has changed',
+  INTERNAL_ERROR: 'Server error',
+};
+
 const exactMap: Record<string, string> = {
   '未登录': 'Not logged in',
   '无权限': 'Permission denied',
@@ -50,4 +65,9 @@ export function translateApiErrorMessage(raw: string): string {
   }
 
   return raw;
+}
+
+export function translateApiErrorCode(code?: string | null, fallbackMessage = ''): string {
+  if (code && codeMap[code]) return codeMap[code];
+  return translateApiErrorMessage(fallbackMessage);
 }

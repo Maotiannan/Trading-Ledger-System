@@ -141,6 +141,20 @@ export class ApiTestContext {
     return this.login(this.adminEmail, this.adminPassword);
   }
 
+  async auth(json, expectedStatus = 200) {
+    return this.request('POST', '/api/auth', {
+      json,
+      expectedStatus,
+    });
+  }
+
+  async createUser(payload, expectedStatus = 200) {
+    return this.auth({
+      action: 'create',
+      ...payload,
+    }, expectedStatus);
+  }
+
   async logout() {
     const response = await this.request('POST', '/api/auth', {
       json: { action: 'logout' },

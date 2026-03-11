@@ -119,4 +119,145 @@ describe('useInvoiceActions', () => {
     expect(loadInvoices).toHaveBeenCalled();
     expect(window.alert).toHaveBeenCalledWith('created');
   });
+
+  it('updates order and refreshes invoices on success', async () => {
+    mockApiCall.mockResolvedValue({ success: true });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: {
+        id: 'order-1',
+        orderNo: 'MAB-1-02',
+        amount: 500,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      },
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('invoice', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        action: 'updateOrder',
+        orderId: 'order-1',
+        orderNo: 'MAB-1-02',
+        amount: 500,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerPhone: null,
+        customerCity: null,
+        customerId: 'cust-1',
+      }),
+    }));
+    expect(handleOrderDialogOpenChange).toHaveBeenCalledWith(false);
+    expect(loadInvoices).toHaveBeenCalled();
+  });
+
+  it('handles delete failure with alert message', async () => {
+    mockApiCall.mockResolvedValue({ success: false, error: '删除失败' });
+    const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => true);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleDeleteOrder('order-2');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('删除失败');
+    expect(loadInvoices).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('adds order and resets inline form on success', async () => {
+    const resetAddOrderForm = jest.fn();
+    mockApiCall.mockResolvedValue({ success: true });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: 'inv-1',
+      setAddError,
+      newOrderNo: 'MAB-1-03',
+      newOrderAmount: '300',
+      newOrderCustomerMark: 'MAB-1',
+      newOrderCustomerName: 'MAB',
+      newOrderCustomerId: 'cust-1',
+      resetAddOrderForm,
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('invoice', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        action: 'addOrder',
+        invoiceId: 'inv-1',
+        orderNo: 'MAB-1-03',
+        amount: 300,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      }),
+    }));
+    expect(resetAddOrderForm).toHaveBeenCalled();
+    expect(loadInvoices).toHaveBeenCalled();
+  });
 });

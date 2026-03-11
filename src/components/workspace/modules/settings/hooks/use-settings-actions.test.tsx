@@ -118,4 +118,44 @@ describe('useSettingsActions', () => {
     expect(deps.setMessage).toHaveBeenCalledWith('purged');
     expect(purgeFormState.password).toBe('');
   });
+
+  it('saves config and reports backend message', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: true, message: 'saved' });
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleSaveConfig();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update-config',
+        settings: { DETAIL_RECEIPT_MATCH_TOLERANCE: '5' },
+      }),
+    }));
+    expect(deps.setMessage).toHaveBeenCalledWith('saved');
+  });
+
+  it('changes password and resets form state on success', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: true, message: 'changed' });
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleChangePassword();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('auth', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'change-password',
+        oldPassword: 'old-pass',
+        newPassword: 'new-pass-1',
+      }),
+    }));
+    expect(pwdState).toEqual({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    expect(deps.setMessage).toHaveBeenCalledWith('changed');
+  });
 });

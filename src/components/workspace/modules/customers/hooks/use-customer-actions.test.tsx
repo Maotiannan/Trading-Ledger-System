@@ -6,10 +6,10 @@ import { apiCall } from '@/components/workspace/shared';
 jest.mock('@/components/workspace/shared', () => {
   return {
     apiCall: jest.fn(),
-    initCustomerImportRowViews: jest.fn(),
-    mergeCustomerImportRowViews: jest.fn(),
-    toCustomerImportRowResults: jest.fn(),
-    toCustomerImportRowResultsFromIssues: jest.fn(),
+    initCustomerImportRowViews: jest.fn((rows) => rows),
+    mergeCustomerImportRowViews: jest.fn((prev, next) => [...prev, ...next]),
+    toCustomerImportRowResults: jest.fn((rows) => rows || []),
+    toCustomerImportRowResultsFromIssues: jest.fn((rows) => rows || []),
   };
 });
 
@@ -176,5 +176,132 @@ describe('useCustomerActions', () => {
     expect(setEditing).toHaveBeenCalledWith(null);
     expect(resetForm).toHaveBeenCalled();
     expect(loadCustomers).toHaveBeenCalled();
+  });
+
+  it('shows alert when create fails', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '保存失败' });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: false,
+      defaultOwnerId: 'sales-1',
+      importOwnerId: '',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: '' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateOrUpdate();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('保存失败');
+    expect(loadCustomers).not.toHaveBeenCalled();
+  });
+
+  it('retries failed import rows and updates import message', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: 'retry ok',
+        rowResults: [
+          {
+            rowNo: 8,
+            mark: 'FIX-1',
+            orderName: 'FIX-ORDER',
+            name: 'Fix User',
+            phone: '620999999',
+            city: 'Conakry',
+            consignee: '',
+            companyName: '',
+            credit: '',
+            companyAddress: '',
+            ownerEmail: 'sales@example.com',
+            status: 'CREATED',
+            reason: '',
+          },
+        ],
+      }),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [
+        {
+          rowNo: 8,
+          mark: 'FIX-1',
+          orderName: 'FIX-ORDER',
+          name: 'Fix User',
+          phone: '620999999',
+          city: 'Conakry',
+          consignee: '',
+          companyName: '',
+          credit: '',
+          companyAddress: '',
+          ownerEmail: 'sales@example.com',
+          latestStatus: 'FAILED',
+          latestReason: 'duplicate',
+          attempts: [],
+        },
+      ],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.retryCustomerIssueRows();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/customer', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+    }));
+    expect(setCustomerImportRows).toHaveBeenCalled();
+    expect(setCustomerImportMessage).toHaveBeenCalledWith('retry ok');
+    expect(loadCustomers).toHaveBeenCalled();
+    globalThis.fetch = originalFetch;
   });
 });

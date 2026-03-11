@@ -1,8 +1,8 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.51  
-> 最后更新：2026-03-10
+> 当前版本：v1.0.52  
+> 最后更新：2026-03-11
 
 ## P0（本周必须完成）
 
@@ -105,6 +105,10 @@
 - [x] CI 门禁与覆盖率阈值上线：新增 GitHub Actions 流水线与 `npm run test:ci`，统一串联类型检查、lint、单测覆盖、隔离 API/E2E ✅ 2026-03-10
 - [x] 修复根管理员初始化幂等与层级归一，避免 `/api/init` 并发或历史脏数据导致根账号层级错误 ✅ 2026-03-10
 - [x] 修复 grouped order 合并后账单加单仍对旧 `orderId` 结算导致的潜在 500 ✅ 2026-03-10
+- [x] 新增层级权限边界 API 回归：覆盖 1/2/3/4 级账号创建、同级可见不可管、旁支不可管理、下级可重置/删除 ✅ 2026-03-11
+- [x] 新增删除审批 API 回归：覆盖 RECEIPT/DETAIL/SWIFT 申请、管理员审批、状态回退与自动对象级联清理 ✅ 2026-03-11
+- [x] hook 分支测试继续补强：`use-invoice-actions`、`use-customer-actions`、`use-settings-actions` 新增失败/重试/成功路径自动化验证 ✅ 2026-03-11
+- [x] 覆盖率门禁第二轮上调：global 与 `invoice/customer/settings` 关键 hook 阈值小步提升，不一次性全仓拉满 ✅ 2026-03-11
 - [ ] 增加业务链路集成测试（Receipt -> Detail -> Swift -> mark-received -> deletion）
 
 ## P1（两周内完成）
@@ -144,6 +148,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.52（2026-03-11）：补齐第二批测试工程化；新增层级权限边界与删除审批链路的 isolated API case，继续为 `use-invoice-actions / use-customer-actions / use-settings-actions` 补分支测试，并将 coverage threshold 做第二轮小步上调
 - v1.0.51（2026-03-10）：测试工程化收口；隔离 API 测试拆成环境引导 + 模块化 case 文件，新增 invoice/customer/settings 第一批 hook 测试、三条稳定 Playwright 隔离 E2E、GitHub Actions CI 与覆盖率阈值；同时修复 `/api/init` 根管理员层级归一和 `/api/invoice` grouped order 合并后的旧 `orderId` 结算风险
 - v1.0.48（2026-03-10）：客户模块导入工作区继续拆分；顶部工具区抽为 `customer-toolbar`，导入问题行列定义抽为 `use-customer-import-columns`，`customer-manager.tsx` 从 347 行压缩到 236 行
 - v1.0.49（2026-03-10）：用户管理模块完成首轮拆分；创建用户对话框、用户列表、本地表单态与远程动作拆到 `components/ + hooks/ + types.ts`，`user-manager.tsx` 收敛到页面编排层；README 补充前端模块拆分规则、共享能力边界与后续预留接口

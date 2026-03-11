@@ -26,6 +26,7 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，覆盖率门禁先只对这些高价值 hook 生效，避免一开始把阈值铺得过宽
+- 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - `/api/init` 已补齐根管理员初始化幂等与层级归一，避免并发初始化或历史脏数据导致根账号层级错误
 - `/api/invoice` 已修复 grouped order 合并后继续对旧 orderId 重算余额导致的潜在 500
 
@@ -656,7 +657,14 @@ npm run test:ci
   - `invoice`: `use-invoice-view-state`, `use-invoice-actions`
   - `customer`: `use-customer-forms`, `use-customer-actions`
   - `settings`: `use-settings-forms`, `use-settings-actions`
-- 覆盖率门禁当前只对上述 hook 生效，先保证新增可维护测试资产稳定，再逐步扩大到 `receipt/detail/swift/users`
+- 当前隔离 API case 覆盖：
+  - `00-auth-system`: 初始化、登录、会话、系统路由
+  - `10-customer-import-and-scope`: 客户导入、重复校验、owner scope
+  - `20-invoice-ledger-flow`: 账单/收据/明细/SWIFT 主链路
+  - `30-settings-and-report`: 设置更新、OCR 配置检测、报表导出
+  - `40-auth-hierarchy-boundaries`: 1/2/3/4 级账户权限边界、同级可见不可管、旁支不可管理
+  - `50-deletion-approval-flow`: 收据/明细/SWIFT 删除申请、管理员审批、状态回退与自动对象级联清理
+- 覆盖率门禁当前仍只对上述高价值 hook 生效，但阈值已开始第二轮上调；后续再逐步扩大到 `receipt/detail/swift/users`
 
 ### 报表导出
 
@@ -889,6 +897,11 @@ src/
 ### v1.0.49 (2026-03-10)
 - 🧩 用户管理模块完成首轮拆分：`user-manager.tsx` 拆出 `components/ + hooks/ + types.ts`，创建用户对话框、用户列表、本地表单态、远程动作不再堆在单文件内。
 - 📉 用户主模块显著瘦身：`user-manager.tsx` 收敛到页面编排层，后续只保留数据加载、权限衍生与组件组装。
+
+### v1.0.52 (2026-03-11)
+- 🛡️ 第二批隔离 API case 落地：新增 `40-auth-hierarchy-boundaries` 与 `50-deletion-approval-flow`，补齐层级权限边界、同级可见不可管、旁支不可管理、删除审批与状态回退链路验证。
+- 🪝 hook 分支测试继续补强：为 `use-invoice-actions`、`use-customer-actions`、`use-settings-actions` 增加成功/失败/重试分支测试，覆盖率显著提升。
+- 📈 coverage threshold 小步上调：在保持“只对高价值 hook 启用门禁”的前提下，提升 global 与 `invoice/customer/settings` hook 阈值，避免一次性全仓拉满。
 
 ### v1.0.51 (2026-03-10)
 - 🧪 自动化测试工程化收口：隔离 API 测试从单脚本重构为“环境引导 + 模块化 case 文件”，新增 `tests/api/isolated/helpers/context.mjs` 与四组 case（鉴权/客户/账单链路/设置导出）。

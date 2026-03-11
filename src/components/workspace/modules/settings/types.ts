@@ -37,6 +37,25 @@ export type SettingsAuditEntry = {
   changes: SettingsAuditChange[];
 };
 
+export type SettingsAuditExportEntry = {
+  id: string;
+  createdAt: string;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  rowCount: number;
+  exportLimit: number;
+  maxExportRows: number;
+  truncated: boolean;
+  filterActor: string;
+  filterKey: string;
+  filterDateFrom: string;
+  filterDateTo: string;
+  exportedKeys: string[];
+};
+
 export type SettingsAuditMeta = {
   defaultPageSize: number;
   maxPageSize: number;

@@ -6,7 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
-import type { SettingsAuditEntry, SettingsAuditFilterState, SettingsAuditMeta } from '../types';
+import type {
+  SettingsAuditEntry,
+  SettingsAuditExportEntry,
+  SettingsAuditFilterState,
+  SettingsAuditMeta,
+} from '../types';
 
 export type SettingsAuditCardProps = {
   tx: (zh: string, en: string) => string;
@@ -16,6 +21,10 @@ export type SettingsAuditCardProps = {
   exporting: boolean;
   hasMore: boolean;
   entries: SettingsAuditEntry[];
+  exportHistoryEntries: SettingsAuditExportEntry[];
+  exportHistoryLoading: boolean;
+  exportHistoryLoadingMore: boolean;
+  exportHistoryHasMore: boolean;
   filters: SettingsAuditFilterState;
   meta: SettingsAuditMeta;
   keyOptions: string[];
@@ -25,6 +34,8 @@ export type SettingsAuditCardProps = {
   onRefresh: () => void;
   onLoadMore: () => void;
   onExport: () => void;
+  onRefreshExportHistory: () => void;
+  onLoadMoreExportHistory: () => void;
 };
 
 function displayAuditValue(value: string): string {
@@ -39,6 +50,10 @@ export function SettingsAuditCard({
   exporting,
   hasMore,
   entries,
+  exportHistoryEntries,
+  exportHistoryLoading,
+  exportHistoryLoadingMore,
+  exportHistoryHasMore,
   filters,
   meta,
   keyOptions,
@@ -48,6 +63,8 @@ export function SettingsAuditCard({
   onRefresh,
   onLoadMore,
   onExport,
+  onRefreshExportHistory,
+  onLoadMoreExportHistory,
 }: SettingsAuditCardProps) {
   const exportOptions = Array.from(new Set([500, 1000, 2000, 5000, meta.maxExportRows]))
     .filter((value) => value <= meta.maxExportRows)
@@ -133,6 +150,91 @@ export function SettingsAuditCard({
     </div>
   );
 
+  const exportHistoryPanel = (
+    <div className="space-y-3 rounded-md border p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold">{tx('导出历史', 'Export History')}</div>
+          <div className="text-xs text-gray-500">
+            {tx('记录配置审计 CSV 导出的操作者、筛选条件和导出结果。', 'Track who exported configuration audit CSV files, which filters were used, and whether the export was truncated.')}
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRefreshExportHistory} disabled={exportHistoryLoading}>
+          {exportHistoryLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+          {tx('刷新历史', 'Refresh History')}
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+        <span>{tx('当前已加载', 'Loaded')}: {exportHistoryEntries.length}</span>
+        <span>{exportHistoryHasMore ? tx('还有更多历史记录可加载', 'More history entries available') : tx('历史记录已加载到末尾', 'Reached the end of history')}</span>
+      </div>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{tx('时间', 'Time')}</TableHead>
+              <TableHead>{tx('导出人', 'Exporter')}</TableHead>
+              <TableHead>{tx('导出摘要', 'Summary')}</TableHead>
+              <TableHead>{tx('筛选条件', 'Filters')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {exportHistoryLoading && exportHistoryEntries.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="py-8 text-center">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                </TableCell>
+              </TableRow>
+            ) : exportHistoryEntries.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="py-6 text-center text-sm text-gray-500">
+                  {tx('暂无导出历史。', 'No export history yet.')}
+                </TableCell>
+              </TableRow>
+            ) : exportHistoryEntries.map((entry) => (
+              <TableRow key={entry.id}>
+                <TableCell className="whitespace-nowrap text-xs align-top">
+                  {new Date(entry.createdAt).toLocaleString()}
+                </TableCell>
+                <TableCell className="align-top">
+                  <div className="text-sm font-medium">{entry.actor?.email || '-'}</div>
+                  {entry.actor?.name ? <div className="text-xs text-gray-500">{entry.actor.name}</div> : null}
+                </TableCell>
+                <TableCell className="align-top text-xs">
+                  <div>{tx('导出条数', 'Rows')}: {entry.rowCount}</div>
+                  <div>{tx('请求上限', 'Requested limit')}: {entry.exportLimit}</div>
+                  <div>{tx('服务端上限', 'Server cap')}: {entry.maxExportRows}</div>
+                  <div>{tx('结果状态', 'Result')}: {entry.truncated ? tx('已截断', 'Truncated') : tx('完整导出', 'Complete')}</div>
+                  {entry.exportedKeys.length > 0 ? (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {entry.exportedKeys.map((key) => (
+                        <span key={`${entry.id}-${key}`} className="rounded bg-gray-100 px-2 py-1 text-[11px]">
+                          {key}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </TableCell>
+                <TableCell className="align-top text-xs">
+                  <div>{tx('操作者筛选', 'Actor filter')}: {entry.filterActor || '-'}</div>
+                  <div>{tx('配置键筛选', 'Setting key filter')}: {entry.filterKey || '-'}</div>
+                  <div>{tx('开始时间', 'Date From')}: {entry.filterDateFrom || '-'}</div>
+                  <div>{tx('结束时间', 'Date To')}: {entry.filterDateTo || '-'}</div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="flex justify-end">
+        <Button variant="outline" onClick={onLoadMoreExportHistory} disabled={!exportHistoryHasMore || exportHistoryLoadingMore}>
+          {exportHistoryLoadingMore ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+          {tx('加载更多历史', 'Load More History')}
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
@@ -158,10 +260,17 @@ export function SettingsAuditCard({
           <>
             {filterPanel}
             <p className="text-sm text-gray-500">{tx('暂无配置审计记录。', 'No configuration audit logs yet.')}</p>
+            {exportHistoryPanel}
           </>
         ) : (
           <>
             {filterPanel}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+              <span>{tx('当前已加载', 'Loaded')}: {entries.length}</span>
+              <span>{tx('分页大小', 'Page Size')}: {filters.pageSize}</span>
+              <span>{tx('分页模式', 'Pagination')}: {tx('游标', 'Cursor')} ({meta.cursorMode})</span>
+              <span>{hasMore ? tx('还有更多记录可加载', 'More entries available') : tx('已加载到末尾', 'Reached the end')}</span>
+            </div>
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
@@ -213,6 +322,7 @@ export function SettingsAuditCard({
                 {tx('加载更多', 'Load More')}
               </Button>
             </div>
+            {exportHistoryPanel}
           </>
         )}
       </CardContent>

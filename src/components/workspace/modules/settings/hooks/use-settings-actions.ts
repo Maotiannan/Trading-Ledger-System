@@ -7,6 +7,7 @@ import type {
   PasswordFormState,
   PurgeFormState,
   SettingsAuditEntry,
+  SettingsAuditExportEntry,
   SettingsAuditFilterState,
   SettingsAuditMeta,
 } from '../types';
@@ -24,6 +25,7 @@ export type SettingsActionDeps = {
   purgeForm: PurgeFormState;
   pwd: PasswordFormState;
   auditCursor: string | null;
+  auditExportHistoryCursor: string | null;
   auditFilters: SettingsAuditFilterState;
   auditMeta: SettingsAuditMeta;
   setLoading: (value: boolean) => void;
@@ -45,6 +47,11 @@ export type SettingsActionDeps = {
   setSettingsAuditEntries: React.Dispatch<React.SetStateAction<SettingsAuditEntry[]>>;
   setSettingsAuditCursor: (value: string | null) => void;
   setSettingsAuditHasMore: (value: boolean) => void;
+  setSettingsAuditExportHistoryEntries: React.Dispatch<React.SetStateAction<SettingsAuditExportEntry[]>>;
+  setSettingsAuditExportHistoryCursor: (value: string | null) => void;
+  setSettingsAuditExportHistoryHasMore: (value: boolean) => void;
+  setSettingsAuditExportHistoryLoading: (value: boolean) => void;
+  setSettingsAuditExportHistoryLoadingMore: (value: boolean) => void;
   setSettingsAuditMeta: (value: SettingsAuditMeta) => void;
   setSettingsAuditFilters: React.Dispatch<React.SetStateAction<SettingsAuditFilterState>>;
   setPurgeForm: React.Dispatch<React.SetStateAction<PurgeFormState>>;
@@ -100,11 +107,12 @@ function clampAuditFilters(filters: SettingsAuditFilterState, meta: SettingsAudi
 }
 
 function buildAuditQuery(
+  view: 'audit' | 'audit-export-history',
   filters: SettingsAuditFilterState,
   cursor?: string | null,
   options: { format?: 'csv'; includeLimit?: boolean } = {},
 ) {
-  const query = new URLSearchParams({ view: 'audit' });
+  const query = new URLSearchParams({ view });
   if (options.includeLimit !== false) {
     query.set('limit', String(filters.pageSize || 20));
   }
@@ -130,6 +138,7 @@ export function useSettingsActions({
   purgeForm,
   pwd,
   auditCursor,
+  auditExportHistoryCursor,
   auditFilters,
   auditMeta,
   setLoading,
@@ -148,10 +157,15 @@ export function useSettingsActions({
   setBranchPurgeTargets,
   setPurgeModuleKeys,
   setPurgingBranch,
-  setSettingsAuditEntries,
-  setSettingsAuditCursor,
-  setSettingsAuditHasMore,
-  setSettingsAuditMeta,
+    setSettingsAuditEntries,
+    setSettingsAuditCursor,
+    setSettingsAuditHasMore,
+    setSettingsAuditExportHistoryEntries,
+    setSettingsAuditExportHistoryCursor,
+    setSettingsAuditExportHistoryHasMore,
+    setSettingsAuditExportHistoryLoading,
+    setSettingsAuditExportHistoryLoadingMore,
+    setSettingsAuditMeta,
   setSettingsAuditFilters,
   setPurgeForm,
   setPwd,
@@ -177,6 +191,9 @@ export function useSettingsActions({
           setSettingsAuditEntries([]);
           setSettingsAuditCursor(null);
           setSettingsAuditHasMore(false);
+          setSettingsAuditExportHistoryEntries([]);
+          setSettingsAuditExportHistoryCursor(null);
+          setSettingsAuditExportHistoryHasMore(false);
         }
         setPurgeForm((prev) => ({
           ...prev,
@@ -188,7 +205,7 @@ export function useSettingsActions({
     } finally {
       setLoading(false);
     }
-  }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setError, setLoading, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditFilters, setSettingsAuditHasMore, setSettingsAuditMeta, tx]);
+  }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setError, setLoading, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditExportHistoryCursor, setSettingsAuditExportHistoryEntries, setSettingsAuditExportHistoryHasMore, setSettingsAuditFilters, setSettingsAuditHasMore, setSettingsAuditMeta, tx]);
 
   const loadSettingsAudit = useCallback(async (options: { append?: boolean; filters?: SettingsAuditFilterState } = {}) => {
     if (!canViewAudit) {
@@ -205,7 +222,7 @@ export function useSettingsActions({
     else setAuditLoading(true);
 
     try {
-      const result = await apiCall(`settings?${buildAuditQuery(filters, cursor)}`);
+      const result = await apiCall(`settings?${buildAuditQuery('audit', filters, cursor)}`);
       if (result.success) {
         const items = Array.isArray(result.data?.items) ? result.data.items : [];
         const nextAuditMeta = normalizeAuditMeta(result.data?.meta);
@@ -234,15 +251,62 @@ export function useSettingsActions({
     tx,
   ]);
 
+  const loadSettingsAuditExportHistory = useCallback(async (options: { append?: boolean; filters?: SettingsAuditFilterState } = {}) => {
+    if (!canViewAudit) {
+      setSettingsAuditExportHistoryEntries([]);
+      setSettingsAuditExportHistoryCursor(null);
+      setSettingsAuditExportHistoryHasMore(false);
+      return;
+    }
+
+    const append = Boolean(options.append);
+    const filters = clampAuditFilters(options.filters || auditFilters || buildEmptyAuditFilters(auditMeta), auditMeta);
+    const cursor = append ? auditExportHistoryCursor : null;
+    if (append) setSettingsAuditExportHistoryLoadingMore(true);
+    else setSettingsAuditExportHistoryLoading(true);
+
+    try {
+      const result = await apiCall(`settings?${buildAuditQuery('audit-export-history', filters, cursor)}`);
+      if (result.success) {
+        const items = Array.isArray(result.data?.items) ? result.data.items : [];
+        const nextAuditMeta = normalizeAuditMeta(result.data?.meta);
+        setSettingsAuditMeta(nextAuditMeta);
+        setSettingsAuditExportHistoryEntries((prev) => (append ? [...prev, ...items] : items));
+        setSettingsAuditExportHistoryCursor(typeof result.data?.nextCursor === 'string' && result.data.nextCursor ? result.data.nextCursor : null);
+        setSettingsAuditExportHistoryHasMore(Boolean(result.data?.nextCursor));
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, tx('加载导出历史失败', 'Failed to load export history')));
+    } finally {
+      if (append) setSettingsAuditExportHistoryLoadingMore(false);
+      else setSettingsAuditExportHistoryLoading(false);
+    }
+  }, [
+    auditExportHistoryCursor,
+    auditMeta,
+    auditFilters,
+    canViewAudit,
+    setError,
+    setSettingsAuditExportHistoryCursor,
+    setSettingsAuditExportHistoryEntries,
+    setSettingsAuditExportHistoryHasMore,
+    setSettingsAuditExportHistoryLoading,
+    setSettingsAuditExportHistoryLoadingMore,
+    setSettingsAuditMeta,
+    tx,
+  ]);
+
   const applyAuditFilters = useCallback(async () => {
     await loadSettingsAudit({ filters: auditFilters });
-  }, [auditFilters, loadSettingsAudit]);
+    await loadSettingsAuditExportHistory({ filters: auditFilters });
+  }, [auditFilters, loadSettingsAudit, loadSettingsAuditExportHistory]);
 
   const resetAuditFilters = useCallback(async () => {
     const nextFilters = buildEmptyAuditFilters(auditMeta);
     setSettingsAuditFilters(nextFilters);
     await loadSettingsAudit({ filters: nextFilters });
-  }, [auditMeta, loadSettingsAudit, setSettingsAuditFilters]);
+    await loadSettingsAuditExportHistory({ filters: nextFilters });
+  }, [auditMeta, loadSettingsAudit, loadSettingsAuditExportHistory, setSettingsAuditFilters]);
 
   const exportSettingsAudit = useCallback(async () => {
     if (!canViewAudit) return;
@@ -250,7 +314,7 @@ export function useSettingsActions({
     setError(null);
     setMessage(null);
     try {
-      const response = await fetch(`/api/settings?${buildAuditQuery(auditFilters, null, { format: 'csv', includeLimit: false })}`, {
+      const response = await fetch(`/api/settings?${buildAuditQuery('audit', auditFilters, null, { format: 'csv', includeLimit: false })}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -285,12 +349,13 @@ export function useSettingsActions({
           `Configuration audit export completed: exported ${exportCount} rows (server cap ${maxExportRows || exportLimit}${truncated ? ', truncated' : ''})`,
         ),
       );
+      await loadSettingsAuditExportHistory({ filters: auditFilters });
     } catch (err) {
       setError(getApiErrorMessage(err, tx('导出配置审计失败', 'Failed to export configuration audit')));
     } finally {
       setAuditExporting(false);
     }
-  }, [auditFilters, auditMeta.maxExportRows, canViewAudit, setAuditExporting, setError, setMessage, tx]);
+  }, [auditFilters, auditMeta.maxExportRows, canViewAudit, loadSettingsAuditExportHistory, setAuditExporting, setError, setMessage, tx]);
 
   const handleSaveConfig = useCallback(async () => {
     if (!canEditConfig) return;
@@ -441,6 +506,7 @@ export function useSettingsActions({
     handleChangePassword,
     handlePurgeBranch,
     loadSettingsAudit,
+    loadSettingsAuditExportHistory,
     applyAuditFilters,
     resetAuditFilters,
     exportSettingsAudit,

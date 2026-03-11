@@ -50,6 +50,25 @@ export type SystemSettingsAuditEntry = {
   changes: SystemSettingsAuditChange[];
 };
 
+export type SystemSettingsAuditExportEntry = {
+  id: string;
+  createdAt: string;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  rowCount: number;
+  exportLimit: number;
+  maxExportRows: number;
+  truncated: boolean;
+  filterActor: string;
+  filterKey: string;
+  filterDateFrom: string;
+  filterDateTo: string;
+  exportedKeys: string[];
+};
+
 export type SystemSettingsAuditFilters = {
   cursor?: string | null;
   limit?: number;
@@ -66,6 +85,19 @@ export type SystemSettingsAuditCapabilities = {
   maxExportRows: number;
   pageSizeOptions: number[];
   cursorMode: 'id';
+};
+
+type AuditActor = {
+  id: string;
+  email: string;
+  name: string | null;
+} | null;
+
+type RawAuditRow = {
+  id: string;
+  createdAt: Date;
+  metadata: unknown;
+  actor: AuditActor;
 };
 
 function normalizeAuditChanges(metadata: unknown): SystemSettingsAuditChange[] {
@@ -98,6 +130,32 @@ function normalizeAuditUpdatedKeys(metadata: unknown, changes: SystemSettingsAud
   return changes.map((item) => item.key);
 }
 
+function normalizeAuditExportedKeys(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== 'object') return [];
+  const exportedKeys = (metadata as { exportedKeys?: unknown }).exportedKeys;
+  if (!Array.isArray(exportedKeys)) return [];
+  return exportedKeys.map((item) => String(item || '').trim()).filter(Boolean);
+}
+
+function normalizeAuditExportCount(metadata: unknown, key: 'rowCount' | 'exportLimit' | 'maxExportRows'): number {
+  if (!metadata || typeof metadata !== 'object') return 0;
+  const value = (metadata as Record<string, unknown>)[key];
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function normalizeAuditExportFilterValue(metadata: unknown, key: 'actor' | 'key' | 'dateFrom' | 'dateTo'): string {
+  if (!metadata || typeof metadata !== 'object') return '';
+  const filters = (metadata as { filters?: unknown }).filters;
+  if (!filters || typeof filters !== 'object') return '';
+  return String((filters as Record<string, unknown>)[key] || '').trim();
+}
+
+function normalizeAuditExportTruncated(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== 'object') return false;
+  return Boolean((metadata as { truncated?: unknown }).truncated);
+}
+
 function parseAuditDateInput(value: string | null | undefined, label: string, endOfRange = false): Date | null {
   const normalized = String(value || '').trim();
   if (!normalized) return null;
@@ -123,6 +181,14 @@ function matchesAuditKeyFilter(metadata: unknown, keyQuery: string): boolean {
   const updatedKeys = normalizeAuditUpdatedKeys(metadata, changes);
   return updatedKeys.some((key) => key.toLowerCase().includes(normalizedKey))
     || changes.some((change) => change.key.toLowerCase().includes(normalizedKey));
+}
+
+function matchesAuditExportKeyFilter(metadata: unknown, keyQuery: string): boolean {
+  if (!keyQuery) return true;
+  const normalizedKey = keyQuery.toLowerCase();
+  const filterKey = normalizeAuditExportFilterValue(metadata, 'key').toLowerCase();
+  const exportedKeys = normalizeAuditExportedKeys(metadata).map((key) => key.toLowerCase());
+  return filterKey.includes(normalizedKey) || exportedKeys.some((key) => key.includes(normalizedKey));
 }
 
 function matchesAuditActorFilter(
@@ -279,25 +345,14 @@ async function collectSystemSettingsAuditRows(
   currentUser: CurrentUser,
   options: SystemSettingsAuditFilters,
   targetCount: number,
-  capabilities?: SystemSettingsAuditCapabilities,
-): Promise<Array<{
-  id: string;
-  createdAt: Date;
-  metadata: unknown;
-  actor: {
-    id: string;
-    email: string;
-    name: string | null;
-  } | null;
-}>> {
+  capabilities: SystemSettingsAuditCapabilities | undefined,
+  where: Prisma.AuditLogWhereInput,
+  matchesMetadata: (metadata: unknown, keyQuery: string) => boolean,
+): Promise<RawAuditRow[]> {
   assertAdmin(currentUser, '只有管理员可以查看系统配置审计');
 
   const resolvedCapabilities = capabilities || await getSettingsAuditCapabilities();
   const { actorQuery, keyQuery, dateFrom, dateTo } = normalizeSystemSettingsAuditFilters(options, resolvedCapabilities);
-  const where: Prisma.AuditLogWhereInput = {
-    action: auditActions.SYSTEM_SETTINGS_UPDATE,
-    targetType: auditTargetTypes.SYSTEM_SETTING,
-  };
 
   if (dateFrom || dateTo) {
     where.createdAt = {
@@ -318,16 +373,7 @@ async function collectSystemSettingsAuditRows(
     };
   }
   const take = Math.max(Math.min(targetCount * 3, 200), 50);
-  const filteredRows: Array<{
-    id: string;
-    createdAt: Date;
-    metadata: unknown;
-    actor: {
-      id: string;
-      email: string;
-      name: string | null;
-    } | null;
-  }> = [];
+  const filteredRows: RawAuditRow[] = [];
 
   let cursor = options.cursor || null;
   let exhausted = false;
@@ -355,7 +401,7 @@ async function collectSystemSettingsAuditRows(
     filteredRows.push(...rows.filter((row) => (
       matchesAuditActorFilter(row.actor, actorQuery)
       && matchesAuditDateFilter(row.createdAt, dateFrom, dateTo)
-      && matchesAuditKeyFilter(row.metadata, keyQuery)
+      && matchesMetadata(row.metadata, keyQuery)
     )));
     cursor = rows[rows.length - 1]?.id || null;
     exhausted = rows.length < take;
@@ -381,6 +427,23 @@ function mapSystemSettingsAuditEntry(row: {
     actor: row.actor,
     updatedKeys: normalizeAuditUpdatedKeys(row.metadata, changes),
     changes,
+  };
+}
+
+function mapSystemSettingsAuditExportEntry(row: RawAuditRow): SystemSettingsAuditExportEntry {
+  return {
+    id: row.id,
+    createdAt: row.createdAt.toISOString(),
+    actor: row.actor,
+    rowCount: normalizeAuditExportCount(row.metadata, 'rowCount'),
+    exportLimit: normalizeAuditExportCount(row.metadata, 'exportLimit'),
+    maxExportRows: normalizeAuditExportCount(row.metadata, 'maxExportRows'),
+    truncated: normalizeAuditExportTruncated(row.metadata),
+    filterActor: normalizeAuditExportFilterValue(row.metadata, 'actor'),
+    filterKey: normalizeAuditExportFilterValue(row.metadata, 'key'),
+    filterDateFrom: normalizeAuditExportFilterValue(row.metadata, 'dateFrom'),
+    filterDateTo: normalizeAuditExportFilterValue(row.metadata, 'dateTo'),
+    exportedKeys: normalizeAuditExportedKeys(row.metadata),
   };
 }
 
@@ -502,7 +565,17 @@ export async function listSystemSettingsAuditLogs(
 }> {
   const capabilities = await getSettingsAuditCapabilities();
   const { limit } = normalizeSystemSettingsAuditFilters(options, capabilities);
-  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, limit + 1, capabilities);
+  const filteredRows = await collectSystemSettingsAuditRows(
+    currentUser,
+    options,
+    limit + 1,
+    capabilities,
+    {
+      action: auditActions.SYSTEM_SETTINGS_UPDATE,
+      targetType: auditTargetTypes.SYSTEM_SETTING,
+    },
+    matchesAuditKeyFilter,
+  );
   const hasMore = filteredRows.length > limit;
   const items = filteredRows.slice(0, limit).map(mapSystemSettingsAuditEntry);
 
@@ -524,14 +597,77 @@ export async function listAllSystemSettingsAuditLogs(
   truncated: boolean;
 }> {
   const capabilities = await getSettingsAuditCapabilities();
-  const { exportLimit } = normalizeSystemSettingsAuditFilters(options, capabilities);
-  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, exportLimit + 1, capabilities);
+  const normalizedFilters = normalizeSystemSettingsAuditFilters(options, capabilities);
+  const { exportLimit } = normalizedFilters;
+  const filteredRows = await collectSystemSettingsAuditRows(
+    currentUser,
+    options,
+    exportLimit + 1,
+    capabilities,
+    {
+      action: auditActions.SYSTEM_SETTINGS_UPDATE,
+      targetType: auditTargetTypes.SYSTEM_SETTING,
+    },
+    matchesAuditKeyFilter,
+  );
   const truncated = filteredRows.length > exportLimit;
+  const items = filteredRows.slice(0, exportLimit).map(mapSystemSettingsAuditEntry);
+  await recordAuditEvent({
+    action: auditActions.SYSTEM_SETTINGS_AUDIT_EXPORT,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.SYSTEM_SETTING,
+    metadata: {
+      rowCount: items.length,
+      exportLimit,
+      maxExportRows: capabilities.maxExportRows,
+      truncated,
+      exportedKeys: Array.from(new Set(items.flatMap((item) => item.updatedKeys))).sort(),
+      filters: {
+        actor: normalizedFilters.actorQuery,
+        key: normalizedFilters.keyQuery,
+        dateFrom: options.dateFrom || '',
+        dateTo: options.dateTo || '',
+      },
+    },
+  });
   return {
-    items: filteredRows.slice(0, exportLimit).map(mapSystemSettingsAuditEntry),
+    items,
     exportLimit,
     maxExportRows: capabilities.maxExportRows,
     truncated,
+  };
+}
+
+export async function listSystemSettingsAuditExportLogs(
+  currentUser: CurrentUser,
+  options: SystemSettingsAuditFilters = {},
+): Promise<{
+  items: SystemSettingsAuditExportEntry[];
+  nextCursor: string | null;
+  limit: number;
+  meta: SystemSettingsAuditCapabilities;
+}> {
+  const capabilities = await getSettingsAuditCapabilities();
+  const { limit } = normalizeSystemSettingsAuditFilters(options, capabilities);
+  const filteredRows = await collectSystemSettingsAuditRows(
+    currentUser,
+    options,
+    limit + 1,
+    capabilities,
+    {
+      action: auditActions.SYSTEM_SETTINGS_AUDIT_EXPORT,
+      targetType: auditTargetTypes.SYSTEM_SETTING,
+    },
+    matchesAuditExportKeyFilter,
+  );
+  const hasMore = filteredRows.length > limit;
+  const items = filteredRows.slice(0, limit).map(mapSystemSettingsAuditExportEntry);
+
+  return {
+    items,
+    nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    limit,
+    meta: capabilities,
   };
 }
 

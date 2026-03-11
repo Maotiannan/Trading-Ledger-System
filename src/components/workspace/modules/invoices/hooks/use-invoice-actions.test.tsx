@@ -292,6 +292,49 @@ describe('useInvoiceActions', () => {
     confirmSpy.mockRestore();
   });
 
+  it('deletes order and refreshes invoices on success', async () => {
+    mockApiCall.mockResolvedValue({ success: true });
+    const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => true);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleDeleteOrder('order-2');
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('invoice', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        action: 'deleteOrder',
+        orderId: 'order-2',
+      }),
+    }));
+    expect(loadInvoices).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
   it('skips delete request when user cancels confirmation', async () => {
     const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => false);
 
@@ -375,6 +418,43 @@ describe('useInvoiceActions', () => {
     expect(loadInvoices).toHaveBeenCalled();
   });
 
+  it('surfaces add order failures from backend response', async () => {
+    const resetAddOrderForm = jest.fn();
+    mockApiCall.mockResolvedValue({ success: false, error: '添加失败' });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: 'inv-1',
+      setAddError,
+      newOrderNo: 'MAB-1-03',
+      newOrderAmount: '300',
+      newOrderCustomerMark: 'MAB-1',
+      newOrderCustomerName: 'MAB',
+      newOrderCustomerId: 'cust-1',
+      resetAddOrderForm,
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(setAddError).toHaveBeenCalledWith('添加失败');
+    expect(resetAddOrderForm).not.toHaveBeenCalled();
+    expect(loadInvoices).not.toHaveBeenCalled();
+  });
+
   it('blocks add order when customer mark is missing', async () => {
     const resetAddOrderForm = jest.fn();
 
@@ -452,6 +532,69 @@ describe('useInvoiceActions', () => {
       credentials: 'include',
     }));
     expect(window.alert).toHaveBeenCalledWith('模板下载失败');
+    if (originalFetch) {
+      Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: originalFetch });
+    } else {
+      delete (globalThis as { fetch?: typeof fetch }).fetch;
+    }
+  });
+
+  it('downloads invoice template on success', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const anchor = originalCreateElement('a');
+    const clickSpy = jest.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(new Blob(['invoice-template'])),
+    } as unknown as Response);
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName.toLowerCase() === 'a') return anchor;
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: jest.fn(() => 'blob:invoice-template') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: jest.fn() });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.downloadInvoiceImportTemplate();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/invoice?action=import-template', expect.objectContaining({
+      method: 'GET',
+      credentials: 'include',
+    }));
+    expect(anchor.download).toBe('invoice-import-template.xlsx');
+    expect(clickSpy).toHaveBeenCalled();
+    expect(window.alert).not.toHaveBeenCalled();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
     if (originalFetch) {
       Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: originalFetch });
     } else {

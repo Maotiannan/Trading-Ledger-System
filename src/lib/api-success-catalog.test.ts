@@ -41,5 +41,17 @@ describe('api-success-catalog', () => {
     expect(
       translateApiSuccessMessage('配置审计导出完成：已导出 88 条（服务端上限 5000，结果已截断）', 'en'),
     ).toBe('Configuration audit export completed: exported 88 rows (server cap 5000, truncated)');
+    expect(
+      translateApiSuccessMessage('配置审计导出历史已加载，共 5 条记录', 'en'),
+    ).toBe('Configuration audit export history loaded: 5 entries');
+    expect(
+      translateApiSuccessMessage('客户列表已加载，共 12 个客户', 'en'),
+    ).toBe('Customer list loaded: 12 customers');
+    expect(
+      translateApiSuccessMessage('客户归属候选已加载，共 3 个账号', 'en'),
+    ).toBe('Customer owner options loaded: 3 accounts');
+    expect(
+      translateApiSuccessMessage('账单列表已加载，共 7 个账单', 'en'),
+    ).toBe('Invoice list loaded: 7 invoices');
   });
 });

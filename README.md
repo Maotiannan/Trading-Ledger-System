@@ -26,7 +26,7 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
-- 当前 Jest 已扩展到 `25 suites / 128 tests`；coverage global threshold 已小步提升到 `branches 48 / functions 74 / lines 68 / statements 66`
+- 当前 Jest 已扩展到 `27 suites / 172 tests`；coverage global threshold 已小步提升到 `branches 55 / functions 79 / lines 73 / statements 71`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -41,6 +41,7 @@
 - 审计与错误目录已开始统一常量化：新增 `audit-catalog.ts` 与 `apiErrorCodes`，`deletion/settings/receipt/detail/swift/invoice` 这批 service 已先接入统一动作/目标类型常量
 - 前端 workspace 的 API 错误消费已开始从字符串文案切到 `code/detail/message` 统一解析：共享 API client 现支持 `WorkspaceApiError`、错误码翻译、detail 拼接与上传接口统一错误读取
 - 设置页已新增独立“配置变更审计”工作区：支持单独查询最近配置修改记录，展示操作人、更新时间、更新键与前后值
+- 设置页配置审计现已补齐“游标分页 + 导出历史”：主审计列表展示当前游标分页状态，CSV 导出会记录成独立审计历史，并支持在前端继续按筛选条件查看导出记录
 - `/api/init` 已补齐根管理员初始化幂等与层级归一，避免并发初始化或历史脏数据导致根账号层级错误
 - `/api/invoice` 已修复 grouped order 合并后继续对旧 orderId 重算余额导致的潜在 500
 
@@ -958,6 +959,13 @@ src/
 - 🧠 前端错误消费收口为“保留服务端具体文案，错误码只做兜底”：`workspace api client` 不再把详细错误覆写成 `Invalid request` 这类通用文案，避免丢失 `OCR_DISABLED`、容差边界等关键细节。
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
+
+### v1.0.67 (2026-03-11)
+- 🏷️ 本地运行版本已与仓库同步：`package.json#version` 提升到 `1.0.67`，设置页顶部继续作为强可见版本入口；本地 `docker compose up -d --build` 后容器内版本与仓库版本一致。
+- 🌐 服务端成功摘要继续扩到读接口与模板下载：`/api/customer` 的 owner options / list / create / update 与 `/api/invoice` 的 list / order lookup / receipt lookup / import template 统一补齐本地化成功消息，`customer/invoice` 模板下载也开始返回 `X-Success-Message`。
+- 📜 设置审计升级为“游标分页 + 导出历史”：`/api/settings?view=audit-export-history` 新增独立导出历史查询；每次配置审计 CSV 导出都会记录操作者、筛选条件、导出条数、服务端上限、是否截断与导出涉及的配置键；设置页新增导出历史表格、刷新/加载更多与游标摘要。
+- 🧪 回归继续补到设置审计新能力与 hooks：新增 `settings-service` 的导出历史 service 测试、`use-settings-actions` 的导出历史/游标/导出后刷新测试，并补齐 `use-invoice-actions / use-customer-actions / api-success-catalog / settings-and-report isolated API case`。
+- 📈 coverage threshold 第十五次小步上调：global 提升到 `55 / 79 / 73 / 71`，并优先提高 `use-invoice-actions` 到 `70 / 88 / 80 / 80`、`use-customer-actions` 到 `45 / 70 / 55 / 53`；同时将 `use-settings-actions` 的函数门禁从假性 `93` 收口到当前真实可持续的 `92`。
 
 ### v1.0.66 (2026-03-11)
 - 🏷️ 页面版本号改为“设置页顶部强可见 + `package.json` 单一来源”：`Settings` 页面最上方新增当前版本号展示，继续通过 `src/lib/app-version.ts` 统一读取 `package.json#version`，避免版本信息只出现在页脚。

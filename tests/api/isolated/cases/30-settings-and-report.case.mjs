@@ -31,6 +31,22 @@ export default async function run(t) {
   t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_WARNING_TOLERANCE || ''), nextSwiftWarningTolerance, 'updated swift warning tolerance persisted');
   t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_REJECT_TOLERANCE || ''), nextSwiftRejectTolerance, 'updated swift reject tolerance persisted');
 
+  const auditList = await t.request('GET', '/api/settings?view=audit&limit=20', { expectedStatus: 200 });
+  t.assertEqual(Array.isArray(auditList.data?.data?.items), true, 'settings audit list returns item array');
+
+  const auditExport = await t.request('GET', '/api/settings?view=audit&format=csv&exportLimit=20', { expectedStatus: 200 });
+  t.assertEqual(auditExport.headers.get('x-export-row-count') !== null, true, 'settings audit csv export returns row count header');
+  t.assertEqual(auditExport.headers.get('x-export-summary') !== null, true, 'settings audit csv export returns export summary header');
+
+  const exportHistory = await t.request('GET', '/api/settings?view=audit-export-history&limit=20', { expectedStatus: 200 });
+  t.assertEqual(Array.isArray(exportHistory.data?.data?.items), true, 'settings audit export history returns item array');
+  t.assertEqual(Boolean(exportHistory.data?.data?.items?.length), true, 'settings audit export history records the latest export');
+  t.assertEqual(
+    String(exportHistory.data?.data?.items?.[0]?.actor?.email || ''),
+    t.adminEmail,
+    'settings audit export history keeps exporter identity',
+  );
+
   const ocrTest = await t.request('POST', '/api/settings', {
     json: { action: 'test-ocr' },
     expectedStatus: 400,

@@ -117,6 +117,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           'Content-Disposition': 'attachment; filename="invoice-import-template.xlsx"',
+          'X-Success-Message': encodeURIComponent(localizeApiSuccessMessage('账单导入模板已生成', request) || ''),
         },
       });
     }
@@ -129,7 +130,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         },
         select: { id: true },
       });
-      if (!accessibleOrder) return NextResponse.json({ success: true, data: [] });
+      if (!accessibleOrder) return createApiSuccessResponse({ data: [], message: '订单收据记录已加载，共 0 条' }, request);
 
       const receipts = await db.receipt.findMany({
         where: {
@@ -153,7 +154,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
         take: 30,
       });
-      return NextResponse.json({ success: true, data: receipts });
+      return createApiSuccessResponse({ data: receipts, message: `订单收据记录已加载，共 ${receipts.length} 条` }, request);
     }
 
     if (orderNo) {
@@ -174,12 +175,13 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
             createdAt: true,
           },
         });
-        return NextResponse.json({ success: true, data: matchedOrder ? [matchedOrder] : [] });
+        const data = matchedOrder ? [matchedOrder] : [];
+        return createApiSuccessResponse({ data, message: `订单匹配候选已加载，共 ${data.length} 条` }, request);
       }
 
       const targetKey = deriveOrderGroupKey(orderNo);
       if (!targetKey) {
-        return NextResponse.json({ success: true, data: [] });
+        return createApiSuccessResponse({ data: [], message: '订单匹配候选已加载，共 0 条' }, request);
       }
       const allOrders = await db.order.findMany({
         where: visibilityWhere,
@@ -197,7 +199,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         orderBy: { createdAt: 'desc' },
       });
       const matched = allOrders.filter((row) => deriveOrderGroupKey(row.orderNo) === targetKey);
-      return NextResponse.json({ success: true, data: matched });
+      return createApiSuccessResponse({ data: matched, message: `订单匹配候选已加载，共 ${matched.length} 条` }, request);
     }
 
     const invoices = await db.invoice.findMany({
@@ -258,7 +260,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-    return NextResponse.json({ success: true, data: searchedResult });
+    return createApiSuccessResponse({ data: searchedResult, message: `账单列表已加载，共 ${searchedResult.length} 个账单` }, request);
   } catch (error) {
     console.error('Get invoices error:', error);
     return toApiErrorResponse(error, {

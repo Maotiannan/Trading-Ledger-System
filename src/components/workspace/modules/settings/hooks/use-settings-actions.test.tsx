@@ -28,6 +28,8 @@ describe('useSettingsActions', () => {
   let pwdState: PasswordFormState;
   let auditFiltersState: SettingsAuditFilterState;
   let auditMetaState: SettingsAuditMeta;
+  let auditCursorState: string | null;
+  let auditExportHistoryCursorState: string | null;
 
   beforeEach(() => {
     mockApiCall.mockReset();
@@ -37,6 +39,8 @@ describe('useSettingsActions', () => {
     pwdState = { oldPassword: 'old-pass', newPassword: 'new-pass-1', confirmPassword: 'new-pass-1' };
     auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20, exportLimit: 5000 };
     auditMetaState = { defaultPageSize: 20, maxPageSize: 100, maxExportRows: 5000, pageSizeOptions: [20, 50, 100], cursorMode: 'id' };
+    auditCursorState = null;
+    auditExportHistoryCursorState = null;
     jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
@@ -60,7 +64,8 @@ describe('useSettingsActions', () => {
       branchPurgeTargets: [{ id: 'sales-1', email: 'sales@example.com', name: 'Sales', level: 3, role: 'SALES', parentId: 'admin-1' }],
       purgeForm: purgeFormState,
       pwd: pwdState,
-      auditCursor: null,
+      auditCursor: auditCursorState,
+      auditExportHistoryCursor: auditExportHistoryCursorState,
       auditFilters: auditFiltersState,
       auditMeta: auditMetaState,
       setLoading: jest.fn(),
@@ -82,6 +87,11 @@ describe('useSettingsActions', () => {
       setSettingsAuditEntries: jest.fn(),
       setSettingsAuditCursor: jest.fn(),
       setSettingsAuditHasMore: jest.fn(),
+      setSettingsAuditExportHistoryEntries: jest.fn(),
+      setSettingsAuditExportHistoryCursor: jest.fn(),
+      setSettingsAuditExportHistoryHasMore: jest.fn(),
+      setSettingsAuditExportHistoryLoading: jest.fn(),
+      setSettingsAuditExportHistoryLoadingMore: jest.fn(),
       setSettingsAuditMeta: jest.fn((value: SettingsAuditMeta) => {
         auditMetaState = value;
       }),
@@ -152,6 +162,9 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditEntries).toHaveBeenCalledWith([]);
     expect(deps.setSettingsAuditCursor).toHaveBeenCalledWith(null);
     expect(deps.setSettingsAuditHasMore).toHaveBeenCalledWith(false);
+    expect(deps.setSettingsAuditExportHistoryEntries).toHaveBeenCalledWith([]);
+    expect(deps.setSettingsAuditExportHistoryCursor).toHaveBeenCalledWith(null);
+    expect(deps.setSettingsAuditExportHistoryHasMore).toHaveBeenCalledWith(false);
   });
 
   it('blocks password change when confirmation mismatches', async () => {
@@ -274,6 +287,42 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditHasMore).toHaveBeenCalledWith(true);
   });
 
+  it('loads export history independently', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [{
+          id: 'audit-export-1',
+          createdAt: '2026-03-11T07:20:00.000Z',
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+          rowCount: 88,
+          exportLimit: 100,
+          maxExportRows: 5000,
+          truncated: true,
+          filterActor: 'admin@example.com',
+          filterKey: 'OCR_DISABLED',
+          filterDateFrom: '2026-03-11T07:00',
+          filterDateTo: '2026-03-11T08:00',
+          exportedKeys: ['OCR_DISABLED'],
+        }],
+        nextCursor: 'audit-export-1',
+        meta: auditMetaState,
+      },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettingsAuditExportHistory();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit-export-history&limit=20');
+    expect(deps.setSettingsAuditExportHistoryEntries).toHaveBeenCalledWith(expect.any(Function));
+    expect(deps.setSettingsAuditExportHistoryCursor).toHaveBeenCalledWith('audit-export-1');
+    expect(deps.setSettingsAuditExportHistoryHasMore).toHaveBeenCalledWith(true);
+  });
+
   it('includes audit filters when applying audit filters', async () => {
     auditFiltersState = {
       actorQuery: 'admin@example.com',
@@ -284,10 +333,15 @@ describe('useSettingsActions', () => {
       exportLimit: 1000,
     };
     const deps = createDeps();
-    mockApiCall.mockResolvedValueOnce({
-      success: true,
-      data: { items: [], nextCursor: null, meta: auditMetaState },
-    });
+    mockApiCall
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [], nextCursor: null, meta: auditMetaState },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [], nextCursor: null, meta: auditMetaState },
+      });
 
     const { result } = renderHook(() => useSettingsActions(deps));
 
@@ -297,6 +351,9 @@ describe('useSettingsActions', () => {
 
     expect(mockApiCall).toHaveBeenCalledWith(
       'settings?view=audit&limit=50&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
+    );
+    expect(mockApiCall).toHaveBeenCalledWith(
+      'settings?view=audit-export-history&limit=50&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
     );
   });
 
@@ -310,10 +367,15 @@ describe('useSettingsActions', () => {
       exportLimit: 1000,
     };
     const deps = createDeps();
-    mockApiCall.mockResolvedValueOnce({
-      success: true,
-      data: { items: [], nextCursor: null, meta: auditMetaState },
-    });
+    mockApiCall
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [], nextCursor: null, meta: auditMetaState },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [], nextCursor: null, meta: auditMetaState },
+      });
 
     const { result } = renderHook(() => useSettingsActions(deps));
 
@@ -323,6 +385,7 @@ describe('useSettingsActions', () => {
 
     expect(auditFiltersState).toEqual({ actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20, exportLimit: 5000 });
     expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit&limit=20');
+    expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit-export-history&limit=20');
   });
 
   it('clears audit state without requesting backend when audit is not allowed', async () => {
@@ -342,7 +405,25 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditHasMore).toHaveBeenCalledWith(false);
   });
 
+  it('clears export history state without requesting backend when audit is not allowed', async () => {
+    const deps = createDeps();
+    const { result } = renderHook(() => useSettingsActions({
+      ...deps,
+      canViewAudit: false,
+    }));
+
+    await act(async () => {
+      await result.current.loadSettingsAuditExportHistory();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(deps.setSettingsAuditExportHistoryEntries).toHaveBeenCalledWith([]);
+    expect(deps.setSettingsAuditExportHistoryCursor).toHaveBeenCalledWith(null);
+    expect(deps.setSettingsAuditExportHistoryHasMore).toHaveBeenCalledWith(false);
+  });
+
   it('loads more audit logs with cursor when appending', async () => {
+    auditCursorState = 'audit-1';
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({
       success: true,
@@ -353,10 +434,7 @@ describe('useSettingsActions', () => {
       },
     });
 
-    const { result } = renderHook(() => useSettingsActions({
-      ...deps,
-      auditCursor: 'audit-1',
-    }));
+    const { result } = renderHook(() => useSettingsActions(deps));
 
     await act(async () => {
       await result.current.loadSettingsAudit({ append: true });
@@ -365,6 +443,42 @@ describe('useSettingsActions', () => {
     expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit&limit=20&cursor=audit-1');
     expect(deps.setAuditLoadingMore).toHaveBeenCalledWith(true);
     expect(deps.setAuditLoadingMore).toHaveBeenLastCalledWith(false);
+  });
+
+  it('loads more export history with cursor when appending', async () => {
+    auditExportHistoryCursorState = 'audit-export-1';
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [{
+          id: 'audit-export-2',
+          createdAt: '2026-03-11T07:21:00.000Z',
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+          rowCount: 10,
+          exportLimit: 20,
+          maxExportRows: 5000,
+          truncated: false,
+          filterActor: '',
+          filterKey: '',
+          filterDateFrom: '',
+          filterDateTo: '',
+          exportedKeys: ['OCR_DISABLED'],
+        }],
+        nextCursor: null,
+        meta: auditMetaState,
+      },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettingsAuditExportHistory({ append: true });
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit-export-history&limit=20&cursor=audit-export-1');
+    expect(deps.setSettingsAuditExportHistoryLoadingMore).toHaveBeenCalledWith(true);
+    expect(deps.setSettingsAuditExportHistoryLoadingMore).toHaveBeenLastCalledWith(false);
   });
 
   it('exports audit logs as csv using active filters', async () => {
@@ -404,6 +518,10 @@ describe('useSettingsActions', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: jest.fn() });
 
     const { result } = renderHook(() => useSettingsActions(deps));
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: { items: [], nextCursor: null, meta: auditMetaState },
+    });
 
     await act(async () => {
       await result.current.exportSettingsAudit();
@@ -416,6 +534,9 @@ describe('useSettingsActions', () => {
     expect(anchor.download).toBe('settings-audit.csv');
     expect(clickSpy).toHaveBeenCalled();
     expect(deps.setMessage).toHaveBeenCalledWith('配置审计导出完成：已导出 88 条（服务端上限 5000，结果已截断）');
+    expect(mockApiCall).toHaveBeenCalledWith(
+      'settings?view=audit-export-history&limit=100&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
+    );
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });

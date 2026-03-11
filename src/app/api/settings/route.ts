@@ -7,6 +7,7 @@ import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-s
 import {
   listAllSystemSettingsAuditLogs,
   listSettings,
+  listSystemSettingsAuditExportLogs,
   listSystemSettingsAuditLogs,
   purgeBranchBusinessData,
   purgeBusinessData,
@@ -107,6 +108,25 @@ export const GET = withAuth(async (_request, currentUser) => {
         dateTo,
       });
       return createApiSuccessResponse({ data, message: `配置审计已加载，共 ${data.items.length} 条记录` }, _request);
+    }
+
+    if (view === 'audit-export-history') {
+      const cursor = _request.nextUrl.searchParams.get('cursor');
+      const limitRaw = _request.nextUrl.searchParams.get('limit');
+      const actor = _request.nextUrl.searchParams.get('actor');
+      const key = _request.nextUrl.searchParams.get('key');
+      const dateFrom = _request.nextUrl.searchParams.get('dateFrom');
+      const dateTo = _request.nextUrl.searchParams.get('dateTo');
+      const limit = limitRaw ? Number(limitRaw) : undefined;
+      const data = await listSystemSettingsAuditExportLogs(currentUser, {
+        cursor,
+        limit,
+        actor,
+        key,
+        dateFrom,
+        dateTo,
+      });
+      return createApiSuccessResponse({ data, message: `配置审计导出历史已加载，共 ${data.items.length} 条记录` }, _request);
     }
 
     const data = await listSettings(currentUser);

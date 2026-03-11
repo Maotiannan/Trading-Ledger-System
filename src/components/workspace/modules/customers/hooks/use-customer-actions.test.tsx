@@ -321,6 +321,46 @@ describe('useCustomerActions', () => {
     expect(loadCustomers).toHaveBeenCalled();
   });
 
+  it('alerts when delete fails', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '删除失败' });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleDelete('cust-1');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('删除失败');
+    expect(loadCustomers).not.toHaveBeenCalled();
+  });
+
   it('submits customer fix and refreshes both lists', async () => {
     mockApiCall.mockResolvedValueOnce({ success: true });
     const setImportOwnerId = jest.fn();
@@ -370,6 +410,47 @@ describe('useCustomerActions', () => {
     expect(resetForm).toHaveBeenCalled();
     expect(loadCustomers).toHaveBeenCalled();
     expect(loadFixes).toHaveBeenCalled();
+  });
+
+  it('alerts when customer fix fails', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '修复失败' });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: { type: 'order', id: 'order-1' },
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.submitFix();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('修复失败');
+    expect(loadCustomers).not.toHaveBeenCalled();
+    expect(loadFixes).not.toHaveBeenCalled();
   });
 
   it('retries failed import rows and updates import message', async () => {
@@ -457,5 +538,68 @@ describe('useCustomerActions', () => {
     expect(setCustomerImportMessage).toHaveBeenCalledWith('retry ok');
     expect(loadCustomers).toHaveBeenCalled();
     globalThis.fetch = originalFetch;
+  });
+
+  it('downloads customer template on success', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const anchor = originalCreateElement('a');
+    const clickSpy = jest.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(['customer-template']),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+    jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName.toLowerCase() === 'a') return anchor;
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: jest.fn(() => 'blob:customer-template') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: jest.fn() });
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.downloadCustomerImportTemplate();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/customer?action=import-template', expect.objectContaining({
+      method: 'GET',
+      credentials: 'include',
+    }));
+    expect(anchor.download).toBe('customer-import-template.xlsx');
+    expect(clickSpy).toHaveBeenCalled();
+    globalThis.fetch = originalFetch;
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });
 });

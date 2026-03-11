@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import {
   listSettings,
   listAllSystemSettingsAuditLogs,
+  listSystemSettingsAuditExportLogs,
   listSystemSettingsAuditLogs,
   purgeBranchBusinessData,
   purgeBusinessData,
@@ -237,9 +238,85 @@ describe('settings-service', () => {
     expect(result.exportLimit).toBe(5000);
     expect(result.maxExportRows).toBe(5000);
     expect(result.truncated).toBe(false);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_AUDIT_EXPORT',
+      metadata: expect.objectContaining({
+        rowCount: 2,
+        exportLimit: 5000,
+        maxExportRows: 5000,
+        truncated: false,
+        exportedKeys: ['OCR_DISABLED', 'SWIFT_WARNING_TOLERANCE'],
+        filters: expect.objectContaining({
+          actor: 'admin@example.com',
+        }),
+      }),
+    }));
     expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
       take: 200,
     }));
+  });
+
+  it('lists settings audit export history with filters and pagination', async () => {
+    mockDb.auditLog.findMany.mockResolvedValueOnce([
+      {
+        id: 'audit-export-2',
+        createdAt: new Date('2026-03-11T08:20:00.000Z'),
+        metadata: {
+          rowCount: 88,
+          exportLimit: 100,
+          maxExportRows: 5000,
+          truncated: true,
+          exportedKeys: ['OCR_DISABLED', 'SWIFT_WARNING_TOLERANCE'],
+          filters: {
+            actor: 'admin@example.com',
+            key: 'OCR_DISABLED',
+            dateFrom: '2026-03-11T07:00',
+            dateTo: '2026-03-11T08:00',
+          },
+        },
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+      {
+        id: 'audit-export-1',
+        createdAt: new Date('2026-03-11T08:10:00.000Z'),
+        metadata: {
+          rowCount: 20,
+          exportLimit: 20,
+          maxExportRows: 5000,
+          truncated: false,
+          exportedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE'],
+          filters: {
+            actor: '',
+            key: 'DETAIL_RECEIPT_MATCH_TOLERANCE',
+            dateFrom: '',
+            dateTo: '',
+          },
+        },
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+    ]);
+
+    const result = await listSystemSettingsAuditExportLogs(makeUser(), {
+      limit: 1,
+      key: 'OCR_DISABLED',
+    });
+
+    expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        action: 'SYSTEM_SETTINGS_AUDIT_EXPORT',
+        targetType: 'SYSTEM_SETTING',
+      }),
+    }));
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'audit-export-2',
+        rowCount: 88,
+        truncated: true,
+        filterKey: 'OCR_DISABLED',
+        exportedKeys: ['OCR_DISABLED', 'SWIFT_WARNING_TOLERANCE'],
+      }),
+    ]);
+    expect(result.nextCursor).toBeNull();
   });
 
   it('filters system setting audit logs by actor, time range, and setting key', async () => {

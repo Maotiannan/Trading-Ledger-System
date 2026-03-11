@@ -6,6 +6,7 @@ import type {
   PasswordFormState,
   PurgeFormState,
   SettingsAuditEntry,
+  SettingsAuditExportEntry,
   SettingsAuditFilterState,
   SettingsAuditMeta,
 } from '../types';
@@ -47,6 +48,11 @@ export function useSettingsForms() {
   const [settingsAuditEntries, setSettingsAuditEntries] = useState<SettingsAuditEntry[]>([]);
   const [settingsAuditCursor, setSettingsAuditCursor] = useState<string | null>(null);
   const [settingsAuditHasMore, setSettingsAuditHasMore] = useState(false);
+  const [settingsAuditExportHistoryEntries, setSettingsAuditExportHistoryEntries] = useState<SettingsAuditExportEntry[]>([]);
+  const [settingsAuditExportHistoryCursor, setSettingsAuditExportHistoryCursor] = useState<string | null>(null);
+  const [settingsAuditExportHistoryHasMore, setSettingsAuditExportHistoryHasMore] = useState(false);
+  const [settingsAuditExportHistoryLoading, setSettingsAuditExportHistoryLoading] = useState(false);
+  const [settingsAuditExportHistoryLoadingMore, setSettingsAuditExportHistoryLoadingMore] = useState(false);
   const [settingsAuditMeta, setSettingsAuditMeta] = useState<SettingsAuditMeta>(defaultSettingsAuditMeta);
   const [settingsAuditFilters, setSettingsAuditFilters] = useState<SettingsAuditFilterState>(emptySettingsAuditFilters);
   const [purgeForm, setPurgeForm] = useState<PurgeFormState>({
@@ -114,6 +120,16 @@ export function useSettingsForms() {
     setSettingsAuditCursor,
     settingsAuditHasMore,
     setSettingsAuditHasMore,
+    settingsAuditExportHistoryEntries,
+    setSettingsAuditExportHistoryEntries,
+    settingsAuditExportHistoryCursor,
+    setSettingsAuditExportHistoryCursor,
+    settingsAuditExportHistoryHasMore,
+    setSettingsAuditExportHistoryHasMore,
+    settingsAuditExportHistoryLoading,
+    setSettingsAuditExportHistoryLoading,
+    settingsAuditExportHistoryLoadingMore,
+    setSettingsAuditExportHistoryLoadingMore,
     settingsAuditMeta,
     setSettingsAuditMeta,
     settingsAuditFilters,

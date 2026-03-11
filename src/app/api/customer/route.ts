@@ -479,7 +479,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
   if (action === 'owner-options') {
     const options = await listCustomerOwnerOptions({ id: currentUser.id, role: currentUser.role as UserRole });
-    return NextResponse.json({ success: true, data: options });
+    return createApiSuccessResponse({ data: options, message: `客户归属候选已加载，共 ${options.length} 个账号` }, request);
   }
 
   if (action === 'import-template') {
@@ -516,6 +516,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': 'attachment; filename="customer-import-template.xlsx"',
+        'X-Success-Message': encodeURIComponent(localizeApiSuccessMessage('客户导入模板已生成', request) || ''),
       },
     });
   }
@@ -544,14 +545,13 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   });
 
   if (currentUser.role === UserRole.ADMIN) {
-    return NextResponse.json({ success: true, data: filterRowsBySearch(rows, search) });
+    const data = filterRowsBySearch(rows, search);
+    return createApiSuccessResponse({ data, message: `客户列表已加载，共 ${data.length} 个客户` }, request);
   }
 
   const showExtended = await canSalesEditExtendedFields();
-  return NextResponse.json({
-    success: true,
-    data: filterRowsBySearch(rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search),
-  });
+  const data = filterRowsBySearch(rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search);
+  return createApiSuccessResponse({ data, message: `客户列表已加载，共 ${data.length} 个客户` }, request);
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
@@ -765,9 +765,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       });
 
       if (currentUser.role === UserRole.ADMIN) {
-        return NextResponse.json({ success: true, data: created });
+        return createApiSuccessResponse({ data: created, message: '客户已创建' }, request);
       }
-      return NextResponse.json({ success: true, data: toSalesView(created as Record<string, unknown>, showExtended) });
+      return createApiSuccessResponse({ data: toSalesView(created as Record<string, unknown>, showExtended), message: '客户已创建' }, request);
     } catch (createError) {
       return badRequest(mapPrismaWriteError(createError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }
@@ -840,9 +840,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       });
 
       if (currentUser.role === UserRole.ADMIN) {
-        return NextResponse.json({ success: true, data: updated });
+        return createApiSuccessResponse({ data: updated, message: '客户已更新' }, request);
       }
-      return NextResponse.json({ success: true, data: toSalesView(updated as Record<string, unknown>, showExtended) });
+      return createApiSuccessResponse({ data: toSalesView(updated as Record<string, unknown>, showExtended), message: '客户已更新' }, request);
     } catch (updateError) {
       return badRequest(mapPrismaWriteError(updateError), apiErrorCodes.BAD_REQUEST, undefined, request);
     }

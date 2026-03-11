@@ -53,6 +53,16 @@ export function SettingsManager() {
     setSettingsAuditCursor,
     settingsAuditHasMore,
     setSettingsAuditHasMore,
+    settingsAuditExportHistoryEntries,
+    setSettingsAuditExportHistoryEntries,
+    settingsAuditExportHistoryCursor,
+    setSettingsAuditExportHistoryCursor,
+    settingsAuditExportHistoryHasMore,
+    setSettingsAuditExportHistoryHasMore,
+    settingsAuditExportHistoryLoading,
+    setSettingsAuditExportHistoryLoading,
+    settingsAuditExportHistoryLoadingMore,
+    setSettingsAuditExportHistoryLoadingMore,
     settingsAuditMeta,
     setSettingsAuditMeta,
     settingsAuditFilters,
@@ -68,6 +78,7 @@ export function SettingsManager() {
   const {
     loadSettings,
     loadSettingsAudit,
+    loadSettingsAuditExportHistory,
     applyAuditFilters,
     resetAuditFilters,
     handleSaveConfig,
@@ -86,6 +97,7 @@ export function SettingsManager() {
     purgeForm,
     pwd,
     auditCursor: settingsAuditCursor,
+    auditExportHistoryCursor: settingsAuditExportHistoryCursor,
     auditFilters: settingsAuditFilters,
     auditMeta: settingsAuditMeta,
     setLoading,
@@ -107,6 +119,11 @@ export function SettingsManager() {
     setSettingsAuditEntries,
     setSettingsAuditCursor,
     setSettingsAuditHasMore,
+    setSettingsAuditExportHistoryEntries,
+    setSettingsAuditExportHistoryCursor,
+    setSettingsAuditExportHistoryHasMore,
+    setSettingsAuditExportHistoryLoading,
+    setSettingsAuditExportHistoryLoadingMore,
     setSettingsAuditMeta,
     setSettingsAuditFilters,
     setPurgeForm,
@@ -120,7 +137,8 @@ export function SettingsManager() {
   useEffect(() => {
     if (!canViewAudit) return;
     void loadSettingsAudit();
-  }, [canViewAudit, loadSettingsAudit]);
+    void loadSettingsAuditExportHistory();
+  }, [canViewAudit, loadSettingsAudit, loadSettingsAuditExportHistory]);
 
   return (
     <div className="space-y-6">
@@ -189,6 +207,10 @@ export function SettingsManager() {
         exporting={auditExporting}
         hasMore={settingsAuditHasMore}
         entries={settingsAuditEntries}
+        exportHistoryEntries={settingsAuditExportHistoryEntries}
+        exportHistoryLoading={settingsAuditExportHistoryLoading}
+        exportHistoryLoadingMore={settingsAuditExportHistoryLoadingMore}
+        exportHistoryHasMore={settingsAuditExportHistoryHasMore}
         filters={settingsAuditFilters}
         meta={settingsAuditMeta}
         keyOptions={Object.keys(config).sort()}
@@ -198,6 +220,8 @@ export function SettingsManager() {
         onRefresh={() => { void loadSettingsAudit({ filters: settingsAuditFilters }); }}
         onLoadMore={() => { void loadSettingsAudit({ append: true, filters: settingsAuditFilters }); }}
         onExport={() => { void exportSettingsAudit(); }}
+        onRefreshExportHistory={() => { void loadSettingsAuditExportHistory({ filters: settingsAuditFilters }); }}
+        onLoadMoreExportHistory={() => { void loadSettingsAuditExportHistory({ append: true, filters: settingsAuditFilters }); }}
       />
     </div>
   );

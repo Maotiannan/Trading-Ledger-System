@@ -14,6 +14,8 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   '订单客户信息已修复': { zh: '订单客户信息已修复', en: 'Order customer information fixed' },
   '收据客户信息已修复': { zh: '收据客户信息已修复', en: 'Receipt customer information fixed' },
   '客户已删除': { zh: '客户已删除', en: 'Customer deleted' },
+  '客户已创建': { zh: '客户已创建', en: 'Customer created' },
+  '客户已更新': { zh: '客户已更新', en: 'Customer updated' },
   '申请已拒绝': { zh: '申请已拒绝', en: 'Request rejected' },
   '删除成功，状态已回退': { zh: '删除成功，状态已回退', en: 'Deletion completed and status reverted' },
   '账单已保存': { zh: '账单已保存', en: 'Invoice saved' },
@@ -42,6 +44,8 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   },
   '设置已加载': { zh: '设置已加载', en: 'Settings loaded' },
   '报表导出已生成': { zh: '报表导出已生成', en: 'Report export generated' },
+  '客户导入模板已生成': { zh: '客户导入模板已生成', en: 'Customer import template generated' },
+  '账单导入模板已生成': { zh: '账单导入模板已生成', en: 'Invoice import template generated' },
 };
 
 const containsSuccessMessages: Array<[string, Record<SupportedLocale, string>]> = [
@@ -113,10 +117,40 @@ export function translateApiSuccessMessage(raw: string, locale: SupportedLocale)
       return `Configuration audit loaded: ${auditLoadedMatch[1]} entries`;
     }
 
+    const auditExportHistoryLoadedMatch = /^配置审计导出历史已加载，共 (\d+) 条记录$/.exec(raw);
+    if (auditExportHistoryLoadedMatch) {
+      return `Configuration audit export history loaded: ${auditExportHistoryLoadedMatch[1]} entries`;
+    }
+
     const auditExportMatch = /^配置审计导出完成：已导出 (\d+) 条（服务端上限 (\d+)(，结果已截断)?）$/.exec(raw);
     if (auditExportMatch) {
       const [, rowCount, maxRows, truncated] = auditExportMatch;
       return `Configuration audit export completed: exported ${rowCount} rows (server cap ${maxRows}${truncated ? ', truncated' : ''})`;
+    }
+
+    const customerListMatch = /^客户列表已加载，共 (\d+) 个客户$/.exec(raw);
+    if (customerListMatch) {
+      return `Customer list loaded: ${customerListMatch[1]} customers`;
+    }
+
+    const customerOwnerOptionsMatch = /^客户归属候选已加载，共 (\d+) 个账号$/.exec(raw);
+    if (customerOwnerOptionsMatch) {
+      return `Customer owner options loaded: ${customerOwnerOptionsMatch[1]} accounts`;
+    }
+
+    const invoiceListMatch = /^账单列表已加载，共 (\d+) 个账单$/.exec(raw);
+    if (invoiceListMatch) {
+      return `Invoice list loaded: ${invoiceListMatch[1]} invoices`;
+    }
+
+    const orderCandidateMatch = /^订单匹配候选已加载，共 (\d+) 条$/.exec(raw);
+    if (orderCandidateMatch) {
+      return `Order match candidates loaded: ${orderCandidateMatch[1]} entries`;
+    }
+
+    const orderReceiptMatch = /^订单收据记录已加载，共 (\d+) 条$/.exec(raw);
+    if (orderReceiptMatch) {
+      return `Order receipt records loaded: ${orderReceiptMatch[1]} entries`;
     }
   }
 

@@ -1,83 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '@/lib/store';
-import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
-  apiCall,
-  fetchCustomerCandidatesByMark,
-  fetchServerDate,
-  getDisplayImageUrl,
-  getErrorMessage,
-  initCustomerImportRowViews,
-  initInvoiceImportRowViews,
-  lookupCustomerByOrderNoGroup,
-  mergeCustomerImportRowViews,
-  mergeInvoiceImportRowViews,
-  summarizeRowsForAlert,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
-  toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
-  useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
-  type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
-  type InvoiceImportRowView,
-} from '@/components/workspace/shared';
-import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
-  ChevronDown, ChevronRight, Pencil
-} from 'lucide-react';
+import { useUiText } from '@/components/workspace/shared';
+import { Check, X } from 'lucide-react';
+import { useDeletionActions } from '@/components/workspace/modules/deletions/hooks';
 
 export function DeletionManager() {
   const tx = useUiText();
   const { deletionRequests, setDeletionRequests, user } = useStore();
   const canApprove = user?.role === 'ADMIN';
-
-  const loadRequests = useCallback(async () => {
-    const result = await apiCall('deletion');
-    if (result.success) {
-      setDeletionRequests(result.data);
-    }
-  }, [setDeletionRequests]);
+  const { loadRequests, handleApprove, handleReject } = useDeletionActions({ setDeletionRequests });
 
   useEffect(() => {
     loadRequests();
   }, [loadRequests]);
-
-  const handleApprove = async (requestId: string) => {
-    await apiCall('deletion', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'approve', requestId }),
-    });
-    loadRequests();
-  };
-
-  const handleReject = async (requestId: string) => {
-    await apiCall('deletion', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'reject', requestId }),
-    });
-    loadRequests();
-  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -141,4 +82,3 @@ export function DeletionManager() {
     </div>
   );
 }
-

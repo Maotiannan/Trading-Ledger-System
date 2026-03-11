@@ -30,7 +30,8 @@
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
-- GitHub Actions `22934138981` 已在上述修复后通过；当前云端剩余事项仅为 `actions/checkout@v4` / `actions/setup-node@v4` 的 Node 24 兼容升级告警
+- GitHub Actions workflow 已升级到 `actions/checkout@v5` 与 `actions/setup-node@v5`，Node 24 兼容告警已消除
+- 删除审批链路已开始统一错误码与事务边界：`/api/deletion` 现通过 `deletion-service + ApiError(code/message/detail) + runInTransaction` 承接写操作，前端删除审批也已抽到独立 `use-deletion-actions`
 - `/api/init` 已补齐根管理员初始化幂等与层级归一，避免并发初始化或历史脏数据导致根账号层级错误
 - `/api/invoice` 已修复 grouped order 合并后继续对旧 orderId 重算余额导致的潜在 500
 
@@ -917,12 +918,19 @@ src/
 - 🧪 第三批 workspace 模块测试推进：为 `receipt/detail/swift/users` 四组 action hooks 补齐上传识别、确认创建、取消/异常分支、权限动作等真实交互测试，Jest 扩展到 `15 suites / 54 tests`。
 - 📈 coverage threshold 第三轮小步上调：将 `receipt/detail/swift/users` 正式纳入 `collectCoverageFrom` 与 module threshold，同时把 global threshold 提升到 `branches 40 / functions 65 / lines 60 / statements 60`，继续保持渐进收紧而不是一次性全仓拉满。
 
+### v1.0.57 (2026-03-11)
+- 🟢 GitHub Actions Node 24 兼容收口：CI workflow 升级到 `actions/checkout@v5` 与 `actions/setup-node@v5`，后续不再触发 Node 20 action 退役告警。
+- 🧱 删除审批服务层落地：新增 `src/lib/deletion-service.ts`、`src/lib/api-error.ts`、`src/lib/transaction.ts`，先在 `/api/deletion` 上统一 `code/message/detail` 错误结构，并把审批写路径收口到事务服务层。
+- 🪝 删除审批前端模块化：`DeletionManager` 抽出 `use-deletion-actions`，清理历史巨石 import，补齐删除审批模块的 hook 级自动化测试。
+- 🧪 删除审批单测补齐：新增 `deletion-service.test.ts` 与 `use-deletion-actions.test.tsx`，覆盖申请校验、审批/拒绝、事务内状态回退、结构化错误码与前端 reload 行为。
+- 📈 coverage threshold 第五轮小步上调：将 deletion hook + deletion service 纳入门禁，global 提升到 `43 / 69 / 63 / 63`；本地 `test:ci` 全绿。
+
 ### v1.0.56 (2026-03-11)
 - 🧪 新增业务链路集成测试：补齐 `60-receipt-detail-swift-lifecycle`，覆盖 `Receipt -> Detail -> Swift -> mark-received` 主链路、管理员拒绝删除、签收后禁止删除等状态迁移与审批边界。
 - 🎯 新增 SWIFT 金额容差边界回归：补齐 `70-swift-tolerance-boundaries`，验证 `±5 / ±6 / ±50 / ±51` 四个关键边界、错误 SWIFT 的持久化与创建者直删路径。
 - 🧮 单测补齐金额容差规则：`matching.test.ts` 新增 `validateAmountTolerance` 的正常/警告/拒绝分支，保证服务端提示文案与容差判定在边界值上稳定。
 - 📈 coverage threshold 第四轮小步上调：global 提升到 `42 / 68 / 62 / 62`，并同步收紧 `use-invoice-actions / use-customer-actions / use-settings-actions` 的局部门禁。
-- ✅ GitHub Actions `22934138981` 已最终通过；当前仅剩 `actions/checkout@v4` 与 `actions/setup-node@v4` 的 Node 24 兼容升级告警待后续处理。
+- ✅ GitHub Actions `22934138981` 已最终通过，并为后续 action 版本升级提供了基线对照。
 
 ### v1.0.55 (2026-03-11)
 - 🧯 修复 GitHub Actions 隔离 E2E 锁冲突：`test:api:isolated` 与 `test:e2e:isolated` 改为分别使用 `.next-api-isolated` / `.next-e2e-isolated`，避免两个 `next dev` 阶段共用 `.next/dev/lock` 导致 CI 在 `app not ready` 处失败。

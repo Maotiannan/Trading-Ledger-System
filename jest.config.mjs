@@ -20,16 +20,18 @@ const customJestConfig = {
     'src/components/workspace/modules/receipts/hooks/use-receipt-actions.ts',
     'src/components/workspace/modules/details/hooks/use-detail-actions.ts',
     'src/components/workspace/modules/swifts/hooks/use-swift-actions.ts',
+    'src/components/workspace/modules/deletions/hooks/use-deletion-actions.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-forms.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-actions.ts',
     'src/components/workspace/modules/users/hooks/use-user-actions.ts',
+    'src/lib/deletion-service.ts',
   ],
   coverageThreshold: {
     global: {
-      branches: 42,
-      functions: 68,
-      lines: 62,
-      statements: 62,
+      branches: 43,
+      functions: 69,
+      lines: 63,
+      statements: 63,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -73,6 +75,12 @@ const customJestConfig = {
       lines: 85,
       statements: 83,
     },
+    './src/components/workspace/modules/deletions/hooks/use-deletion-actions.ts': {
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100,
+    },
     './src/components/workspace/modules/settings/hooks/use-settings-forms.ts': {
       branches: 60,
       functions: 100,
@@ -90,6 +98,12 @@ const customJestConfig = {
       functions: 100,
       lines: 85,
       statements: 84,
+    },
+    './src/lib/deletion-service.ts': {
+      branches: 50,
+      functions: 70,
+      lines: 60,
+      statements: 60,
     },
   },
 };

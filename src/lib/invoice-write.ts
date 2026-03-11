@@ -318,7 +318,7 @@ export async function saveInvoiceWithOrders(input: {
     messageParts.push(`部分订单已合并: ${persisted.mergedOrdersInfo.join(', ')}`);
   }
   if (prepared.hasNeedsCustomerFix) {
-    messageParts.push('please modify guest information');
+    messageParts.push('请修复客户信息');
   }
 
   return {

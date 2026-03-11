@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { type ApiErrorCode, apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
 import {
@@ -854,7 +855,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     await db.customer.delete({ where: { id } });
-    return NextResponse.json({ success: true, message: '客户已删除' });
+    return createApiSuccessResponse({ message: '客户已删除' }, request);
   }
 
   return badRequest('未知操作', apiErrorCodes.INVALID_ACTION, { action }, request);

@@ -4,6 +4,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import {
   addInvoiceOrder,
   applyInvoiceRematch,
@@ -379,7 +380,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
       shipDate: parsedShipDate,
       releaseDate: parsedReleaseDate,
     });
-    return NextResponse.json({ success: true, data: result.data, message: result.message });
+    return createApiSuccessResponse({ data: result.data, message: result.message }, request);
   } catch (error) {
     console.error('Create invoice error:', error);
     return toApiErrorResponse(error, {
@@ -394,7 +395,7 @@ export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request:
   try {
     const { searchParams } = new URL(request.url);
     const result = await deleteInvoiceRecord(currentUser, searchParams.get('id') || '');
-    return NextResponse.json({ success: true, message: result.message });
+    return createApiSuccessResponse({ message: result.message }, request);
   } catch (error) {
     console.error('Delete invoice error:', error);
     return toApiErrorResponse(error, {
@@ -420,17 +421,17 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
         currentUser,
         Array.isArray(body?.resolutions) ? body.resolutions : []
       );
-      return NextResponse.json({ success: true, message: result.message });
+      return createApiSuccessResponse({ message: result.message }, request);
     }
 
     if (action === 'rematch') {
       const result = await rematchInvoices(currentUser);
-      return NextResponse.json({ success: true, message: result.message });
+      return createApiSuccessResponse({ message: result.message }, request);
     }
 
     if (action === 'updateInvoiceDates') {
       const result = await updateInvoiceDates(currentUser, body ?? {});
-      return NextResponse.json({ success: true, data: result.data, message: result.message });
+      return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
 
     if (action === 'updateOrder') {
@@ -445,12 +446,12 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
     if (action === 'deleteOrder') {
       const result = await deleteInvoiceOrder(currentUser, typeof body?.orderId === 'string' ? body.orderId : '');
-      return NextResponse.json({ success: true, message: result.message });
+      return createApiSuccessResponse({ message: result.message }, request);
     }
 
     if (action === 'transferBalance') {
       const result = await transferInvoiceBalance(currentUser, body ?? {});
-      return NextResponse.json({ success: true, message: result.message });
+      return createApiSuccessResponse({ message: result.message }, request);
     }
 
     throw createApiError({

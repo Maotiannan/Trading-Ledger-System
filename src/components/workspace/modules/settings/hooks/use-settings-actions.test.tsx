@@ -1,11 +1,12 @@
 import { act, renderHook } from '@testing-library/react';
 import { useSettingsActions } from './use-settings-actions';
 import type { PasswordFormState, PurgeFormState, SettingsAuditFilterState } from '../types';
-import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getApiResponseErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
   return {
     apiCall: jest.fn(),
+    getApiResponseErrorMessage: jest.fn(async (_response: Response, fallback: string) => fallback),
     getApiErrorMessage: jest.fn((error: unknown, fallback: string) => {
       if (error instanceof Error) return error.message;
       if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
@@ -18,6 +19,8 @@ jest.mock('@/components/workspace/shared', () => {
 
 const mockApiCall = apiCall as jest.Mock;
 const mockGetApiErrorMessage = getApiErrorMessage as jest.Mock;
+const mockGetApiResponseErrorMessage = getApiResponseErrorMessage as jest.Mock;
+const originalFetch = globalThis.fetch;
 
 describe('useSettingsActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -28,13 +31,19 @@ describe('useSettingsActions', () => {
   beforeEach(() => {
     mockApiCall.mockReset();
     mockGetApiErrorMessage.mockClear();
+    mockGetApiResponseErrorMessage.mockClear();
     purgeFormState = { targetUserId: 'sales-1', password: 'Admin@2026!', modules: ['customer'] };
     pwdState = { oldPassword: 'old-pass', newPassword: 'new-pass-1', confirmPassword: 'new-pass-1' };
-    auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '' };
+    auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20 };
     jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
   afterEach(() => {
+    if (originalFetch) {
+      Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: originalFetch });
+    } else {
+      delete (globalThis as { fetch?: typeof fetch }).fetch;
+    }
     jest.restoreAllMocks();
   });
 
@@ -57,6 +66,7 @@ describe('useSettingsActions', () => {
       setPasswordLoading: jest.fn(),
       setAuditLoading: jest.fn(),
       setAuditLoadingMore: jest.fn(),
+      setAuditExporting: jest.fn(),
       setMessage: jest.fn(),
       setError: jest.fn(),
       setConfig: jest.fn(),
@@ -258,6 +268,7 @@ describe('useSettingsActions', () => {
       settingKey: 'OCR_DISABLED',
       dateFrom: '2026-03-11T07:00',
       dateTo: '2026-03-11T08:00',
+      pageSize: 50,
     };
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({
@@ -272,7 +283,7 @@ describe('useSettingsActions', () => {
     });
 
     expect(mockApiCall).toHaveBeenCalledWith(
-      'settings?view=audit&limit=20&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
+      'settings?view=audit&limit=50&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
     );
   });
 
@@ -282,6 +293,7 @@ describe('useSettingsActions', () => {
       settingKey: 'OCR_DISABLED',
       dateFrom: '2026-03-11T07:00',
       dateTo: '2026-03-11T08:00',
+      pageSize: 50,
     };
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({
@@ -295,7 +307,7 @@ describe('useSettingsActions', () => {
       await result.current.resetAuditFilters();
     });
 
-    expect(auditFiltersState).toEqual({ actorQuery: '', settingKey: '', dateFrom: '', dateTo: '' });
+    expect(auditFiltersState).toEqual({ actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20 });
     expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit&limit=20');
   });
 
@@ -338,6 +350,55 @@ describe('useSettingsActions', () => {
     expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit&limit=20&cursor=audit-1');
     expect(deps.setAuditLoadingMore).toHaveBeenCalledWith(true);
     expect(deps.setAuditLoadingMore).toHaveBeenLastCalledWith(false);
+  });
+
+  it('exports audit logs as csv using active filters', async () => {
+    auditFiltersState = {
+      actorQuery: 'admin@example.com',
+      settingKey: 'OCR_DISABLED',
+      dateFrom: '2026-03-11T07:00',
+      dateTo: '2026-03-11T08:00',
+      pageSize: 100,
+    };
+    const deps = createDeps();
+    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const anchor = originalCreateElement('a');
+    const clickSpy = jest.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(new Blob(['time,actor\n'])),
+      headers: {
+        get: (name: string) => (
+          name.toLowerCase() === 'content-disposition'
+            ? 'attachment; filename="settings-audit.csv"'
+            : null
+        ),
+      },
+    } as unknown as Response);
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName.toLowerCase() === 'a') return anchor;
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: jest.fn(() => 'blob:audit') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: jest.fn() });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.exportSettingsAudit();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/settings?view=audit&format=csv&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+    expect(anchor.download).toBe('settings-audit.csv');
+    expect(clickSpy).toHaveBeenCalled();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });
 
   it('blocks purge when target or password is missing', async () => {

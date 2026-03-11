@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Download, Loader2, RefreshCw } from 'lucide-react';
 import type { SettingsAuditEntry, SettingsAuditFilterState } from '../types';
 
 export type SettingsAuditCardProps = {
@@ -13,6 +13,7 @@ export type SettingsAuditCardProps = {
   canViewAudit: boolean;
   loading: boolean;
   loadingMore: boolean;
+  exporting: boolean;
   hasMore: boolean;
   entries: SettingsAuditEntry[];
   filters: SettingsAuditFilterState;
@@ -22,6 +23,7 @@ export type SettingsAuditCardProps = {
   onResetFilters: () => void;
   onRefresh: () => void;
   onLoadMore: () => void;
+  onExport: () => void;
 };
 
 function displayAuditValue(value: string): string {
@@ -33,6 +35,7 @@ export function SettingsAuditCard({
   canViewAudit,
   loading,
   loadingMore,
+  exporting,
   hasMore,
   entries,
   filters,
@@ -42,7 +45,74 @@ export function SettingsAuditCard({
   onResetFilters,
   onRefresh,
   onLoadMore,
+  onExport,
 }: SettingsAuditCardProps) {
+  const filterPanel = (
+    <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="space-y-1">
+        <Label>{tx('操作者', 'Actor')}</Label>
+        <Input
+          value={filters.actorQuery}
+          placeholder={tx('邮箱 / 名称 / ID', 'Email / name / ID')}
+          onChange={(event) => onFilterChange((prev) => ({ ...prev, actorQuery: event.target.value }))}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{tx('配置键', 'Setting Key')}</Label>
+        <select
+          className="w-full rounded-md border px-3 py-2 text-sm"
+          value={filters.settingKey}
+          onChange={(event) => onFilterChange((prev) => ({ ...prev, settingKey: event.target.value }))}
+        >
+          <option value="">{tx('全部配置键', 'All Setting Keys')}</option>
+          {keyOptions.map((key) => (
+            <option key={key} value={key}>{key}</option>
+          ))}
+        </select>
+      </div>
+      <div className="space-y-1">
+        <Label>{tx('开始时间', 'Date From')}</Label>
+        <Input
+          type="datetime-local"
+          value={filters.dateFrom}
+          onChange={(event) => onFilterChange((prev) => ({ ...prev, dateFrom: event.target.value }))}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{tx('结束时间', 'Date To')}</Label>
+        <Input
+          type="datetime-local"
+          value={filters.dateTo}
+          onChange={(event) => onFilterChange((prev) => ({ ...prev, dateTo: event.target.value }))}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label>{tx('分页大小', 'Page Size')}</Label>
+        <select
+          className="w-full rounded-md border px-3 py-2 text-sm"
+          value={String(filters.pageSize)}
+          onChange={(event) => onFilterChange((prev) => ({ ...prev, pageSize: Number(event.target.value) || 20 }))}
+        >
+          {[20, 50, 100].map((size) => (
+            <option key={size} value={size}>{size}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-5">
+        <Button variant="outline" onClick={onApplyFilters}>
+          {tx('应用筛选', 'Apply Filters')}
+        </Button>
+        <Button variant="ghost" onClick={onResetFilters}>
+          {tx('重置筛选', 'Reset Filters')}
+        </Button>
+        <Button variant="outline" onClick={onExport} disabled={exporting}>
+          {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+          {tx('导出CSV', 'Export CSV')}
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
@@ -66,104 +136,12 @@ export function SettingsAuditCard({
           </div>
         ) : entries.length === 0 ? (
           <>
-            <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-1">
-                <Label>{tx('操作者', 'Actor')}</Label>
-                <Input
-                  value={filters.actorQuery}
-                  placeholder={tx('邮箱 / 名称 / ID', 'Email / name / ID')}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, actorQuery: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>{tx('配置键', 'Setting Key')}</Label>
-                <select
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  value={filters.settingKey}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, settingKey: event.target.value }))}
-                >
-                  <option value="">{tx('全部配置键', 'All Setting Keys')}</option>
-                  {keyOptions.map((key) => (
-                    <option key={key} value={key}>{key}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>{tx('开始时间', 'Date From')}</Label>
-                <Input
-                  type="datetime-local"
-                  value={filters.dateFrom}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateFrom: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>{tx('结束时间', 'Date To')}</Label>
-                <Input
-                  type="datetime-local"
-                  value={filters.dateTo}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateTo: event.target.value }))}
-                />
-              </div>
-              <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
-                <Button variant="outline" onClick={onApplyFilters}>
-                  {tx('应用筛选', 'Apply Filters')}
-                </Button>
-                <Button variant="ghost" onClick={onResetFilters}>
-                  {tx('重置筛选', 'Reset Filters')}
-                </Button>
-              </div>
-            </div>
+            {filterPanel}
             <p className="text-sm text-gray-500">{tx('暂无配置审计记录。', 'No configuration audit logs yet.')}</p>
           </>
         ) : (
           <>
-            <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-4">
-              <div className="space-y-1">
-                <Label>{tx('操作者', 'Actor')}</Label>
-                <Input
-                  value={filters.actorQuery}
-                  placeholder={tx('邮箱 / 名称 / ID', 'Email / name / ID')}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, actorQuery: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>{tx('配置键', 'Setting Key')}</Label>
-                <select
-                  className="w-full rounded-md border px-3 py-2 text-sm"
-                  value={filters.settingKey}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, settingKey: event.target.value }))}
-                >
-                  <option value="">{tx('全部配置键', 'All Setting Keys')}</option>
-                  {keyOptions.map((key) => (
-                    <option key={key} value={key}>{key}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>{tx('开始时间', 'Date From')}</Label>
-                <Input
-                  type="datetime-local"
-                  value={filters.dateFrom}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateFrom: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>{tx('结束时间', 'Date To')}</Label>
-                <Input
-                  type="datetime-local"
-                  value={filters.dateTo}
-                  onChange={(event) => onFilterChange((prev) => ({ ...prev, dateTo: event.target.value }))}
-                />
-              </div>
-              <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
-                <Button variant="outline" onClick={onApplyFilters}>
-                  {tx('应用筛选', 'Apply Filters')}
-                </Button>
-                <Button variant="ghost" onClick={onResetFilters}>
-                  {tx('重置筛选', 'Reset Filters')}
-                </Button>
-              </div>
-            </div>
+            {filterPanel}
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>

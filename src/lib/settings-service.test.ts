@@ -2,6 +2,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
   listSettings,
+  listAllSystemSettingsAuditLogs,
   listSystemSettingsAuditLogs,
   purgeBranchBusinessData,
   purgeBusinessData,
@@ -118,7 +119,7 @@ const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 
 describe('settings-service', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockGetSystemSettingsWithDefaults.mockResolvedValue({
       OCR_DISABLED: 'false',
@@ -180,6 +181,44 @@ describe('settings-service', () => {
       changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
     }));
     expect(result.nextCursor).toBe('audit-2');
+  });
+
+  it('exports all filtered system setting audit logs without pagination cursor', async () => {
+    mockDb.auditLog.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'audit-3',
+          createdAt: new Date('2026-03-11T08:10:00.000Z'),
+          metadata: {
+            updatedKeys: ['OCR_DISABLED'],
+            changes: [{ key: 'OCR_DISABLED', before: 'false', after: 'true' }],
+          },
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+        },
+        {
+          id: 'audit-2',
+          createdAt: new Date('2026-03-11T08:00:00.000Z'),
+          metadata: {
+            updatedKeys: ['SWIFT_WARNING_TOLERANCE'],
+            changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
+          },
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await listAllSystemSettingsAuditLogs(makeUser(), {
+      actor: 'admin@example.com',
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual(expect.objectContaining({
+      id: 'audit-3',
+      updatedKeys: ['OCR_DISABLED'],
+    }));
+    expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      take: 200,
+    }));
   });
 
   it('filters system setting audit logs by actor, time range, and setting key', async () => {

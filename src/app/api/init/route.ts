@@ -4,6 +4,7 @@ import { hashPassword } from '@/lib/auth';
 import { Prisma, UserRole } from '@prisma/client';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 
 // 初始化默认管理员账户
 export async function POST(request: Request) {
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ success: true, message: existingAdmin ? '管理员已存在' : '管理员初始化成功' });
+    return createApiSuccessResponse({ message: existingAdmin ? '管理员已存在' : '管理员初始化成功' }, request);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       await db.user.updateMany({
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
           createdById: null,
         },
       });
-      return NextResponse.json({ success: true, message: '管理员已存在' });
+      return createApiSuccessResponse({ message: '管理员已存在' }, request);
     }
     console.error('Init error:', error);
     return toApiErrorResponse(error, {

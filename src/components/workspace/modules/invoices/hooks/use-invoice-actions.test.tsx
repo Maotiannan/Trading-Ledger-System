@@ -123,6 +123,42 @@ describe('useInvoiceActions', () => {
     expect(window.alert).toHaveBeenCalledWith('created');
   });
 
+  it('surfaces create invoice request errors', async () => {
+    mockApiCall.mockRejectedValueOnce(new Error('网络错误'));
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [{ orderNo: 'MAB-1-01', amount: '1200', customerMark: 'MAB-1', customerName: 'MAB', customerId: 'cust-1', customerCandidates: [] }],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateInvoice();
+    });
+
+    expect(setFormError).toHaveBeenCalledWith('网络错误');
+    consoleSpy.mockRestore();
+  });
+
   it('updates order and refreshes invoices on success', async () => {
     mockApiCall.mockResolvedValue({ success: true });
 
@@ -179,6 +215,46 @@ describe('useInvoiceActions', () => {
     expect(loadInvoices).toHaveBeenCalled();
   });
 
+  it('blocks order update when amount is invalid', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: {
+        id: 'order-1',
+        orderNo: 'MAB-1-02',
+        amount: -1,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      },
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(setOrderFormError).toHaveBeenCalledWith('请输入有效金额(>=0)');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
   it('handles delete failure with alert message', async () => {
     mockApiCall.mockResolvedValue({ success: false, error: '删除失败' });
     const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => true);
@@ -213,6 +289,41 @@ describe('useInvoiceActions', () => {
 
     expect(window.alert).toHaveBeenCalledWith('删除失败');
     expect(loadInvoices).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('skips delete request when user cancels confirmation', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => false);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleDeleteOrder('order-2');
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
 
@@ -262,5 +373,89 @@ describe('useInvoiceActions', () => {
     }));
     expect(resetAddOrderForm).toHaveBeenCalled();
     expect(loadInvoices).toHaveBeenCalled();
+  });
+
+  it('blocks add order when customer mark is missing', async () => {
+    const resetAddOrderForm = jest.fn();
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: 'inv-1',
+      setAddError,
+      newOrderNo: 'MAB-1-03',
+      newOrderAmount: '300',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm,
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(setAddError).toHaveBeenCalledWith('请输入客户MARK');
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(resetAddOrderForm).not.toHaveBeenCalled();
+  });
+
+  it('alerts when template download fails', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    } as Response);
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.downloadInvoiceImportTemplate();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/invoice?action=import-template', expect.objectContaining({
+      method: 'GET',
+      credentials: 'include',
+    }));
+    expect(window.alert).toHaveBeenCalledWith('模板下载失败');
+    if (originalFetch) {
+      Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: originalFetch });
+    } else {
+      delete (globalThis as { fetch?: typeof fetch }).fetch;
+    }
   });
 });

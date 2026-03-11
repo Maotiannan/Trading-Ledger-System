@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
 import { deriveOrderGroupKey } from '@/lib/order-group';
@@ -304,7 +305,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     await syncSameGroupCustomer(order.orderNo, customer, currentUser.role === UserRole.SALES ? currentUser.id : undefined);
 
-    return NextResponse.json({ success: true, message: '订单客户信息已修复', data: customer });
+    return createApiSuccessResponse({ message: '订单客户信息已修复', data: customer }, request);
   }
 
   const receiptId = trimStr(body.receiptId);
@@ -348,5 +349,5 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
   await syncSameGroupCustomer(receipt.orderNo, customer, currentUser.role === UserRole.SALES ? currentUser.id : undefined);
 
-  return NextResponse.json({ success: true, message: '收据客户信息已修复', data: customer });
+  return createApiSuccessResponse({ message: '收据客户信息已修复', data: customer }, request);
 });

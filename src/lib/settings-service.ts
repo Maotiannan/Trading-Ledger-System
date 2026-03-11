@@ -20,6 +20,8 @@ const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'a
 type PurgeModuleKey = typeof purgeModuleKeys[number];
 type SelectedPurgeModule = Exclude<PurgeModuleKey, 'all'>;
 const SETTINGS_AUDIT_PAGE_SIZE = 20;
+const SETTINGS_AUDIT_MAX_PAGE_SIZE = 100;
+const SETTINGS_AUDIT_EXPORT_MAX_ROWS = 5000;
 
 type BranchPurgeTarget = {
   id: string;
@@ -132,6 +134,14 @@ function matchesAuditDateFilter(createdAt: Date, dateFrom: Date | null, dateTo: 
   return true;
 }
 
+type NormalizedSystemSettingsAuditFilters = {
+  limit: number;
+  actorQuery: string;
+  keyQuery: string;
+  dateFrom: Date | null;
+  dateTo: Date | null;
+};
+
 function assertAdmin(currentUser: CurrentUser, message: string): void {
   if (currentUser.role !== UserRole.ADMIN) {
     throw createApiError({
@@ -181,6 +191,138 @@ async function getBranchUserIds(rootUserId: string): Promise<string[]> {
     }
   }
   return Array.from(seen);
+}
+
+function normalizeSystemSettingsAuditFilters(options: SystemSettingsAuditFilters): NormalizedSystemSettingsAuditFilters {
+  const limit = Math.min(
+    Math.max(Number(options.limit) || SETTINGS_AUDIT_PAGE_SIZE, 1),
+    SETTINGS_AUDIT_MAX_PAGE_SIZE,
+  );
+  const actorQuery = String(options.actor || '').trim();
+  const keyQuery = String(options.key || '').trim();
+  const dateFrom = parseAuditDateInput(options.dateFrom, 'dateFrom');
+  const dateTo = parseAuditDateInput(options.dateTo, 'dateTo', true);
+
+  if (dateFrom && dateTo && dateTo.getTime() < dateFrom.getTime()) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '结束时间不能早于开始时间',
+      detail: {
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
+      },
+    });
+  }
+
+  return { limit, actorQuery, keyQuery, dateFrom, dateTo };
+}
+
+async function collectSystemSettingsAuditRows(
+  currentUser: CurrentUser,
+  options: SystemSettingsAuditFilters,
+  targetCount: number,
+): Promise<Array<{
+  id: string;
+  createdAt: Date;
+  metadata: unknown;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+}>> {
+  assertAdmin(currentUser, '只有管理员可以查看系统配置审计');
+
+  const { actorQuery, keyQuery, dateFrom, dateTo } = normalizeSystemSettingsAuditFilters(options);
+  const where: Prisma.AuditLogWhereInput = {
+    action: auditActions.SYSTEM_SETTINGS_UPDATE,
+    targetType: auditTargetTypes.SYSTEM_SETTING,
+  };
+
+  if (dateFrom || dateTo) {
+    where.createdAt = {
+      ...(dateFrom ? { gte: dateFrom } : {}),
+      ...(dateTo ? { lte: dateTo } : {}),
+    };
+  }
+
+  if (actorQuery) {
+    where.actor = {
+      is: {
+        OR: [
+          { id: actorQuery },
+          { email: { contains: actorQuery } },
+          { name: { contains: actorQuery } },
+        ],
+      },
+    };
+  }
+  const take = Math.max(Math.min(targetCount * 3, 200), 50);
+  const filteredRows: Array<{
+    id: string;
+    createdAt: Date;
+    metadata: unknown;
+    actor: {
+      id: string;
+      email: string;
+      name: string | null;
+    } | null;
+  }> = [];
+
+  let cursor = options.cursor || null;
+  let exhausted = false;
+  while (filteredRows.length < targetCount && !exhausted) {
+    const rows = await db.auditLog.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      take,
+      select: {
+        id: true,
+        createdAt: true,
+        metadata: true,
+        actor: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (rows.length === 0) break;
+    filteredRows.push(...rows.filter((row) => (
+      matchesAuditActorFilter(row.actor, actorQuery)
+      && matchesAuditDateFilter(row.createdAt, dateFrom, dateTo)
+      && matchesAuditKeyFilter(row.metadata, keyQuery)
+    )));
+    cursor = rows[rows.length - 1]?.id || null;
+    exhausted = rows.length < take;
+  }
+
+  return filteredRows;
+}
+
+function mapSystemSettingsAuditEntry(row: {
+  id: string;
+  createdAt: Date;
+  metadata: unknown;
+  actor: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+}): SystemSettingsAuditEntry {
+  const changes = normalizeAuditChanges(row.metadata);
+  return {
+    id: row.id,
+    createdAt: row.createdAt.toISOString(),
+    actor: row.actor,
+    updatedKeys: normalizeAuditUpdatedKeys(row.metadata, changes),
+    changes,
+  };
 }
 
 function validateBooleanSetting(key: string, value: string): void {
@@ -295,111 +437,24 @@ export async function listSystemSettingsAuditLogs(
   nextCursor: string | null;
   limit: number;
 }> {
-  assertAdmin(currentUser, '只有管理员可以查看系统配置审计');
-
-  const limit = Math.min(Math.max(Number(options.limit) || SETTINGS_AUDIT_PAGE_SIZE, 1), 50);
-  const actorQuery = String(options.actor || '').trim();
-  const keyQuery = String(options.key || '').trim();
-  const dateFrom = parseAuditDateInput(options.dateFrom, 'dateFrom');
-  const dateTo = parseAuditDateInput(options.dateTo, 'dateTo', true);
-
-  if (dateFrom && dateTo && dateTo.getTime() < dateFrom.getTime()) {
-    throw createApiError({
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: '结束时间不能早于开始时间',
-      detail: {
-        dateFrom: options.dateFrom,
-        dateTo: options.dateTo,
-      },
-    });
-  }
-
-  const where: Prisma.AuditLogWhereInput = {
-    action: auditActions.SYSTEM_SETTINGS_UPDATE,
-    targetType: auditTargetTypes.SYSTEM_SETTING,
-  };
-
-  if (dateFrom || dateTo) {
-    where.createdAt = {
-      ...(dateFrom ? { gte: dateFrom } : {}),
-      ...(dateTo ? { lte: dateTo } : {}),
-    };
-  }
-
-  if (actorQuery) {
-    where.actor = {
-      is: {
-        OR: [
-          { id: actorQuery },
-          { email: { contains: actorQuery } },
-          { name: { contains: actorQuery } },
-        ],
-      },
-    };
-  }
-
-  const take = Math.max(limit * 3, 50);
-  const filteredRows: Array<{
-    id: string;
-    createdAt: Date;
-    metadata: unknown;
-    actor: {
-      id: string;
-      email: string;
-      name: string | null;
-    } | null;
-  }> = [];
-
-  let cursor = options.cursor || null;
-  let exhausted = false;
-  while (filteredRows.length < limit + 1 && !exhausted) {
-    const rows = await db.auditLog.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      take,
-      select: {
-        id: true,
-        createdAt: true,
-        metadata: true,
-        actor: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    if (rows.length === 0) break;
-    filteredRows.push(...rows.filter((row) => (
-      matchesAuditActorFilter(row.actor, actorQuery)
-      && matchesAuditDateFilter(row.createdAt, dateFrom, dateTo)
-      && matchesAuditKeyFilter(row.metadata, keyQuery)
-    )));
-    cursor = rows[rows.length - 1]?.id || null;
-    exhausted = rows.length < take;
-  }
-
+  const { limit } = normalizeSystemSettingsAuditFilters(options);
+  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, limit + 1);
   const hasMore = filteredRows.length > limit;
-  const items = filteredRows.slice(0, limit).map((row) => {
-    const changes = normalizeAuditChanges(row.metadata);
-    return {
-      id: row.id,
-      createdAt: row.createdAt.toISOString(),
-      actor: row.actor,
-      updatedKeys: normalizeAuditUpdatedKeys(row.metadata, changes),
-      changes,
-    };
-  });
+  const items = filteredRows.slice(0, limit).map(mapSystemSettingsAuditEntry);
 
   return {
     items,
     nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
     limit,
   };
+}
+
+export async function listAllSystemSettingsAuditLogs(
+  currentUser: CurrentUser,
+  options: Omit<SystemSettingsAuditFilters, 'cursor' | 'limit'> = {},
+): Promise<SystemSettingsAuditEntry[]> {
+  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, SETTINGS_AUDIT_EXPORT_MAX_ROWS);
+  return filteredRows.slice(0, SETTINGS_AUDIT_EXPORT_MAX_ROWS).map(mapSystemSettingsAuditEntry);
 }
 
 export async function testSettingsOcr(currentUser: CurrentUser): Promise<{

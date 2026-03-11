@@ -200,7 +200,7 @@ export async function createReceiptRecord(params: {
   return {
     data: receipt,
     message: customerResolution.needsCustomerFix
-      ? 'please modify guest information'
+      ? '请修复客户信息'
       : (mode === 'direct-create' ? '收据已直接创建' : undefined),
   };
 }

@@ -11,6 +11,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { filterRowsBySearch } from '@/lib/text-search';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiError } from '@/lib/api-error';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { createSwiftRecord, deleteSwiftRecord } from '@/lib/swift-service';
 
 function parseSwiftPayload(data: Record<string, unknown>) {
@@ -144,14 +145,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         mode: action,
       });
 
-      return NextResponse.json({
-        success: true,
+      return createApiSuccessResponse({
         data: {
           swift: result.swift,
           validation: result.validation,
         },
         message: result.message,
-      });
+      }, request);
     }
 
     if (action === 'delete') {
@@ -159,7 +159,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         currentUser,
         swiftId: typeof requestData.swiftId === 'string' ? requestData.swiftId : '',
       });
-      return NextResponse.json({ success: true, message: result.message });
+      return createApiSuccessResponse({ message: result.message }, request);
     }
 
     throw createApiError({

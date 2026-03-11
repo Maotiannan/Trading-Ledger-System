@@ -44,6 +44,8 @@ export function SettingsManager() {
     setAuditLoading,
     auditLoadingMore,
     setAuditLoadingMore,
+    auditExporting,
+    setAuditExporting,
     settingsAuditEntries,
     setSettingsAuditEntries,
     settingsAuditCursor,
@@ -69,6 +71,7 @@ export function SettingsManager() {
     handleTestOcrConfig,
     handleChangePassword,
     handlePurgeBranch,
+    exportSettingsAudit,
   } = useSettingsActions({
     tx,
     userEmail: user?.email,
@@ -87,6 +90,7 @@ export function SettingsManager() {
     setPasswordLoading,
     setAuditLoading,
     setAuditLoadingMore,
+    setAuditExporting,
     setMessage,
     setError,
     setConfig,
@@ -172,6 +176,7 @@ export function SettingsManager() {
         canViewAudit={canViewAudit}
         loading={auditLoading}
         loadingMore={auditLoadingMore}
+        exporting={auditExporting}
         hasMore={settingsAuditHasMore}
         entries={settingsAuditEntries}
         filters={settingsAuditFilters}
@@ -181,6 +186,7 @@ export function SettingsManager() {
         onResetFilters={() => { void resetAuditFilters(); }}
         onRefresh={() => { void loadSettingsAudit({ filters: settingsAuditFilters }); }}
         onLoadMore={() => { void loadSettingsAudit({ append: true, filters: settingsAuditFilters }); }}
+        onExport={() => { void exportSettingsAudit(); }}
       />
     </div>
   );

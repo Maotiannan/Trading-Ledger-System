@@ -11,6 +11,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { filterRowsBySearch } from '@/lib/text-search';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import {
   createReceiptRecord,
   markReceiptReceived,
@@ -147,11 +148,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         imageName: typeof data.imageName === 'string' ? data.imageName : null,
         mode: action,
       });
-      return NextResponse.json({
-        success: true,
+      return createApiSuccessResponse({
         data: result.data,
         message: result.message,
-      });
+      }, request);
     }
 
     if (action === 'update') {

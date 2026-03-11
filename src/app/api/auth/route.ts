@@ -4,6 +4,7 @@ import { hashPassword, validateUser, verifyPassword } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
 import { type ApiErrorCode, apiErrorCodes, createApiError } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'logout') {
-      const response = NextResponse.json({ success: true, message: '已退出登录' });
+      const response = createApiSuccessResponse({ message: '已退出登录' }, request);
       clearSessionCookie(response);
       return response;
     }
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
         data: { role: newRole, level: roleLevel[newRole] },
         select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true },
       });
-      return NextResponse.json({ success: true, data: updated, message: '角色已更新' });
+      return createApiSuccessResponse({ data: updated, message: '角色已更新' }, request);
     }
 
     // 创建用户时可选的上级列表
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
         await tx.auditLog.updateMany({ where: { actorId: userId }, data: { actorId: currentUser.id } });
         await tx.user.delete({ where: { id: userId } });
       });
-      return NextResponse.json({ success: true, message: '用户已删除' });
+      return createApiSuccessResponse({ message: '用户已删除' }, request);
     }
 
     // 重置密码 (管理员/销售)
@@ -345,7 +346,7 @@ export async function POST(request: NextRequest) {
         data: { password: hashedPassword }
       });
 
-      return NextResponse.json({ success: true, message: '密码已重置' });
+      return createApiSuccessResponse({ message: '密码已重置' }, request);
     }
 
     // 修改自己密码
@@ -383,7 +384,7 @@ export async function POST(request: NextRequest) {
         where: { id: currentUser.id },
         data: { password: hashedPassword },
       });
-      return NextResponse.json({ success: true, message: '密码修改成功' });
+      return createApiSuccessResponse({ message: '密码修改成功' }, request);
     }
 
     throw createApiError({

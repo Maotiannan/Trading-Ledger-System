@@ -292,6 +292,29 @@ describe('invoice-service', () => {
     expect(mockSaveInvoiceWithOrders).not.toHaveBeenCalled();
   });
 
+  it('rejects invoice import when no usable rows remain', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([]);
+    mockDb.customer.findMany.mockResolvedValueOnce([]);
+
+    const result = await processInvoiceImportRows([
+      {
+        rowNo: 2,
+        invNo: '',
+        shipDateRaw: '',
+        releaseDateRaw: '',
+        orderNo: '',
+        amountRaw: '',
+        customerMark: '',
+        customerName: '',
+        customerId: '',
+      },
+    ], makeUser());
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe('没有可导入的数据行');
+    expect(result.importedOrderNos).toEqual([]);
+  });
+
   it('updates invoice dates in transaction and records before/after audit values', async () => {
     mockDb.invoice.findFirst.mockResolvedValueOnce({
       id: 'inv-1',
@@ -412,6 +435,57 @@ describe('invoice-service', () => {
       metadata: expect.objectContaining({
         merged: true,
         addedAmount: 200,
+      }),
+    }));
+  });
+
+  it('adds orders as a new visible order when alias lookup misses', async () => {
+    mockDb.invoice.findFirst.mockResolvedValueOnce({ id: 'inv-1' });
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'IB',
+      customerPhone: '+224620000000',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
+    mockDb.order.create.mockResolvedValueOnce({
+      id: 'order-new',
+      invoiceId: 'inv-1',
+      orderNo: 'IB-02',
+      amount: 300,
+      orderBalance: 300,
+    });
+
+    const result = await addInvoiceOrder(makeUser(), {
+      invoiceId: 'inv-1',
+      orderNo: 'IB-02',
+      amount: 300,
+      customerMark: 'IB',
+      customerName: 'IB',
+      customerId: 'customer-1',
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      merged: false,
+      data: expect.objectContaining({ id: 'order-new' }),
+    }));
+    expect(mockDb.order.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        invoiceId: 'inv-1',
+        orderNo: 'IB-02',
+        createdBy: 'sales-1',
+      }),
+    }));
+    expect(mockConsolidateGroupedOrders).toHaveBeenCalledWith({ invoiceIds: ['inv-1'] });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_ADD',
+      targetId: 'order-new',
+      metadata: expect.objectContaining({
+        merged: false,
+        addedAmount: 300,
+        orderNo: 'IB-02',
       }),
     }));
   });

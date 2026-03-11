@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/route-auth';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 import {
   createDeletionRequest,
   listDeletionRequests,
@@ -47,7 +48,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         action,
         requestId,
       });
-      return NextResponse.json({ success: true, message: result.message });
+      return createApiSuccessResponse({ message: result.message }, request);
     }
 
     throw createApiError({

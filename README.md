@@ -959,6 +959,13 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.64 (2026-03-11)
+- 🌐 服务端成功消息开始统一字典化：新增 `src/lib/api-success-catalog.ts`、`src/lib/api-success-response.ts` 与 `src/lib/api-response-locale.ts`，`auth / init / settings / invoice / deletion / customer-fixes / receipt / detail / swift` 这批成功响应现在也会基于 `NEXT_LOCALE / Accept-Language` 直接返回本地化文案，不再只在前端兜底翻译。
+- 🧹 历史成功消息规范化：`receipt-service` 与 `invoice-write` 中遗留的英文 `please modify guest information` 已改为统一中文语义 `请修复客户信息`，再由服务端字典按语言输出，避免中英混杂。
+- 📄 设置审计增强为“筛选 + 分页大小 + 导出”：`/api/settings?view=audit` 新增 `limit` 自定义页大小，设置页审计卡片新增 `20 / 50 / 100` 分页大小选择与 `CSV` 导出；后端新增全量导出查询与本地化列头 CSV 输出。
+- 🧪 补齐 success/audit 回归：新增 `api-success-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-invoice-actions / invoice-service / invoice-write` 测试覆盖导出、分页大小、成功消息与新增账单分支；Jest 扩展到 `27 suites / 152 tests`。
+- 📈 coverage threshold 第十二次小步上调：global 提升到 `52 / 76 / 70 / 68`，并优先提高 `use-invoice-actions` 到 `60 / 80 / 65 / 65`、`invoice-service` 到 `42 / 40 / 49 / 46`；本地 `test:ci` 全绿。
+
 ### v1.0.58 (2026-03-11)
 - 🧱 `settings / receipt / detail / swift` 写接口继续统一：新增 `settings-service / receipt-service / detail-service / swift-service`，路由层只保留请求解析、OCR 识别和响应封装。
 - ⚙️ SWIFT 容差正式配置化：新增 `SWIFT_WARNING_TOLERANCE` 与 `SWIFT_REJECT_TOLERANCE`，后端从 `/api/settings` 读取，前端设置页同步可编辑。

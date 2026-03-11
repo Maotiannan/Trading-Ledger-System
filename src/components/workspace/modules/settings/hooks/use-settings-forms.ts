@@ -14,6 +14,7 @@ const emptySettingsAuditFilters: SettingsAuditFilterState = {
   settingKey: '',
   dateFrom: '',
   dateTo: '',
+  pageSize: 20,
 };
 
 export function useSettingsForms() {
@@ -32,6 +33,7 @@ export function useSettingsForms() {
   const [purgingBranch, setPurgingBranch] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+  const [auditExporting, setAuditExporting] = useState(false);
   const [settingsAuditEntries, setSettingsAuditEntries] = useState<SettingsAuditEntry[]>([]);
   const [settingsAuditCursor, setSettingsAuditCursor] = useState<string | null>(null);
   const [settingsAuditHasMore, setSettingsAuditHasMore] = useState(false);
@@ -93,6 +95,8 @@ export function useSettingsForms() {
     setAuditLoading,
     auditLoadingMore,
     setAuditLoadingMore,
+    auditExporting,
+    setAuditExporting,
     settingsAuditEntries,
     setSettingsAuditEntries,
     settingsAuditCursor,

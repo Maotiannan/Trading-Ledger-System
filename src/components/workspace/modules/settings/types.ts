@@ -42,4 +42,5 @@ export type SettingsAuditFilterState = {
   settingKey: string;
   dateFrom: string;
   dateTo: string;
+  pageSize: number;
 };

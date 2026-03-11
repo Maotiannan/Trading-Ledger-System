@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getApiResponseErrorMessage } from '@/components/workspace/shared';
 import type {
   BranchPurgeTarget,
   PasswordFormState,
@@ -30,6 +30,7 @@ export type SettingsActionDeps = {
   setPasswordLoading: (value: boolean) => void;
   setAuditLoading: (value: boolean) => void;
   setAuditLoadingMore: (value: boolean) => void;
+  setAuditExporting: (value: boolean) => void;
   setMessage: (value: string | null) => void;
   setError: (value: string | null) => void;
   setConfig: (value: Record<string, string>) => void;
@@ -52,10 +53,21 @@ const emptyAuditFilters: SettingsAuditFilterState = {
   settingKey: '',
   dateFrom: '',
   dateTo: '',
+  pageSize: 20,
 };
 
-function buildAuditQuery(filters: SettingsAuditFilterState, cursor?: string | null) {
-  const query = new URLSearchParams({ view: 'audit', limit: '20' });
+function buildAuditQuery(
+  filters: SettingsAuditFilterState,
+  cursor?: string | null,
+  options: { format?: 'csv'; includeLimit?: boolean } = {},
+) {
+  const query = new URLSearchParams({ view: 'audit' });
+  if (options.includeLimit !== false) {
+    query.set('limit', String(filters.pageSize || 20));
+  }
+  if (options.format) {
+    query.set('format', options.format);
+  }
   if (cursor) query.set('cursor', cursor);
   if (filters.actorQuery.trim()) query.set('actor', filters.actorQuery.trim());
   if (filters.settingKey.trim()) query.set('key', filters.settingKey.trim());
@@ -81,6 +93,7 @@ export function useSettingsActions({
   setPasswordLoading,
   setAuditLoading,
   setAuditLoadingMore,
+  setAuditExporting,
   setMessage,
   setError,
   setConfig,
@@ -137,7 +150,7 @@ export function useSettingsActions({
     }
 
     const append = Boolean(options.append);
-    const filters = options.filters || emptyAuditFilters;
+    const filters = options.filters || auditFilters || emptyAuditFilters;
     const cursor = append ? auditCursor : null;
     if (append) setAuditLoadingMore(true);
     else setAuditLoading(true);
@@ -176,6 +189,34 @@ export function useSettingsActions({
     setSettingsAuditFilters(emptyAuditFilters);
     await loadSettingsAudit({ filters: emptyAuditFilters });
   }, [loadSettingsAudit, setSettingsAuditFilters]);
+
+  const exportSettingsAudit = useCallback(async () => {
+    if (!canViewAudit) return;
+    setAuditExporting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/settings?${buildAuditQuery(auditFilters, null, { format: 'csv', includeLimit: false })}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error(await getApiResponseErrorMessage(response, tx('导出配置审计失败', 'Failed to export configuration audit')));
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const contentDisposition = response.headers.get('content-disposition') || '';
+      const fileName = /filename="([^"]+)"/.exec(contentDisposition)?.[1] || 'settings-audit.csv';
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(getApiErrorMessage(err, tx('导出配置审计失败', 'Failed to export configuration audit')));
+    } finally {
+      setAuditExporting(false);
+    }
+  }, [auditFilters, canViewAudit, setAuditExporting, setError, tx]);
 
   const handleSaveConfig = useCallback(async () => {
     if (!canEditConfig) return;
@@ -327,5 +368,6 @@ export function useSettingsActions({
     loadSettingsAudit,
     applyAuditFilters,
     resetAuditFilters,
+    exportSettingsAudit,
   };
 }

@@ -37,10 +37,19 @@ export type SettingsAuditEntry = {
   changes: SettingsAuditChange[];
 };
 
+export type SettingsAuditMeta = {
+  defaultPageSize: number;
+  maxPageSize: number;
+  maxExportRows: number;
+  pageSizeOptions: number[];
+  cursorMode: 'id';
+};
+
 export type SettingsAuditFilterState = {
   actorQuery: string;
   settingKey: string;
   dateFrom: string;
   dateTo: string;
   pageSize: number;
+  exportLimit: number;
 };

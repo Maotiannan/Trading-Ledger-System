@@ -20,8 +20,8 @@ const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'a
 type PurgeModuleKey = typeof purgeModuleKeys[number];
 type SelectedPurgeModule = Exclude<PurgeModuleKey, 'all'>;
 const SETTINGS_AUDIT_PAGE_SIZE = 20;
-const SETTINGS_AUDIT_MAX_PAGE_SIZE = 100;
-const SETTINGS_AUDIT_EXPORT_MAX_ROWS = 5000;
+const SETTINGS_AUDIT_MAX_PAGE_SIZE_FALLBACK = 100;
+const SETTINGS_AUDIT_EXPORT_MAX_ROWS_FALLBACK = 5000;
 
 type BranchPurgeTarget = {
   id: string;
@@ -53,10 +53,19 @@ export type SystemSettingsAuditEntry = {
 export type SystemSettingsAuditFilters = {
   cursor?: string | null;
   limit?: number;
+  exportLimit?: number;
   actor?: string | null;
   key?: string | null;
   dateFrom?: string | null;
   dateTo?: string | null;
+};
+
+export type SystemSettingsAuditCapabilities = {
+  defaultPageSize: number;
+  maxPageSize: number;
+  maxExportRows: number;
+  pageSizeOptions: number[];
+  cursorMode: 'id';
 };
 
 function normalizeAuditChanges(metadata: unknown): SystemSettingsAuditChange[] {
@@ -136,11 +145,52 @@ function matchesAuditDateFilter(createdAt: Date, dateFrom: Date | null, dateTo: 
 
 type NormalizedSystemSettingsAuditFilters = {
   limit: number;
+  exportLimit: number;
   actorQuery: string;
   keyQuery: string;
   dateFrom: Date | null;
   dateTo: Date | null;
 };
+
+function clampPositiveInt(value: number, fallback: number, min = 1): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(Math.trunc(value), min);
+}
+
+function buildPageSizeOptions(maxPageSize: number): number[] {
+  const candidates = [20, 50, 100, maxPageSize]
+    .map((value) => clampPositiveInt(value, SETTINGS_AUDIT_PAGE_SIZE))
+    .filter((value) => value <= maxPageSize);
+  const unique = Array.from(new Set(candidates)).sort((a, b) => a - b);
+  return unique.length > 0 ? unique : [maxPageSize];
+}
+
+function buildSettingsAuditCapabilities(settings: Partial<Record<string, string>>): SystemSettingsAuditCapabilities {
+  const maxPageSize = clampPositiveInt(
+    Number(settings.SETTINGS_AUDIT_MAX_PAGE_SIZE),
+    SETTINGS_AUDIT_MAX_PAGE_SIZE_FALLBACK,
+  );
+  const maxExportRows = clampPositiveInt(
+    Number(settings.SETTINGS_AUDIT_EXPORT_MAX_ROWS),
+    SETTINGS_AUDIT_EXPORT_MAX_ROWS_FALLBACK,
+  );
+
+  return {
+    defaultPageSize: Math.min(SETTINGS_AUDIT_PAGE_SIZE, maxPageSize),
+    maxPageSize,
+    maxExportRows,
+    pageSizeOptions: buildPageSizeOptions(maxPageSize),
+    cursorMode: 'id',
+  };
+}
+
+async function getSettingsAuditCapabilities(): Promise<SystemSettingsAuditCapabilities> {
+  const settings = await getSystemSettingsWithDefaults([
+    'SETTINGS_AUDIT_MAX_PAGE_SIZE',
+    'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
+  ]);
+  return buildSettingsAuditCapabilities(settings);
+}
 
 function assertAdmin(currentUser: CurrentUser, message: string): void {
   if (currentUser.role !== UserRole.ADMIN) {
@@ -193,10 +243,17 @@ async function getBranchUserIds(rootUserId: string): Promise<string[]> {
   return Array.from(seen);
 }
 
-function normalizeSystemSettingsAuditFilters(options: SystemSettingsAuditFilters): NormalizedSystemSettingsAuditFilters {
+function normalizeSystemSettingsAuditFilters(
+  options: SystemSettingsAuditFilters,
+  capabilities: SystemSettingsAuditCapabilities,
+): NormalizedSystemSettingsAuditFilters {
   const limit = Math.min(
     Math.max(Number(options.limit) || SETTINGS_AUDIT_PAGE_SIZE, 1),
-    SETTINGS_AUDIT_MAX_PAGE_SIZE,
+    capabilities.maxPageSize,
+  );
+  const exportLimit = Math.min(
+    Math.max(Number(options.exportLimit) || capabilities.maxExportRows, 1),
+    capabilities.maxExportRows,
   );
   const actorQuery = String(options.actor || '').trim();
   const keyQuery = String(options.key || '').trim();
@@ -215,13 +272,14 @@ function normalizeSystemSettingsAuditFilters(options: SystemSettingsAuditFilters
     });
   }
 
-  return { limit, actorQuery, keyQuery, dateFrom, dateTo };
+  return { limit, exportLimit, actorQuery, keyQuery, dateFrom, dateTo };
 }
 
 async function collectSystemSettingsAuditRows(
   currentUser: CurrentUser,
   options: SystemSettingsAuditFilters,
   targetCount: number,
+  capabilities?: SystemSettingsAuditCapabilities,
 ): Promise<Array<{
   id: string;
   createdAt: Date;
@@ -234,7 +292,8 @@ async function collectSystemSettingsAuditRows(
 }>> {
   assertAdmin(currentUser, '只有管理员可以查看系统配置审计');
 
-  const { actorQuery, keyQuery, dateFrom, dateTo } = normalizeSystemSettingsAuditFilters(options);
+  const resolvedCapabilities = capabilities || await getSettingsAuditCapabilities();
+  const { actorQuery, keyQuery, dateFrom, dateTo } = normalizeSystemSettingsAuditFilters(options, resolvedCapabilities);
   const where: Prisma.AuditLogWhereInput = {
     action: auditActions.SYSTEM_SETTINGS_UPDATE,
     targetType: auditTargetTypes.SYSTEM_SETTING,
@@ -407,8 +466,10 @@ export async function listSettings(currentUser: CurrentUser): Promise<{
   canPurgeBranch: boolean;
   purgeModuleKeys: readonly PurgeModuleKey[];
   canViewAudit: boolean;
+  auditCapabilities: SystemSettingsAuditCapabilities;
 }> {
   const settings = await getSystemSettingsWithDefaults(editableSystemSettingKeys);
+  const auditCapabilities = buildSettingsAuditCapabilities(settings);
 
   let branchPurgeTargets: BranchPurgeTarget[] = [];
   if (currentUser.role === UserRole.ADMIN) {
@@ -426,6 +487,7 @@ export async function listSettings(currentUser: CurrentUser): Promise<{
     canPurgeBranch: currentUser.role === UserRole.ADMIN,
     purgeModuleKeys,
     canViewAudit: currentUser.role === UserRole.ADMIN,
+    auditCapabilities,
   };
 }
 
@@ -436,9 +498,11 @@ export async function listSystemSettingsAuditLogs(
   items: SystemSettingsAuditEntry[];
   nextCursor: string | null;
   limit: number;
+  meta: SystemSettingsAuditCapabilities;
 }> {
-  const { limit } = normalizeSystemSettingsAuditFilters(options);
-  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, limit + 1);
+  const capabilities = await getSettingsAuditCapabilities();
+  const { limit } = normalizeSystemSettingsAuditFilters(options, capabilities);
+  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, limit + 1, capabilities);
   const hasMore = filteredRows.length > limit;
   const items = filteredRows.slice(0, limit).map(mapSystemSettingsAuditEntry);
 
@@ -446,15 +510,29 @@ export async function listSystemSettingsAuditLogs(
     items,
     nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
     limit,
+    meta: capabilities,
   };
 }
 
 export async function listAllSystemSettingsAuditLogs(
   currentUser: CurrentUser,
   options: Omit<SystemSettingsAuditFilters, 'cursor' | 'limit'> = {},
-): Promise<SystemSettingsAuditEntry[]> {
-  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, SETTINGS_AUDIT_EXPORT_MAX_ROWS);
-  return filteredRows.slice(0, SETTINGS_AUDIT_EXPORT_MAX_ROWS).map(mapSystemSettingsAuditEntry);
+): Promise<{
+  items: SystemSettingsAuditEntry[];
+  exportLimit: number;
+  maxExportRows: number;
+  truncated: boolean;
+}> {
+  const capabilities = await getSettingsAuditCapabilities();
+  const { exportLimit } = normalizeSystemSettingsAuditFilters(options, capabilities);
+  const filteredRows = await collectSystemSettingsAuditRows(currentUser, options, exportLimit + 1, capabilities);
+  const truncated = filteredRows.length > exportLimit;
+  return {
+    items: filteredRows.slice(0, exportLimit).map(mapSystemSettingsAuditEntry),
+    exportLimit,
+    maxExportRows: capabilities.maxExportRows,
+    truncated,
+  };
 }
 
 export async function testSettingsOcr(currentUser: CurrentUser): Promise<{

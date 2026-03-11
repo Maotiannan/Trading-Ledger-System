@@ -1055,7 +1055,7 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
       },
     },
   });
-  return { data: updated };
+  return { data: updated, message: '订单已更新' };
 }
 
 export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
@@ -1142,7 +1142,7 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
         orderNo: incomingOrderNo,
       },
     });
-    return { data: updated, merged: true };
+    return { data: updated, merged: true, message: '订单已合并' };
   }
 
   const order = await runInTransaction(async (tx) => {
@@ -1177,7 +1177,7 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
       orderNo: incomingOrderNo,
     },
   });
-  return { data: order, merged: false };
+  return { data: order, merged: false, message: '订单已添加' };
 }
 
 export async function deleteInvoiceOrder(currentUser: CurrentUser, orderId: string) {

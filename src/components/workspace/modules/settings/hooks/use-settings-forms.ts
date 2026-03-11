@@ -7,6 +7,7 @@ import type {
   PurgeFormState,
   SettingsAuditEntry,
   SettingsAuditFilterState,
+  SettingsAuditMeta,
 } from '../types';
 
 const emptySettingsAuditFilters: SettingsAuditFilterState = {
@@ -15,6 +16,15 @@ const emptySettingsAuditFilters: SettingsAuditFilterState = {
   dateFrom: '',
   dateTo: '',
   pageSize: 20,
+  exportLimit: 5000,
+};
+
+const defaultSettingsAuditMeta: SettingsAuditMeta = {
+  defaultPageSize: 20,
+  maxPageSize: 100,
+  maxExportRows: 5000,
+  pageSizeOptions: [20, 50, 100],
+  cursorMode: 'id',
 };
 
 export function useSettingsForms() {
@@ -37,6 +47,7 @@ export function useSettingsForms() {
   const [settingsAuditEntries, setSettingsAuditEntries] = useState<SettingsAuditEntry[]>([]);
   const [settingsAuditCursor, setSettingsAuditCursor] = useState<string | null>(null);
   const [settingsAuditHasMore, setSettingsAuditHasMore] = useState(false);
+  const [settingsAuditMeta, setSettingsAuditMeta] = useState<SettingsAuditMeta>(defaultSettingsAuditMeta);
   const [settingsAuditFilters, setSettingsAuditFilters] = useState<SettingsAuditFilterState>(emptySettingsAuditFilters);
   const [purgeForm, setPurgeForm] = useState<PurgeFormState>({
     targetUserId: '',
@@ -103,6 +114,8 @@ export function useSettingsForms() {
     setSettingsAuditCursor,
     settingsAuditHasMore,
     setSettingsAuditHasMore,
+    settingsAuditMeta,
+    setSettingsAuditMeta,
     settingsAuditFilters,
     setSettingsAuditFilters,
     purgeForm,
@@ -112,5 +125,6 @@ export function useSettingsForms() {
     updateConfigField,
     togglePurgeModule,
     emptySettingsAuditFilters,
+    defaultSettingsAuditMeta,
   };
 }

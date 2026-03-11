@@ -23,7 +23,7 @@ function escapeCsvCell(value: unknown): string {
 }
 
 function buildSettingsAuditCsv(
-  entries: Awaited<ReturnType<typeof listAllSystemSettingsAuditLogs>>,
+  entries: Awaited<ReturnType<typeof listAllSystemSettingsAuditLogs>>['items'],
   locale: 'zh' | 'en',
 ): string {
   const headers = locale === 'en'
@@ -65,24 +65,30 @@ export const GET = withAuth(async (_request, currentUser) => {
       const format = (_request.nextUrl.searchParams.get('format') || '').trim().toLowerCase();
       const cursor = _request.nextUrl.searchParams.get('cursor');
       const limitRaw = _request.nextUrl.searchParams.get('limit');
+      const exportLimitRaw = _request.nextUrl.searchParams.get('exportLimit');
       const actor = _request.nextUrl.searchParams.get('actor');
       const key = _request.nextUrl.searchParams.get('key');
       const dateFrom = _request.nextUrl.searchParams.get('dateFrom');
       const dateTo = _request.nextUrl.searchParams.get('dateTo');
       const limit = limitRaw ? Number(limitRaw) : undefined;
+      const exportLimit = exportLimitRaw ? Number(exportLimitRaw) : undefined;
       if (format === 'csv') {
-        const entries = await listAllSystemSettingsAuditLogs(currentUser, {
+        const result = await listAllSystemSettingsAuditLogs(currentUser, {
           actor,
           key,
           dateFrom,
           dateTo,
+          exportLimit,
         });
         const locale = resolveRequestLocale(_request);
-        const csv = buildSettingsAuditCsv(entries, locale);
+        const csv = buildSettingsAuditCsv(result.items, locale);
         return new NextResponse(csv, {
           headers: {
             'Content-Type': 'text/csv; charset=utf-8',
             'Content-Disposition': `attachment; filename="settings-audit-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv"`,
+            'X-Export-Limit-Applied': String(result.exportLimit),
+            'X-Export-Limit-Max': String(result.maxExportRows),
+            'X-Export-Truncated': result.truncated ? 'true' : 'false',
           },
         });
       }

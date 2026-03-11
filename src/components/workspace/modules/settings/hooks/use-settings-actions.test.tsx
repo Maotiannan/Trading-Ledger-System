@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useSettingsActions } from './use-settings-actions';
-import type { PasswordFormState, PurgeFormState, SettingsAuditFilterState } from '../types';
+import type { PasswordFormState, PurgeFormState, SettingsAuditFilterState, SettingsAuditMeta } from '../types';
 import { apiCall, getApiErrorMessage, getApiResponseErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
@@ -27,6 +27,7 @@ describe('useSettingsActions', () => {
   let purgeFormState: PurgeFormState;
   let pwdState: PasswordFormState;
   let auditFiltersState: SettingsAuditFilterState;
+  let auditMetaState: SettingsAuditMeta;
 
   beforeEach(() => {
     mockApiCall.mockReset();
@@ -34,7 +35,8 @@ describe('useSettingsActions', () => {
     mockGetApiResponseErrorMessage.mockClear();
     purgeFormState = { targetUserId: 'sales-1', password: 'Admin@2026!', modules: ['customer'] };
     pwdState = { oldPassword: 'old-pass', newPassword: 'new-pass-1', confirmPassword: 'new-pass-1' };
-    auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20 };
+    auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20, exportLimit: 5000 };
+    auditMetaState = { defaultPageSize: 20, maxPageSize: 100, maxExportRows: 5000, pageSizeOptions: [20, 50, 100], cursorMode: 'id' };
     jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
@@ -60,6 +62,7 @@ describe('useSettingsActions', () => {
       pwd: pwdState,
       auditCursor: null,
       auditFilters: auditFiltersState,
+      auditMeta: auditMetaState,
       setLoading: jest.fn(),
       setSavingConfig: jest.fn(),
       setTestingConfig: jest.fn(),
@@ -79,6 +82,9 @@ describe('useSettingsActions', () => {
       setSettingsAuditEntries: jest.fn(),
       setSettingsAuditCursor: jest.fn(),
       setSettingsAuditHasMore: jest.fn(),
+      setSettingsAuditMeta: jest.fn((value: SettingsAuditMeta) => {
+        auditMetaState = value;
+      }),
       setSettingsAuditFilters: jest.fn((value: SettingsAuditFilterState | ((prev: SettingsAuditFilterState) => SettingsAuditFilterState)) => {
         auditFiltersState = typeof value === 'function' ? value(auditFiltersState) : value;
       }),
@@ -102,6 +108,7 @@ describe('useSettingsActions', () => {
         canPurgeBranch: true,
         branchPurgeTargets: [{ id: 'sales-2', email: 'sales2@example.com', name: 'Sales 2', level: 3, role: 'SALES', parentId: 'admin-1' }],
         purgeModuleKeys: ['customer', 'invoice', 'all'],
+        auditCapabilities: { defaultPageSize: 20, maxPageSize: 80, maxExportRows: 1200, pageSizeOptions: [20, 50, 80], cursorMode: 'id' },
       },
     });
 
@@ -117,6 +124,8 @@ describe('useSettingsActions', () => {
     expect(deps.setCanPurgeBranch).toHaveBeenCalledWith(true);
     expect(deps.setBranchPurgeTargets).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ id: 'sales-2' })]));
     expect(purgeFormState.targetUserId).toBe('sales-2');
+    expect(auditMetaState).toEqual({ defaultPageSize: 20, maxPageSize: 80, maxExportRows: 1200, pageSizeOptions: [20, 50, 80], cursorMode: 'id' });
+    expect(auditFiltersState.exportLimit).toBe(1200);
   });
 
   it('clears audit state when loaded settings disable audit viewing', async () => {
@@ -130,6 +139,7 @@ describe('useSettingsActions', () => {
         canPurgeBranch: true,
         branchPurgeTargets: [],
         purgeModuleKeys: ['customer'],
+        auditCapabilities: { defaultPageSize: 20, maxPageSize: 100, maxExportRows: 5000, pageSizeOptions: [20, 50, 100], cursorMode: 'id' },
       },
     });
 
@@ -188,6 +198,7 @@ describe('useSettingsActions', () => {
         data: {
           items: [{ id: 'audit-1', createdAt: '2026-03-11T07:20:00.000Z', actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' }, updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE'], changes: [{ key: 'DETAIL_RECEIPT_MATCH_TOLERANCE', before: '5', after: '7' }] }],
           nextCursor: null,
+          meta: auditMetaState,
         },
       });
     const { result } = renderHook(() => useSettingsActions(deps));
@@ -247,6 +258,7 @@ describe('useSettingsActions', () => {
       data: {
         items: [{ id: 'audit-1', createdAt: '2026-03-11T07:20:00.000Z', actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' }, updatedKeys: ['OCR_DISABLED'], changes: [{ key: 'OCR_DISABLED', before: 'false', after: 'true' }] }],
         nextCursor: 'audit-1',
+        meta: auditMetaState,
       },
     });
 
@@ -269,11 +281,12 @@ describe('useSettingsActions', () => {
       dateFrom: '2026-03-11T07:00',
       dateTo: '2026-03-11T08:00',
       pageSize: 50,
+      exportLimit: 1000,
     };
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({
       success: true,
-      data: { items: [], nextCursor: null },
+      data: { items: [], nextCursor: null, meta: auditMetaState },
     });
 
     const { result } = renderHook(() => useSettingsActions(deps));
@@ -294,11 +307,12 @@ describe('useSettingsActions', () => {
       dateFrom: '2026-03-11T07:00',
       dateTo: '2026-03-11T08:00',
       pageSize: 50,
+      exportLimit: 1000,
     };
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({
       success: true,
-      data: { items: [], nextCursor: null },
+      data: { items: [], nextCursor: null, meta: auditMetaState },
     });
 
     const { result } = renderHook(() => useSettingsActions(deps));
@@ -307,7 +321,7 @@ describe('useSettingsActions', () => {
       await result.current.resetAuditFilters();
     });
 
-    expect(auditFiltersState).toEqual({ actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20 });
+    expect(auditFiltersState).toEqual({ actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20, exportLimit: 5000 });
     expect(mockApiCall).toHaveBeenCalledWith('settings?view=audit&limit=20');
   });
 
@@ -335,6 +349,7 @@ describe('useSettingsActions', () => {
       data: {
         items: [{ id: 'audit-2', createdAt: '2026-03-11T07:21:00.000Z', actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' }, updatedKeys: ['OCR_DISABLED'], changes: [{ key: 'OCR_DISABLED', before: 'false', after: 'true' }] }],
         nextCursor: null,
+        meta: auditMetaState,
       },
     });
 
@@ -359,6 +374,7 @@ describe('useSettingsActions', () => {
       dateFrom: '2026-03-11T07:00',
       dateTo: '2026-03-11T08:00',
       pageSize: 100,
+      exportLimit: 1000,
     };
     const deps = createDeps();
     const originalCreateElement = document.createElement.bind(document);
@@ -392,7 +408,7 @@ describe('useSettingsActions', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/settings?view=audit&format=csv&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
+      '/api/settings?view=audit&format=csv&exportLimit=1000&actor=admin%40example.com&key=OCR_DISABLED&dateFrom=2026-03-11T07%3A00&dateTo=2026-03-11T08%3A00',
       expect.objectContaining({ method: 'GET', credentials: 'include' }),
     );
     expect(anchor.download).toBe('settings-audit.csv');

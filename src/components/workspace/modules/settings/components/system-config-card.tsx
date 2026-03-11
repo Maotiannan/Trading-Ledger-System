@@ -101,6 +101,14 @@ export function SystemConfigCard({
                 <Label>SWIFT_REJECT_TOLERANCE</Label>
                 <Input value={config.SWIFT_REJECT_TOLERANCE || '50'} onChange={(e) => onConfigFieldChange('SWIFT_REJECT_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
               </div>
+              <div>
+                <Label>SETTINGS_AUDIT_MAX_PAGE_SIZE</Label>
+                <Input value={config.SETTINGS_AUDIT_MAX_PAGE_SIZE || '100'} onChange={(e) => onConfigFieldChange('SETTINGS_AUDIT_MAX_PAGE_SIZE', e.target.value)} disabled={!canEditConfig} />
+              </div>
+              <div>
+                <Label>SETTINGS_AUDIT_EXPORT_MAX_ROWS</Label>
+                <Input value={config.SETTINGS_AUDIT_EXPORT_MAX_ROWS || '5000'} onChange={(e) => onConfigFieldChange('SETTINGS_AUDIT_EXPORT_MAX_ROWS', e.target.value)} disabled={!canEditConfig} />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onTestOcrConfig} disabled={!canEditConfig || testingConfig}>

@@ -4,7 +4,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { type ApiErrorCode, apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse } from '@/lib/api-error-response';
-import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import { withAuth } from '@/lib/route-auth';
 import { getSystemSettings } from '@/lib/system-settings';
 import {
@@ -457,7 +457,7 @@ async function processCustomerImportRows(
   return {
     success: true,
     status: 200,
-    message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，无变更 ${unchangedCount}，失败 ${issueRows.length}`,
+    message: `导入完成：新增 ${createdCount}，更新 ${updatedCount}，无变更 ${unchangedCount}，失败 ${issueRows.length} 行`,
     details: issueRows.map((row) => `第${row.rowNo}行(NAME=${row.name || '-'})：${row.reason}`),
     issueRows,
     rowResults: rowResults.sort((a, b) => a.rowNo - b.rowNo),
@@ -635,10 +635,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
     const processed = await processCustomerImportRows(rows, currentUser as { id: string; role: UserRole }, ownerId, showExtended);
+    const localizedMessage = processed.success
+      ? localizeApiSuccessMessage(processed.message, request)
+      : processed.message;
     return NextResponse.json(
       {
         success: processed.success,
-        message: processed.message,
+        message: localizedMessage,
         error: processed.success ? undefined : processed.message,
         code: processed.success ? undefined : apiErrorCodes.BAD_REQUEST,
         details: processed.details.slice(0, 200),
@@ -693,10 +696,13 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
     const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedFields());
     const processed = await processCustomerImportRows(rows, currentUser as { id: string; role: UserRole }, ownerId, showExtended);
+    const localizedMessage = processed.success
+      ? localizeApiSuccessMessage(processed.message, request)
+      : processed.message;
     return NextResponse.json(
       {
         success: processed.success,
-        message: processed.message,
+        message: localizedMessage,
         error: processed.success ? undefined : processed.message,
         code: processed.success ? undefined : apiErrorCodes.BAD_REQUEST,
         details: processed.details.slice(0, 200),

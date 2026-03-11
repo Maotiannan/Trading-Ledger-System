@@ -52,6 +52,8 @@ export function SettingsManager() {
     setSettingsAuditCursor,
     settingsAuditHasMore,
     setSettingsAuditHasMore,
+    settingsAuditMeta,
+    setSettingsAuditMeta,
     settingsAuditFilters,
     setSettingsAuditFilters,
     purgeForm,
@@ -84,6 +86,7 @@ export function SettingsManager() {
     pwd,
     auditCursor: settingsAuditCursor,
     auditFilters: settingsAuditFilters,
+    auditMeta: settingsAuditMeta,
     setLoading,
     setSavingConfig,
     setTestingConfig,
@@ -103,6 +106,7 @@ export function SettingsManager() {
     setSettingsAuditEntries,
     setSettingsAuditCursor,
     setSettingsAuditHasMore,
+    setSettingsAuditMeta,
     setSettingsAuditFilters,
     setPurgeForm,
     setPwd,
@@ -180,6 +184,7 @@ export function SettingsManager() {
         hasMore={settingsAuditHasMore}
         entries={settingsAuditEntries}
         filters={settingsAuditFilters}
+        meta={settingsAuditMeta}
         keyOptions={Object.keys(config).sort()}
         onFilterChange={setSettingsAuditFilters}
         onApplyFilters={() => { void applyAuditFilters(); }}

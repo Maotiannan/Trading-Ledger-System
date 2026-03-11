@@ -13,39 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  CustomerCandidate,
-  IMPORT_RESULT_PAGE_SIZE,
-  apiCall,
-  fetchCustomerCandidatesByMark,
-  fetchServerDate,
-  getDisplayImageUrl,
-  getApiErrorMessage,
-  initCustomerImportRowViews,
-  initInvoiceImportRowViews,
-  lookupCustomerByOrderNoGroup,
-  mergeCustomerImportRowViews,
-  mergeInvoiceImportRowViews,
-  summarizeRowsForAlert,
-  toCustomerImportRowResults,
-  toCustomerImportRowResultsFromIssues,
-  toDateInputValue,
-  toInvoiceImportRowResults,
-  toInvoiceImportRowResultsFromIssues,
-  useUiText,
-  type CustomerImportIssueRow,
-  type CustomerImportRowResult,
-  type CustomerImportRowView,
-  type InvoiceImportIssueRow,
-  type InvoiceImportRowResult,
-  type InvoiceImportRowView,
-} from '@/components/workspace/shared';
-import {
-  Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
-  History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
-  ChevronDown, ChevronRight, Pencil
-} from 'lucide-react';
+import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
+import { AppVersionFooter } from '@/components/workspace/chrome/app-version-footer';
+import { Loader2, LogIn } from 'lucide-react';
 
 export function LoginPage() {
   const t = useTranslations('login');
@@ -117,6 +87,7 @@ export function LoginPage() {
           </form>
         </CardContent>
       </Card>
+      <AppVersionFooter />
     </div>
   );
 }

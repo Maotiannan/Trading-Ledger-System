@@ -62,6 +62,8 @@ jest.mock('@/lib/system-settings', () => ({
     'DETAIL_RECEIPT_MATCH_TOLERANCE',
     'SWIFT_WARNING_TOLERANCE',
     'SWIFT_REJECT_TOLERANCE',
+    'SETTINGS_AUDIT_MAX_PAGE_SIZE',
+    'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
   ],
   booleanSystemSettingKeys: ['OCR_DISABLED'],
   secretSystemSettingKeys: ['OCR_API_KEY'],
@@ -69,6 +71,8 @@ jest.mock('@/lib/system-settings', () => ({
     DETAIL_RECEIPT_MATCH_TOLERANCE: 0,
     SWIFT_WARNING_TOLERANCE: 0,
     SWIFT_REJECT_TOLERANCE: 0,
+    SETTINGS_AUDIT_MAX_PAGE_SIZE: 1,
+    SETTINGS_AUDIT_EXPORT_MAX_ROWS: 1,
   },
   getSystemSettingsWithDefaults: jest.fn(),
   invalidateSystemSettingsCache: jest.fn(),
@@ -127,6 +131,8 @@ describe('settings-service', () => {
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
       SWIFT_WARNING_TOLERANCE: '5',
       SWIFT_REJECT_TOLERANCE: '50',
+      SETTINGS_AUDIT_MAX_PAGE_SIZE: '100',
+      SETTINGS_AUDIT_EXPORT_MAX_ROWS: '5000',
     });
   });
 
@@ -142,6 +148,13 @@ describe('settings-service', () => {
     expect(result.canViewAudit).toBe(true);
     expect(result.canPurgeBranch).toBe(true);
     expect(result.branchPurgeTargets).toHaveLength(1);
+    expect(result.auditCapabilities).toEqual({
+      defaultPageSize: 20,
+      maxPageSize: 100,
+      maxExportRows: 5000,
+      pageSizeOptions: [20, 50, 100],
+      cursorMode: 'id',
+    });
   });
 
   it('lists system setting audit logs with actor and changes', async () => {
@@ -181,6 +194,11 @@ describe('settings-service', () => {
       changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
     }));
     expect(result.nextCursor).toBe('audit-2');
+    expect(result.meta).toEqual(expect.objectContaining({
+      maxPageSize: 100,
+      maxExportRows: 5000,
+      cursorMode: 'id',
+    }));
   });
 
   it('exports all filtered system setting audit logs without pagination cursor', async () => {
@@ -211,11 +229,14 @@ describe('settings-service', () => {
       actor: 'admin@example.com',
     });
 
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual(expect.objectContaining({
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0]).toEqual(expect.objectContaining({
       id: 'audit-3',
       updatedKeys: ['OCR_DISABLED'],
     }));
+    expect(result.exportLimit).toBe(5000);
+    expect(result.maxExportRows).toBe(5000);
+    expect(result.truncated).toBe(false);
     expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
       take: 200,
     }));
@@ -325,6 +346,35 @@ describe('settings-service', () => {
         updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE'],
       }),
     }));
+  });
+
+  it('clamps audit page size and export limit to configured server caps', async () => {
+    mockGetSystemSettingsWithDefaults.mockResolvedValue({
+      OCR_DISABLED: 'false',
+      OCR_API_KEY: 'old-secret',
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
+      SWIFT_WARNING_TOLERANCE: '5',
+      SWIFT_REJECT_TOLERANCE: '50',
+      SETTINGS_AUDIT_MAX_PAGE_SIZE: '30',
+      SETTINGS_AUDIT_EXPORT_MAX_ROWS: '200',
+    });
+    mockDb.auditLog.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const paged = await listSystemSettingsAuditLogs(makeUser(), { limit: 999 });
+    const exported = await listAllSystemSettingsAuditLogs(makeUser(), { exportLimit: 999 });
+
+    expect(paged.limit).toBe(30);
+    expect(paged.meta).toEqual({
+      defaultPageSize: 20,
+      maxPageSize: 30,
+      maxExportRows: 200,
+      pageSizeOptions: [20, 30],
+      cursorMode: 'id',
+    });
+    expect(exported.exportLimit).toBe(200);
+    expect(exported.maxExportRows).toBe(200);
   });
 
   it('masks secret values in settings audit logs', async () => {

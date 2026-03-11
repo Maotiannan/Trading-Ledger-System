@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.62  
+> 当前版本：v1.0.65  
 > 最后更新：2026-03-11
 
 ## P0（本周必须完成）
@@ -178,6 +178,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.65（2026-03-11）：前端底部版本号改为直接显示 `package.json#version`，登录页与 workspace 页面统一可见；服务端成功消息继续扩展到客户导入/账单导入/重匹配/余额转移/OCR 配置测试等批处理提示；设置页配置审计新增服务端 `auditCapabilities` 元信息、`SETTINGS_AUDIT_MAX_PAGE_SIZE / SETTINGS_AUDIT_EXPORT_MAX_ROWS` 配置化与 `exportLimit` 导出控制；新增 `invoice-write` 与 `settings-service` 关键分支回归，coverage threshold 第十三次提升到 `53/77/71/69`，其中 `invoice-write` 提升到 `60/90/80/80`、`settings-service` 提升到 `45/60/55/55`
 - v1.0.64（2026-03-11）：服务端成功消息开始统一字典化，新增 `api-success-catalog + api-success-response + api-response-locale`，并将 `auth/init/settings/invoice/deletion/customer-fixes/receipt/detail/swift` 这批成功响应接入请求级本地化；设置页配置审计新增分页大小与 CSV 导出；新增 `api-success-catalog.test.ts` 与 `settings-service / use-settings-actions / use-invoice-actions / invoice-service / invoice-write` 回归，coverage threshold 第十二次提升到 `52/76/70/68`，其中 `use-invoice-actions` 提升到 `60/80/65/65`、`invoice-service` 提升到 `42/40/49/46`
 - v1.0.63（2026-03-11）：服务端错误字典继续下沉到 `api-error-catalog + api-error-response`，后端开始按 `NEXT_LOCALE / Accept-Language` 直接返回本地化错误；设置页配置审计新增按操作者/配置键/时间范围筛选；前端 workspace API client 改为优先保留服务端详细错误，再用错误码兜底；新增 `api-error-catalog.test.ts` 与更多 `settings-service / use-settings-actions / use-customer-actions / invoice-service` 回归，coverage threshold 第十一次提升到 `50/75/69/67`，其中 `customer-actions` 提升到 `40/65/50/50`、`invoice-service` 提升到 `39/38/47/44`
 - v1.0.58（2026-03-11）：`settings / receipt / detail / swift` 写接口继续迁到 `service + ApiError + runInTransaction`；新增 `SWIFT_WARNING_TOLERANCE / SWIFT_REJECT_TOLERANCE` 系统配置与设置页编辑，修复 `system-settings` 热缓存缺陷，并补齐 `settings-service / receipt-service / detail-service / swift-service / system-settings` 单测；isolated API 已验证设置修改后 SWIFT 容差立即生效，coverage threshold 第六轮提升到 `44/70/64/64`
@@ -246,5 +247,6 @@
 ## 维护规则
 
 - 每次版本更新必须同步更新 `README.md` 与本文件。
+- 前端底部版本号统一读取 `package.json#version`，后续版本发布不要再手写第二套网页版本号。
 - 新需求先判断是否需要配置化，能配置的优先进入系统设置。
 - 需要人工验证的流程优先封装成 API 脚本或自动化用例再交付。

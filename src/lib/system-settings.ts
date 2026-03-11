@@ -14,6 +14,8 @@ export const editableSystemSettingKeys = [
   'DETAIL_RECEIPT_MATCH_TOLERANCE',
   'SWIFT_WARNING_TOLERANCE',
   'SWIFT_REJECT_TOLERANCE',
+  'SETTINGS_AUDIT_MAX_PAGE_SIZE',
+  'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
 ] as const;
 
 export type EditableSystemSettingKey = (typeof editableSystemSettingKeys)[number];
@@ -45,6 +47,8 @@ export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   DETAIL_RECEIPT_MATCH_TOLERANCE: process.env.DETAIL_RECEIPT_MATCH_TOLERANCE ?? '5',
   SWIFT_WARNING_TOLERANCE: process.env.SWIFT_WARNING_TOLERANCE ?? '5',
   SWIFT_REJECT_TOLERANCE: process.env.SWIFT_REJECT_TOLERANCE ?? '50',
+  SETTINGS_AUDIT_MAX_PAGE_SIZE: process.env.SETTINGS_AUDIT_MAX_PAGE_SIZE ?? '100',
+  SETTINGS_AUDIT_EXPORT_MAX_ROWS: process.env.SETTINGS_AUDIT_EXPORT_MAX_ROWS ?? '5000',
 };
 
 export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingKey, number>> = {
@@ -56,6 +60,8 @@ export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingK
   DETAIL_RECEIPT_MATCH_TOLERANCE: 0,
   SWIFT_WARNING_TOLERANCE: 0,
   SWIFT_REJECT_TOLERANCE: 0,
+  SETTINGS_AUDIT_MAX_PAGE_SIZE: 1,
+  SETTINGS_AUDIT_EXPORT_MAX_ROWS: 1,
 };
 
 let cache: { expiresAt: number; values: Record<string, string> } | null = null;

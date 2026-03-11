@@ -4,7 +4,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
-import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import {
   addInvoiceOrder,
   applyInvoiceRematch,
@@ -54,11 +54,17 @@ function mapInvoiceImportRows(rowsInput: unknown[]): InvoiceImportInputRow[] {
   });
 }
 
-function toImportResponse(processed: Awaited<ReturnType<typeof processInvoiceImportRows>>) {
+function toImportResponse(
+  processed: Awaited<ReturnType<typeof processInvoiceImportRows>>,
+  request?: NextRequest,
+) {
+  const localizedMessage = processed.success
+    ? localizeApiSuccessMessage(processed.message, request)
+    : processed.message;
   return NextResponse.json(
     {
       success: processed.success,
-      message: processed.message,
+      message: localizedMessage,
       error: processed.success ? undefined : processed.message,
       details: processed.details.slice(0, 200),
       issueRows: processed.issueRows.slice(0, 200),
@@ -347,14 +353,14 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
       }
 
       const processed = await processInvoiceImportRows(importRows, currentUser);
-      return toImportResponse(processed);
+      return toImportResponse(processed, request);
     }
 
     const body = await request.json();
     if (body?.action === 'import-rows') {
       const rowsInput = Array.isArray(body?.rows) ? body.rows : [];
       const processed = await processInvoiceImportRows(mapInvoiceImportRows(rowsInput), currentUser);
-      return toImportResponse(processed);
+      return toImportResponse(processed, request);
     }
 
     const parsedShipDate = parseDateInput(body?.shipDate);
@@ -436,12 +442,12 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
     if (action === 'updateOrder') {
       const result = await updateInvoiceOrder(currentUser, body ?? {});
-      return NextResponse.json({ success: true, data: result.data });
+      return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
 
     if (action === 'addOrder') {
       const result = await addInvoiceOrder(currentUser, body ?? {});
-      return NextResponse.json({ success: true, data: result.data, merged: result.merged });
+      return createApiSuccessResponse({ data: result.data, merged: result.merged, message: result.message }, request);
     }
 
     if (action === 'deleteOrder') {

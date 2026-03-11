@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Download, Loader2, RefreshCw } from 'lucide-react';
-import type { SettingsAuditEntry, SettingsAuditFilterState } from '../types';
+import type { SettingsAuditEntry, SettingsAuditFilterState, SettingsAuditMeta } from '../types';
 
 export type SettingsAuditCardProps = {
   tx: (zh: string, en: string) => string;
@@ -17,6 +17,7 @@ export type SettingsAuditCardProps = {
   hasMore: boolean;
   entries: SettingsAuditEntry[];
   filters: SettingsAuditFilterState;
+  meta: SettingsAuditMeta;
   keyOptions: string[];
   onFilterChange: React.Dispatch<React.SetStateAction<SettingsAuditFilterState>>;
   onApplyFilters: () => void;
@@ -39,6 +40,7 @@ export function SettingsAuditCard({
   hasMore,
   entries,
   filters,
+  meta,
   keyOptions,
   onFilterChange,
   onApplyFilters,
@@ -47,8 +49,11 @@ export function SettingsAuditCard({
   onLoadMore,
   onExport,
 }: SettingsAuditCardProps) {
+  const exportOptions = Array.from(new Set([500, 1000, 2000, 5000, meta.maxExportRows]))
+    .filter((value) => value <= meta.maxExportRows)
+    .sort((a, b) => a - b);
   const filterPanel = (
-    <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-3 rounded-md border p-4 md:grid-cols-2 xl:grid-cols-6">
       <div className="space-y-1">
         <Label>{tx('操作者', 'Actor')}</Label>
         <Input
@@ -93,12 +98,27 @@ export function SettingsAuditCard({
           value={String(filters.pageSize)}
           onChange={(event) => onFilterChange((prev) => ({ ...prev, pageSize: Number(event.target.value) || 20 }))}
         >
-          {[20, 50, 100].map((size) => (
+          {meta.pageSizeOptions.map((size) => (
             <option key={size} value={size}>{size}</option>
           ))}
         </select>
       </div>
-      <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-5">
+      <div className="space-y-1">
+        <Label>{tx('导出条数', 'Export Rows')}</Label>
+        <select
+          className="w-full rounded-md border px-3 py-2 text-sm"
+          value={String(filters.exportLimit)}
+          onChange={(event) => onFilterChange((prev) => ({ ...prev, exportLimit: Number(event.target.value) || meta.maxExportRows }))}
+        >
+          {exportOptions.map((size) => (
+            <option key={size} value={size}>{size}</option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-500">
+          {tx('服务端最多导出', 'Server export cap')}: {meta.maxExportRows}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-6">
         <Button variant="outline" onClick={onApplyFilters}>
           {tx('应用筛选', 'Apply Filters')}
         </Button>

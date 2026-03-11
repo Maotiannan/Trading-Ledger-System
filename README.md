@@ -959,6 +959,13 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.65 (2026-03-11)
+- 🏷️ 前端底部版本号正式落地：新增 `src/lib/app-version.ts` 作为单一版本来源，直接读取 `package.json#version`；登录页与 workspace 页面底部都会固定显示当前版本号，后续每次小版本更新只需同步 `package.json + README + todolist`。
+- 🌐 服务端成功消息继续扩到批处理提示：`api-success-catalog` 新增 OCR 配置测试、客户导入摘要、重匹配摘要、余额转移、账单内加单/改单等成功文案；`invoice import` 与 `customer import` 这两条历史批量接口也开始按请求语言本地化成功消息，不再只翻译错误。
+- 📄 设置审计继续升级为“服务端元信息 + 批量导出控制”：新增 `SETTINGS_AUDIT_MAX_PAGE_SIZE / SETTINGS_AUDIT_EXPORT_MAX_ROWS` 系统配置，`/api/settings?view=audit` 现在返回服务端 `meta`（`defaultPageSize / maxPageSize / maxExportRows / pageSizeOptions / cursorMode`），CSV 导出支持 `exportLimit` 并由服务端强制截断、回传导出上限头。
+- 🧪 回归重点转到 `invoice-write + settings-service`：新增 `invoice-write` 对“同账单累加 / Un_Associated 吞并”分支测试，新增 `settings-service` 对“审计能力元信息 / 导出上限钳制”测试；Jest 扩展到 `27 suites / 157 tests`。
+- 📈 coverage threshold 第十三次小步上调：global 提升到 `53 / 77 / 71 / 69`，并优先提高 `invoice-write` 到 `60 / 90 / 80 / 80`、`settings-service` 到 `45 / 60 / 55 / 55`；本地 `test:ci` 与 GitHub Actions 全绿。
+
 ### v1.0.64 (2026-03-11)
 - 🌐 服务端成功消息开始统一字典化：新增 `src/lib/api-success-catalog.ts`、`src/lib/api-success-response.ts` 与 `src/lib/api-response-locale.ts`，`auth / init / settings / invoice / deletion / customer-fixes / receipt / detail / swift` 这批成功响应现在也会基于 `NEXT_LOCALE / Accept-Language` 直接返回本地化文案，不再只在前端兜底翻译。
 - 🧹 历史成功消息规范化：`receipt-service` 与 `invoice-write` 中遗留的英文 `please modify guest information` 已改为统一中文语义 `请修复客户信息`，再由服务端字典按语言输出，避免中英混杂。
@@ -1153,3 +1160,11 @@ src/
   - 客户模块剩余少量格式化辅助可继续收口为 helper/hook。
   - 若后续新增复杂工作区，先复用现有 import-result 架构，再决定是否抽新的 shared 组件。
   - `deletions / dashboard` 后续仅在体量或职责明显膨胀时再拆，避免为模块化而引入额外维护成本。
+
+### 6. 版本号规则
+- 前端底部显示的版本号以 `package.json#version` 为单一来源。
+- 每次小版本更新必须同步更新：
+  - `package.json#version`
+  - `README.md` 版本记录
+  - `todolist.md` 当前版本与里程碑摘要
+- 不要再维护多个分散版本号来源，避免网页显示、文档与 CI 产物版本不一致。

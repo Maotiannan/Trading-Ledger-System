@@ -10,6 +10,9 @@ const mockApiCall = apiCall as jest.Mock;
 
 describe('useReceiptActions', () => {
   const tx = (zh: string, _en: string) => zh;
+  const mockFetch = jest.fn();
+  const OriginalFileReader = global.FileReader;
+  const originalFetch = global.fetch;
   const loadReceipts = jest.fn(async () => undefined);
   const setOcrResult = jest.fn();
   const setOcrCustomerMark = jest.fn();
@@ -24,17 +27,42 @@ describe('useReceiptActions', () => {
   const handleShowDirectCreateChange = jest.fn();
   const resetDirectForm = jest.fn();
 
+  class MockFileReader {
+    result: string | ArrayBuffer | null = 'data:image/png;base64,mock';
+    onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+
+    readAsDataURL(_file: Blob) {
+      if (this.onload) {
+        this.onload.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
+      }
+    }
+  }
+
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockFetch.mockReset();
     loadReceipts.mockClear();
+    setOcrResult.mockClear();
+    setOcrCustomerMark.mockClear();
+    setOcrCustomerName.mockClear();
+    setOcrCustomerId.mockClear();
+    setOcrCustomerCandidates.mockClear();
+    setImagePreview.mockClear();
+    setSelectedFile.mockClear();
+    setSavedImagePath.mockClear();
     setError.mockClear();
+    handleShowUploadChange.mockClear();
     handleShowDirectCreateChange.mockClear();
     resetDirectForm.mockClear();
+    global.FileReader = MockFileReader as unknown as typeof FileReader;
+    global.fetch = mockFetch as unknown as typeof fetch;
     jest.spyOn(window, 'alert').mockImplementation(() => undefined);
     jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
   afterEach(() => {
+    global.FileReader = OriginalFileReader;
+    global.fetch = originalFetch;
     jest.restoreAllMocks();
   });
 
@@ -102,6 +130,59 @@ describe('useReceiptActions', () => {
     expect(mockApiCall).not.toHaveBeenCalled();
   });
 
+  it('recognizes uploaded receipt and stores OCR result', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        success: true,
+        data: {
+          ocrResult: { receiptNo: 'OCR-1' },
+          image: { path: '/uploads/receipt.png', name: 'receipt.png' },
+        },
+      }),
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setSelectedFile).toHaveBeenCalledWith(file);
+    expect(setImagePreview).toHaveBeenCalledWith('data:image/png;base64,mock');
+    expect(setOcrResult).toHaveBeenCalledWith({ receiptNo: 'OCR-1' });
+    expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/receipt.png', name: 'receipt.png' });
+    expect(setOcrCustomerMark).toHaveBeenCalledWith('');
+    expect(setOcrCustomerCandidates).toHaveBeenCalledWith([]);
+  });
+
+  it('confirms OCR receipt creation and reloads receipts', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: true }),
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: 120 },
+      ocrCustomerMark: ' MAB-1 ',
+      ocrCustomerName: 'MAB',
+      ocrCustomerId: 'cust-1',
+      savedImagePath: { path: '/uploads/receipt.png', name: 'receipt.png' },
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    const [, request] = mockFetch.mock.calls[0] as [string, { body: FormData }];
+    expect(request.body.get('action')).toBe('confirm');
+    expect(request.body.get('imagePath')).toBe('/uploads/receipt.png');
+    expect(handleShowUploadChange).toHaveBeenCalledWith(false);
+    expect(setSelectedFile).toHaveBeenCalledWith(null);
+    expect(loadReceipts).toHaveBeenCalled();
+  });
+
   it('creates receipt directly and refreshes list on success', async () => {
     mockApiCall.mockResolvedValue({ success: true });
     const { result } = renderHook(() => useReceiptActions(createDeps()));
@@ -132,6 +213,17 @@ describe('useReceiptActions', () => {
     expect(loadReceipts).toHaveBeenCalled();
   });
 
+  it('reports direct-create failure returned by API', async () => {
+    mockApiCall.mockResolvedValue({ success: false, error: '创建失败' });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('创建失败');
+  });
+
   it('submits receipt deletion request and reloads on success', async () => {
     mockApiCall.mockResolvedValue({ success: true });
     const { result } = renderHook(() => useReceiptActions(createDeps()));
@@ -149,6 +241,23 @@ describe('useReceiptActions', () => {
       }),
     }));
     expect(window.alert).toHaveBeenCalledWith('删除申请已提交，等待管理员审批');
+    expect(loadReceipts).toHaveBeenCalled();
+  });
+
+  it('marks receipt as received and refreshes list on success', async () => {
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: true }),
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleMarkReceived('receipt-2');
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/receipt', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+    }));
     expect(loadReceipts).toHaveBeenCalled();
   });
 });

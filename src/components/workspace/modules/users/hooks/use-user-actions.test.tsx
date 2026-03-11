@@ -24,6 +24,7 @@ describe('useUserActions', () => {
     mockApiCall.mockReset();
     setUsers.mockClear();
     setShowCreate.mockClear();
+    setNewUser.mockClear();
     setParentOptions.mockClear();
     setLoadingParents.mockClear();
     newUserState = { email: 'user@example.com', password: 'User@2026!', name: 'User', role: 'SALES', parentId: '' };
@@ -102,5 +103,57 @@ describe('useUserActions', () => {
     });
 
     expect(window.alert).toHaveBeenCalledWith('角色更新失败');
+  });
+
+  it('loads users into state when list succeeds', async () => {
+    mockApiCall.mockResolvedValue({
+      success: true,
+      data: [{ id: 'user-1', email: 'user@example.com', role: 'USER' }],
+    });
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.loadUsers();
+    });
+
+    expect(setUsers).toHaveBeenCalledWith([{ id: 'user-1', email: 'user@example.com', role: 'USER' }]);
+  });
+
+  it('clears parent options when parent lookup fails', async () => {
+    mockApiCall.mockRejectedValue(new Error('load failed'));
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.loadParentOptions('USER');
+    });
+
+    expect(setParentOptions).toHaveBeenCalledWith([]);
+    expect(setLoadingParents).toHaveBeenLastCalledWith(false);
+  });
+
+  it('resets password and shows success alert', async () => {
+    mockApiCall.mockResolvedValue({ success: true });
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleResetPassword('user-1');
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('auth', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ action: 'reset-password', userId: 'user-1', password: 'Reset@2026!' }),
+    }));
+    expect(window.alert).toHaveBeenCalledWith('密码已重置');
+  });
+
+  it('does not delete user when confirmation is cancelled', async () => {
+    jest.spyOn(window, 'confirm').mockImplementation(() => false);
+    const { result } = renderHook(() => useUserActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDelete('user-1');
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
   });
 });

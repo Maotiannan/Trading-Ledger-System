@@ -17,15 +17,19 @@ const customJestConfig = {
     'src/components/workspace/modules/invoices/hooks/use-invoice-actions.ts',
     'src/components/workspace/modules/customers/hooks/use-customer-forms.ts',
     'src/components/workspace/modules/customers/hooks/use-customer-actions.ts',
+    'src/components/workspace/modules/receipts/hooks/use-receipt-actions.ts',
+    'src/components/workspace/modules/details/hooks/use-detail-actions.ts',
+    'src/components/workspace/modules/swifts/hooks/use-swift-actions.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-forms.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-actions.ts',
+    'src/components/workspace/modules/users/hooks/use-user-actions.ts',
   ],
   coverageThreshold: {
     global: {
-      branches: 35,
-      functions: 60,
-      lines: 55,
-      statements: 55,
+      branches: 40,
+      functions: 65,
+      lines: 60,
+      statements: 60,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -51,6 +55,24 @@ const customJestConfig = {
       lines: 35,
       statements: 35,
     },
+    './src/components/workspace/modules/receipts/hooks/use-receipt-actions.ts': {
+      branches: 45,
+      functions: 100,
+      lines: 80,
+      statements: 79,
+    },
+    './src/components/workspace/modules/details/hooks/use-detail-actions.ts': {
+      branches: 45,
+      functions: 100,
+      lines: 85,
+      statements: 84,
+    },
+    './src/components/workspace/modules/swifts/hooks/use-swift-actions.ts': {
+      branches: 45,
+      functions: 100,
+      lines: 85,
+      statements: 83,
+    },
     './src/components/workspace/modules/settings/hooks/use-settings-forms.ts': {
       branches: 60,
       functions: 100,
@@ -62,6 +84,12 @@ const customJestConfig = {
       functions: 80,
       lines: 60,
       statements: 60,
+    },
+    './src/components/workspace/modules/users/hooks/use-user-actions.ts': {
+      branches: 45,
+      functions: 100,
+      lines: 85,
+      statements: 84,
     },
   },
 };

@@ -909,6 +909,11 @@ src/
 - 🧪 第二批 workspace 模块测试落地：新增 `use-receipt-actions`、`use-detail-actions`、`use-swift-actions`、`use-user-actions` 四组 hook 测试，补齐收据/明细/SWIFT/用户管理模块的基础动作回归。
 - 🧭 测试矩阵继续扩展：当前本地 Jest 已扩到 `15 suites / 36 tests`，下一轮再决定是否把第二批 hooks 纳入 coverage 门禁。
 
+### v1.0.54 (2026-03-11)
+- 🔧 GitHub Actions CI 继续修复：将 `jest.config.ts` 改为 `jest.config.mjs`，去掉 runner 对 `ts-node` 的隐式依赖，修复云端 `jest --coverage` 解析配置失败的问题。
+- 🧪 第三批 workspace 模块测试推进：为 `receipt/detail/swift/users` 四组 action hooks 补齐上传识别、确认创建、取消/异常分支、权限动作等真实交互测试，Jest 扩展到 `15 suites / 54 tests`。
+- 📈 coverage threshold 第三轮小步上调：将 `receipt/detail/swift/users` 正式纳入 `collectCoverageFrom` 与 module threshold，同时把 global threshold 提升到 `branches 40 / functions 65 / lines 60 / statements 60`，继续保持渐进收紧而不是一次性全仓拉满。
+
 ### v1.0.52 (2026-03-11)
 - 🛡️ 第二批隔离 API case 落地：新增 `40-auth-hierarchy-boundaries` 与 `50-deletion-approval-flow`，补齐层级权限边界、同级可见不可管、旁支不可管理、删除审批与状态回退链路验证。
 - 🪝 hook 分支测试继续补强：为 `use-invoice-actions`、`use-customer-actions`、`use-settings-actions` 增加成功/失败/重试分支测试，覆盖率显著提升。

@@ -1,0 +1,258 @@
+import { UserRole } from '@prisma/client';
+import { db } from '@/lib/db';
+import {
+  listSettings,
+  purgeBranchBusinessData,
+  purgeBusinessData,
+  testSettingsOcr,
+  updateSystemSettings,
+} from '@/lib/settings-service';
+import { verifyPassword } from '@/lib/auth';
+import { testOcrConnectivity } from '@/lib/ocr';
+import {
+  getSystemSettingsWithDefaults,
+  invalidateSystemSettingsCache,
+} from '@/lib/system-settings';
+
+jest.mock('@/lib/db', () => ({
+  db: {
+    user: {
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    systemSetting: {
+      findMany: jest.fn(),
+      upsert: jest.fn(),
+    },
+    detailItem: { deleteMany: jest.fn(), updateMany: jest.fn() },
+    receiptHistory: { deleteMany: jest.fn() },
+    detailHistory: { deleteMany: jest.fn() },
+    balanceTransfer: { deleteMany: jest.fn() },
+    swift: { deleteMany: jest.fn(), findMany: jest.fn() },
+    receipt: { deleteMany: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+    detail: { deleteMany: jest.fn(), findMany: jest.fn() },
+    order: { deleteMany: jest.fn(), findMany: jest.fn() },
+    invoice: { deleteMany: jest.fn(), findMany: jest.fn() },
+    customer: { deleteMany: jest.fn(), findMany: jest.fn() },
+    deletionRequest: { deleteMany: jest.fn() },
+    auditLog: { deleteMany: jest.fn() },
+    $transaction: jest.fn(),
+  },
+}));
+
+jest.mock('@/lib/auth', () => ({
+  verifyPassword: jest.fn(),
+}));
+
+jest.mock('@/lib/ocr', () => ({
+  testOcrConnectivity: jest.fn(),
+}));
+
+jest.mock('@/lib/system-settings', () => ({
+  editableSystemSettingKeys: [
+    'OCR_DISABLED',
+    'DETAIL_RECEIPT_MATCH_TOLERANCE',
+    'SWIFT_WARNING_TOLERANCE',
+    'SWIFT_REJECT_TOLERANCE',
+  ],
+  booleanSystemSettingKeys: ['OCR_DISABLED'],
+  numericSystemSettingMinimums: {
+    DETAIL_RECEIPT_MATCH_TOLERANCE: 0,
+    SWIFT_WARNING_TOLERANCE: 0,
+    SWIFT_REJECT_TOLERANCE: 0,
+  },
+  getSystemSettingsWithDefaults: jest.fn(),
+  invalidateSystemSettingsCache: jest.fn(),
+}));
+
+function makeUser(overrides: Partial<{
+  id: string;
+  email: string;
+  role: UserRole;
+  level: number;
+  parentId: string | null;
+}> = {}) {
+  return {
+    id: 'admin-1',
+    email: 'admin@example.com',
+    name: 'Admin',
+    role: UserRole.ADMIN,
+    level: 1,
+    parentId: null,
+    createdById: null,
+    ...overrides,
+  };
+}
+
+const mockDb = db as unknown as {
+  user: { findMany: jest.Mock; findUnique: jest.Mock };
+  systemSetting: { findMany: jest.Mock; upsert: jest.Mock };
+  detailItem: { deleteMany: jest.Mock; updateMany: jest.Mock };
+  receiptHistory: { deleteMany: jest.Mock };
+  detailHistory: { deleteMany: jest.Mock };
+  balanceTransfer: { deleteMany: jest.Mock };
+  swift: { deleteMany: jest.Mock; findMany: jest.Mock };
+  receipt: { deleteMany: jest.Mock; findMany: jest.Mock; updateMany: jest.Mock };
+  detail: { deleteMany: jest.Mock; findMany: jest.Mock };
+  order: { deleteMany: jest.Mock; findMany: jest.Mock };
+  invoice: { deleteMany: jest.Mock; findMany: jest.Mock };
+  customer: { deleteMany: jest.Mock; findMany: jest.Mock };
+  deletionRequest: { deleteMany: jest.Mock };
+  auditLog: { deleteMany: jest.Mock };
+  $transaction: jest.Mock;
+};
+
+const mockGetSystemSettingsWithDefaults = getSystemSettingsWithDefaults as jest.Mock;
+const mockInvalidateSystemSettingsCache = invalidateSystemSettingsCache as jest.Mock;
+const mockVerifyPassword = verifyPassword as jest.Mock;
+const mockTestOcrConnectivity = testOcrConnectivity as jest.Mock;
+
+describe('settings-service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
+    mockGetSystemSettingsWithDefaults.mockResolvedValue({
+      OCR_DISABLED: 'false',
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
+      SWIFT_WARNING_TOLERANCE: '5',
+      SWIFT_REJECT_TOLERANCE: '50',
+    });
+  });
+
+  it('lists editable settings and branch purge targets for admin', async () => {
+    mockDb.user.findMany.mockResolvedValueOnce([
+      { id: 'sales-1', email: 'sales@example.com', name: 'Sales', level: 3, role: UserRole.SALES, parentId: 'admin-1' },
+    ]);
+
+    const result = await listSettings(makeUser());
+
+    expect(result.settings.SWIFT_WARNING_TOLERANCE).toBe('5');
+    expect(result.canEdit).toBe(true);
+    expect(result.canPurgeBranch).toBe(true);
+    expect(result.branchPurgeTargets).toHaveLength(1);
+  });
+
+  it('validates swift tolerance ordering before saving config', async () => {
+    await expect(updateSystemSettings(makeUser(), {
+      SWIFT_WARNING_TOLERANCE: '10',
+      SWIFT_REJECT_TOLERANCE: '5',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'SWIFT_REJECT_TOLERANCE 不能小于 SWIFT_WARNING_TOLERANCE',
+    });
+  });
+
+  it('upserts settings and invalidates cache on save', async () => {
+    mockDb.systemSetting.upsert.mockResolvedValue(undefined);
+
+    const result = await updateSystemSettings(makeUser(), {
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '7',
+      SWIFT_WARNING_TOLERANCE: '6',
+      SWIFT_REJECT_TOLERANCE: '60',
+    });
+
+    expect(result.message).toBe('配置已更新');
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(3);
+    expect(mockInvalidateSystemSettingsCache).toHaveBeenCalled();
+  });
+
+  it('rejects invalid boolean config values', async () => {
+    await expect(updateSystemSettings(makeUser(), {
+      OCR_DISABLED: 'maybe',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'OCR_DISABLED 必须为 true 或 false',
+    });
+  });
+
+  it('tests OCR connectivity for admins and returns detail text', async () => {
+    mockTestOcrConnectivity.mockResolvedValueOnce({
+      success: true,
+      message: 'ok',
+      detail: 'pong',
+    });
+
+    const result = await testSettingsOcr(makeUser());
+
+    expect(result).toEqual({ message: 'ok', detail: 'pong' });
+  });
+
+  it('surfaces OCR connectivity failures as structured errors', async () => {
+    mockTestOcrConnectivity.mockResolvedValueOnce({
+      success: false,
+      message: 'OCR disabled',
+      detail: 'OCR_DISABLED=true',
+    });
+
+    await expect(testSettingsOcr(makeUser())).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'OCR disabled',
+      detail: 'OCR_DISABLED=true',
+    });
+  });
+
+  it('purges business data without touching system settings', async () => {
+    const result = await purgeBusinessData(makeUser());
+
+    expect(result.message).toMatch(/系统配置\/用户数据保留/);
+    expect(mockDb.systemSetting.upsert).not.toHaveBeenCalled();
+    expect(mockDb.detailItem.deleteMany).toHaveBeenCalled();
+    expect(mockDb.auditLog.deleteMany).toHaveBeenCalled();
+  });
+
+  it('rejects branch purge when admin password is wrong', async () => {
+    mockDb.user.findUnique.mockResolvedValueOnce({ id: 'admin-1', password: 'hashed' });
+    mockVerifyPassword.mockResolvedValueOnce(false);
+
+    await expect(purgeBranchBusinessData(makeUser(), {
+      targetUserId: 'sales-1',
+      password: 'bad-password',
+      modules: ['all'],
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '密码错误',
+    });
+  });
+
+  it('purges selected branch modules and preserves settings/users', async () => {
+    mockDb.user.findUnique
+      .mockResolvedValueOnce({ id: 'admin-1', password: 'hashed' })
+      .mockResolvedValueOnce({ id: 'sales-1', role: UserRole.SALES, email: 'sales@example.com', name: 'Sales', level: 3 });
+    mockVerifyPassword.mockResolvedValueOnce(true);
+    mockDb.user.findMany
+      .mockResolvedValueOnce([
+        { id: 'admin-1', parentId: null },
+        { id: 'sales-1', parentId: 'admin-1' },
+        { id: 'user-1', parentId: 'sales-1' },
+      ]);
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', invoiceId: 'invoice-1' }]);
+    mockDb.invoice.findMany.mockResolvedValueOnce([{ id: 'invoice-2' }]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ id: 'receipt-1' }]);
+    mockDb.detail.findMany.mockResolvedValueOnce([{ id: 'detail-1' }]);
+    mockDb.swift.findMany.mockResolvedValueOnce([{ id: 'swift-1', detailId: 'detail-1' }]);
+    mockDb.customer.findMany.mockResolvedValueOnce([{ id: 'customer-1' }]);
+
+    const result = await purgeBranchBusinessData(makeUser(), {
+      targetUserId: 'sales-1',
+      password: 'Admin@2026!',
+      modules: ['all'],
+    });
+
+    expect(result.data.modules).toEqual(['invoice', 'receipt', 'detail', 'swift', 'customer']);
+    expect(mockDb.detailItem.updateMany).toHaveBeenCalled();
+    expect(mockDb.receipt.updateMany).toHaveBeenCalled();
+    expect(mockDb.balanceTransfer.deleteMany).toHaveBeenCalled();
+    expect(mockDb.swift.deleteMany).toHaveBeenCalled();
+    expect(mockDb.invoice.deleteMany).toHaveBeenCalled();
+    expect(mockDb.customer.deleteMany).toHaveBeenCalled();
+    expect(mockDb.deletionRequest.deleteMany).toHaveBeenCalled();
+    expect(mockDb.auditLog.deleteMany).toHaveBeenCalled();
+  });
+
+  it('rejects OCR testing for non-admin', async () => {
+    await expect(testSettingsOcr(makeUser({ role: UserRole.SALES, level: 3 }))).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+    });
+  });
+});

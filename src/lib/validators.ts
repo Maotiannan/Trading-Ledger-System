@@ -40,6 +40,7 @@ export const receiptPayloadSchema = z.object({
   customerId: nullableTrimmedString.optional(),
   isDeposit: booleanLike,
 });
+export type ReceiptPayload = z.infer<typeof receiptPayloadSchema>;
 
 export const detailPayloadSchema = z.object({
   date: nullableTrimmedString,
@@ -55,6 +56,7 @@ export const detailPayloadSchema = z.object({
     )
     .min(1, '未识别到有效明细项'),
 });
+export type DetailPayload = z.infer<typeof detailPayloadSchema>;
 
 export const swiftPayloadSchema = z.object({
   amount: z.coerce.number().positive('SWIFT金额无效'),
@@ -64,6 +66,7 @@ export const swiftPayloadSchema = z.object({
   receiverName: nullableTrimmedString,
   receiverAccount: nullableTrimmedString,
 });
+export type SwiftPayload = z.infer<typeof swiftPayloadSchema>;
 
 export function parseJsonWithSchema<T>(raw: string, schema: z.ZodType<T>, invalidMessage: string): T {
   let parsed: unknown;

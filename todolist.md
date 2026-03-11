@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.57  
+> 当前版本：v1.0.58  
 > 最后更新：2026-03-11
 
 ## P0（本周必须完成）
@@ -123,13 +123,18 @@
 - [x] 删除审批模块测试补齐：新增 `use-deletion-actions` hook 测试与 `deletion-service` 单测，覆盖申请校验、审批/拒绝、事务回退与前端 reload 行为 ✅ 2026-03-11
 - [x] 删除审批链路开始统一错误码与事务边界：`/api/deletion` 接入 `ApiError(code/message/detail)` 与 `runInTransaction`，并收口到 `deletion-service` ✅ 2026-03-11
 - [x] 覆盖率门禁第五轮上调：将 deletion hook/service 纳入门禁，global 提升到 `43/69/63/63` ✅ 2026-03-11
+- [x] `settings / receipt / detail / swift` 写接口迁到 `service + ApiError + runInTransaction`，统一路由层职责为“请求解析 + 识别 + 响应封装” ✅ 2026-03-11
+- [x] `SWIFT_WARNING_TOLERANCE / SWIFT_REJECT_TOLERANCE` 配置化进 `/api/settings` 与设置页，并补 isolated API 回归验证配置更新后立即生效 ✅ 2026-03-11
+- [x] 修复 `system-settings` 热缓存只缓存首批 key 的缺陷，避免设置更新后按不同 key 读取时错误回退默认值 ✅ 2026-03-11
+- [x] 新增 `settings-service / receipt-service / detail-service / swift-service / system-settings` 单测，覆盖事务边界、结构化错误、状态回退、容差配置与缓存补齐 ✅ 2026-03-11
+- [x] 覆盖率门禁第六轮上调：global 提升到 `44/70/64/64`，并将 `settings/receipt/detail/swift` service 纳入 coverage 门禁 ✅ 2026-03-11
 
 ## P1（两周内完成）
 
 ### 工程化与标准化
 - [ ] 为核心写接口补事务边界审计（create/update/delete 全链路）
 - [ ] 统一 API 错误码与错误结构（`code/message/detail`），减少前端分支判断
-- [ ] 将关键阈值配置化（如 SWIFT 容差 ±5/±50）并纳入 `/api/settings`
+- [x] 将关键阈值配置化（如 SWIFT 容差 ±5/±50）并纳入 `/api/settings` ✅ 2026-03-11
 - [ ] 补充配置变更审计日志（记录配置前后值 + 操作人）
 - [ ] 多语言二期：将 API 中文报错改为错误码 + 服务端字典，前端按语言渲染（替代字符串映射）
 
@@ -161,6 +166,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.58（2026-03-11）：`settings / receipt / detail / swift` 写接口继续迁到 `service + ApiError + runInTransaction`；新增 `SWIFT_WARNING_TOLERANCE / SWIFT_REJECT_TOLERANCE` 系统配置与设置页编辑，修复 `system-settings` 热缓存缺陷，并补齐 `settings-service / receipt-service / detail-service / swift-service / system-settings` 单测；isolated API 已验证设置修改后 SWIFT 容差立即生效，coverage threshold 第六轮提升到 `44/70/64/64`
 - v1.0.57（2026-03-11）：GitHub Actions 升级到 `actions/checkout@v5` / `actions/setup-node@v5`，消除 Node 24 兼容告警；删除审批链路抽出 `deletion-service + ApiError + runInTransaction`，并新增 deletion hook/service 单测，coverage threshold 第五轮提升到 `43/69/63/63`
 - v1.0.56（2026-03-11）：新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期集成测试与 SWIFT 容差边界 API 回归，补齐 `validateAmountTolerance` 单测，并将 coverage threshold 第四轮小步上调到 `42/68/62/62`；GitHub Actions run `22934138981` 最终通过
 - v1.0.55（2026-03-11）：修复 GitHub Actions 中 isolated API 与 isolated E2E 共用 `.next/dev/lock` 导致的 `app not ready`；测试脚本改为独立 `distDir`，并收口 `NEXT_DIST_DIR` 的相对路径规则，避免再次生成仓库内 `Users/...` 编译产物

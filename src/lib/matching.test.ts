@@ -66,4 +66,17 @@ describe('matching.validateAmountTolerance', () => {
       message: '金额差异 51.00 超过允许范围(±50)，无法通过验证',
     });
   });
+
+  it('supports custom warning and reject thresholds', () => {
+    expect(validateAmountTolerance(100, 103, { warningTolerance: 2, rejectTolerance: 4 })).toEqual({
+      valid: true,
+      hasWarning: true,
+      message: '金额差异 3.00 超出正常容差(±2)，已标红但允许通过',
+    });
+    expect(validateAmountTolerance(100, 105, { warningTolerance: 2, rejectTolerance: 4 })).toEqual({
+      valid: false,
+      hasWarning: true,
+      message: '金额差异 5.00 超过允许范围(±4)，无法通过验证',
+    });
+  });
 });

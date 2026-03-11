@@ -25,13 +25,17 @@ const customJestConfig = {
     'src/components/workspace/modules/settings/hooks/use-settings-actions.ts',
     'src/components/workspace/modules/users/hooks/use-user-actions.ts',
     'src/lib/deletion-service.ts',
+    'src/lib/settings-service.ts',
+    'src/lib/swift-service.ts',
+    'src/lib/receipt-service.ts',
+    'src/lib/detail-service.ts',
   ],
   coverageThreshold: {
     global: {
-      branches: 43,
-      functions: 69,
-      lines: 63,
-      statements: 63,
+      branches: 44,
+      functions: 70,
+      lines: 64,
+      statements: 64,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -104,6 +108,30 @@ const customJestConfig = {
       functions: 70,
       lines: 60,
       statements: 60,
+    },
+    './src/lib/settings-service.ts': {
+      branches: 38,
+      functions: 55,
+      lines: 48,
+      statements: 48,
+    },
+    './src/lib/swift-service.ts': {
+      branches: 40,
+      functions: 70,
+      lines: 60,
+      statements: 60,
+    },
+    './src/lib/receipt-service.ts': {
+      branches: 30,
+      functions: 45,
+      lines: 42,
+      statements: 42,
+    },
+    './src/lib/detail-service.ts': {
+      branches: 30,
+      functions: 45,
+      lines: 42,
+      statements: 42,
     },
   },
 };

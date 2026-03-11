@@ -363,23 +363,29 @@ export async function findMatchingReceipt(
 // 允许±5的容差，超出需要标红但通过，超出±50则不给通过
 export function validateAmountTolerance(
   detailTotal: number,
-  swiftAmount: number
+  swiftAmount: number,
+  options: {
+    warningTolerance?: number;
+    rejectTolerance?: number;
+  } = {}
 ): { valid: boolean; hasWarning: boolean; message: string } {
   const difference = Math.abs(detailTotal - swiftAmount);
+  const warningTolerance = options.warningTolerance ?? 5;
+  const rejectTolerance = options.rejectTolerance ?? 50;
 
-  if (difference > 50) {
+  if (difference > rejectTolerance) {
     return {
       valid: false,
       hasWarning: true,
-      message: `金额差异 ${difference.toFixed(2)} 超过允许范围(±50)，无法通过验证`
+      message: `金额差异 ${difference.toFixed(2)} 超过允许范围(±${rejectTolerance})，无法通过验证`
     };
   }
 
-  if (difference > 5) {
+  if (difference > warningTolerance) {
     return {
       valid: true,
       hasWarning: true,
-      message: `金额差异 ${difference.toFixed(2)} 超出正常容差(±5)，已标红但允许通过`
+      message: `金额差异 ${difference.toFixed(2)} 超出正常容差(±${warningTolerance})，已标红但允许通过`
     };
   }
 

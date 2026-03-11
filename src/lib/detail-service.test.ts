@@ -1,0 +1,196 @@
+import { DetailStatus, ReceiptStatus, UserRole } from '@prisma/client';
+import { db } from '@/lib/db';
+import { canAccessOwnedResourceAsync } from '@/lib/ownership';
+import { recordAuditEvent } from '@/lib/audit';
+import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
+import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/lib/matching';
+import { resolveCustomer } from '@/lib/customer-matching';
+
+jest.mock('@/lib/db', () => ({
+  db: {
+    receipt: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      updateMany: jest.fn(),
+    },
+    order: {
+      update: jest.fn(),
+    },
+    detail: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+    detailItem: {
+      deleteMany: jest.fn(),
+    },
+    detailHistory: {
+      create: jest.fn(),
+    },
+    $transaction: jest.fn(),
+  },
+}));
+
+jest.mock('@/lib/ownership', () => ({
+  canAccessOwnedResourceAsync: jest.fn(),
+}));
+
+jest.mock('@/lib/audit', () => ({
+  recordAuditEvent: jest.fn(),
+}));
+
+jest.mock('@/lib/matching', () => ({
+  findMatchingReceipt: jest.fn(),
+  findOrCreateOrder: jest.fn(),
+  updateOrderBalance: jest.fn(),
+}));
+
+jest.mock('@/lib/customer-matching', () => ({
+  resolveCustomer: jest.fn(),
+}));
+
+function makeUser(overrides: Partial<{ id: string; role: UserRole }> = {}) {
+  return {
+    id: 'sales-1',
+    email: 'sales@example.com',
+    name: 'Sales',
+    role: UserRole.SALES,
+    level: 3,
+    parentId: 'admin-1',
+    createdById: 'admin-1',
+    ...overrides,
+  };
+}
+
+const mockDb = db as unknown as {
+  receipt: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+  order: { update: jest.Mock };
+  detail: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+  detailItem: { deleteMany: jest.Mock };
+  detailHistory: { create: jest.Mock };
+  $transaction: jest.Mock;
+};
+const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
+const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockFindMatchingReceipt = findMatchingReceipt as jest.Mock;
+const mockFindOrCreateOrder = findOrCreateOrder as jest.Mock;
+const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
+const mockResolveCustomer = resolveCustomer as jest.Mock;
+
+describe('detail-service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
+    mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
+    mockResolveCustomer.mockResolvedValue({
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'Ibrahima',
+      customerPhone: '+224',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+  });
+
+  it('creates missing receipts/orders during direct detail creation', async () => {
+    mockFindMatchingReceipt.mockResolvedValueOnce(null);
+    mockFindOrCreateOrder.mockResolvedValueOnce('order-1');
+    mockDb.receipt.create.mockResolvedValueOnce({ id: 'receipt-new' });
+    mockDb.detail.create.mockResolvedValueOnce({
+      id: 'detail-1',
+      items: [{ receiptId: 'receipt-new', receipt: { id: 'receipt-new' } }],
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+
+    const result = await createDetailRecord({
+      currentUser: makeUser(),
+      payload: {
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
+      },
+      mode: 'direct-create',
+    });
+
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        note: '由付款明细直接创建',
+        status: ReceiptStatus.SR_Received,
+      }),
+    }));
+    expect(mockDb.order.update).toHaveBeenCalled();
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(result.message).toBe('付款明细已直接创建');
+    expect(mockRecordAuditEvent).toHaveBeenCalled();
+  });
+
+  it('rejects detail update when status is RECEIVED', async () => {
+    mockDb.detail.findUnique.mockResolvedValueOnce({
+      id: 'detail-received',
+      createdBy: 'sales-1',
+      status: DetailStatus.RECEIVED,
+      items: [],
+      imageUrl: null,
+      imageName: null,
+      date: null,
+    });
+
+    await expect(updateDetailRecord({
+      currentUser: makeUser(),
+      detailId: 'detail-received',
+      payload: {
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
+      },
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'RECEIVED状态下禁止修改',
+    });
+  });
+
+  it('writes history and relinks items on detail update', async () => {
+    mockDb.detail.findUnique.mockResolvedValueOnce({
+      id: 'detail-edit',
+      createdBy: 'sales-1',
+      status: DetailStatus.Waiting_SWIFT,
+      items: [{ receiptId: 'receipt-old' }],
+      imageUrl: '/old.png',
+      imageName: 'old.png',
+      date: null,
+    });
+    mockFindMatchingReceipt.mockResolvedValueOnce('receipt-existing');
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-existing',
+      createdBy: 'sales-1',
+      imageUrl: null,
+      imageName: null,
+    });
+    mockDb.detail.update.mockResolvedValueOnce({
+      id: 'detail-edit',
+      items: [{ receiptId: 'receipt-existing', receipt: { id: 'receipt-existing' } }],
+    });
+
+    const result = await updateDetailRecord({
+      currentUser: makeUser(),
+      detailId: 'detail-edit',
+      payload: {
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-2', amount: 120, receiptId: null, matchedReceiptId: null }],
+      },
+      imagePath: '/new.png',
+      imageName: 'new.png',
+    });
+
+    expect(mockDb.detailHistory.create).toHaveBeenCalled();
+    expect(mockDb.detailItem.deleteMany).toHaveBeenCalledWith({ where: { detailId: 'detail-edit' } });
+    expect(mockDb.receipt.update).toHaveBeenCalledWith({
+      where: { id: 'receipt-existing' },
+      data: { imageUrl: '/new.png', imageName: 'new.png' },
+    });
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['receipt-existing'] } },
+      data: { status: ReceiptStatus.Waiting_SWIFT },
+    });
+    expect(result.data.id).toBe('detail-edit');
+  });
+});

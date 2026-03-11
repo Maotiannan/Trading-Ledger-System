@@ -9,6 +9,8 @@ export default async function run(t) {
   t.assertEqual(Boolean(settingsBefore.data?.data?.canPurgeBranch), true, 'admin can purge branch data');
 
   const nextTolerance = '7';
+  const nextSwiftWarningTolerance = '6';
+  const nextSwiftRejectTolerance = '60';
   const currentSettings = settingsBefore.data?.data?.settings || {};
   const saveSettings = await t.request('POST', '/api/settings', {
     json: {
@@ -16,6 +18,8 @@ export default async function run(t) {
       settings: {
         ...currentSettings,
         DETAIL_RECEIPT_MATCH_TOLERANCE: nextTolerance,
+        SWIFT_WARNING_TOLERANCE: nextSwiftWarningTolerance,
+        SWIFT_REJECT_TOLERANCE: nextSwiftRejectTolerance,
       },
     },
     expectedStatus: 200,
@@ -24,6 +28,8 @@ export default async function run(t) {
 
   const settingsAfter = await t.request('GET', '/api/settings', { expectedStatus: 200 });
   t.assertEqual(String(settingsAfter.data?.data?.settings?.DETAIL_RECEIPT_MATCH_TOLERANCE || ''), nextTolerance, 'updated tolerance persisted');
+  t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_WARNING_TOLERANCE || ''), nextSwiftWarningTolerance, 'updated swift warning tolerance persisted');
+  t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_REJECT_TOLERANCE || ''), nextSwiftRejectTolerance, 'updated swift reject tolerance persisted');
 
   const ocrTest = await t.request('POST', '/api/settings', {
     json: { action: 'test-ocr' },

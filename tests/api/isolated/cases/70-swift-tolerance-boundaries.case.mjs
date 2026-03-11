@@ -61,6 +61,17 @@ export default async function run(t) {
   });
   t.step('tolerance sales account created');
 
+  await t.request('POST', '/api/settings', {
+    json: {
+      action: 'update-config',
+      settings: {
+        SWIFT_WARNING_TOLERANCE: '5',
+        SWIFT_REJECT_TOLERANCE: '50',
+      },
+    },
+    expectedStatus: 200,
+  });
+
   await t.logout();
   await t.login(salesEmail, 'Sales@2026!');
 
@@ -160,6 +171,50 @@ export default async function run(t) {
   const errorSwiftAfterDelete = await t.request('GET', `/api/swift?search=${encodeURIComponent(errorBoundary.orderNo)}`, { expectedStatus: 200 });
   const deletedErrorSwift = findSwiftByDetail(errorSwiftAfterDelete.data?.data, errorBoundary.detailId);
   t.assertOk(!deletedErrorSwift, 'hard-error swift is removed after direct delete');
+
+  await t.logout();
+  await t.loginAdmin();
+  await t.request('POST', '/api/settings', {
+    json: {
+      action: 'update-config',
+      settings: {
+        SWIFT_WARNING_TOLERANCE: '2',
+        SWIFT_REJECT_TOLERANCE: '4',
+      },
+    },
+    expectedStatus: 200,
+  });
+  await t.logout();
+  await t.login(salesEmail, 'Sales@2026!');
+
+  const configuredWarning = await createPair(t, suffix, 'CFG-03', 100);
+  const configuredWarningSwift = await t.request('POST', '/api/swift', {
+    json: {
+      action: 'direct-create',
+      detailId: configuredWarning.detailId,
+      amount: 103,
+      senderName: 'Tolerance Sender',
+      receiverName: 'Tolerance Receiver',
+    },
+    expectedStatus: 200,
+  });
+  t.assertEqual(Boolean(configuredWarningSwift.data?.data?.validation?.valid), true, 'configured difference of 3 still validates');
+  t.assertEqual(Boolean(configuredWarningSwift.data?.data?.validation?.hasWarning), true, 'configured difference of 3 raises warning after settings update');
+  t.assertMatch(configuredWarningSwift.data?.data?.validation?.message || '', /±2/, 'configured warning message uses updated threshold');
+
+  const configuredReject = await createPair(t, suffix, 'CFG-05', 100);
+  const configuredRejectSwift = await t.request('POST', '/api/swift', {
+    json: {
+      action: 'direct-create',
+      detailId: configuredReject.detailId,
+      amount: 105,
+      senderName: 'Tolerance Sender',
+      receiverName: 'Tolerance Receiver',
+    },
+    expectedStatus: 200,
+  });
+  t.assertEqual(Boolean(configuredRejectSwift.data?.data?.validation?.valid), false, 'configured difference of 5 is rejected after settings update');
+  t.assertMatch(configuredRejectSwift.data?.data?.validation?.message || '', /±4/, 'configured reject message uses updated threshold');
 
   await t.logout();
 }

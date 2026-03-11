@@ -93,6 +93,14 @@ export function SystemConfigCard({
                 <Label>DETAIL_RECEIPT_MATCH_TOLERANCE</Label>
                 <Input value={config.DETAIL_RECEIPT_MATCH_TOLERANCE || '5'} onChange={(e) => onConfigFieldChange('DETAIL_RECEIPT_MATCH_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
               </div>
+              <div>
+                <Label>SWIFT_WARNING_TOLERANCE</Label>
+                <Input value={config.SWIFT_WARNING_TOLERANCE || '5'} onChange={(e) => onConfigFieldChange('SWIFT_WARNING_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
+              </div>
+              <div>
+                <Label>SWIFT_REJECT_TOLERANCE</Label>
+                <Input value={config.SWIFT_REJECT_TOLERANCE || '50'} onChange={(e) => onConfigFieldChange('SWIFT_REJECT_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onTestOcrConfig} disabled={!canEditConfig || testingConfig}>

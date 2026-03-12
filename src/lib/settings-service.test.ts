@@ -84,9 +84,11 @@ jest.mock('@/lib/system-settings', () => ({
 function makeUser(overrides: Partial<{
   id: string;
   email: string;
+  name: string | null;
   role: UserRole;
   level: number;
   parentId: string | null;
+  createdById: string | null;
 }> = {}) {
   return {
     id: 'admin-1',
@@ -167,6 +169,35 @@ describe('settings-service', () => {
         branchPurgeTargetCount: 1,
         canEdit: true,
         canViewAudit: true,
+      }),
+    }));
+  });
+
+  it('lists settings for non-admin without privileged capabilities', async () => {
+    const salesUser = makeUser({
+      id: 'sales-1',
+      email: 'sales@example.com',
+      name: 'Sales',
+      role: UserRole.SALES,
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    });
+
+    const result = await listSettings(salesUser);
+
+    expect(result.canEdit).toBe(false);
+    expect(result.canViewAudit).toBe(false);
+    expect(result.canPurgeBranch).toBe(false);
+    expect(result.branchPurgeTargets).toEqual([]);
+    expect(mockDb.user.findMany).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_VIEW',
+      actorId: 'sales-1',
+      metadata: expect.objectContaining({
+        branchPurgeTargetCount: 0,
+        canEdit: false,
+        canViewAudit: false,
       }),
     }));
   });
@@ -434,6 +465,110 @@ describe('settings-service', () => {
       code: 'BAD_REQUEST',
       message: '结束时间不能早于开始时间',
     });
+  });
+
+  it('rejects invalid audit date inputs', async () => {
+    await expect(listSystemSettingsAuditLogs(makeUser(), {
+      dateFrom: 'bad-date',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'dateFrom 格式错误',
+    });
+  });
+
+  it('rejects non-admin audit reads and export history reads', async () => {
+    const salesUser = makeUser({
+      id: 'sales-1',
+      email: 'sales@example.com',
+      role: UserRole.SALES,
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    });
+
+    await expect(listSystemSettingsAuditLogs(salesUser)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: '只有管理员可以查看系统配置审计',
+    });
+
+    await expect(listSystemSettingsAuditExportLogs(salesUser)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: '只有管理员可以查看系统配置审计',
+    });
+  });
+
+  it('filters settings audit export history by actor, key, date range, and cursor', async () => {
+    mockDb.auditLog.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'audit-export-3',
+          createdAt: new Date('2026-03-11T09:30:00.000Z'),
+          metadata: {
+            rowCount: 10,
+            exportLimit: 20,
+            maxExportRows: 5000,
+            truncated: false,
+            exportedKeys: ['OCR_DISABLED'],
+            filters: {
+              actor: 'admin@example.com',
+              key: 'OCR_DISABLED',
+              dateFrom: '2026-03-11',
+              dateTo: '2026-03-11',
+            },
+          },
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+        },
+        {
+          id: 'audit-export-2',
+          createdAt: new Date('2026-03-10T09:30:00.000Z'),
+          metadata: {
+            rowCount: 5,
+            exportLimit: 20,
+            maxExportRows: 5000,
+            truncated: false,
+            exportedKeys: ['SWIFT_WARNING_TOLERANCE'],
+            filters: {
+              actor: '',
+              key: 'SWIFT_WARNING_TOLERANCE',
+              dateFrom: '',
+              dateTo: '',
+            },
+          },
+          actor: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await listSystemSettingsAuditExportLogs(makeUser(), {
+      cursor: 'audit-export-0',
+      limit: 20,
+      actor: 'admin@example.com',
+      key: 'OCR_DISABLED',
+      dateFrom: '2026-03-11',
+      dateTo: '2026-03-11',
+    });
+
+    expect(mockDb.auditLog.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      cursor: { id: 'audit-export-0' },
+      skip: 1,
+      where: expect.objectContaining({
+        action: 'SYSTEM_SETTINGS_AUDIT_EXPORT',
+        targetType: 'SYSTEM_SETTING',
+        createdAt: expect.objectContaining({
+          gte: new Date('2026-03-11T00:00:00.000'),
+          lte: new Date('2026-03-11T23:59:59.999'),
+        }),
+      }),
+    }));
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'audit-export-3',
+        filterActor: 'admin@example.com',
+        filterKey: 'OCR_DISABLED',
+      }),
+    ]);
   });
 
   it('validates swift tolerance ordering before saving config', async () => {

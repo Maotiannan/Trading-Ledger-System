@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.71  
+> 当前版本：v1.0.72  
 > 最后更新：2026-03-12
 
 ## P0（本周必须完成）
@@ -181,6 +181,8 @@
 ---
 
 ## 已完成里程碑摘要
+
+- v1.0.72（2026-03-12）：继续补齐设置读接口的关键分支与审计闭环；`settings-read-service` 新增无权限、非法日期、导出历史过滤/游标等测试，`settings-and-report` isolated API case 新增审计分页元信息、过滤结果与导出头校验；`customer-read-service / invoice-read-service` 分支回归继续覆盖非 manager 拒绝、精确 MARK 过滤、admin 搜扩展字段、alias 命中但订单不存在、账单余额计算与特殊 INV 排序；coverage threshold 第二十次提升到 `61/83/79/77`，其中 `settings-read-service` 提升到 `70/96/90/90`、`customer-read-service` 提升到 `70/100/90/90`、`invoice-read-service` 提升到 `75/100/95/95`
 
 - v1.0.71（2026-03-12）：移除页面底部永久悬浮版本号，版本信息只保留在设置页顶部；修复设置页“配置变更审计”因 effect 依赖循环导致的持续刷新；新增 `settings-read-service / settings-write-service`，将 `/api/settings` 继续拆成明确读写边界；补齐 `customer-read-service / invoice-read-service` 分支回归与设置页 Playwright 可视回归，coverage threshold 第十九次提升到 `60/82/78/76`，其中 `customer-read-service` 提升到 `60/100/85/85`、`invoice-read-service` 提升到 `60/58/85/85`、`settings-write-service` 提升到 `55/70/65/65`
 - v1.0.70（2026-03-12）：`settings` 关键读接口补齐读审计基线，`listSettings / listSystemSettingsAuditLogs / listSystemSettingsAuditExportLogs` 开始区分记录配置总览、审计列表和导出历史列表读取；继续补齐 `use-customer-actions` 与 `customer-fix-service` 分支回归，覆盖非管理员删除短路、取消确认、`issueRows` 回退导入、跨 sales 修复拒绝、命中既有客户走 update、异常事务错误映射等场景；coverage threshold 第十八次提升到 `58/81/76/74`，其中 `use-customer-actions` 提升到 `55/80/60/60`、`customer-fix-service` 提升到 `55/80/80/80`

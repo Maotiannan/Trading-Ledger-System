@@ -26,7 +26,7 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
-- 当前 Jest 已扩展到 `27 suites / 172 tests`；coverage global threshold 已小步提升到 `branches 55 / functions 79 / lines 73 / statements 71`
+- 当前 Jest 已扩展到 `36 suites / 231 tests`；coverage global threshold 已小步提升到 `branches 61 / functions 83 / lines 79 / statements 77`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -960,6 +960,11 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.72 (2026-03-12)
+- 🧾 设置读接口继续补强：`settings-read-service` 的无权限、非法日期、导出历史过滤/游标等关键分支已补齐；`settings-and-report` isolated API case 新增审计分页元信息、按操作者/配置键过滤、导出头信息校验，确保配置审计链路可稳定筛选、分页和导出。
+- 🧪 读接口分支回归继续补强：`customer-read-service` 新增非 manager 拒绝、精确 MARK 过滤、admin 搜扩展字段等测试；`invoice-read-service` 新增 alias 命中但订单不存在、账单余额计算、`DEPOSIT_POOL / Un_Associated / normal` 排序等测试。
+- 📈 coverage threshold 第二十次小步上调：global 提升到 `61 / 83 / 79 / 77`；`settings-read-service` 提升到 `70 / 96 / 90 / 90`，`customer-read-service` 提升到 `70 / 100 / 90 / 90`，`invoice-read-service` 提升到 `75 / 100 / 95 / 95`。
+
 ### v1.0.71 (2026-03-12)
 - 🧹 前端体验修正：移除页面底部永久悬浮版本号，版本号只保留在设置页顶部；同时修复设置页“配置变更审计”因 effect 依赖循环导致的持续刷新，审计列表与导出历史现在只在首次进入或显式操作时加载。
 - 🧩 `settings` 服务继续标准化拆分：新增 `settings-read-service / settings-write-service`，`/api/settings` 读写路径完全分离，`settings-service.ts` 退化为兼容 barrel，避免读写混杂导致 coverage 和审计边界失真。
@@ -1199,7 +1204,7 @@ src/
 
 ### 6. 版本号规则
 - 前端版本号以 `package.json#version` 为单一来源。
-- 设置页顶部必须展示当前版本号；页脚版本号可以保留，但不能作为唯一可见入口。
+- 设置页顶部必须展示当前版本号；不要再放永久悬浮页脚/底栏版本号。
 - 每次小版本更新必须同步更新：
   - `package.json#version`
   - `README.md` 版本记录

@@ -99,6 +99,21 @@ describe('invoice-read-service', () => {
     }));
   });
 
+  it('returns empty direct candidate list when alias resolves to a missing order', async () => {
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('order-missing');
+    mockDb.order.findUnique.mockResolvedValueOnce(null);
+
+    const result = await listOrderMatchCandidates(makeUser() as never, 'IB-404');
+
+    expect(result.data).toEqual([]);
+    expect(result.message).toContain('0 条');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_MATCH_CANDIDATES_VIEW',
+      targetId: 'order-missing',
+      metadata: expect.objectContaining({ mode: 'direct', count: 0 }),
+    }));
+  });
+
   it('falls back to group key matching when alias lookup misses', async () => {
     mockFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
     mockDb.order.findMany.mockResolvedValueOnce([
@@ -173,6 +188,75 @@ describe('invoice-read-service', () => {
       targetId: 'order-1',
       metadata: expect.objectContaining({ accessible: true, count: 1 }),
     }));
+  });
+
+  it('computes invoice balances from linked orders and receipts', async () => {
+    mockDb.invoice.findMany.mockResolvedValueOnce([
+      {
+        id: 'inv-1',
+        invNo: 'INV-001',
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+        orders: [
+          {
+            id: 'order-1',
+            orderNo: 'IB-01',
+            amount: 100,
+            receipts: [{ usd: 30, status: 'Waiting_SWIFT' }, { usd: 20, status: 'RECEIVED' }],
+          },
+          {
+            id: 'order-2',
+            orderNo: 'IB-02',
+            amount: 50,
+            receipts: [],
+          },
+        ],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+    ]);
+
+    const result = await listInvoiceRecords(makeUser() as never, '');
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        invNo: 'INV-001',
+        invAmount: 150,
+        invBalance: 100,
+        orders: [
+          expect.objectContaining({ orderNo: 'IB-01', orderBalance: 50, isSystemOrder: false }),
+          expect.objectContaining({ orderNo: 'IB-02', orderBalance: 50, isSystemOrder: false }),
+        ],
+      }),
+    ]);
+  });
+
+  it('sorts Un_Associated ahead of normal invoices but after DEPOSIT_POOL', async () => {
+    mockDb.invoice.findMany.mockResolvedValueOnce([
+      {
+        id: 'inv-3',
+        invNo: 'INV-001',
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+      {
+        id: 'inv-2',
+        invNo: 'Un_Associated',
+        createdAt: new Date('2026-03-13T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+      {
+        id: 'inv-1',
+        invNo: 'DEPOSIT_POOL',
+        createdAt: new Date('2026-03-11T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+    ]);
+
+    const result = await listInvoiceRecords(makeUser() as never, '');
+
+    expect(result.data.map((row) => row.invNo)).toEqual(['DEPOSIT_POOL', 'Un_Associated', 'INV-001']);
   });
 
   it('sorts DEPOSIT_POOL before normal invoices', async () => {

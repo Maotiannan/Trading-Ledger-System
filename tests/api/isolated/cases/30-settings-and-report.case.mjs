@@ -33,10 +33,24 @@ export default async function run(t) {
 
   const auditList = await t.request('GET', '/api/settings?view=audit&limit=20', { expectedStatus: 200 });
   t.assertEqual(Array.isArray(auditList.data?.data?.items), true, 'settings audit list returns item array');
+  t.assertEqual(Boolean(auditList.data?.data?.meta?.maxPageSize), true, 'settings audit list returns server paging meta');
+
+  const filteredAuditList = await t.request(
+    'GET',
+    `/api/settings?view=audit&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_WARNING_TOLERANCE&dateFrom=2026-03-11&dateTo=2026-03-12`,
+    { expectedStatus: 200 },
+  );
+  t.assertEqual(
+    filteredAuditList.data?.data?.items?.some((item) => Array.isArray(item?.updatedKeys) && item.updatedKeys.includes('SWIFT_WARNING_TOLERANCE')),
+    true,
+    'filtered settings audit list can match updated key',
+  );
 
   const auditExport = await t.request('GET', '/api/settings?view=audit&format=csv&exportLimit=20', { expectedStatus: 200 });
   t.assertEqual(auditExport.headers.get('x-export-row-count') !== null, true, 'settings audit csv export returns row count header');
   t.assertEqual(auditExport.headers.get('x-export-summary') !== null, true, 'settings audit csv export returns export summary header');
+  t.assertEqual(auditExport.headers.get('x-export-limit-applied') !== null, true, 'settings audit csv export returns applied limit header');
+  t.assertEqual(auditExport.headers.get('x-export-limit-max') !== null, true, 'settings audit csv export returns max limit header');
 
   const exportHistory = await t.request('GET', '/api/settings?view=audit-export-history&limit=20', { expectedStatus: 200 });
   t.assertEqual(Array.isArray(exportHistory.data?.data?.items), true, 'settings audit export history returns item array');
@@ -45,6 +59,16 @@ export default async function run(t) {
     String(exportHistory.data?.data?.items?.[0]?.actor?.email || ''),
     t.adminEmail,
     'settings audit export history keeps exporter identity',
+  );
+  const filteredExportHistory = await t.request(
+    'GET',
+    `/api/settings?view=audit-export-history&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_WARNING_TOLERANCE`,
+    { expectedStatus: 200 },
+  );
+  t.assertEqual(
+    filteredExportHistory.data?.data?.items?.some((item) => Array.isArray(item?.exportedKeys) && item.exportedKeys.includes('SWIFT_WARNING_TOLERANCE')),
+    true,
+    'settings audit export history can be filtered by key',
   );
 
   const ocrTest = await t.request('POST', '/api/settings', {

@@ -183,4 +183,76 @@ describe('customer-read-service', () => {
 
     expect(result.data).toEqual([]);
   });
+
+  it('rejects non-manager customer list reads', async () => {
+    await expect(listCustomers(makeUser({
+      id: 'user-1',
+      email: 'user@example.com',
+      role: UserRole.USER,
+      level: 4,
+      parentId: 'sales-1',
+      createdById: 'sales-1',
+    }), { search: 'IB' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: '无权限',
+    });
+  });
+
+  it('applies exact mark filter before returning customers', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: 'IB Co',
+        companyAddress: 'Address',
+        credit: 0,
+        owner: { id: 'admin-1', email: 'admin@example.com', name: 'Admin', role: UserRole.ADMIN, level: 1 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser(), { mark: 'IB', search: '' });
+
+    expect(mockDb.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        mark: { equals: 'IB' },
+      }),
+    }));
+    expect(result.data).toHaveLength(1);
+    expect(result.message).toContain('1 个客户');
+  });
+
+  it('lets admin search extended customer fields', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: 'Hidden Co',
+        companyAddress: 'Secret Address',
+        credit: 100,
+        owner: { id: 'admin-1', email: 'admin@example.com', name: 'Admin', role: UserRole.ADMIN, level: 1 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser(), { search: 'Secret Address' });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toEqual(expect.objectContaining({
+      companyAddress: 'Secret Address',
+    }));
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'CUSTOMER_LIST_VIEW',
+      metadata: expect.objectContaining({ count: 1, search: 'Secret Address', showExtended: true }),
+    }));
+  });
 });

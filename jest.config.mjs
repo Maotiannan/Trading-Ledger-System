@@ -23,6 +23,7 @@ const customJestConfig = {
     'src/components/workspace/modules/deletions/hooks/use-deletion-actions.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-forms.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-actions.ts',
+    'src/components/workspace/modules/settings/read-model.ts',
     'src/components/workspace/modules/users/hooks/use-user-actions.ts',
     'src/lib/deletion-service.ts',
     'src/lib/settings-read-service.ts',
@@ -41,10 +42,10 @@ const customJestConfig = {
   ],
   coverageThreshold: {
     global: {
-      branches: 61,
-      functions: 83,
-      lines: 79,
-      statements: 77,
+      branches: 62,
+      functions: 84,
+      lines: 80,
+      statements: 78,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -101,10 +102,16 @@ const customJestConfig = {
       statements: 90,
     },
     './src/components/workspace/modules/settings/hooks/use-settings-actions.ts': {
-      branches: 45,
-      functions: 92,
-      lines: 70,
-      statements: 70,
+      branches: 50,
+      functions: 95,
+      lines: 72,
+      statements: 72,
+    },
+    './src/components/workspace/modules/settings/read-model.ts': {
+      branches: 65,
+      functions: 90,
+      lines: 85,
+      statements: 85,
     },
     './src/components/workspace/modules/users/hooks/use-user-actions.ts': {
       branches: 50,
@@ -161,10 +168,10 @@ const customJestConfig = {
       statements: 65,
     },
     './src/lib/customer-read-service.ts': {
-      branches: 70,
+      branches: 75,
       functions: 100,
-      lines: 90,
-      statements: 90,
+      lines: 95,
+      statements: 95,
     },
     './src/lib/customer-fix-service.ts': {
       branches: 55,
@@ -185,7 +192,7 @@ const customJestConfig = {
       statements: 60,
     },
     './src/lib/invoice-read-service.ts': {
-      branches: 75,
+      branches: 80,
       functions: 100,
       lines: 95,
       statements: 95,

@@ -11,6 +11,14 @@ import type {
   SettingsAuditFilterState,
   SettingsAuditMeta,
 } from '../types';
+import {
+  buildEmptySettingsAuditFilters,
+  buildSettingsAuditQuery,
+  clampSettingsAuditFilters,
+  normalizeSettingsAuditExportHistoryPage,
+  normalizeSettingsAuditPage,
+  normalizeSettingsBootstrap,
+} from '../read-model';
 
 export type SettingsActionText = (zh: string, en: string) => string;
 
@@ -58,76 +66,6 @@ export type SettingsActionDeps = {
   setPwd: (value: PasswordFormState) => void;
 };
 
-const defaultAuditMeta: SettingsAuditMeta = {
-  defaultPageSize: 20,
-  maxPageSize: 100,
-  maxExportRows: 5000,
-  pageSizeOptions: [20, 50, 100],
-  cursorMode: 'id',
-};
-
-function normalizeAuditMeta(value: unknown): SettingsAuditMeta {
-  const source = (value && typeof value === 'object') ? (value as Partial<SettingsAuditMeta>) : {};
-  const maxPageSize = Math.max(Number(source.maxPageSize) || defaultAuditMeta.maxPageSize, 1);
-  const maxExportRows = Math.max(Number(source.maxExportRows) || defaultAuditMeta.maxExportRows, 1);
-  const defaultPageSize = Math.min(Math.max(Number(source.defaultPageSize) || defaultAuditMeta.defaultPageSize, 1), maxPageSize);
-  const rawPageSizeOptions = Array.isArray(source.pageSizeOptions) ? source.pageSizeOptions : defaultAuditMeta.pageSizeOptions;
-  const pageSizeOptions = Array.from(new Set(
-    rawPageSizeOptions
-      .map((value) => Math.max(Math.min(Number(value) || defaultPageSize, maxPageSize), 1))
-      .filter((value) => Number.isFinite(value)),
-  )).sort((a, b) => a - b);
-
-  return {
-    defaultPageSize,
-    maxPageSize,
-    maxExportRows,
-    pageSizeOptions: pageSizeOptions.length > 0 ? pageSizeOptions : [defaultPageSize],
-    cursorMode: source.cursorMode === 'id' ? 'id' : 'id',
-  };
-}
-
-function buildEmptyAuditFilters(meta: SettingsAuditMeta): SettingsAuditFilterState {
-  return {
-    actorQuery: '',
-    settingKey: '',
-    dateFrom: '',
-    dateTo: '',
-    pageSize: meta.defaultPageSize,
-    exportLimit: meta.maxExportRows,
-  };
-}
-
-function clampAuditFilters(filters: SettingsAuditFilterState, meta: SettingsAuditMeta): SettingsAuditFilterState {
-  return {
-    ...filters,
-    pageSize: Math.max(Math.min(Number(filters.pageSize) || meta.defaultPageSize, meta.maxPageSize), 1),
-    exportLimit: Math.max(Math.min(Number(filters.exportLimit) || meta.maxExportRows, meta.maxExportRows), 1),
-  };
-}
-
-function buildAuditQuery(
-  view: 'audit' | 'audit-export-history',
-  filters: SettingsAuditFilterState,
-  cursor?: string | null,
-  options: { format?: 'csv'; includeLimit?: boolean } = {},
-) {
-  const query = new URLSearchParams({ view });
-  if (options.includeLimit !== false) {
-    query.set('limit', String(filters.pageSize || 20));
-  }
-  if (options.format) {
-    query.set('format', options.format);
-    query.set('exportLimit', String(filters.exportLimit || 1));
-  }
-  if (cursor) query.set('cursor', cursor);
-  if (filters.actorQuery.trim()) query.set('actor', filters.actorQuery.trim());
-  if (filters.settingKey.trim()) query.set('key', filters.settingKey.trim());
-  if (filters.dateFrom.trim()) query.set('dateFrom', filters.dateFrom.trim());
-  if (filters.dateTo.trim()) query.set('dateTo', filters.dateTo.trim());
-  return query.toString();
-}
-
 export function useSettingsActions({
   tx,
   canEditConfig,
@@ -157,15 +95,15 @@ export function useSettingsActions({
   setBranchPurgeTargets,
   setPurgeModuleKeys,
   setPurgingBranch,
-    setSettingsAuditEntries,
-    setSettingsAuditCursor,
-    setSettingsAuditHasMore,
-    setSettingsAuditExportHistoryEntries,
-    setSettingsAuditExportHistoryCursor,
-    setSettingsAuditExportHistoryHasMore,
-    setSettingsAuditExportHistoryLoading,
-    setSettingsAuditExportHistoryLoadingMore,
-    setSettingsAuditMeta,
+  setSettingsAuditEntries,
+  setSettingsAuditCursor,
+  setSettingsAuditHasMore,
+  setSettingsAuditExportHistoryEntries,
+  setSettingsAuditExportHistoryCursor,
+  setSettingsAuditExportHistoryHasMore,
+  setSettingsAuditExportHistoryLoading,
+  setSettingsAuditExportHistoryLoadingMore,
+  setSettingsAuditMeta,
   setSettingsAuditFilters,
   setPurgeForm,
   setPwd,
@@ -176,17 +114,17 @@ export function useSettingsActions({
     try {
       const result = await apiCall('settings');
       if (result.success) {
-        setConfig(result.data.settings || {});
-        const nextAuditMeta = normalizeAuditMeta(result.data.auditCapabilities);
-        setSettingsAuditMeta(nextAuditMeta);
-        setSettingsAuditFilters((prev) => clampAuditFilters(prev, nextAuditMeta));
-        setCanEditConfig(Boolean(result.data.canEdit));
-        const nextCanViewAudit = Boolean(result.data.canViewAudit);
+        const nextState = normalizeSettingsBootstrap(result.data);
+        setConfig(nextState.config);
+        setSettingsAuditMeta(nextState.auditMeta);
+        setSettingsAuditFilters((prev) => clampSettingsAuditFilters(prev, nextState.auditMeta));
+        setCanEditConfig(nextState.canEditConfig);
+        const nextCanViewAudit = nextState.canViewAudit;
         setCanViewAudit(nextCanViewAudit);
-        setCanPurgeBranch(Boolean(result.data.canPurgeBranch));
-        const targets = Array.isArray(result.data.branchPurgeTargets) ? result.data.branchPurgeTargets : [];
+        setCanPurgeBranch(nextState.canPurgeBranch);
+        const targets = nextState.branchPurgeTargets;
         setBranchPurgeTargets(targets);
-        setPurgeModuleKeys(Array.isArray(result.data.purgeModuleKeys) ? result.data.purgeModuleKeys : []);
+        setPurgeModuleKeys(nextState.purgeModuleKeys);
         if (!nextCanViewAudit) {
           setSettingsAuditEntries([]);
           setSettingsAuditCursor(null);
@@ -216,20 +154,19 @@ export function useSettingsActions({
     }
 
     const append = Boolean(options.append);
-    const filters = clampAuditFilters(options.filters || auditFilters || buildEmptyAuditFilters(auditMeta), auditMeta);
+    const filters = clampSettingsAuditFilters(options.filters || auditFilters || buildEmptySettingsAuditFilters(auditMeta), auditMeta);
     const cursor = append ? auditCursor : null;
     if (append) setAuditLoadingMore(true);
     else setAuditLoading(true);
 
     try {
-      const result = await apiCall(`settings?${buildAuditQuery('audit', filters, cursor)}`);
+      const result = await apiCall(`settings?${buildSettingsAuditQuery('audit', filters, cursor)}`);
       if (result.success) {
-        const items = Array.isArray(result.data?.items) ? result.data.items : [];
-        const nextAuditMeta = normalizeAuditMeta(result.data?.meta);
-        setSettingsAuditMeta(nextAuditMeta);
-        setSettingsAuditEntries((prev) => (append ? [...prev, ...items] : items));
-        setSettingsAuditCursor(typeof result.data?.nextCursor === 'string' && result.data.nextCursor ? result.data.nextCursor : null);
-        setSettingsAuditHasMore(Boolean(result.data?.nextCursor));
+        const nextPage = normalizeSettingsAuditPage(result.data, auditMeta);
+        setSettingsAuditMeta(nextPage.meta);
+        setSettingsAuditEntries((prev) => (append ? [...prev, ...nextPage.items] : nextPage.items));
+        setSettingsAuditCursor(nextPage.nextCursor);
+        setSettingsAuditHasMore(Boolean(nextPage.nextCursor));
       }
     } catch (err) {
       setError(getApiErrorMessage(err, tx('加载配置审计失败', 'Failed to load configuration audit')));
@@ -260,20 +197,19 @@ export function useSettingsActions({
     }
 
     const append = Boolean(options.append);
-    const filters = clampAuditFilters(options.filters || auditFilters || buildEmptyAuditFilters(auditMeta), auditMeta);
+    const filters = clampSettingsAuditFilters(options.filters || auditFilters || buildEmptySettingsAuditFilters(auditMeta), auditMeta);
     const cursor = append ? auditExportHistoryCursor : null;
     if (append) setSettingsAuditExportHistoryLoadingMore(true);
     else setSettingsAuditExportHistoryLoading(true);
 
     try {
-      const result = await apiCall(`settings?${buildAuditQuery('audit-export-history', filters, cursor)}`);
+      const result = await apiCall(`settings?${buildSettingsAuditQuery('audit-export-history', filters, cursor)}`);
       if (result.success) {
-        const items = Array.isArray(result.data?.items) ? result.data.items : [];
-        const nextAuditMeta = normalizeAuditMeta(result.data?.meta);
-        setSettingsAuditMeta(nextAuditMeta);
-        setSettingsAuditExportHistoryEntries((prev) => (append ? [...prev, ...items] : items));
-        setSettingsAuditExportHistoryCursor(typeof result.data?.nextCursor === 'string' && result.data.nextCursor ? result.data.nextCursor : null);
-        setSettingsAuditExportHistoryHasMore(Boolean(result.data?.nextCursor));
+        const nextPage = normalizeSettingsAuditExportHistoryPage(result.data, auditMeta);
+        setSettingsAuditMeta(nextPage.meta);
+        setSettingsAuditExportHistoryEntries((prev) => (append ? [...prev, ...nextPage.items] : nextPage.items));
+        setSettingsAuditExportHistoryCursor(nextPage.nextCursor);
+        setSettingsAuditExportHistoryHasMore(Boolean(nextPage.nextCursor));
       }
     } catch (err) {
       setError(getApiErrorMessage(err, tx('加载导出历史失败', 'Failed to load export history')));
@@ -302,7 +238,7 @@ export function useSettingsActions({
   }, [auditFilters, loadSettingsAudit, loadSettingsAuditExportHistory]);
 
   const resetAuditFilters = useCallback(async () => {
-    const nextFilters = buildEmptyAuditFilters(auditMeta);
+    const nextFilters = buildEmptySettingsAuditFilters(auditMeta);
     setSettingsAuditFilters(nextFilters);
     await loadSettingsAudit({ filters: nextFilters });
     await loadSettingsAuditExportHistory({ filters: nextFilters });
@@ -314,7 +250,7 @@ export function useSettingsActions({
     setError(null);
     setMessage(null);
     try {
-      const response = await fetch(`/api/settings?${buildAuditQuery('audit', auditFilters, null, { format: 'csv', includeLimit: false })}`, {
+      const response = await fetch(`/api/settings?${buildSettingsAuditQuery('audit', auditFilters, null, { format: 'csv', includeLimit: false })}`, {
         method: 'GET',
         credentials: 'include',
       });
@@ -370,7 +306,7 @@ export function useSettingsActions({
       if (result.success) {
         setMessage(result.message || tx('配置已保存', 'Configuration saved'));
         await loadSettings();
-        await loadSettingsAudit({ filters: clampAuditFilters(auditFilters, auditMeta) });
+        await loadSettingsAudit({ filters: clampSettingsAuditFilters(auditFilters, auditMeta) });
       } else {
         setError(getApiErrorMessage(result, tx('保存失败', 'Save failed')));
       }

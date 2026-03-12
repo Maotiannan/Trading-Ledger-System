@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.72  
+> 当前版本：v1.0.73  
 > 最后更新：2026-03-12
 
 ## P0（本周必须完成）
@@ -182,6 +182,8 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.73（2026-03-12）：`settings` 前端读路径继续收口，新增 `read-model.ts` 统一处理审计元信息、默认筛选、分页/导出上限 clamp 与 bootstrap/audit/export-history 响应归一化，减少设置页对混合响应结构的直接依赖；继续补齐 `use-settings-actions` 的改密码异常、清库未选模块、清库请求异常分支测试，以及 `settings-service / customer-read-service / invoice-read-service` 的关键读路径边界测试；coverage threshold 第二十一次提升到 `62/84/80/78`，其中 `use-settings-actions` 提升到 `50/95/72/72`、`customer-read-service` 提升到 `75/100/95/95`、`invoice-read-service` 提升到 `80/100/95/95`
+
 - v1.0.72（2026-03-12）：继续补齐设置读接口的关键分支与审计闭环；`settings-read-service` 新增无权限、非法日期、导出历史过滤/游标等测试，`settings-and-report` isolated API case 新增审计分页元信息、过滤结果与导出头校验；`customer-read-service / invoice-read-service` 分支回归继续覆盖非 manager 拒绝、精确 MARK 过滤、admin 搜扩展字段、alias 命中但订单不存在、账单余额计算与特殊 INV 排序；coverage threshold 第二十次提升到 `61/83/79/77`，其中 `settings-read-service` 提升到 `70/96/90/90`、`customer-read-service` 提升到 `70/100/90/90`、`invoice-read-service` 提升到 `75/100/95/95`
 
 - v1.0.71（2026-03-12）：移除页面底部永久悬浮版本号，版本信息只保留在设置页顶部；修复设置页“配置变更审计”因 effect 依赖循环导致的持续刷新；新增 `settings-read-service / settings-write-service`，将 `/api/settings` 继续拆成明确读写边界；补齐 `customer-read-service / invoice-read-service` 分支回归与设置页 Playwright 可视回归，coverage threshold 第十九次提升到 `60/82/78/76`，其中 `customer-read-service` 提升到 `60/100/85/85`、`invoice-read-service` 提升到 `60/58/85/85`、`settings-write-service` 提升到 `55/70/65/65`
@@ -259,6 +261,6 @@
 ## 维护规则
 
 - 每次版本更新必须同步更新 `README.md` 与本文件。
-- 前端底部版本号统一读取 `package.json#version`，后续版本发布不要再手写第二套网页版本号。
+- 前端版本号统一读取 `package.json#version`，并仅在设置页顶部展示；不要再恢复永久悬浮页脚/底栏版本号。
 - 新需求先判断是否需要配置化，能配置的优先进入系统设置。
 - 需要人工验证的流程优先封装成 API 脚本或自动化用例再交付。

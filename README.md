@@ -26,7 +26,8 @@
 - 自动化测试已升级为三层：Jest hook/module 单测、隔离 API case 集、隔离 Playwright 关键链路闭环；CI 已统一串联 `tsc + lint + unit coverage + api isolated + e2e isolated`
 - `scripts/test-api-isolated.sh` 现仅负责隔离环境启动，具体 case 已拆到 `tests/api/isolated/cases/*.case.mjs`，便于后续按模块继续扩展
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
-- 当前 Jest 已扩展到 `36 suites / 231 tests`；coverage global threshold 已小步提升到 `branches 61 / functions 83 / lines 79 / statements 77`
+- `settings` 前端读路径已开始通过 `read-model` 收口：审计元信息、筛选默认值、分页参数 clamp、bootstrap/audit/export-history 归一化都集中在 `src/components/workspace/modules/settings/read-model.ts`，设置页不再直接消费混合响应结构
+- 当前 Jest 已扩展到 `36 suites / 238 tests`；coverage global threshold 已小步提升到 `branches 62 / functions 84 / lines 80 / statements 78`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -959,6 +960,12 @@ src/
 - 🧠 前端错误消费收口为“保留服务端具体文案，错误码只做兜底”：`workspace api client` 不再把详细错误覆写成 `Invalid request` 这类通用文案，避免丢失 `OCR_DISABLED`、容差边界等关键细节。
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
+
+### v1.0.73 (2026-03-12)
+- 🧩 `settings` 前端读路径继续收口：新增 `src/components/workspace/modules/settings/read-model.ts`，把审计元信息、默认筛选、页大小/导出上限 clamp、bootstrap/audit/export-history 响应归一化集中到单一 read-model，减少设置页对 `/api/settings` 混合返回结构的直接依赖。
+- 🧪 边界测试继续补强：`use-settings-actions` 新增改密码请求异常、清库未选模块、清库请求异常分支测试；`customer-read-service / invoice-read-service / settings-service` 继续补齐非 manager 拒绝、精确过滤、alias 命中空结果、非法日期、导出历史过滤/游标等关键读路径分支。Jest 扩展到 `36 suites / 238 tests`。
+- 📈 coverage threshold 第二十一次小步上调：global 提升到 `62 / 84 / 80 / 78`；`use-settings-actions` 提升到 `50 / 95 / 72 / 72`，`customer-read-service` 提升到 `75 / 100 / 95 / 95`，`invoice-read-service` 提升到 `80 / 100 / 95 / 95`。
+- 🏷️ 版本提升到 `1.0.73`；本地服务重建后，设置页顶部应显示当前版本号，不再显示任何永久悬浮页脚版本信息。
 
 ### v1.0.72 (2026-03-12)
 - 🧾 设置读接口继续补强：`settings-read-service` 的无权限、非法日期、导出历史过滤/游标等关键分支已补齐；`settings-and-report` isolated API case 新增审计分页元信息、按操作者/配置键过滤、导出头信息校验，确保配置审计链路可稳定筛选、分页和导出。

@@ -10,23 +10,7 @@ import type {
   SettingsAuditFilterState,
   SettingsAuditMeta,
 } from '../types';
-
-const emptySettingsAuditFilters: SettingsAuditFilterState = {
-  actorQuery: '',
-  settingKey: '',
-  dateFrom: '',
-  dateTo: '',
-  pageSize: 20,
-  exportLimit: 5000,
-};
-
-const defaultSettingsAuditMeta: SettingsAuditMeta = {
-  defaultPageSize: 20,
-  maxPageSize: 100,
-  maxExportRows: 5000,
-  pageSizeOptions: [20, 50, 100],
-  cursorMode: 'id',
-};
+import { buildEmptySettingsAuditFilters, defaultSettingsAuditMeta } from '../read-model';
 
 export function useSettingsForms() {
   const [loading, setLoading] = useState(false);
@@ -54,7 +38,9 @@ export function useSettingsForms() {
   const [settingsAuditExportHistoryLoading, setSettingsAuditExportHistoryLoading] = useState(false);
   const [settingsAuditExportHistoryLoadingMore, setSettingsAuditExportHistoryLoadingMore] = useState(false);
   const [settingsAuditMeta, setSettingsAuditMeta] = useState<SettingsAuditMeta>(defaultSettingsAuditMeta);
-  const [settingsAuditFilters, setSettingsAuditFilters] = useState<SettingsAuditFilterState>(emptySettingsAuditFilters);
+  const [settingsAuditFilters, setSettingsAuditFilters] = useState<SettingsAuditFilterState>(
+    buildEmptySettingsAuditFilters(defaultSettingsAuditMeta),
+  );
   const [purgeForm, setPurgeForm] = useState<PurgeFormState>({
     targetUserId: '',
     password: '',
@@ -140,7 +126,6 @@ export function useSettingsForms() {
     setPwd,
     updateConfigField,
     togglePurgeModule,
-    emptySettingsAuditFilters,
     defaultSettingsAuditMeta,
   };
 }

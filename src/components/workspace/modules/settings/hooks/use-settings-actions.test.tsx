@@ -1,6 +1,13 @@
 import { act, renderHook } from '@testing-library/react';
 import { useSettingsActions } from './use-settings-actions';
-import type { PasswordFormState, PurgeFormState, SettingsAuditFilterState, SettingsAuditMeta } from '../types';
+import type {
+  PasswordFormState,
+  PurgeFormState,
+  SettingsAuditEntry,
+  SettingsAuditExportEntry,
+  SettingsAuditFilterState,
+  SettingsAuditMeta,
+} from '../types';
 import { apiCall, getApiErrorMessage, getApiResponseErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
@@ -30,6 +37,8 @@ describe('useSettingsActions', () => {
   let auditMetaState: SettingsAuditMeta;
   let auditCursorState: string | null;
   let auditExportHistoryCursorState: string | null;
+  let auditEntriesState: SettingsAuditEntry[];
+  let auditExportHistoryEntriesState: SettingsAuditExportEntry[];
 
   beforeEach(() => {
     mockApiCall.mockReset();
@@ -41,6 +50,8 @@ describe('useSettingsActions', () => {
     auditMetaState = { defaultPageSize: 20, maxPageSize: 100, maxExportRows: 5000, pageSizeOptions: [20, 50, 100], cursorMode: 'id' };
     auditCursorState = null;
     auditExportHistoryCursorState = null;
+    auditEntriesState = [];
+    auditExportHistoryEntriesState = [];
     jest.spyOn(window, 'confirm').mockImplementation(() => true);
   });
 
@@ -84,10 +95,14 @@ describe('useSettingsActions', () => {
       setBranchPurgeTargets: jest.fn(),
       setPurgeModuleKeys: jest.fn(),
       setPurgingBranch: jest.fn(),
-      setSettingsAuditEntries: jest.fn(),
+      setSettingsAuditEntries: jest.fn((value: SettingsAuditEntry[] | ((prev: SettingsAuditEntry[]) => SettingsAuditEntry[])) => {
+        auditEntriesState = typeof value === 'function' ? value(auditEntriesState) : value;
+      }),
       setSettingsAuditCursor: jest.fn(),
       setSettingsAuditHasMore: jest.fn(),
-      setSettingsAuditExportHistoryEntries: jest.fn(),
+      setSettingsAuditExportHistoryEntries: jest.fn((value: SettingsAuditExportEntry[] | ((prev: SettingsAuditExportEntry[]) => SettingsAuditExportEntry[])) => {
+        auditExportHistoryEntriesState = typeof value === 'function' ? value(auditExportHistoryEntriesState) : value;
+      }),
       setSettingsAuditExportHistoryCursor: jest.fn(),
       setSettingsAuditExportHistoryHasMore: jest.fn(),
       setSettingsAuditExportHistoryLoading: jest.fn(),
@@ -165,6 +180,48 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditExportHistoryEntries).toHaveBeenCalledWith([]);
     expect(deps.setSettingsAuditExportHistoryCursor).toHaveBeenCalledWith(null);
     expect(deps.setSettingsAuditExportHistoryHasMore).toHaveBeenCalledWith(false);
+  });
+
+  it('normalizes malformed audit capabilities from settings bootstrap', async () => {
+    auditFiltersState = {
+      actorQuery: '',
+      settingKey: '',
+      dateFrom: '',
+      dateTo: '',
+      pageSize: 999,
+      exportLimit: 999999,
+    };
+    purgeFormState = { targetUserId: 'missing-target', password: 'Admin@2026!', modules: ['customer'] };
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        settings: { DETAIL_RECEIPT_MATCH_TOLERANCE: '8' },
+        canEdit: true,
+        canViewAudit: true,
+        canPurgeBranch: true,
+        branchPurgeTargets: [{ id: 'sales-2', email: 'sales2@example.com', name: 'Sales 2', level: 3, role: 'SALES', parentId: 'admin-1' }],
+        purgeModuleKeys: ['customer'],
+        auditCapabilities: { defaultPageSize: 0, maxPageSize: 0, maxExportRows: -1, pageSizeOptions: ['bad'], cursorMode: 'unexpected' },
+      },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    expect(auditMetaState).toEqual({
+      defaultPageSize: 20,
+      maxPageSize: 100,
+      maxExportRows: 1,
+      pageSizeOptions: [20],
+      cursorMode: 'id',
+    });
+    expect(auditFiltersState.pageSize).toBe(100);
+    expect(auditFiltersState.exportLimit).toBe(1);
+    expect(purgeFormState.targetUserId).toBe('sales-2');
   });
 
   it('blocks password change when confirmation mismatches', async () => {
@@ -262,6 +319,20 @@ describe('useSettingsActions', () => {
     }));
     expect(pwdState).toEqual({ oldPassword: '', newPassword: '', confirmPassword: '' });
     expect(deps.setMessage).toHaveBeenCalledWith('changed');
+  });
+
+  it('surfaces password change request failures through shared error mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockRejectedValueOnce(new Error('password request failed'));
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleChangePassword();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('password request failed');
+    expect(deps.setPasswordLoading).toHaveBeenCalledWith(true);
+    expect(deps.setPasswordLoading).toHaveBeenLastCalledWith(false);
   });
 
   it('loads settings audit logs independently', async () => {
@@ -589,6 +660,24 @@ describe('useSettingsActions', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });
 
+  it('skips audit export when audit access is disabled', async () => {
+    const deps = createDeps();
+    const fetchMock = jest.fn();
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { result } = renderHook(() => useSettingsActions({
+      ...deps,
+      canViewAudit: false,
+    }));
+
+    await act(async () => {
+      await result.current.exportSettingsAudit();
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(deps.setAuditExporting).not.toHaveBeenCalledWith(true);
+  });
+
   it('blocks purge when target or password is missing', async () => {
     const deps = createDeps();
     const { result } = renderHook(() => useSettingsActions({
@@ -602,5 +691,66 @@ describe('useSettingsActions', () => {
 
     expect(deps.setError).toHaveBeenCalledWith('请先选择账号并填写管理员密码');
     expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('blocks purge when no purge modules are selected', async () => {
+    const deps = createDeps();
+    const { result } = renderHook(() => useSettingsActions({
+      ...deps,
+      purgeForm: { targetUserId: 'sales-1', password: 'Admin@2026!', modules: [] },
+    }));
+
+    await act(async () => {
+      await result.current.handlePurgeBranch();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('请至少选择一个清理模块');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('blocks purge when selected target is missing from current branch list', async () => {
+    const deps = createDeps();
+    const { result } = renderHook(() => useSettingsActions({
+      ...deps,
+      purgeForm: { targetUserId: 'missing', password: 'Admin@2026!', modules: ['customer'] },
+    }));
+
+    await act(async () => {
+      await result.current.handlePurgeBranch();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('目标账号不存在');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('surfaces purge api failure through shared error mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: false, error: 'boom' });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handlePurgeBranch();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.any(Object));
+    expect(deps.setError).toHaveBeenCalledWith('boom');
+    expect(deps.setPurgingBranch).toHaveBeenCalledWith(true);
+    expect(deps.setPurgingBranch).toHaveBeenLastCalledWith(false);
+  });
+
+  it('surfaces purge request exceptions through shared error mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockRejectedValueOnce(new Error('purge request failed'));
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handlePurgeBranch();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('purge request failed');
+    expect(deps.setPurgingBranch).toHaveBeenCalledWith(true);
+    expect(deps.setPurgingBranch).toHaveBeenLastCalledWith(false);
   });
 });

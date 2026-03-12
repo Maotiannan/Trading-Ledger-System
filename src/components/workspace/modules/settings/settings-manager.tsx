@@ -9,13 +9,12 @@ import { APP_VERSION } from '@/lib/app-version';
 import { BranchPurgeCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
 import { useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
-import { buildSettingsAuditViewModel } from './view-model';
+import { buildSettingsPageViewModel } from './page-view-model';
 
 export function SettingsManager() {
   const tx = useUiText();
   const didLoadAuditRef = useRef(false);
   const { user } = useStore();
-  const canManageUsers = user?.role === 'ADMIN' || user?.role === 'SALES';
   const {
     loading,
     setLoading,
@@ -147,8 +146,12 @@ export function SettingsManager() {
     void loadSettingsAuditExportHistory({ filters: settingsAuditFilters });
   }, [canViewAudit, loadSettingsAudit, loadSettingsAuditExportHistory, settingsAuditFilters]);
 
-  const settingsAuditView = useMemo(() => buildSettingsAuditViewModel({
+  const settingsPageView = useMemo(() => buildSettingsPageViewModel({
     tx,
+    appVersion: APP_VERSION,
+    userRole: user?.role,
+    error,
+    message,
     filters: settingsAuditFilters,
     meta: settingsAuditMeta,
     keyOptions: Object.keys(config),
@@ -158,6 +161,8 @@ export function SettingsManager() {
     exportHistoryHasMore: settingsAuditExportHistoryHasMore,
   }), [
     config,
+    error,
+    message,
     settingsAuditEntries,
     settingsAuditExportHistoryEntries,
     settingsAuditExportHistoryHasMore,
@@ -165,19 +170,20 @@ export function SettingsManager() {
     settingsAuditHasMore,
     settingsAuditMeta,
     tx,
+    user?.role,
   ]);
 
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-2xl font-bold">{tx('设置', 'Settings')}</h2>
+        <h2 className="text-2xl font-bold">{settingsPageView.title}</h2>
         <p className="text-sm text-gray-500">
-          {tx('当前版本', 'Current Version')}: <span className="font-mono">{APP_VERSION}</span>
+          {tx('当前版本', 'Current Version')}: <span className="font-mono">{settingsPageView.versionLabel}</span>
         </p>
       </div>
-      {(error || message) && (
-        <Alert variant={error ? 'destructive' : 'default'}>
-          <AlertDescription>{error || message}</AlertDescription>
+      {settingsPageView.alertMessage && (
+        <Alert variant={settingsPageView.alertVariant}>
+          <AlertDescription>{settingsPageView.alertMessage}</AlertDescription>
         </Alert>
       )}
 
@@ -190,7 +196,7 @@ export function SettingsManager() {
         onSubmit={handleChangePassword}
       />
 
-      {canManageUsers && (
+      {settingsPageView.canManageUsers && (
         <Card>
           <CardHeader>
             <CardTitle>{tx('用户管理', 'User Management')}</CardTitle>
@@ -234,7 +240,7 @@ export function SettingsManager() {
         exporting={auditExporting}
         exportHistoryLoading={settingsAuditExportHistoryLoading}
         exportHistoryLoadingMore={settingsAuditExportHistoryLoadingMore}
-        viewModel={settingsAuditView}
+        viewModel={settingsPageView.auditView}
         onFilterChange={setSettingsAuditFilters}
         onApplyFilters={() => { void applyAuditFilters(); }}
         onResetFilters={() => { void resetAuditFilters(); }}

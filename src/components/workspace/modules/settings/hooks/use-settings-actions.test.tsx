@@ -182,6 +182,21 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditExportHistoryHasMore).toHaveBeenCalledWith(false);
   });
 
+  it('surfaces settings bootstrap request failures', async () => {
+    const deps = createDeps();
+    mockApiCall.mockRejectedValueOnce(new Error('加载设置失败'));
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('加载设置失败');
+    expect(deps.setLoading).toHaveBeenCalledWith(true);
+    expect(deps.setLoading).toHaveBeenLastCalledWith(false);
+  });
+
   it('normalizes malformed audit capabilities from settings bootstrap', async () => {
     auditFiltersState = {
       actorQuery: '',
@@ -300,6 +315,32 @@ describe('useSettingsActions', () => {
     expect(deps.setError).toHaveBeenCalledWith('OCR test failed | OCR_DISABLED=true');
   });
 
+  it('surfaces OCR test success detail in message', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: true, message: 'OCR 测试成功', detail: 'detected 1 receipt' });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleTestOcrConfig();
+    });
+
+    expect(deps.setMessage).toHaveBeenCalledWith('OCR 测试成功 | detected 1 receipt');
+  });
+
+  it('surfaces OCR test backend failures through shared mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: false, error: 'OCR 测试失败' });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleTestOcrConfig();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('OCR 测试失败');
+  });
+
   it('changes password and resets form state on success', async () => {
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({ success: true, message: 'changed' });
@@ -358,6 +399,21 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditHasMore).toHaveBeenCalledWith(true);
   });
 
+  it('surfaces audit load failures through shared mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockRejectedValueOnce(new Error('加载配置审计失败'));
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettingsAudit();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('加载配置审计失败');
+    expect(deps.setAuditLoading).toHaveBeenCalledWith(true);
+    expect(deps.setAuditLoading).toHaveBeenLastCalledWith(false);
+  });
+
   it('loads export history independently', async () => {
     const deps = createDeps();
     mockApiCall.mockResolvedValueOnce({
@@ -392,6 +448,21 @@ describe('useSettingsActions', () => {
     expect(deps.setSettingsAuditExportHistoryEntries).toHaveBeenCalledWith(expect.any(Function));
     expect(deps.setSettingsAuditExportHistoryCursor).toHaveBeenCalledWith('audit-export-1');
     expect(deps.setSettingsAuditExportHistoryHasMore).toHaveBeenCalledWith(true);
+  });
+
+  it('surfaces export history load failures through shared mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockRejectedValueOnce(new Error('加载导出历史失败'));
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettingsAuditExportHistory();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('加载导出历史失败');
+    expect(deps.setSettingsAuditExportHistoryLoading).toHaveBeenCalledWith(true);
+    expect(deps.setSettingsAuditExportHistoryLoading).toHaveBeenLastCalledWith(false);
   });
 
   it('includes audit filters when applying audit filters', async () => {
@@ -660,6 +731,65 @@ describe('useSettingsActions', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
   });
 
+  it('falls back to raw export summary when header decoding fails', async () => {
+    const deps = createDeps();
+    const originalCreateElement = document.createElement.bind(document);
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const anchor = originalCreateElement('a');
+    jest.spyOn(anchor, 'click').mockImplementation(() => undefined);
+    const fetchMock = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      blob: jest.fn().mockResolvedValue(new Blob(['time,actor\n'])),
+      headers: {
+        get: (name: string) => {
+          switch (name.toLowerCase()) {
+            case 'content-disposition':
+              return 'attachment; filename="settings-audit.csv"';
+            case 'x-export-summary':
+              return '%E0%A4%A';
+            default:
+              return null;
+          }
+        },
+      },
+    } as unknown as Response);
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+    jest.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      if (tagName.toLowerCase() === 'a') return anchor;
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: jest.fn(() => 'blob:audit') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: jest.fn() });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.exportSettingsAudit();
+    });
+
+    expect(deps.setMessage).toHaveBeenCalledWith('%E0%A4%A');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: originalCreateObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: originalRevokeObjectURL });
+  });
+
+  it('surfaces export request failures through shared mapper', async () => {
+    const deps = createDeps();
+    const fetchMock = jest.fn().mockResolvedValueOnce({ ok: false } as Response);
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, writable: true, value: fetchMock });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.exportSettingsAudit();
+    });
+
+    expect(mockGetApiResponseErrorMessage).toHaveBeenCalled();
+    expect(deps.setError).toHaveBeenCalledWith('导出配置审计失败');
+    expect(deps.setAuditExporting).toHaveBeenCalledWith(true);
+    expect(deps.setAuditExporting).toHaveBeenLastCalledWith(false);
+  });
+
   it('skips audit export when audit access is disabled', async () => {
     const deps = createDeps();
     const fetchMock = jest.fn();
@@ -691,6 +821,32 @@ describe('useSettingsActions', () => {
 
     expect(deps.setError).toHaveBeenCalledWith('请先选择账号并填写管理员密码');
     expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('blocks password change when fields are incomplete', async () => {
+    pwdState = { oldPassword: '', newPassword: 'new-pass-1', confirmPassword: '' };
+    const deps = createDeps();
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleChangePassword();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('请填写完整密码信息');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('surfaces password update backend failures', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '密码修改失败' });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleChangePassword();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('密码修改失败');
   });
 
   it('blocks purge when no purge modules are selected', async () => {
@@ -737,6 +893,36 @@ describe('useSettingsActions', () => {
     expect(deps.setError).toHaveBeenCalledWith('boom');
     expect(deps.setPurgingBranch).toHaveBeenCalledWith(true);
     expect(deps.setPurgingBranch).toHaveBeenLastCalledWith(false);
+  });
+
+  it('surfaces save config backend failures through shared mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '保存失败' });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleSaveConfig();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('保存失败');
+    expect(deps.setSavingConfig).toHaveBeenCalledWith(true);
+    expect(deps.setSavingConfig).toHaveBeenLastCalledWith(false);
+  });
+
+  it('surfaces save config request exceptions through shared mapper', async () => {
+    const deps = createDeps();
+    mockApiCall.mockRejectedValueOnce(new Error('保存请求失败'));
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleSaveConfig();
+    });
+
+    expect(deps.setError).toHaveBeenCalledWith('保存请求失败');
+    expect(deps.setSavingConfig).toHaveBeenCalledWith(true);
+    expect(deps.setSavingConfig).toHaveBeenLastCalledWith(false);
   });
 
   it('surfaces purge request exceptions through shared error mapper', async () => {

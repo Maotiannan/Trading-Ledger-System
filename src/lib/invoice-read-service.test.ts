@@ -312,4 +312,27 @@ describe('invoice-read-service', () => {
       metadata: expect.objectContaining({ count: 1, search: 'IB-001' }),
     }));
   });
+
+  it('sorts normal invoices by createdAt descending when ranks match', async () => {
+    mockDb.invoice.findMany.mockResolvedValueOnce([
+      {
+        id: 'inv-2',
+        invNo: 'INV-002',
+        createdAt: new Date('2026-03-11T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+      {
+        id: 'inv-1',
+        invNo: 'INV-001',
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+    ]);
+
+    const result = await listInvoiceRecords(makeUser() as never, '');
+
+    expect(result.data.map((row) => row.invNo)).toEqual(['INV-001', 'INV-002']);
+  });
 });

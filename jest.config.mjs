@@ -24,6 +24,7 @@ const customJestConfig = {
     'src/components/workspace/modules/settings/hooks/use-settings-forms.ts',
     'src/components/workspace/modules/settings/hooks/use-settings-actions.ts',
     'src/components/workspace/modules/settings/read-model.ts',
+    'src/components/workspace/modules/settings/page-view-model.ts',
     'src/components/workspace/modules/users/hooks/use-user-actions.ts',
     'src/lib/deletion-service.ts',
     'src/lib/settings-read-service.ts',
@@ -42,10 +43,10 @@ const customJestConfig = {
   ],
   coverageThreshold: {
     global: {
-      branches: 62,
+      branches: 63,
       functions: 84,
-      lines: 80,
-      statements: 78,
+      lines: 81,
+      statements: 79,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -102,16 +103,22 @@ const customJestConfig = {
       statements: 90,
     },
     './src/components/workspace/modules/settings/hooks/use-settings-actions.ts': {
-      branches: 50,
-      functions: 95,
-      lines: 72,
-      statements: 72,
+      branches: 55,
+      functions: 98,
+      lines: 80,
+      statements: 80,
     },
     './src/components/workspace/modules/settings/read-model.ts': {
       branches: 65,
       functions: 90,
       lines: 85,
       statements: 85,
+    },
+    './src/components/workspace/modules/settings/page-view-model.ts': {
+      branches: 100,
+      functions: 100,
+      lines: 100,
+      statements: 100,
     },
     './src/components/workspace/modules/users/hooks/use-user-actions.ts': {
       branches: 50,
@@ -168,10 +175,10 @@ const customJestConfig = {
       statements: 65,
     },
     './src/lib/customer-read-service.ts': {
-      branches: 75,
+      branches: 80,
       functions: 100,
-      lines: 95,
-      statements: 95,
+      lines: 97,
+      statements: 97,
     },
     './src/lib/customer-fix-service.ts': {
       branches: 55,
@@ -192,10 +199,10 @@ const customJestConfig = {
       statements: 60,
     },
     './src/lib/invoice-read-service.ts': {
-      branches: 80,
+      branches: 85,
       functions: 100,
-      lines: 95,
-      statements: 95,
+      lines: 97,
+      statements: 97,
     },
     './src/lib/invoice-write.ts': {
       branches: 60,

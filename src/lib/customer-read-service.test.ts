@@ -184,6 +184,42 @@ describe('customer-read-service', () => {
     expect(result.data).toEqual([]);
   });
 
+  it('keeps extended fields for sales when setting allows them', async () => {
+    mockCanSalesEditExtendedCustomerFields.mockResolvedValueOnce(true);
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: 'Visible Co',
+        companyAddress: 'Visible Address',
+        credit: 100,
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser({
+      id: 'sales-1',
+      email: 'sales@example.com',
+      role: UserRole.SALES,
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    }), { search: 'Visible Co' });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        companyName: 'Visible Co',
+        companyAddress: 'Visible Address',
+        credit: 100,
+      }),
+    ]);
+  });
+
   it('rejects non-manager customer list reads', async () => {
     await expect(listCustomers(makeUser({
       id: 'user-1',

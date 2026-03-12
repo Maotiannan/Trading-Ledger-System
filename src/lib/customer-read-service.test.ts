@@ -76,6 +76,44 @@ describe('customer-read-service', () => {
     }));
   });
 
+  it('returns only self as owner option for sales user', async () => {
+    const salesUser = makeUser({
+      id: 'sales-1',
+      email: 'sales@example.com',
+      name: 'Sales',
+      role: UserRole.SALES,
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    });
+
+    const result = await listCustomerOwnerOptions(salesUser);
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: 'sales-1',
+        email: 'sales@example.com',
+        role: UserRole.SALES,
+      }),
+    ]);
+    expect(mockDb.user.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-manager owner option reads', async () => {
+    await expect(listCustomerOwnerOptions(makeUser({
+      id: 'user-1',
+      email: 'user@example.com',
+      role: UserRole.USER,
+      level: 4,
+      parentId: 'sales-1',
+      createdById: 'sales-1',
+    }))).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: '无权限',
+    });
+  });
+
   it('hides extended fields for sales when setting is disabled', async () => {
     mockCanSalesEditExtendedCustomerFields.mockResolvedValueOnce(false);
     mockDb.customer.findMany.mockResolvedValueOnce([
@@ -114,5 +152,35 @@ describe('customer-read-service', () => {
       action: 'CUSTOMER_LIST_VIEW',
       metadata: expect.objectContaining({ count: 1, showExtended: false }),
     }));
+  });
+
+  it('filters sales list using visible fields only', async () => {
+    mockCanSalesEditExtendedCustomerFields.mockResolvedValueOnce(false);
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: 'Hidden Co',
+        companyAddress: 'Secret Address',
+        credit: 100,
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser({
+      id: 'sales-1',
+      email: 'sales@example.com',
+      role: UserRole.SALES,
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    }), { search: 'Hidden Co' });
+
+    expect(result.data).toEqual([]);
   });
 });

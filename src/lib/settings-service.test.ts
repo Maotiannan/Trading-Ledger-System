@@ -1,15 +1,17 @@
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
-  listSettings,
-  listAllSystemSettingsAuditLogs,
-  listSystemSettingsAuditExportLogs,
-  listSystemSettingsAuditLogs,
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
   updateSystemSettings,
-} from '@/lib/settings-service';
+} from '@/lib/settings-write-service';
+import {
+  listSettings,
+  listAllSystemSettingsAuditLogs,
+  listSystemSettingsAuditExportLogs,
+  listSystemSettingsAuditLogs,
+} from '@/lib/settings-read-service';
 import { verifyPassword } from '@/lib/auth';
 import { testOcrConnectivity } from '@/lib/ocr';
 import { recordAuditEvent } from '@/lib/audit';

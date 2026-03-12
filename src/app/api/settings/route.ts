@@ -9,12 +9,13 @@ import {
   listSettings,
   listSystemSettingsAuditExportLogs,
   listSystemSettingsAuditLogs,
+} from '@/lib/settings-read-service';
+import {
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
   updateSystemSettings,
-} from '@/lib/settings-service';
-
+} from '@/lib/settings-write-service';
 function escapeCsvCell(value: unknown): string {
   const text = String(value ?? '');
   if (/[",\r\n]/.test(text)) {

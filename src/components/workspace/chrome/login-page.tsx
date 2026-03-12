@@ -14,7 +14,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
-import { AppVersionFooter } from '@/components/workspace/chrome/app-version-footer';
 import { Loader2, LogIn } from 'lucide-react';
 
 export function LoginPage() {
@@ -87,7 +86,6 @@ export function LoginPage() {
           </form>
         </CardContent>
       </Card>
-      <AppVersionFooter />
     </div>
   );
 }

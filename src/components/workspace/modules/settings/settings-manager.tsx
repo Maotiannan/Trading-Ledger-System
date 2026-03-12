@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +12,7 @@ import { UserManager } from '@/components/workspace/modules/users/user-manager';
 
 export function SettingsManager() {
   const tx = useUiText();
+  const didLoadAuditRef = useRef(false);
   const { user } = useStore();
   const canManageUsers = user?.role === 'ADMIN' || user?.role === 'SALES';
   const {
@@ -135,10 +136,15 @@ export function SettingsManager() {
   }, [loadSettings]);
 
   useEffect(() => {
-    if (!canViewAudit) return;
-    void loadSettingsAudit();
-    void loadSettingsAuditExportHistory();
-  }, [canViewAudit, loadSettingsAudit, loadSettingsAuditExportHistory]);
+    if (!canViewAudit) {
+      didLoadAuditRef.current = false;
+      return;
+    }
+    if (didLoadAuditRef.current) return;
+    didLoadAuditRef.current = true;
+    void loadSettingsAudit({ filters: settingsAuditFilters });
+    void loadSettingsAuditExportHistory({ filters: settingsAuditFilters });
+  }, [canViewAudit, loadSettingsAudit, loadSettingsAuditExportHistory, settingsAuditFilters]);
 
   return (
     <div className="space-y-6">

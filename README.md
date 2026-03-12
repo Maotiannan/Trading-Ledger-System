@@ -960,6 +960,12 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.71 (2026-03-12)
+- 🧹 前端体验修正：移除页面底部永久悬浮版本号，版本号只保留在设置页顶部；同时修复设置页“配置变更审计”因 effect 依赖循环导致的持续刷新，审计列表与导出历史现在只在首次进入或显式操作时加载。
+- 🧩 `settings` 服务继续标准化拆分：新增 `settings-read-service / settings-write-service`，`/api/settings` 读写路径完全分离，`settings-service.ts` 退化为兼容 barrel，避免读写混杂导致 coverage 和审计边界失真。
+- 🧪 读接口分支回归补强：新增 `customer-read-service / invoice-read-service` 分支测试，覆盖 sales 自身归属候选、非 manager 拒绝、隐藏扩展字段搜索、订单候选 group-fallback、无效 group key、可见收据列表与账单搜索过滤；设置页 Playwright 回归同步补上“版本号仅出现一次 + 配置审计区可稳定渲染”。
+- 📈 coverage threshold 第十九次小步上调：global 提升到 `60 / 82 / 78 / 76`；`customer-read-service` 提升到 `60 / 100 / 85 / 85`，`invoice-read-service` 提升到 `60 / 58 / 85 / 85`，`settings-write-service` 提升到 `55 / 70 / 65 / 65`。
+
 ### v1.0.70 (2026-03-12)
 - 🧾 设置关键读接口补齐同一套读审计基线：`listSettings / listSystemSettingsAuditLogs / listSystemSettingsAuditExportLogs` 现在都会记录独立的读审计动作，区分“配置总览 / 审计列表 / 导出历史列表”三类读取，并保留筛选条件、页大小、返回条数与游标摘要，便于后续做真正的设置侧查询审计。
 - 🧪 客户分支回归继续补强：新增 `use-customer-actions` 的非管理员删除短路、取消确认短路、空修复目标短路、模板下载失败、`issueRows` 回退导入等前端分支测试；新增 `customer-fix-service` 的负数 CREDIT、跨 sales 修复拒绝、收据不存在、命中既有客户走 update、异常事务错误映射等服务层分支测试。

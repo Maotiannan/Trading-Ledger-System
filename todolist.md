@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.70  
+> 当前版本：v1.0.71  
 > 最后更新：2026-03-12
 
 ## P0（本周必须完成）
@@ -182,6 +182,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.71（2026-03-12）：移除页面底部永久悬浮版本号，版本信息只保留在设置页顶部；修复设置页“配置变更审计”因 effect 依赖循环导致的持续刷新；新增 `settings-read-service / settings-write-service`，将 `/api/settings` 继续拆成明确读写边界；补齐 `customer-read-service / invoice-read-service` 分支回归与设置页 Playwright 可视回归，coverage threshold 第十九次提升到 `60/82/78/76`，其中 `customer-read-service` 提升到 `60/100/85/85`、`invoice-read-service` 提升到 `60/58/85/85`、`settings-write-service` 提升到 `55/70/65/65`
 - v1.0.70（2026-03-12）：`settings` 关键读接口补齐读审计基线，`listSettings / listSystemSettingsAuditLogs / listSystemSettingsAuditExportLogs` 开始区分记录配置总览、审计列表和导出历史列表读取；继续补齐 `use-customer-actions` 与 `customer-fix-service` 分支回归，覆盖非管理员删除短路、取消确认、`issueRows` 回退导入、跨 sales 修复拒绝、命中既有客户走 update、异常事务错误映射等场景；coverage threshold 第十八次提升到 `58/81/76/74`，其中 `use-customer-actions` 提升到 `55/80/60/60`、`customer-fix-service` 提升到 `55/80/80/80`
 - v1.0.69（2026-03-12）：关键读接口开始统一分层，新增 `auth-read-service / customer-read-service / customer-fix-read-service / invoice-read-service / report-service`；`/api/auth /api/customer /api/customer/fixes /api/invoice /api/report` 的关键查询改为路由薄层 + read service，补齐用户列表/上级候选、客户列表/归属候选、客户修复队列、账单列表/订单候选/订单收据、报表导出的读审计基线；同时补齐 `customer-service / invoice-service` 分支回归与新增 read service 单测，coverage threshold 第十七次提升到 `57/80/75/73`，其中 `customer-service` 提升到 `50/55/65/65`、`invoice-service` 提升到 `50/55/60/60`
 - v1.0.68（2026-03-11）：补完核心写接口全链路事务边界审计；新增 `auth-service / customer-service / customer-fix-service / init-service`，并将 `/api/auth /api/customer /api/customer/fixes /api/init` 收敛为薄路由；低层写路径继续补事务化，`matching / receipt-service / detail-service / invoice-service(rematch)` 统一支持在事务客户端内写入；新增 `auth-service / customer-service / customer-fix-service / init-service / invoice-service(rematch)` 单测与 `customer-fix-flow` isolated API case，coverage threshold 第十六次提升到 `56/79/74/72`

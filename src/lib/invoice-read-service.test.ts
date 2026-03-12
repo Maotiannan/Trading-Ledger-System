@@ -99,6 +99,82 @@ describe('invoice-read-service', () => {
     }));
   });
 
+  it('falls back to group key matching when alias lookup misses', async () => {
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-1',
+        orderNo: 'IB-01A',
+        customerId: 'customer-1',
+        customerMark: 'IB',
+        customerName: 'IB',
+        customerPhone: '622443103',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+      {
+        id: 'order-2',
+        orderNo: 'XX-01',
+        customerId: 'customer-2',
+        customerMark: 'XX',
+        customerName: 'XX',
+        customerPhone: '620000000',
+        customerCity: 'Kindia',
+        needsCustomerFix: false,
+        createdAt: new Date('2026-03-11T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listOrderMatchCandidates(makeUser() as never, 'IB-01B');
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].id).toBe('order-1');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_MATCH_CANDIDATES_VIEW',
+      metadata: expect.objectContaining({ mode: 'group-fallback', count: 1 }),
+    }));
+  });
+
+  it('returns no candidates for invalid order group key', async () => {
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
+
+    const result = await listOrderMatchCandidates(makeUser() as never, '');
+
+    expect(result.data).toEqual([]);
+    expect(mockDb.order.findMany).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ mode: 'invalid-group-key', count: 0 }),
+    }));
+  });
+
+  it('returns accessible order receipts and records count', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({ id: 'order-1' });
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      {
+        id: 'receipt-1',
+        receiptNo: 'RCPT-1',
+        usd: 100,
+        status: 'Waiting_SWIFT',
+        date: '2026-03-12',
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+        payer: 'Alice',
+        invNo: 'INV-1',
+        orderNo: 'IB-01',
+      },
+    ]);
+
+    const result = await listOrderReceiptRecords(makeUser() as never, 'order-1');
+
+    expect(result.data).toHaveLength(1);
+    expect(result.message).toContain('1 条');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_RECEIPT_LIST_VIEW',
+      targetId: 'order-1',
+      metadata: expect.objectContaining({ accessible: true, count: 1 }),
+    }));
+  });
+
   it('sorts DEPOSIT_POOL before normal invoices', async () => {
     mockDb.invoice.findMany.mockResolvedValueOnce([
       {
@@ -123,6 +199,33 @@ describe('invoice-read-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_LIST_VIEW',
       metadata: expect.objectContaining({ count: 2 }),
+    }));
+  });
+
+  it('filters invoices by search term before returning list', async () => {
+    mockDb.invoice.findMany.mockResolvedValueOnce([
+      {
+        id: 'inv-1',
+        invNo: 'INV-IB-001',
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+      {
+        id: 'inv-2',
+        invNo: 'INV-XX-002',
+        createdAt: new Date('2026-03-11T00:00:00Z'),
+        orders: [],
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      },
+    ]);
+
+    const result = await listInvoiceRecords(makeUser() as never, 'IB-001');
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].invNo).toBe('INV-IB-001');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ count: 1, search: 'IB-001' }),
     }));
   });
 });

@@ -196,6 +196,8 @@
 
 - v1.0.73（2026-03-12）：`settings` 前端读路径继续收口，新增 `read-model.ts` 统一处理审计元信息、默认筛选、分页/导出上限 clamp 与 bootstrap/audit/export-history 响应归一化，减少设置页对混合响应结构的直接依赖；继续补齐 `use-settings-actions` 的改密码异常、清库未选模块、清库请求异常分支测试，以及 `settings-service / customer-read-service / invoice-read-service` 的关键读路径边界测试；coverage threshold 第二十一次提升到 `62/84/80/78`，其中 `use-settings-actions` 提升到 `50/95/72/72`、`customer-read-service` 提升到 `75/100/95/95`、`invoice-read-service` 提升到 `80/100/95/95`
 
+- v1.0.80（2026-03-12）：README 重写为用户手册首页，移除大段技术栈、API、数据库、工程流水和细粒度更新日志，只保留角色、模块、日常流程、启动方式、配置审计说明和版本入口；技术变更记录继续保留在 `todolist.md`，工程规范继续保留在 `CHANGE_CHECKLIST.md`
+
 - v1.0.79（2026-03-12）：新增根目录工程变更清单 `CHANGE_CHECKLIST.md`，按“改业务逻辑、加模块、改页面、改接口、改配置、改数据库、纯文档变更”分别给出必须同步做的测试、文档、版本、git、CI 和本地服务动作；`README.md` 已补齐入口，后续流程不再依赖口头约定
 
 - v1.0.78（2026-03-12）：workspace 切页体验继续优化，侧边栏新增 `router.prefetch + API 数据预热`，高频模块默认首屏数据改为“先吃热缓存、再后台刷新”；侧边栏按钮补齐即时 pending 动效与 `Opening` 文案，workspace 主内容区顶部新增进度条，右侧 loading fallback 改为 skeleton，避免“空白转圈”观感；新增 `client.ts` 预热缓存单测、`settings/read-model` 单测，并补齐 `use-invoice-view-state / use-deletion-actions / use-settings-actions` 的 cached 分支回归，Jest 扩展到 `39 suites / 299 tests`

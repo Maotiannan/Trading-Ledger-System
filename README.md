@@ -962,6 +962,12 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.79 (2026-03-12)
+
+- 📘 新增根目录工程变更清单：[CHANGE_CHECKLIST.md](./CHANGE_CHECKLIST.md)。把“改业务逻辑、加模块、改页面、改接口、改配置、改数据库、纯文档变更”分别拆成执行型要求，明确每类改动必须同步做哪些测试、文档、版本、git、CI 和本地服务动作。
+- 🔗 README 管理入口补齐：项目根目录现在同时维护 `README.md + todolist.md + CHANGE_CHECKLIST.md` 三层文档分工，后续不需要再靠口头约定记流程。
+- 🏷️ 版本提升到 `1.0.79`；本地容器更新后，设置页顶部应显示 `1.0.79`。
+
 ### v1.0.78 (2026-03-12)
 
 - ⚡ Workspace 切页体验继续优化：侧边栏新增 `router.prefetch + API 数据预热`，高频模块默认首屏数据会先进入轻量缓存，再在页面 mount 后后台刷新；首次点击不再完全依赖“进页后再发起第一跳请求”。
@@ -1201,6 +1207,7 @@ src/
 项目核心功能（v1.0.0）已全部完成，可直接用于生产环境。
 
 **接下来要做什么、优先级、具体任务**，请查看项目根目录的 **[todolist.md](./todolist.md)**。
+**后续每类改动必须同步做哪些动作**，请查看项目根目录的 **[CHANGE_CHECKLIST.md](./CHANGE_CHECKLIST.md)**。
 
 所有安全修复、功能增强、测试计划都在那里统一维护。  
 建议每周查看并更新 todolist.md，保持开发节奏透明。

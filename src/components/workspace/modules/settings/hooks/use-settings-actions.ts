@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { apiCall, getApiErrorMessage, getApiResponseErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getApiResponseErrorMessage, peekPrefetchedApiResult, rememberPrefetchedApiResult } from '@/components/workspace/shared';
 import type {
   BranchPurgeTarget,
   PasswordFormState,
@@ -108,42 +108,53 @@ export function useSettingsActions({
   setPurgeForm,
   setPwd,
 }: SettingsActionDeps) {
+  const applySettingsBootstrap = useCallback((payload: unknown) => {
+    const nextState = normalizeSettingsBootstrap(payload);
+    setConfig(nextState.config);
+    setSettingsAuditMeta(nextState.auditMeta);
+    setSettingsAuditFilters((prev) => clampSettingsAuditFilters(prev, nextState.auditMeta));
+    setCanEditConfig(nextState.canEditConfig);
+    const nextCanViewAudit = nextState.canViewAudit;
+    setCanViewAudit(nextCanViewAudit);
+    setCanPurgeBranch(nextState.canPurgeBranch);
+    const targets = nextState.branchPurgeTargets;
+    setBranchPurgeTargets(targets);
+    setPurgeModuleKeys(nextState.purgeModuleKeys);
+    if (!nextCanViewAudit) {
+      setSettingsAuditEntries([]);
+      setSettingsAuditCursor(null);
+      setSettingsAuditHasMore(false);
+      setSettingsAuditExportHistoryEntries([]);
+      setSettingsAuditExportHistoryCursor(null);
+      setSettingsAuditExportHistoryHasMore(false);
+    }
+    setPurgeForm((prev) => ({
+      ...prev,
+      targetUserId: targets.some((row) => row.id === prev.targetUserId) ? prev.targetUserId : (targets[0]?.id || ''),
+    }));
+  }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditExportHistoryCursor, setSettingsAuditExportHistoryEntries, setSettingsAuditExportHistoryHasMore, setSettingsAuditFilters, setSettingsAuditHasMore, setSettingsAuditMeta]);
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const endpoint = 'settings';
+    const cachedResult = peekPrefetchedApiResult<{ success?: boolean; data?: unknown }>(endpoint);
+    if (cachedResult?.success) {
+      applySettingsBootstrap(cachedResult.data);
+      setLoading(false);
+    }
     try {
-      const result = await apiCall('settings');
+      const result = await apiCall(endpoint);
       if (result.success) {
-        const nextState = normalizeSettingsBootstrap(result.data);
-        setConfig(nextState.config);
-        setSettingsAuditMeta(nextState.auditMeta);
-        setSettingsAuditFilters((prev) => clampSettingsAuditFilters(prev, nextState.auditMeta));
-        setCanEditConfig(nextState.canEditConfig);
-        const nextCanViewAudit = nextState.canViewAudit;
-        setCanViewAudit(nextCanViewAudit);
-        setCanPurgeBranch(nextState.canPurgeBranch);
-        const targets = nextState.branchPurgeTargets;
-        setBranchPurgeTargets(targets);
-        setPurgeModuleKeys(nextState.purgeModuleKeys);
-        if (!nextCanViewAudit) {
-          setSettingsAuditEntries([]);
-          setSettingsAuditCursor(null);
-          setSettingsAuditHasMore(false);
-          setSettingsAuditExportHistoryEntries([]);
-          setSettingsAuditExportHistoryCursor(null);
-          setSettingsAuditExportHistoryHasMore(false);
-        }
-        setPurgeForm((prev) => ({
-          ...prev,
-          targetUserId: targets.some((row) => row.id === prev.targetUserId) ? prev.targetUserId : (targets[0]?.id || ''),
-        }));
+        applySettingsBootstrap(result.data);
+        rememberPrefetchedApiResult(endpoint, result);
       }
     } catch (err) {
       setError(getApiErrorMessage(err, tx('加载设置失败', 'Failed to load settings')));
     } finally {
       setLoading(false);
     }
-  }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setError, setLoading, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditExportHistoryCursor, setSettingsAuditExportHistoryEntries, setSettingsAuditExportHistoryHasMore, setSettingsAuditFilters, setSettingsAuditHasMore, setSettingsAuditMeta, tx]);
+  }, [applySettingsBootstrap, setError, setLoading, tx]);
 
   const loadSettingsAudit = useCallback(async (options: { append?: boolean; filters?: SettingsAuditFilterState } = {}) => {
     if (!canViewAudit) {

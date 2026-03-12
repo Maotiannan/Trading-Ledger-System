@@ -9,6 +9,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   apiCall,
   getDisplayImageUrl,
+  peekPrefetchedApiResult,
+  rememberPrefetchedApiResult,
   useUiText,
 } from '@/components/workspace/shared';
 import {
@@ -59,16 +61,26 @@ export function DetailManager() {
 
   const loadDetails = useCallback(async () => {
     const params = new URLSearchParams();
-    if (search.trim()) params.set('search', search.trim());
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) params.set('search', trimmedSearch);
     if (statusFilter) params.set('status', statusFilter);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     if (minAmount) params.set('minAmount', minAmount);
     if (maxAmount) params.set('maxAmount', maxAmount);
     const query = params.toString();
-    const result = await apiCall(`detail${query ? `?${query}` : ''}`);
+    const endpoint = `detail${query ? `?${query}` : ''}`;
+    const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !minAmount && !maxAmount;
+    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof details }>(endpoint) : null;
+    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+      setDetails(cachedResult.data);
+    }
+    const result = await apiCall(endpoint);
     if (result.success) {
       setDetails(result.data);
+      if (canUsePrefetch) {
+        rememberPrefetchedApiResult(endpoint, result);
+      }
     }
   }, [setDetails, search, statusFilter, dateFrom, dateTo, minAmount, maxAmount]);
 

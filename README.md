@@ -962,6 +962,13 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.78 (2026-03-12)
+
+- ⚡ Workspace 切页体验继续优化：侧边栏新增 `router.prefetch + API 数据预热`，高频模块默认首屏数据会先进入轻量缓存，再在页面 mount 后后台刷新；首次点击不再完全依赖“进页后再发起第一跳请求”。
+- 🎛️ 菜单点击反馈补齐：侧边栏按钮现在有即时 pending 态与 `Opening` 文案，workspace 主内容区顶部新增细进度条，右侧 loading fallback 由“空白转圈”改成 skeleton 结构，避免视觉上像整块卡死。
+- 🧪 导航链路回归补齐：新增 `client.ts` 预热缓存单测、`settings/read-model` 单测，并补齐 `use-invoice-view-state / use-deletion-actions / use-settings-actions` 的 cached 分支回归；全量 Jest 扩展到 `39 suites / 299 tests`，全局 coverage 提升到 `83.46 / 66.48 / 85.89 / 86.05`。
+- 🏷️ 版本提升到 `1.0.78`；本地容器更新后，设置页顶部应显示 `1.0.78`。
+
 ### v1.0.77 (2026-03-12)
 
 - ✅ 继续补 `settings-write-service` 与 `report-service` 边界：`settings-write-service` 新增“非管理员全库清空拒绝、缺少目标账号/密码、空模块集、目标账号不存在、无变更、非法数值、合法布尔值更新”等分支；`report-service` 新增“Excel fallback 字段为空、PDF 大量收据触发分页截断、导出计数审计”回归。

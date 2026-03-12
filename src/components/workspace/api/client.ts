@@ -13,6 +13,16 @@ const DECIMAL_KEYS = new Set([
   'credit',
 ]);
 
+const API_PREFETCH_MAX_AGE_MS = 30_000;
+
+type ApiPrefetchEntry = {
+  value: unknown;
+  storedAt: number;
+};
+
+const apiPrefetchCache = new Map<string, ApiPrefetchEntry>();
+const apiPrefetchInflight = new Map<string, Promise<unknown>>();
+
 type ApiErrorLike = {
   error?: unknown;
   message?: unknown;
@@ -39,6 +49,10 @@ function getCurrentLocale(): string {
     return document.documentElement.lang;
   }
   return 'zh';
+}
+
+function normalizeEndpointKey(endpoint: string): string {
+  return endpoint.replace(/^\/+/, '').replace(/^api\//, '');
 }
 
 function formatApiErrorDetail(detail: unknown): string {
@@ -112,6 +126,59 @@ async function parseApiResponse(response: Response) {
     throw toWorkspaceApiError(json, response.status);
   }
   return json;
+}
+
+export function peekPrefetchedApiResult<T>(endpoint: string, maxAgeMs = API_PREFETCH_MAX_AGE_MS): T | null {
+  const key = normalizeEndpointKey(endpoint);
+  const cached = apiPrefetchCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.storedAt > maxAgeMs) {
+    apiPrefetchCache.delete(key);
+    return null;
+  }
+  return cached.value as T;
+}
+
+export function rememberPrefetchedApiResult<T>(endpoint: string, result: T): T {
+  const key = normalizeEndpointKey(endpoint);
+  apiPrefetchCache.set(key, {
+    value: result,
+    storedAt: Date.now(),
+  });
+  return result;
+}
+
+export async function prefetchApiResult(endpoint: string, options: RequestInit = {}): Promise<unknown | null> {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') return null;
+
+  const key = normalizeEndpointKey(endpoint);
+  const cached = peekPrefetchedApiResult(key);
+  if (cached) return cached;
+
+  const inflight = apiPrefetchInflight.get(key);
+  if (inflight) return inflight;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  const promise = fetch(`/api/${key}`, {
+    ...options,
+    method,
+    credentials: 'include',
+    headers,
+  })
+    .then(parseApiResponse)
+    .then((result) => rememberPrefetchedApiResult(key, result))
+    .catch(() => null)
+    .finally(() => {
+      apiPrefetchInflight.delete(key);
+    });
+
+  apiPrefetchInflight.set(key, promise);
+  return promise;
 }
 
 export async function apiCall(endpoint: string, options: RequestInit = {}) {

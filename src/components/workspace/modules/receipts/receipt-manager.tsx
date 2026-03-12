@@ -12,6 +12,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   apiCall,
   getDisplayImageUrl,
+  peekPrefetchedApiResult,
+  rememberPrefetchedApiResult,
   useUiText,
 } from '@/components/workspace/shared';
 import {
@@ -80,16 +82,27 @@ export function ReceiptManager() {
   const loadReceipts = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search.trim()) params.set('search', search.trim());
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) params.set('search', trimmedSearch);
     if (statusFilter) params.set('status', statusFilter);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     if (minUsd) params.set('minUsd', minUsd);
     if (maxUsd) params.set('maxUsd', maxUsd);
     const query = params.toString();
-    const result = await apiCall(`receipt${query ? `?${query}` : ''}`);
+    const endpoint = `receipt${query ? `?${query}` : ''}`;
+    const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !minUsd && !maxUsd;
+    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof receipts }>(endpoint) : null;
+    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+      setReceipts(cachedResult.data);
+      setLoading(false);
+    }
+    const result = await apiCall(endpoint);
     if (result.success) {
       setReceipts(result.data);
+      if (canUsePrefetch) {
+        rememberPrefetchedApiResult(endpoint, result);
+      }
     }
     setLoading(false);
   }, [setReceipts, setLoading, search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);

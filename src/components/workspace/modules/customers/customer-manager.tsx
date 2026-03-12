@@ -5,6 +5,8 @@ import { useStore } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   apiCall,
+  peekPrefetchedApiResult,
+  rememberPrefetchedApiResult,
   useUiText,
 } from '@/components/workspace/shared';
 import { ImportResultDialog } from '@/components/workspace/components/import-result-dialog';
@@ -63,15 +65,31 @@ export function CustomerManager() {
   const customerImportColumns = useCustomerImportColumns(updateCustomerImportIssue);
 
   const loadCustomers = useCallback(async () => {
-    const result = await apiCall(`customer${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ''}`);
+    const trimmedSearch = search.trim();
+    const endpoint = `customer${trimmedSearch ? `?search=${encodeURIComponent(trimmedSearch)}` : ''}`;
+    const cachedResult = trimmedSearch ? null : peekPrefetchedApiResult<{ success?: boolean; data?: Array<Record<string, unknown>> }>(endpoint);
+    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+      setCustomers(cachedResult.data);
+    }
+    const result = await apiCall(endpoint);
     if (result.success) setCustomers(Array.isArray(result.data) ? result.data : []);
+    if (result.success && !trimmedSearch) {
+      rememberPrefetchedApiResult(endpoint, result);
+    }
   }, [search]);
 
   const loadFixes = useCallback(async () => {
-    const result = await apiCall('customer/fixes');
+    const endpoint = 'customer/fixes';
+    const cachedResult = peekPrefetchedApiResult<{ success?: boolean; data?: { orders?: Array<Record<string, unknown>>; receipts?: Array<Record<string, unknown>> } }>(endpoint);
+    if (cachedResult?.success && cachedResult.data) {
+      setFixOrders(Array.isArray(cachedResult.data.orders) ? cachedResult.data.orders : []);
+      setFixReceipts(Array.isArray(cachedResult.data.receipts) ? cachedResult.data.receipts : []);
+    }
+    const result = await apiCall(endpoint);
     if (result.success && result.data) {
       setFixOrders(Array.isArray(result.data.orders) ? result.data.orders : []);
       setFixReceipts(Array.isArray(result.data.receipts) ? result.data.receipts : []);
+      rememberPrefetchedApiResult(endpoint, result);
     }
   }, []);
 

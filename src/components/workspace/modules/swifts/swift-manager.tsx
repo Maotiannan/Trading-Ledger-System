@@ -9,6 +9,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   apiCall,
   getDisplayImageUrl,
+  peekPrefetchedApiResult,
+  rememberPrefetchedApiResult,
   useUiText,
 } from '@/components/workspace/shared';
 import { SwiftDirectCreateDialog, SwiftImagePreviewDialog, SwiftList, SwiftUploadDialog } from './components';
@@ -51,16 +53,26 @@ export function SwiftManager() {
 
   const loadSwifts = useCallback(async () => {
     const params = new URLSearchParams();
-    if (search.trim()) params.set('search', search.trim());
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) params.set('search', trimmedSearch);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     if (minAmount) params.set('minAmount', minAmount);
     if (maxAmount) params.set('maxAmount', maxAmount);
     if (hasErrorFilter) params.set('hasError', hasErrorFilter);
     const query = params.toString();
-    const result = await apiCall(`swift${query ? `?${query}` : ''}`);
+    const endpoint = `swift${query ? `?${query}` : ''}`;
+    const canUsePrefetch = !trimmedSearch && !dateFrom && !dateTo && !minAmount && !maxAmount && !hasErrorFilter;
+    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof swifts }>(endpoint) : null;
+    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+      setSwifts(cachedResult.data);
+    }
+    const result = await apiCall(endpoint);
     if (result.success) {
       setSwifts(result.data);
+      if (canUsePrefetch) {
+        rememberPrefetchedApiResult(endpoint, result);
+      }
     }
   }, [setSwifts, search, dateFrom, dateTo, minAmount, maxAmount, hasErrorFilter]);
 

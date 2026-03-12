@@ -135,6 +135,8 @@ interface AppState {
   // 当前视图
   currentView: WorkspaceView;
   setCurrentView: (view: WorkspaceView) => void;
+  navigationPendingView: WorkspaceView | null;
+  setNavigationPendingView: (view: WorkspaceView | null) => void;
   
   // 数据
   invoices: Invoice[];
@@ -174,6 +176,8 @@ export const useStore = create<AppState>()(
       // 当前视图
       currentView: 'dashboard',
       setCurrentView: (currentView) => set({ currentView }),
+      navigationPendingView: null,
+      setNavigationPendingView: (navigationPendingView) => set({ navigationPendingView }),
       
       // 数据
       invoices: [],

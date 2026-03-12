@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, peekPrefetchedApiResult, rememberPrefetchedApiResult } from '@/components/workspace/shared';
 import type { Invoice } from '@/lib/store';
 
 export function useInvoiceViewState({
@@ -16,13 +16,26 @@ export function useInvoiceViewState({
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadInvoices = useCallback(async () => {
-    setLoading(true);
+    const params = new URLSearchParams();
+    const trimmedSearch = search.trim();
+    if (trimmedSearch) params.set('search', trimmedSearch);
+    const endpoint = `invoice${params.toString() ? `?${params.toString()}` : ''}`;
+    const cachedResult = trimmedSearch ? null : peekPrefetchedApiResult<{ success?: boolean; data?: Invoice[] }>(endpoint);
+
+    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+      setInvoices(cachedResult.data);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const params = new URLSearchParams();
-      if (search.trim()) params.set('search', search.trim());
-      const result = await apiCall(`invoice${params.toString() ? `?${params.toString()}` : ''}`);
+      const result = await apiCall(endpoint);
       if (result.success) {
         setInvoices(result.data);
+        if (!trimmedSearch) {
+          rememberPrefetchedApiResult(endpoint, result);
+        }
       }
     } finally {
       setLoading(false);

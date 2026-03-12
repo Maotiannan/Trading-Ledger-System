@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { useLocale, useTranslations } from 'next-intl';
@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { apiCall, useUiText } from '@/components/workspace/shared';
 import { getWorkspacePath, getWorkspaceViewFromPath } from '@/components/workspace/routes';
+import { prefetchWorkspaceView } from '@/components/workspace/navigation/prefetch';
 import {
   LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, LayoutDashboard, Settings, PanelLeftClose, PanelLeftOpen
+  Building2, Trash2, LayoutDashboard, Settings, PanelLeftClose, PanelLeftOpen, Loader2
 } from 'lucide-react';
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'muledger-sidebar-collapsed';
@@ -22,9 +23,11 @@ export function Sidebar() {
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
-  const { user, setCurrentView, setUser } = useStore();
+  const { user, setCurrentView, setNavigationPendingView, setUser } = useStore();
   const [switchingLocale, setSwitchingLocale] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingView, setPendingView] = useState<ReturnType<typeof getWorkspaceViewFromPath> | null>(null);
+  const [, startNavigationTransition] = useTransition();
   const activeView = getWorkspaceViewFromPath(pathname);
 
   useEffect(() => {
@@ -41,6 +44,11 @@ export function Sidebar() {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
 
+  useEffect(() => {
+    setPendingView(null);
+    setNavigationPendingView(null);
+  }, [pathname, setNavigationPendingView]);
+
   const handleLogout = async () => {
     await apiCall('auth', {
       method: 'POST',
@@ -50,7 +58,7 @@ export function Sidebar() {
     router.push('/');
   };
 
-  const menuItems = [
+  const menuItems = useMemo(() => ([
     { id: 'dashboard' as const, label: t('dashboard'), icon: LayoutDashboard },
     { id: 'invoices' as const, label: t('invoices'), icon: FileText },
     { id: 'receipts' as const, label: t('receipts'), icon: Receipt },
@@ -59,8 +67,27 @@ export function Sidebar() {
     { id: 'deletions' as const, label: t('deletions'), icon: Trash2, managerOnly: true },
     { id: 'customers' as const, label: tx('客户管理', 'Customers'), icon: Users, managerOnly: true },
     { id: 'settings' as const, label: t('settings'), icon: Settings },
-  ];
+  ]), [t, tx]);
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const visibleMenuItems = useMemo(
+    () => menuItems.filter((item) => !(item.managerOnly && !isManager)),
+    [isManager, menuItems],
+  );
+
+  const prefetchMenuItem = useCallback((view: ReturnType<typeof getWorkspaceViewFromPath>) => {
+    prefetchWorkspaceView(router, view, { isManager });
+  }, [isManager, router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      visibleMenuItems.forEach((item) => {
+        if (item.id !== activeView) {
+          prefetchMenuItem(item.id);
+        }
+      });
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [activeView, prefetchMenuItem, visibleMenuItems]);
 
   const switchLocale = async (nextLocale: 'zh' | 'en') => {
     if (nextLocale === locale) return;
@@ -77,6 +104,16 @@ export function Sidebar() {
       setSwitchingLocale(false);
     }
   };
+
+  const handleNavigate = useCallback((view: ReturnType<typeof getWorkspaceViewFromPath>) => {
+    if (view === activeView) return;
+    setPendingView(view);
+    setNavigationPendingView(view);
+    prefetchMenuItem(view);
+    startNavigationTransition(() => {
+      router.push(getWorkspacePath(view));
+    });
+  }, [activeView, prefetchMenuItem, router, setNavigationPendingView]);
 
   return (
     <div className={`bg-white dark:bg-gray-800 border-r h-screen flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
@@ -121,18 +158,34 @@ export function Sidebar() {
         </div>
       )}
       <nav className="flex-1 p-2">
-        {menuItems.map((item) => {
-          if (item.managerOnly && !isManager) return null;
+        {visibleMenuItems.map((item) => {
+          const itemPending = pendingView === item.id;
           return (
             <Button
               key={item.id}
-              variant={activeView === item.id ? 'secondary' : 'ghost'}
-              className={`w-full mb-1 ${collapsed ? 'justify-center px-0' : 'justify-start'}`}
-              onClick={() => router.push(getWorkspacePath(item.id))}
+              variant={activeView === item.id || itemPending ? 'secondary' : 'ghost'}
+              className={`w-full mb-1 transition-all duration-150 ${collapsed ? 'justify-center px-0' : 'justify-start'} ${itemPending ? 'scale-[0.99] ring-1 ring-black/10' : ''}`}
+              onMouseEnter={() => prefetchMenuItem(item.id)}
+              onFocus={() => prefetchMenuItem(item.id)}
+              onClick={() => handleNavigate(item.id)}
               title={item.label}
+              data-testid={`sidebar-nav-${item.id}`}
             >
-              <item.icon className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
-              {!collapsed && item.label}
+              {itemPending ? (
+                <Loader2 className={`h-4 w-4 animate-spin ${collapsed ? '' : 'mr-2'}`} />
+              ) : (
+                <item.icon className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+              )}
+              {!collapsed && (
+                <>
+                  <span>{item.label}</span>
+                  {itemPending && (
+                    <span className="ml-auto text-[11px] text-gray-500">
+                      {tx('打开中', 'Opening')}
+                    </span>
+                  )}
+                </>
+              )}
             </Button>
           );
         })}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, peekPrefetchedApiResult, rememberPrefetchedApiResult } from '@/components/workspace/shared';
 import type { DeletionRequest } from '@/lib/store';
 
 export function useDeletionActions({
@@ -10,9 +10,15 @@ export function useDeletionActions({
   setDeletionRequests: (requests: DeletionRequest[]) => void;
 }) {
   const loadRequests = useCallback(async () => {
-    const result = await apiCall('deletion');
+    const endpoint = 'deletion';
+    const cachedResult = peekPrefetchedApiResult<{ success?: boolean; data?: DeletionRequest[] }>(endpoint);
+    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+      setDeletionRequests(cachedResult.data);
+    }
+    const result = await apiCall(endpoint);
     if (result.success) {
       setDeletionRequests(result.data as DeletionRequest[]);
+      rememberPrefetchedApiResult(endpoint, result);
     }
   }, [setDeletionRequests]);
 

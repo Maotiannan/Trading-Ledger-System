@@ -1,4 +1,10 @@
-import { getApiErrorCode, getApiErrorMessage, WorkspaceApiError } from '@/components/workspace/api/client';
+import {
+  getApiErrorCode,
+  getApiErrorMessage,
+  peekPrefetchedApiResult,
+  prefetchApiResult,
+  WorkspaceApiError,
+} from '@/components/workspace/api/client';
 
 describe('workspace api client', () => {
   let originalLang = 'zh';
@@ -63,5 +69,25 @@ describe('workspace api client', () => {
 
   it('falls back to translated raw message when no code exists', () => {
     expect(getApiErrorMessage({ error: '请上传Excel文件' }, 'fallback')).toBe('Please upload an Excel file');
+  });
+
+  it('prefetches and reuses cached GET responses', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: [{ id: 'row-1' }] }),
+    } as Response);
+    Object.assign(global, { fetch: fetchMock });
+
+    const first = await prefetchApiResult('prefetch-smoke');
+    const cached = peekPrefetchedApiResult<{ success: boolean; data: Array<{ id: string }> }>('prefetch-smoke');
+    const second = await prefetchApiResult('prefetch-smoke');
+
+    expect(first).toEqual({ success: true, data: [{ id: 'row-1' }] });
+    expect(cached).toEqual({ success: true, data: [{ id: 'row-1' }] });
+    expect(second).toEqual({ success: true, data: [{ id: 'row-1' }] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    Object.assign(global, { fetch: originalFetch });
   });
 });

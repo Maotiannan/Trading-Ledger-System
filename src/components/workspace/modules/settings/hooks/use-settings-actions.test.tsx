@@ -8,7 +8,13 @@ import type {
   SettingsAuditFilterState,
   SettingsAuditMeta,
 } from '../types';
-import { apiCall, getApiErrorMessage, getApiResponseErrorMessage } from '@/components/workspace/shared';
+import {
+  apiCall,
+  getApiErrorMessage,
+  getApiResponseErrorMessage,
+  peekPrefetchedApiResult,
+  rememberPrefetchedApiResult,
+} from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => {
   return {
@@ -21,12 +27,16 @@ jest.mock('@/components/workspace/shared', () => {
       }
       return fallback;
     }),
+    peekPrefetchedApiResult: jest.fn(() => null),
+    rememberPrefetchedApiResult: jest.fn((_endpoint: string, value: unknown) => value),
   };
 });
 
 const mockApiCall = apiCall as jest.Mock;
 const mockGetApiErrorMessage = getApiErrorMessage as jest.Mock;
 const mockGetApiResponseErrorMessage = getApiResponseErrorMessage as jest.Mock;
+const mockPeekPrefetchedApiResult = peekPrefetchedApiResult as jest.Mock;
+const mockRememberPrefetchedApiResult = rememberPrefetchedApiResult as jest.Mock;
 const originalFetch = globalThis.fetch;
 
 describe('useSettingsActions', () => {
@@ -44,6 +54,9 @@ describe('useSettingsActions', () => {
     mockApiCall.mockReset();
     mockGetApiErrorMessage.mockClear();
     mockGetApiResponseErrorMessage.mockClear();
+    mockPeekPrefetchedApiResult.mockReset();
+    mockPeekPrefetchedApiResult.mockReturnValue(null);
+    mockRememberPrefetchedApiResult.mockClear();
     purgeFormState = { targetUserId: 'sales-1', password: 'Admin@2026!', modules: ['customer'] };
     pwdState = { oldPassword: 'old-pass', newPassword: 'new-pass-1', confirmPassword: 'new-pass-1' };
     auditFiltersState = { actorQuery: '', settingKey: '', dateFrom: '', dateTo: '', pageSize: 20, exportLimit: 5000 };
@@ -151,6 +164,44 @@ describe('useSettingsActions', () => {
     expect(purgeFormState.targetUserId).toBe('sales-2');
     expect(auditMetaState).toEqual({ defaultPageSize: 20, maxPageSize: 80, maxExportRows: 1200, pageSizeOptions: [20, 50, 80], cursorMode: 'id' });
     expect(auditFiltersState.exportLimit).toBe(1200);
+  });
+
+  it('hydrates from prefetched settings before refreshing bootstrap', async () => {
+    const deps = createDeps();
+    mockPeekPrefetchedApiResult.mockReturnValueOnce({
+      success: true,
+      data: {
+        settings: { DETAIL_RECEIPT_MATCH_TOLERANCE: '6' },
+        canEdit: true,
+        canViewAudit: true,
+        canPurgeBranch: true,
+        branchPurgeTargets: [{ id: 'sales-cached', email: 'cached@example.com', name: 'Cached', level: 3, role: 'SALES', parentId: 'admin-1' }],
+        purgeModuleKeys: ['customer'],
+        auditCapabilities: { defaultPageSize: 20, maxPageSize: 50, maxExportRows: 500, pageSizeOptions: [20, 50], cursorMode: 'id' },
+      },
+    });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        settings: { DETAIL_RECEIPT_MATCH_TOLERANCE: '7' },
+        canEdit: true,
+        canViewAudit: true,
+        canPurgeBranch: true,
+        branchPurgeTargets: [{ id: 'sales-fresh', email: 'fresh@example.com', name: 'Fresh', level: 3, role: 'SALES', parentId: 'admin-1' }],
+        purgeModuleKeys: ['customer', 'invoice'],
+        auditCapabilities: { defaultPageSize: 20, maxPageSize: 60, maxExportRows: 600, pageSizeOptions: [20, 60], cursorMode: 'id' },
+      },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    expect(deps.setConfig).toHaveBeenNthCalledWith(1, { DETAIL_RECEIPT_MATCH_TOLERANCE: '6' });
+    expect(deps.setConfig).toHaveBeenLastCalledWith({ DETAIL_RECEIPT_MATCH_TOLERANCE: '7' });
+    expect(mockRememberPrefetchedApiResult).toHaveBeenCalledWith('settings', expect.objectContaining({ success: true }));
   });
 
   it('clears audit state when loaded settings disable audit viewing', async () => {
@@ -278,6 +329,18 @@ describe('useSettingsActions', () => {
     const deps = createDeps();
     mockApiCall
       .mockResolvedValueOnce({ success: true, message: 'saved' })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          settings: { DETAIL_RECEIPT_MATCH_TOLERANCE: '7' },
+          canEdit: true,
+          canViewAudit: true,
+          canPurgeBranch: true,
+          branchPurgeTargets: deps.branchPurgeTargets,
+          purgeModuleKeys: ['customer', 'invoice', 'all'],
+          auditCapabilities: auditMetaState,
+        },
+      })
       .mockResolvedValueOnce({
         success: true,
         data: {

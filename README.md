@@ -11,12 +11,13 @@
 README 现在只保留用户应该看的内容。
 技术实现、工程规范、开发计划，请看：
 - [todolist.md](./todolist.md)
+- [ENGINEERING_LOG.md](./ENGINEERING_LOG.md)
 - [CHANGE_CHECKLIST.md](./CHANGE_CHECKLIST.md)
 
 ## 最近更新
 
-- 当前版本：`1.0.80`
-- 本次更新：README 已精简为用户手册首页；技术变更记录与工程规则已移出 README 主体。
+- 当前版本：`1.0.81`
+- 本次更新：`todolist.md` 已收敛为用户里程碑，详细技术流水已拆分到 `ENGINEERING_LOG.md`。
 - 前端版本号位置：`设置` 页面最上方
 
 ## 系统适合谁
@@ -176,5 +177,6 @@ docker compose up -d --build
 ## 更多文档
 
 如果你要看后续计划或技术规范：
-- [todolist.md](./todolist.md)：开发计划、版本流水、长期 backlog
+- [todolist.md](./todolist.md)：用户看得懂的版本里程碑与后续计划
+- [ENGINEERING_LOG.md](./ENGINEERING_LOG.md)：纯工程内部流水、详细版本记录与测试门禁
 - [CHANGE_CHECKLIST.md](./CHANGE_CHECKLIST.md)：以后每类改动必须同步做哪些动作

@@ -80,4 +80,90 @@ describe('report-service', () => {
       metadata: expect.objectContaining({ format: 'excel', invoiceCount: 0 }),
     }));
   });
+
+  it('exports pdf report with aggregated counts and records audit', async () => {
+    mockDb.invoice.count.mockResolvedValueOnce(2);
+    mockDb.receipt.count.mockResolvedValueOnce(3);
+    mockDb.detail.count.mockResolvedValueOnce(4);
+    mockDb.swift.count.mockResolvedValueOnce(5);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      {
+        orderNo: 'IB-01',
+        usd: 120,
+        status: 'MATCHED',
+        createdAt: new Date('2026-03-12T08:00:00.000Z'),
+      },
+    ]);
+
+    const result = await exportReport(makeUser() as never, 'pdf');
+
+    expect(result.contentType).toBe('application/pdf');
+    expect(result.fileName).toMatch(/trading-ledger-report-\d{4}-\d{2}-\d{2}\.pdf/);
+    expect(result.fileBuffer.length).toBeGreaterThan(0);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'REPORT_EXPORT',
+      metadata: expect.objectContaining({
+        format: 'pdf',
+        invoiceCount: 2,
+        receiptCount: 3,
+        detailCount: 4,
+        swiftCount: 5,
+      }),
+    }));
+  });
+
+  it('exports excel report using visible owner scope and linked receipt totals', async () => {
+    mockDb.invoice.findMany.mockResolvedValueOnce([
+      {
+        invNo: 'INV-1',
+        orders: [
+          {
+            amount: 100,
+            receipts: [{ usd: 40 }, { usd: 10 }],
+          },
+          {
+            amount: 50,
+            receipts: [{ usd: 20 }],
+          },
+        ],
+      },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      {
+        receiptNo: 'R-1',
+        orderNo: 'IB-01',
+        usd: 60,
+        status: 'MATCHED',
+        date: new Date('2026-03-12T00:00:00.000Z'),
+      },
+    ]);
+    mockDb.detail.findMany.mockResolvedValueOnce([{ id: 'detail-1' }]);
+    mockDb.swift.findMany.mockResolvedValueOnce([{ id: 'swift-1' }]);
+
+    const result = await exportReport(makeUser() as never, 'excel');
+
+    expect(mockGetOwnerVisibleIds).toHaveBeenCalledWith(expect.objectContaining({ id: 'admin-1' }));
+    expect(mockDb.invoice.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        orders: expect.objectContaining({
+          include: expect.objectContaining({
+            receipts: expect.objectContaining({
+              select: { usd: true },
+            }),
+          }),
+        }),
+      }),
+    }));
+    expect(result.fileBuffer.length).toBeGreaterThan(0);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'REPORT_EXPORT',
+      metadata: expect.objectContaining({
+        format: 'excel',
+        invoiceCount: 1,
+        receiptCount: 1,
+        detailCount: 1,
+        swiftCount: 1,
+      }),
+    }));
+  });
 });

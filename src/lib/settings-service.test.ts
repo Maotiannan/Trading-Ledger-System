@@ -630,6 +630,116 @@ describe('settings-service', () => {
     expect(exported.maxExportRows).toBe(200);
   });
 
+  it('clamps malformed audit capabilities to minimum values in settings overview', async () => {
+    mockGetSystemSettingsWithDefaults.mockResolvedValue({
+      OCR_DISABLED: 'false',
+      OCR_API_KEY: 'old-secret',
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
+      SWIFT_WARNING_TOLERANCE: '5',
+      SWIFT_REJECT_TOLERANCE: '50',
+      SETTINGS_AUDIT_MAX_PAGE_SIZE: '0',
+      SETTINGS_AUDIT_EXPORT_MAX_ROWS: '-9',
+    });
+    mockDb.user.findMany.mockResolvedValueOnce([]);
+
+    const result = await listSettings(makeUser());
+
+    expect(result.auditCapabilities).toEqual({
+      defaultPageSize: 1,
+      maxPageSize: 1,
+      maxExportRows: 1,
+      pageSizeOptions: [1],
+      cursorMode: 'id',
+    });
+  });
+
+  it('clamps negative export limit to one row and marks export as truncated', async () => {
+    mockDb.auditLog.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'audit-3',
+          createdAt: new Date('2026-03-11T08:10:00.000Z'),
+          metadata: {
+            updatedKeys: ['OCR_DISABLED'],
+            changes: [{ key: 'OCR_DISABLED', before: 'false', after: 'true' }],
+          },
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+        },
+        {
+          id: 'audit-2',
+          createdAt: new Date('2026-03-11T08:00:00.000Z'),
+          metadata: {
+            updatedKeys: ['SWIFT_WARNING_TOLERANCE'],
+            changes: [{ key: 'SWIFT_WARNING_TOLERANCE', before: '5', after: '6' }],
+          },
+          actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await listAllSystemSettingsAuditLogs(makeUser(), { exportLimit: -5 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].id).toBe('audit-3');
+    expect(result.exportLimit).toBe(1);
+    expect(result.truncated).toBe(true);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_AUDIT_EXPORT',
+      metadata: expect.objectContaining({
+        exportLimit: 1,
+        truncated: true,
+      }),
+    }));
+  });
+
+  it('normalizes malformed export history metadata and clamps negative page limit', async () => {
+    mockDb.auditLog.findMany.mockResolvedValueOnce([
+      {
+        id: 'audit-export-2',
+        createdAt: new Date('2026-03-11T08:20:00.000Z'),
+        metadata: {
+          rowCount: 'not-a-number',
+          exportLimit: null,
+          maxExportRows: undefined,
+          truncated: 0,
+          exportedKeys: ['OCR_DISABLED', '', null],
+          filters: {
+            actor: 123,
+            key: null,
+            dateFrom: undefined,
+            dateTo: '2026-03-11',
+          },
+        },
+        actor: null,
+      },
+      {
+        id: 'audit-export-1',
+        createdAt: new Date('2026-03-11T08:10:00.000Z'),
+        metadata: {},
+        actor: { id: 'admin-1', email: 'admin@example.com', name: 'Admin' },
+      },
+    ]);
+
+    const result = await listSystemSettingsAuditExportLogs(makeUser(), { limit: -2 });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'audit-export-2',
+        rowCount: 0,
+        exportLimit: 0,
+        maxExportRows: 0,
+        truncated: false,
+        filterActor: '123',
+        filterKey: '',
+        filterDateFrom: '',
+        filterDateTo: '2026-03-11',
+        exportedKeys: ['OCR_DISABLED'],
+      }),
+    ]);
+    expect(result.nextCursor).toBe('audit-export-2');
+    expect(result.limit).toBe(1);
+  });
+
   it('masks secret values in settings audit logs', async () => {
     mockDb.systemSetting.upsert.mockResolvedValue(undefined);
 

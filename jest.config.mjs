@@ -43,10 +43,10 @@ const customJestConfig = {
   ],
   coverageThreshold: {
     global: {
-      branches: 63,
+      branches: 64,
       functions: 84,
-      lines: 81,
-      statements: 79,
+      lines: 82,
+      statements: 80,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -133,9 +133,9 @@ const customJestConfig = {
       statements: 60,
     },
     './src/lib/settings-read-service.ts': {
-      branches: 70,
-      functions: 96,
-      lines: 90,
+      branches: 80,
+      functions: 97,
+      lines: 95,
       statements: 90,
     },
     './src/lib/settings-write-service.ts': {

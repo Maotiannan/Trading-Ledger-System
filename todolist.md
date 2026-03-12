@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.75  
+> 当前版本：v1.0.76  
 > 最后更新：2026-03-12
 
 ## P0（本周必须完成）
@@ -160,6 +160,7 @@
 - [x] 设置审计导出历史补齐 service/hook/API 回归，并将 `use-invoice-actions / use-customer-actions` 再纳入更高一轮 coverage 门禁 ✅ 2026-03-11
 - [x] `use-invoice-actions / use-customer-actions` 再补一轮失败/早退/空结果分支测试，并把两项局部门禁继续小步上调 ✅ 2026-03-12
 - [x] `settings` 页面级读模型继续收口，补齐 `use-settings-actions / customer-read-service / invoice-read-service` 边界分支并继续小步上调门禁 ✅ 2026-03-12
+- [x] 继续补齐读路径与审计导出边界：`settings-read-service` 新增 clamp/异常 metadata/负数导出上限边界测试，`report-service` 新增 PDF/Excel 导出审计回归，并将 `settings-read-service` 与 global 门禁再小步上调 ✅ 2026-03-12
 
 ## P2（持续迭代）
 
@@ -183,6 +184,8 @@
 ---
 
 ## 已完成里程碑摘要
+
+- v1.0.76（2026-03-12）：继续补齐 `settings-read-service` 的审计导出边界，新增“审计能力最小值 clamp、负数 exportLimit 回退为 1 并触发 truncated、导出历史异常 metadata 归一化”等测试；`report-service` 新增 PDF 导出计数审计与 Excel 可见范围/汇总回归；coverage threshold 第二十四次提升到 `64/84/82/80`，并将 `settings-read-service` 提升到 `80/97/95/90`；Jest 扩展到 `38 suites / 279 tests`
 
 - v1.0.75（2026-03-12）：`settings` 继续新增 `page-view-model.ts`，把页面标题、版本号、告警态、用户管理可见性与审计展示模型统一收口；`use-settings-actions` 补齐设置加载失败、审计/导出历史加载失败、导出失败/summary 回退、保存配置失败、OCR 成功/失败、密码字段不完整/后端失败等分支；`customer-read-service / invoice-read-service` 分别补 sales 扩展字段可见与普通 INV 创建时间降序排序分支；coverage threshold 第二十三次提升到 `63/84/81/79`，其中 `use-settings-actions` 提升到 `55/98/80/80`、`customer-read-service` 提升到 `80/100/97/97`、`invoice-read-service` 提升到 `85/100/97/97`，并新增 `page-view-model` 的满额局部门禁；Jest 扩展到 `38 suites / 274 tests`
 

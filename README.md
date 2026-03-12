@@ -28,7 +28,7 @@
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
 - `settings` 前端读路径已开始通过 `read-model` 收口：审计元信息、筛选默认值、分页参数 clamp、bootstrap/audit/export-history 归一化都集中在 `src/components/workspace/modules/settings/read-model.ts`，设置页不再直接消费混合响应结构
 - `settings` 审计展示层已新增独立 `view-model`：审计摘要、导出历史摘要、行级展示文本和导出选项都在 `src/components/workspace/modules/settings/view-model.ts` 统一生成，组件层不再直接拼接原始 API 行结构
-- 当前 Jest 已扩展到 `38 suites / 274 tests`；coverage global threshold 维持 `branches 63 / functions 84 / lines 81 / statements 79`
+- 当前 Jest 已扩展到 `38 suites / 279 tests`；coverage global threshold 现为 `branches 64 / functions 84 / lines 82 / statements 80`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -961,6 +961,12 @@ src/
 - 🧠 前端错误消费收口为“保留服务端具体文案，错误码只做兜底”：`workspace api client` 不再把详细错误覆写成 `Invalid request` 这类通用文案，避免丢失 `OCR_DISABLED`、容差边界等关键细节。
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
+
+### v1.0.76 (2026-03-12)
+
+- ✅ 继续补强读路径与设置审计导出边界：`settings-read-service` 新增“审计能力最小值 clamp、负数 exportLimit 回退为 1 并触发 truncated、导出历史异常 metadata 归一化”等边界测试；`report-service` 新增 PDF 导出计数审计与 Excel 可见范围/已收金额汇总回归。
+- 📈 coverage threshold 第二十四次小步上调：global 提升到 `64 / 84 / 82 / 80`；`settings-read-service` 提升到 `80 / 97 / 95 / 90`。当前全局 coverage 为 `82.61 / 64.80 / 85.34 / 85.22`，Jest 扩展到 `38 suites / 279 tests`。
+- 🏷️ 版本提升到 `1.0.76`；设置页顶部继续显示当前版本号，本地容器更新后应与 `package.json#version` 一致。
 
 ### v1.0.75 (2026-03-12)
 - 🧩 `settings` 读路径继续收口：新增 `src/components/workspace/modules/settings/page-view-model.ts`，把页面标题、版本号、告警态、用户管理可见性与审计 view-model 统一收口到单一 page-level model，`settings-manager.tsx` 进一步退化为状态接线层。

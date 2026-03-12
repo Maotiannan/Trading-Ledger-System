@@ -54,10 +54,10 @@ const customJestConfig = {
       statements: 100,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-actions.ts': {
-      branches: 70,
-      functions: 88,
-      lines: 80,
-      statements: 80,
+      branches: 75,
+      functions: 90,
+      lines: 85,
+      statements: 85,
     },
     './src/components/workspace/modules/customers/hooks/use-customer-forms.ts': {
       branches: 45,
@@ -66,10 +66,10 @@ const customJestConfig = {
       statements: 70,
     },
     './src/components/workspace/modules/customers/hooks/use-customer-actions.ts': {
-      branches: 55,
-      functions: 80,
-      lines: 60,
-      statements: 60,
+      branches: 60,
+      functions: 81,
+      lines: 70,
+      statements: 70,
     },
     './src/components/workspace/modules/receipts/hooks/use-receipt-actions.ts': {
       branches: 45,

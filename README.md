@@ -28,7 +28,7 @@
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
 - `settings` 前端读路径已开始通过 `read-model` 收口：审计元信息、筛选默认值、分页参数 clamp、bootstrap/audit/export-history 归一化都集中在 `src/components/workspace/modules/settings/read-model.ts`，设置页不再直接消费混合响应结构
 - `settings` 审计展示层已新增独立 `view-model`：审计摘要、导出历史摘要、行级展示文本和导出选项都在 `src/components/workspace/modules/settings/view-model.ts` 统一生成，组件层不再直接拼接原始 API 行结构
-- 当前 Jest 已扩展到 `37 suites / 240 tests`；coverage global threshold 维持 `branches 62 / functions 84 / lines 80 / statements 78`
+- 当前 Jest 已扩展到 `37 suites / 258 tests`；coverage global threshold 维持 `branches 62 / functions 84 / lines 80 / statements 78`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -966,7 +966,8 @@ src/
 - 🧩 `settings` 审计前端继续分层：新增 `src/components/workspace/modules/settings/view-model.ts`，把审计摘要、导出历史摘要、导出选项、行级展示文本统一收口到 view-model；`settings-audit-card.tsx` 现在只消费可渲染结构，不再直接拼接原始 API 行数据。
 - ♿ 设置审计筛选表单补齐可访问性：`Actor / Setting Key / Date From / Date To / Page Size / Export Rows` 全部补上 `htmlFor + id + data-testid`，UI 和自动化都可以稳定定位，不再依赖脆弱 DOM 结构。
 - 🎭 新增稳定 Playwright 闭环：`tests/e2e/settings-workspace.spec.ts` 现覆盖“设置筛选 + 加载更多 + 导出 CSV + 导出历史”，并通过已登录 API 会话先造 21 条审计记录，避免用 UI 人工点出测试数据。
-- 🧪 当前自动化结果扩展到 `37 suites / 240 tests`；本轮没有继续抬高 coverage threshold，而是先把 `settings` 审计展示层的测试和稳定性补齐，再为下一轮门禁上调打基础。
+- 🧪 `use-invoice-actions / use-customer-actions` 分支测试继续补强：新增导入按钮触发、创建失败、更新早退/失败/异常、删除异常、加单早退/异常，以及客户导入/问题行重试的纯错误返回与空结果回退等场景；全量 Jest 扩展到 `37 suites / 258 tests`。
+- 📈 coverage threshold 第二十二次小步上调：保持 global `62 / 84 / 80 / 78` 不变，仅把 `use-invoice-actions` 提升到 `75 / 90 / 85 / 85`，`use-customer-actions` 提升到 `60 / 81 / 70 / 70`；继续只抬已稳定覆盖的高价值 hook。
 
 ### v1.0.73 (2026-03-12)
 - 🧩 `settings` 前端读路径继续收口：新增 `src/components/workspace/modules/settings/read-model.ts`，把审计元信息、默认筛选、页大小/导出上限 clamp、bootstrap/audit/export-history 响应归一化集中到单一 read-model，减少设置页对 `/api/settings` 混合返回结构的直接依赖。

@@ -158,6 +158,7 @@
 - [x] 覆盖 `swift` 金额容差分支单测（正常/警告/拒绝）✅ 2026-03-11
 - [x] 增加 Playwright API 驱动用例（优先 API，不依赖手工 UI 点击）✅ 2026-03-10
 - [x] 设置审计导出历史补齐 service/hook/API 回归，并将 `use-invoice-actions / use-customer-actions` 再纳入更高一轮 coverage 门禁 ✅ 2026-03-11
+- [x] `use-invoice-actions / use-customer-actions` 再补一轮失败/早退/空结果分支测试，并把两项局部门禁继续小步上调 ✅ 2026-03-12
 
 ## P2（持续迭代）
 
@@ -182,7 +183,7 @@
 
 ## 已完成里程碑摘要
 
-- v1.0.74（2026-03-12）：`settings` 审计前端继续分层，新增 `view-model.ts` 统一生成审计摘要、导出历史摘要、导出选项与行级展示文本，`settings-audit-card.tsx` 不再直接拼接原始 API 行结构；设置审计筛选表单补齐 `htmlFor + id + data-testid` 可访问性；新增稳定 Playwright 闭环，覆盖“设置筛选 + 加载更多 + 导出 CSV + 导出历史”；Jest 扩展到 `37 suites / 240 tests`
+- v1.0.74（2026-03-12）：`settings` 审计前端继续分层，新增 `view-model.ts` 统一生成审计摘要、导出历史摘要、导出选项与行级展示文本，`settings-audit-card.tsx` 不再直接拼接原始 API 行结构；设置审计筛选表单补齐 `htmlFor + id + data-testid` 可访问性；新增稳定 Playwright 闭环，覆盖“设置筛选 + 加载更多 + 导出 CSV + 导出历史”；继续补齐 `use-invoice-actions / use-customer-actions` 的失败、早退、空结果回退分支测试，并把两项门禁提升到 `75/90/85/85` 与 `60/81/70/70`；Jest 扩展到 `37 suites / 258 tests`
 
 - v1.0.73（2026-03-12）：`settings` 前端读路径继续收口，新增 `read-model.ts` 统一处理审计元信息、默认筛选、分页/导出上限 clamp 与 bootstrap/audit/export-history 响应归一化，减少设置页对混合响应结构的直接依赖；继续补齐 `use-settings-actions` 的改密码异常、清库未选模块、清库请求异常分支测试，以及 `settings-service / customer-read-service / invoice-read-service` 的关键读路径边界测试；coverage threshold 第二十一次提升到 `62/84/80/78`，其中 `use-settings-actions` 提升到 `50/95/72/72`、`customer-read-service` 提升到 `75/100/95/95`、`invoice-read-service` 提升到 `80/100/95/95`
 

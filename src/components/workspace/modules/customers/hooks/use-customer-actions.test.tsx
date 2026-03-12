@@ -132,6 +132,48 @@ describe('useCustomerActions', () => {
     expect(formState.ownerId).toBe('sales-1');
   });
 
+  it('keeps owner options unchanged when owner option load fails', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '读取失败' });
+
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId,
+      editing: null,
+      fixingTarget: null,
+      form: formState,
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.loadOwnerOptions();
+    });
+
+    expect(setOwnerOptions).not.toHaveBeenCalled();
+    expect(setImportOwnerId).not.toHaveBeenCalled();
+    expect(setForm).not.toHaveBeenCalled();
+  });
+
   it('creates customer and refreshes list on success', async () => {
     mockApiCall.mockResolvedValueOnce({ success: true, data: { id: 'cust-1' } });
     const setImportOwnerId = jest.fn();
@@ -228,6 +270,61 @@ describe('useCustomerActions', () => {
 
     expect(window.alert).toHaveBeenCalledWith('保存失败');
     expect(loadCustomers).not.toHaveBeenCalled();
+  });
+
+  it('updates customer with default owner fallback for admin', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: true, data: { id: 'cust-1' } });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: '',
+      editing: { id: 'cust-1' },
+      fixingTarget: null,
+      form: { ...formState, ownerId: '' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateOrUpdate();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('customer', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update',
+        id: 'cust-1',
+        mark: 'MAB-1',
+        orderName: 'MAB-1',
+        name: 'Customer',
+        phone: '620000001',
+        city: 'Conakry',
+        consignee: '',
+        companyName: null,
+        companyAddress: null,
+        credit: null,
+        ownerId: 'admin-1',
+      }),
+    }));
   });
 
   it('uses default owner for non-admin owner options', async () => {
@@ -722,6 +819,104 @@ describe('useCustomerActions', () => {
     globalThis.fetch = originalFetch;
   });
 
+  it('alerts when customer excel import returns only error details', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: '导入失败',
+        details: ['第2行重复', '第3行格式错误'],
+      }),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCustomerExcelImport(new File(['rows'], 'customers.xlsx'));
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('导入失败\n第2行重复\n第3行格式错误');
+    globalThis.fetch = originalFetch;
+  });
+
+  it('alerts when customer excel import produces no usable row results', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        error: '导入失败',
+        details: ['没有可导入数据'],
+        rowResults: [],
+        issueRows: [],
+      }),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCustomerExcelImport(new File(['rows'], 'customers.xlsx'));
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('导入失败\n没有可导入数据');
+    globalThis.fetch = originalFetch;
+  });
+
   it('alerts when template download response is not ok', async () => {
     const setImportOwnerId = jest.fn();
     const setForm = jest.fn();
@@ -764,6 +959,138 @@ describe('useCustomerActions', () => {
 
     expect(mockGetApiResponseErrorMessage).toHaveBeenCalled();
     expect(window.alert).toHaveBeenCalledWith('模板下载失败');
+    globalThis.fetch = originalFetch;
+  });
+
+  it('alerts when retry response returns only error details', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: '导入失败',
+        details: ['第8行重复'],
+      }),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [
+        {
+          rowNo: 8,
+          mark: 'FIX-1',
+          orderName: 'FIX-ORDER',
+          name: 'Fix User',
+          phone: '620999999',
+          city: 'Conakry',
+          consignee: '',
+          companyName: '',
+          credit: '',
+          companyAddress: '',
+          ownerEmail: 'sales@example.com',
+          latestStatus: 'FAILED',
+          latestReason: 'duplicate',
+          attempts: [],
+        },
+      ],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.retryCustomerIssueRows();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('导入失败\n第8行重复');
+    globalThis.fetch = originalFetch;
+  });
+
+  it('alerts when retry produces no usable row results', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        error: '导入失败',
+        details: ['仍然没有可导入数据'],
+        rowResults: [],
+        issueRows: [],
+      }),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [
+        {
+          rowNo: 8,
+          mark: 'FIX-1',
+          orderName: 'FIX-ORDER',
+          name: 'Fix User',
+          phone: '620999999',
+          city: 'Conakry',
+          consignee: '',
+          companyName: '',
+          credit: '',
+          companyAddress: '',
+          ownerEmail: 'sales@example.com',
+          latestStatus: 'FAILED',
+          latestReason: 'duplicate',
+          attempts: [],
+        },
+      ],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.retryCustomerIssueRows();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('导入失败\n仍然没有可导入数据');
     globalThis.fetch = originalFetch;
   });
 

@@ -123,6 +123,108 @@ describe('useInvoiceActions', () => {
     expect(window.alert).toHaveBeenCalledWith('created');
   });
 
+  it('opens invoice import picker through input ref', () => {
+    const clickSpy = jest.fn();
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: { current: { click: clickSpy } as unknown as HTMLInputElement },
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    act(() => {
+      result.current.openInvoiceImportPicker();
+    });
+
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it('blocks create when any order row is incomplete', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [{ orderNo: '   ', amount: '1200', customerMark: 'MAB-1', customerName: 'MAB', customerId: '', customerCandidates: [] }],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateInvoice();
+    });
+
+    expect(setFormError).toHaveBeenCalledWith('请填写所有订单的客户单号、金额和MARK');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('surfaces create invoice backend failures', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '创建失败' });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [{ orderNo: 'MAB-1-01', amount: '1200', customerMark: 'MAB-1', customerName: 'MAB', customerId: 'cust-1', customerCandidates: [] }],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateInvoice();
+    });
+
+    expect(setFormError).toHaveBeenCalledWith('创建失败');
+    expect(handleCreateDialogOpenChange).not.toHaveBeenCalled();
+    expect(loadInvoices).not.toHaveBeenCalled();
+  });
+
   it('surfaces create invoice request errors', async () => {
     mockApiCall.mockRejectedValueOnce(new Error('网络错误'));
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -215,6 +317,165 @@ describe('useInvoiceActions', () => {
     expect(loadInvoices).toHaveBeenCalled();
   });
 
+  it('returns early when update is triggered without an editing order', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(setOrderFormError).not.toHaveBeenCalled();
+  });
+
+  it('blocks order update when order number is empty', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: {
+        id: 'order-1',
+        orderNo: '   ',
+        amount: 500,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      },
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(setOrderFormError).toHaveBeenCalledWith('请输入客户单号');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('surfaces order update backend failures', async () => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: '修改失败' });
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: {
+        id: 'order-1',
+        orderNo: 'MAB-1-02',
+        amount: 500,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      },
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(setOrderFormError).toHaveBeenCalledWith('修改失败');
+    expect(handleOrderDialogOpenChange).not.toHaveBeenCalled();
+    expect(loadInvoices).not.toHaveBeenCalled();
+  });
+
+  it('surfaces order update request errors', async () => {
+    mockApiCall.mockRejectedValueOnce(new Error('更新网络错误'));
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: {
+        id: 'order-1',
+        orderNo: 'MAB-1-02',
+        amount: 500,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      },
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(setOrderFormError).toHaveBeenCalledWith('更新网络错误');
+    consoleSpy.mockRestore();
+  });
+
   it('blocks order update when amount is invalid', async () => {
     const { result } = renderHook(() => useInvoiceActions({
       tx,
@@ -253,6 +514,44 @@ describe('useInvoiceActions', () => {
 
     expect(setOrderFormError).toHaveBeenCalledWith('请输入有效金额(>=0)');
     expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('alerts when delete request throws', async () => {
+    mockApiCall.mockRejectedValueOnce(new Error('删除网络错误'));
+    const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => true);
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleDeleteOrder('order-2');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('删除网络错误');
+    confirmSpy.mockRestore();
+    consoleSpy.mockRestore();
   });
 
   it('handles delete failure with alert message', async () => {
@@ -418,6 +717,105 @@ describe('useInvoiceActions', () => {
     expect(loadInvoices).toHaveBeenCalled();
   });
 
+  it('returns early when add order is triggered without invoice target', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: 'MAB-1-03',
+      newOrderAmount: '300',
+      newOrderCustomerMark: 'MAB-1',
+      newOrderCustomerName: 'MAB',
+      newOrderCustomerId: 'cust-1',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(setAddError).not.toHaveBeenCalled();
+  });
+
+  it('blocks add order when order number is missing', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: 'inv-1',
+      setAddError,
+      newOrderNo: '   ',
+      newOrderAmount: '300',
+      newOrderCustomerMark: 'MAB-1',
+      newOrderCustomerName: 'MAB',
+      newOrderCustomerId: 'cust-1',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(setAddError).toHaveBeenCalledWith('请输入客户单号');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('blocks add order when amount is invalid', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: 'inv-1',
+      setAddError,
+      newOrderNo: 'MAB-1-03',
+      newOrderAmount: '0',
+      newOrderCustomerMark: 'MAB-1',
+      newOrderCustomerName: 'MAB',
+      newOrderCustomerId: 'cust-1',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(setAddError).toHaveBeenCalledWith('请输入有效金额');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
   it('surfaces add order failures from backend response', async () => {
     const resetAddOrderForm = jest.fn();
     mockApiCall.mockResolvedValue({ success: false, error: '添加失败' });
@@ -453,6 +851,44 @@ describe('useInvoiceActions', () => {
     expect(setAddError).toHaveBeenCalledWith('添加失败');
     expect(resetAddOrderForm).not.toHaveBeenCalled();
     expect(loadInvoices).not.toHaveBeenCalled();
+  });
+
+  it('surfaces add order request errors', async () => {
+    const resetAddOrderForm = jest.fn();
+    mockApiCall.mockRejectedValueOnce(new Error('添加网络错误'));
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: null,
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: 'inv-1',
+      setAddError,
+      newOrderNo: 'MAB-1-03',
+      newOrderAmount: '300',
+      newOrderCustomerMark: 'MAB-1',
+      newOrderCustomerName: 'MAB',
+      newOrderCustomerId: 'cust-1',
+      resetAddOrderForm,
+    }));
+
+    await act(async () => {
+      await result.current.handleAddOrder();
+    });
+
+    expect(setAddError).toHaveBeenCalledWith('添加网络错误');
+    expect(resetAddOrderForm).not.toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 
   it('blocks add order when customer mark is missing', async () => {

@@ -361,6 +361,85 @@ describe('useCustomerActions', () => {
     expect(loadCustomers).not.toHaveBeenCalled();
   });
 
+  it('skips delete for non-admin users', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: false,
+      defaultOwnerId: 'sales-1',
+      importOwnerId: '',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: '' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleDelete('cust-1');
+    });
+
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('stops delete when confirmation is cancelled', async () => {
+    jest.spyOn(window, 'confirm').mockImplementation(() => false);
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleDelete('cust-1');
+    });
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
   it('submits customer fix and refreshes both lists', async () => {
     mockApiCall.mockResolvedValueOnce({ success: true });
     const setImportOwnerId = jest.fn();
@@ -453,6 +532,44 @@ describe('useCustomerActions', () => {
     expect(loadFixes).not.toHaveBeenCalled();
   });
 
+  it('returns early when no fixing target exists', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.submitFix();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
   it('retries failed import rows and updates import message', async () => {
     const setImportOwnerId = jest.fn();
     const setForm = jest.fn();
@@ -537,6 +654,116 @@ describe('useCustomerActions', () => {
     expect(setCustomerImportRows).toHaveBeenCalled();
     expect(setCustomerImportMessage).toHaveBeenCalledWith('retry ok');
     expect(loadCustomers).toHaveBeenCalled();
+    globalThis.fetch = originalFetch;
+  });
+
+  it('imports customer excel from issue row fallback results', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const input = document.createElement('input');
+    input.value = 'pending.xlsx';
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: 'import ok',
+        issueRows: [
+          {
+            rowNo: 3,
+            mark: 'IB',
+            orderName: 'IB',
+            name: 'Ibrahima',
+            phone: '622443103',
+            city: 'Conakry',
+            status: 'FAILED',
+            reason: 'duplicate',
+          },
+        ],
+      }),
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: input },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCustomerExcelImport(new File(['rows'], 'customers.xlsx'));
+    });
+
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(setCustomerImportRows).toHaveBeenCalled();
+    expect(setShowCustomerImportIssues).toHaveBeenCalledWith(true);
+    expect(setCustomerImportMessage).toHaveBeenCalledWith('import ok');
+    expect(input.value).toBe('');
+    globalThis.fetch = originalFetch;
+  });
+
+  it('alerts when template download response is not ok', async () => {
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = jest.fn().mockResolvedValue({
+      ok: false,
+    } as Response);
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: 'sales-1',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: 'sales-1' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.downloadCustomerImportTemplate();
+    });
+
+    expect(mockGetApiResponseErrorMessage).toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('模板下载失败');
     globalThis.fetch = originalFetch;
   });
 

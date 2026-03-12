@@ -4,6 +4,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { getSystemSettings } from '@/lib/system-settings';
 import {
   assertNoCustomerScopeConflict,
+  mapPrismaWriteError,
   resolveCustomerOwnerId,
   resolveCustomerUpsertTargetId,
 } from '@/lib/customer-scope';
@@ -78,6 +79,7 @@ const mockGetSystemSettings = getSystemSettings as jest.Mock;
 const mockResolveCustomerOwnerId = resolveCustomerOwnerId as jest.Mock;
 const mockResolveCustomerUpsertTargetId = resolveCustomerUpsertTargetId as jest.Mock;
 const mockAssertNoCustomerScopeConflict = assertNoCustomerScopeConflict as jest.Mock;
+const mockMapPrismaWriteError = mapPrismaWriteError as jest.Mock;
 
 describe('customer-fix-service', () => {
   beforeEach(() => {
@@ -92,6 +94,19 @@ describe('customer-fix-service', () => {
   it('parses fix payload and validates required fields', () => {
     expect(parseFixCustomerPayload({ mark: '', orderName: '', name: '', phone: '', city: '' })).toEqual({
       error: 'MARK/ORDER_NAME/NAME/PHONE/CITY均为必填',
+    });
+  });
+
+  it('rejects negative credit in fix payload', () => {
+    expect(parseFixCustomerPayload({
+      mark: 'IB',
+      orderName: 'IB',
+      name: 'Ibrahima',
+      phone: '622443103',
+      city: 'Conakry',
+      credit: -1,
+    })).toEqual({
+      error: 'CREDIT必须为大于等于0的数字',
     });
   });
 
@@ -172,5 +187,121 @@ describe('customer-fix-service', () => {
       action: 'CUSTOMER_FIX_RECEIPT',
       targetId: 'receipt-1',
     }));
+  });
+
+  it('forbids sales from fixing another sales order', async () => {
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-2', orderNo: 'IB-01' });
+
+    await expect(resolveOrderCustomerFix(makeUser({ role: UserRole.SALES, id: 'sales-1' }), {
+      orderId: 'order-1',
+      ownerId: 'sales-1',
+      payload: {
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        consignee: null,
+        companyName: null,
+        companyAddress: null,
+        credit: null,
+      },
+    })).rejects.toMatchObject({
+      code: 'CUSTOMER_SCOPE_FORBIDDEN',
+      status: 403,
+      message: '无权修复该订单',
+    });
+  });
+
+  it('rejects missing receipt during receipt fix', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce(null);
+
+    await expect(resolveReceiptCustomerFix(makeUser(), {
+      receiptId: 'missing',
+      ownerId: 'sales-1',
+      payload: {
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        consignee: null,
+        companyName: null,
+        companyAddress: null,
+        credit: null,
+      },
+    })).rejects.toMatchObject({
+      code: 'RESOURCE_NOT_FOUND',
+      status: 404,
+      message: '收据不存在',
+    });
+  });
+
+  it('updates existing customer instead of creating a new one when scoped match exists', async () => {
+    mockResolveCustomerUpsertTargetId.mockResolvedValueOnce('customer-1');
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+    mockDb.customer.update.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'IB',
+      name: 'Ibrahima',
+      orderName: 'IB',
+      phone: '622443103',
+      city: 'Conakry',
+    });
+    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'IB-01' });
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
+    mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 0 });
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    const result = await resolveOrderCustomerFix(makeUser({ role: UserRole.SALES, id: 'sales-1' }), {
+      orderId: 'order-1',
+      ownerId: 'sales-1',
+      payload: {
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        consignee: null,
+        companyName: null,
+        companyAddress: null,
+        credit: null,
+      },
+    });
+
+    expect(result.data.id).toBe('customer-1');
+    expect(mockDb.customer.create).not.toHaveBeenCalled();
+    expect(mockDb.customer.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'customer-1' },
+    }));
+  });
+
+  it('maps unexpected transaction errors to structured api errors', async () => {
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+    mockDb.$transaction.mockImplementationOnce(async () => {
+      throw new Error('db fail');
+    });
+    mockMapPrismaWriteError.mockReturnValueOnce('db fail');
+
+    await expect(resolveOrderCustomerFix(makeUser({ role: UserRole.SALES, id: 'sales-1' }), {
+      orderId: 'order-1',
+      ownerId: 'sales-1',
+      payload: {
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        consignee: null,
+        companyName: null,
+        companyAddress: null,
+        credit: null,
+      },
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: 'db fail',
+    });
   });
 });

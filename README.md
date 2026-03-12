@@ -960,6 +960,11 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.70 (2026-03-12)
+- 🧾 设置关键读接口补齐同一套读审计基线：`listSettings / listSystemSettingsAuditLogs / listSystemSettingsAuditExportLogs` 现在都会记录独立的读审计动作，区分“配置总览 / 审计列表 / 导出历史列表”三类读取，并保留筛选条件、页大小、返回条数与游标摘要，便于后续做真正的设置侧查询审计。
+- 🧪 客户分支回归继续补强：新增 `use-customer-actions` 的非管理员删除短路、取消确认短路、空修复目标短路、模板下载失败、`issueRows` 回退导入等前端分支测试；新增 `customer-fix-service` 的负数 CREDIT、跨 sales 修复拒绝、收据不存在、命中既有客户走 update、异常事务错误映射等服务层分支测试。
+- 📈 coverage threshold 第十八次小步上调：global 提升到 `58 / 81 / 76 / 74`，并优先提高 `use-customer-actions` 到 `55 / 80 / 60 / 60`、`customer-fix-service` 到 `55 / 80 / 80 / 80`；当前真实覆盖率仍保留明显余量，不靠擦线通过。
+
 ### v1.0.69 (2026-03-12)
 - 🔎 关键读接口开始统一 `read service` 边界：新增 `auth-read-service / customer-read-service / customer-fix-read-service / invoice-read-service / report-service`，将用户列表/上级候选、客户列表/归属候选、客户修复队列、账单列表/订单候选/订单收据、报表导出收敛到 service 层，路由只保留参数解析和响应封装。
 - 🧾 读审计基线补齐：`audit-catalog` 新增 `USER/CUSTOMER/INVOICE/ORDER/REPORT` 的关键读动作，敏感查询与导出开始记录查询规模、目标类型、筛选输入和导出格式，便于后续做审计检索与异常排查。

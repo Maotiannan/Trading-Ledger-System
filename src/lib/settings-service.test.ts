@@ -156,6 +156,17 @@ describe('settings-service', () => {
       pageSizeOptions: [20, 50, 100],
       cursorMode: 'id',
     });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_VIEW',
+      targetType: 'SYSTEM_SETTING',
+      actorId: 'admin-1',
+      metadata: expect.objectContaining({
+        editableKeyCount: 7,
+        branchPurgeTargetCount: 1,
+        canEdit: true,
+        canViewAudit: true,
+      }),
+    }));
   });
 
   it('lists system setting audit logs with actor and changes', async () => {
@@ -199,6 +210,20 @@ describe('settings-service', () => {
       maxPageSize: 100,
       maxExportRows: 5000,
       cursorMode: 'id',
+    }));
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_AUDIT_VIEW',
+      targetType: 'SYSTEM_SETTING',
+      actorId: 'admin-1',
+      metadata: expect.objectContaining({
+        rowCount: 1,
+        limit: 1,
+        nextCursor: 'audit-2',
+        filters: expect.objectContaining({
+          actor: '',
+          key: '',
+        }),
+      }),
     }));
   });
 
@@ -317,6 +342,20 @@ describe('settings-service', () => {
       }),
     ]);
     expect(result.nextCursor).toBeNull();
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_AUDIT_EXPORT_HISTORY_VIEW',
+      targetType: 'SYSTEM_SETTING',
+      actorId: 'admin-1',
+      metadata: expect.objectContaining({
+        rowCount: 1,
+        limit: 1,
+        nextCursor: null,
+        filters: expect.objectContaining({
+          actor: '',
+          key: 'OCR_DISABLED',
+        }),
+      }),
+    }));
   });
 
   it('filters system setting audit logs by actor, time range, and setting key', async () => {

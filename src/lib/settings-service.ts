@@ -542,6 +542,18 @@ export async function listSettings(currentUser: CurrentUser): Promise<{
     });
   }
 
+  await recordAuditEvent({
+    action: auditActions.SYSTEM_SETTINGS_VIEW,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.SYSTEM_SETTING,
+    metadata: {
+      editableKeyCount: editableSystemSettingKeys.length,
+      branchPurgeTargetCount: branchPurgeTargets.length,
+      canEdit: currentUser.role === UserRole.ADMIN,
+      canViewAudit: currentUser.role === UserRole.ADMIN,
+    },
+  });
+
   return {
     settings,
     editableKeys: editableSystemSettingKeys,
@@ -578,6 +590,23 @@ export async function listSystemSettingsAuditLogs(
   );
   const hasMore = filteredRows.length > limit;
   const items = filteredRows.slice(0, limit).map(mapSystemSettingsAuditEntry);
+
+  await recordAuditEvent({
+    action: auditActions.SYSTEM_SETTINGS_AUDIT_VIEW,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.SYSTEM_SETTING,
+    metadata: {
+      rowCount: items.length,
+      limit,
+      nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+      filters: {
+        actor: String(options.actor || '').trim(),
+        key: String(options.key || '').trim(),
+        dateFrom: String(options.dateFrom || '').trim(),
+        dateTo: String(options.dateTo || '').trim(),
+      },
+    },
+  });
 
   return {
     items,
@@ -662,6 +691,23 @@ export async function listSystemSettingsAuditExportLogs(
   );
   const hasMore = filteredRows.length > limit;
   const items = filteredRows.slice(0, limit).map(mapSystemSettingsAuditExportEntry);
+
+  await recordAuditEvent({
+    action: auditActions.SYSTEM_SETTINGS_AUDIT_EXPORT_HISTORY_VIEW,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.SYSTEM_SETTING,
+    metadata: {
+      rowCount: items.length,
+      limit,
+      nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+      filters: {
+        actor: String(options.actor || '').trim(),
+        key: String(options.key || '').trim(),
+        dateFrom: String(options.dateFrom || '').trim(),
+        dateTo: String(options.dateTo || '').trim(),
+      },
+    },
+  });
 
   return {
     items,

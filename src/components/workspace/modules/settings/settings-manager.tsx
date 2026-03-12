@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { APP_VERSION } from '@/lib/app-version';
 import { BranchPurgeCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
 import { useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
+import { buildSettingsAuditViewModel } from './view-model';
 
 export function SettingsManager() {
   const tx = useUiText();
@@ -146,6 +147,26 @@ export function SettingsManager() {
     void loadSettingsAuditExportHistory({ filters: settingsAuditFilters });
   }, [canViewAudit, loadSettingsAudit, loadSettingsAuditExportHistory, settingsAuditFilters]);
 
+  const settingsAuditView = useMemo(() => buildSettingsAuditViewModel({
+    tx,
+    filters: settingsAuditFilters,
+    meta: settingsAuditMeta,
+    keyOptions: Object.keys(config),
+    entries: settingsAuditEntries,
+    exportHistoryEntries: settingsAuditExportHistoryEntries,
+    hasMore: settingsAuditHasMore,
+    exportHistoryHasMore: settingsAuditExportHistoryHasMore,
+  }), [
+    config,
+    settingsAuditEntries,
+    settingsAuditExportHistoryEntries,
+    settingsAuditExportHistoryHasMore,
+    settingsAuditFilters,
+    settingsAuditHasMore,
+    settingsAuditMeta,
+    tx,
+  ]);
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -211,15 +232,9 @@ export function SettingsManager() {
         loading={auditLoading}
         loadingMore={auditLoadingMore}
         exporting={auditExporting}
-        hasMore={settingsAuditHasMore}
-        entries={settingsAuditEntries}
-        exportHistoryEntries={settingsAuditExportHistoryEntries}
         exportHistoryLoading={settingsAuditExportHistoryLoading}
         exportHistoryLoadingMore={settingsAuditExportHistoryLoadingMore}
-        exportHistoryHasMore={settingsAuditExportHistoryHasMore}
-        filters={settingsAuditFilters}
-        meta={settingsAuditMeta}
-        keyOptions={Object.keys(config).sort()}
+        viewModel={settingsAuditView}
         onFilterChange={setSettingsAuditFilters}
         onApplyFilters={() => { void applyAuditFilters(); }}
         onResetFilters={() => { void resetAuditFilters(); }}

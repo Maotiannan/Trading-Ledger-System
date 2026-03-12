@@ -1,0 +1,118 @@
+import { UserRole } from '@prisma/client';
+import { db } from '@/lib/db';
+import { recordAuditEvent } from '@/lib/audit';
+import {
+  listCustomerOwnerOptions,
+  listCustomers,
+} from '@/lib/customer-read-service';
+import { canSalesEditExtendedCustomerFields } from '@/lib/customer-service';
+
+jest.mock('@/lib/db', () => ({
+  db: {
+    user: {
+      findMany: jest.fn(),
+    },
+    customer: {
+      findMany: jest.fn(),
+    },
+  },
+}));
+
+jest.mock('@/lib/audit', () => ({
+  recordAuditEvent: jest.fn(),
+}));
+
+jest.mock('@/lib/customer-service', () => ({
+  canSalesEditExtendedCustomerFields: jest.fn(),
+}));
+
+function makeUser(overrides: Partial<{
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  level: number;
+  parentId: string | null;
+  createdById: string | null;
+}> = {}) {
+  return {
+    id: 'admin-1',
+    email: 'admin@example.com',
+    name: 'Admin',
+    role: UserRole.ADMIN,
+    level: 1,
+    parentId: null,
+    createdById: null,
+    ...overrides,
+  };
+}
+
+const mockDb = db as unknown as {
+  user: { findMany: jest.Mock };
+  customer: { findMany: jest.Mock };
+};
+const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockCanSalesEditExtendedCustomerFields = canSalesEditExtendedCustomerFields as jest.Mock;
+
+describe('customer-read-service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCanSalesEditExtendedCustomerFields.mockResolvedValue(true);
+  });
+
+  it('lists owner options and records audit', async () => {
+    mockDb.user.findMany.mockResolvedValueOnce([
+      { id: 'admin-1', email: 'admin@example.com', name: 'Admin', role: UserRole.ADMIN, level: 1 },
+      { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+    ]);
+
+    const result = await listCustomerOwnerOptions(makeUser());
+
+    expect(result.data).toHaveLength(2);
+    expect(result.message).toContain('2 个账号');
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'CUSTOMER_OWNER_OPTIONS_VIEW',
+      metadata: expect.objectContaining({ count: 2 }),
+    }));
+  });
+
+  it('hides extended fields for sales when setting is disabled', async () => {
+    mockCanSalesEditExtendedCustomerFields.mockResolvedValueOnce(false);
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: 'Hidden Co',
+        companyAddress: 'Address',
+        credit: 100,
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser({
+      id: 'sales-1',
+      email: 'sales@example.com',
+      role: UserRole.SALES,
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    }), { search: 'Ibrahima' });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        companyName: null,
+        companyAddress: null,
+        credit: null,
+      }),
+    ]);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'CUSTOMER_LIST_VIEW',
+      metadata: expect.objectContaining({ count: 1, showExtended: false }),
+    }));
+  });
+});

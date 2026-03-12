@@ -120,6 +120,32 @@ describe('customer-service', () => {
     }));
   });
 
+  it('rejects duplicate customer creation before write', async () => {
+    mockFindDuplicateCustomersInScope.mockResolvedValueOnce([
+      {
+        id: 'customer-dup',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        ownerEmail: 'sales@example.com',
+      },
+    ]);
+
+    await expect(createCustomerRecord(makeUser(), {
+      mark: 'IB',
+      orderName: 'IB',
+      name: 'Ibrahima',
+      phone: '622443103',
+      city: 'Conakry',
+    }, 'sales-1')).rejects.toMatchObject({
+      code: 'CUSTOMER_DUPLICATE',
+      status: 400,
+    });
+
+    expect(mockDb.customer.create).not.toHaveBeenCalled();
+  });
+
   it('updates customer in transaction and records owner changes', async () => {
     mockDb.customer.findUnique.mockResolvedValueOnce({
       id: 'customer-1',
@@ -171,6 +197,32 @@ describe('customer-service', () => {
     }));
   });
 
+  it('blocks sales from updating another owner customer', async () => {
+    mockDb.customer.findUnique.mockResolvedValueOnce({
+      id: 'customer-1',
+      ownerId: 'sales-owner',
+      mark: 'IB',
+      orderName: 'IB',
+      name: 'Ibrahima',
+      phone: '622443103',
+    });
+
+    await expect(updateCustomerRecord(makeUser({
+      id: 'sales-2',
+      role: UserRole.SALES,
+      level: 3,
+    }), 'customer-1', {
+      mark: 'IB',
+      orderName: 'IB',
+      name: 'Ibrahima',
+      phone: '622443103',
+      city: 'Conakry',
+    })).rejects.toMatchObject({
+      code: 'CUSTOMER_SCOPE_FORBIDDEN',
+      status: 403,
+    });
+  });
+
   it('imports valid rows and summarizes audit once', async () => {
     mockDb.user.findMany.mockResolvedValueOnce([{ id: 'sales-1', email: 'sales@example.com' }]);
     mockDb.user.findUnique.mockResolvedValueOnce({ email: 'sales@example.com' });
@@ -205,5 +257,36 @@ describe('customer-service', () => {
     expect(result.createdCount).toBe(1);
     expect(mockRecordAuditEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({ action: 'CUSTOMER_CREATE' }));
     expect(mockRecordAuditEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ action: 'CUSTOMER_IMPORT' }));
+  });
+
+  it('marks import row failed when sales email is unknown', async () => {
+    mockDb.user.findMany.mockResolvedValueOnce([]);
+
+    const result = await processCustomerImportRows([
+      {
+        rowNo: 5,
+        ownerEmail: 'missing-sales@example.com',
+        payload: {
+          mark: 'MISS',
+          orderName: 'MISS',
+          name: 'Missing Sales',
+          phone: '622000009',
+          city: 'Conakry',
+          consignee: null,
+          companyName: null,
+          companyAddress: null,
+          credit: 0,
+        },
+      },
+    ], makeUser(), 'sales-1');
+
+    expect(result.success).toBe(false);
+    expect(result.issueRows).toEqual([
+      expect.objectContaining({
+        rowNo: 5,
+        reason: expect.stringContaining('SALES_EMAIL不存在'),
+      }),
+    ]);
+    expect(mockDb.customer.create).not.toHaveBeenCalled();
   });
 });

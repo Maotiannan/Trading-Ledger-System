@@ -960,6 +960,11 @@ src/
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
 
+### v1.0.69 (2026-03-12)
+- 🔎 关键读接口开始统一 `read service` 边界：新增 `auth-read-service / customer-read-service / customer-fix-read-service / invoice-read-service / report-service`，将用户列表/上级候选、客户列表/归属候选、客户修复队列、账单列表/订单候选/订单收据、报表导出收敛到 service 层，路由只保留参数解析和响应封装。
+- 🧾 读审计基线补齐：`audit-catalog` 新增 `USER/CUSTOMER/INVOICE/ORDER/REPORT` 的关键读动作，敏感查询与导出开始记录查询规模、目标类型、筛选输入和导出格式，便于后续做审计检索与异常排查。
+- ✅ 测试与门禁继续上调：新增 `auth-read-service / customer-read-service / customer-fix-read-service / invoice-read-service / report-service` 单测，并补齐 `customer-service / invoice-service` 分支回归；coverage threshold 第十七次提升到 `57/80/75/73`，其中 `customer-service` 提升到 `50/55/65/65`、`invoice-service` 提升到 `50/55/60/60`。
+
 ### v1.0.68 (2026-03-11)
 - 🧱 核心写接口全链路事务边界审计补完：新增 `auth-service / customer-service / customer-fix-service / init-service`，将 `/api/auth /api/customer /api/customer/fixes /api/init` 继续收敛为薄路由；`matching / receipt-service / detail-service / invoice-service(rematch)` 这批残余写路径补齐事务客户端透传，避免多步写入中途失败留下半状态。
 - 🧾 审计目录继续收口：`audit-catalog` 扩展到 `USER / CUSTOMER` 目标类型与创建、更新、删除、导入、修复、密码操作等动作，核心 create/update/delete 链路都已经纳入审计事件。

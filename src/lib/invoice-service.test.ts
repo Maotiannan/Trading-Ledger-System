@@ -759,4 +759,39 @@ describe('invoice-service', () => {
       }),
     });
   });
+
+  it('blocks deleting an order that still has receipts', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-1',
+      invoiceId: 'inv-1',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
+
+    await expect(deleteInvoiceOrder(makeUser(), 'order-1')).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: '该订单下有收据，无法删除',
+      detail: expect.objectContaining({ orderId: 'order-1' }),
+    });
+  });
+
+  it('rejects invalid invoice date format', async () => {
+    mockDb.invoice.findFirst.mockResolvedValueOnce({
+      id: 'inv-1',
+      shipDate: null,
+      releaseDate: null,
+    });
+    mockDb.invoice.update.mockResolvedValueOnce({
+      id: 'inv-1',
+      shipDate: new Date('2026-03-12T00:00:00Z'),
+      releaseDate: null,
+    });
+
+    await expect(updateInvoiceDates(makeUser(), {
+      invoiceId: 'inv-1',
+      shipDate: 'not-a-date',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'SHIP_DATE 格式错误，应为 YYYY-MM-DD',
+    });
+  });
 });

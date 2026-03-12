@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UserRole } from '@prisma/client';
-import { db } from '@/lib/db';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { withAuth } from '@/lib/route-auth';
+import { listCustomerFixQueue } from '@/lib/customer-fix-read-service';
 import {
   parseFixCustomerPayload,
   resolveOrderCustomerFix,
@@ -23,44 +23,8 @@ function managerOnly(role: UserRole, request?: NextRequest): NextResponse | null
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const denied = managerOnly(currentUser.role as UserRole, request);
   if (denied) return denied;
-
-  const [orders, receipts] = await Promise.all([
-    db.order.findMany({
-      where: {
-        needsCustomerFix: true,
-        ...(currentUser.role === UserRole.SALES ? { createdBy: currentUser.id } : {}),
-      },
-      include: {
-        invoice: { select: { id: true, invNo: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    }),
-    db.receipt.findMany({
-      where: {
-        needsCustomerFix: true,
-        ...(currentUser.role === UserRole.SALES ? { createdBy: currentUser.id } : {}),
-      },
-      select: {
-        id: true,
-        receiptNo: true,
-        usd: true,
-        status: true,
-        orderNo: true,
-        invNo: true,
-        customerMark: true,
-        customerName: true,
-        customerPhone: true,
-        customerCity: true,
-        createdAt: true,
-        orderId: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    }),
-  ]);
-
-  return NextResponse.json({ success: true, data: { orders, receipts } });
+  const result = await listCustomerFixQueue(currentUser);
+  return createApiSuccessResponse(result, request);
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {

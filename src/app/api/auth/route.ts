@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { validateUser } from '@/lib/auth';
 import { UserRole } from '@prisma/client';
 import { type ApiErrorCode, apiErrorCodes, createApiError } from '@/lib/api-error';
@@ -7,22 +6,18 @@ import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-resp
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
-import { getHierarchyScope } from '@/lib/user-hierarchy';
 import {
-  canCreateRole,
   changeCurrentUserPassword,
   createManagedUser,
   deleteManagedUser,
-  parseManagedRole,
   resetManagedUserPassword,
   updateManagedUserRole,
 } from '@/lib/auth-service';
-
-const roleRank: Record<UserRole, number> = {
-  [UserRole.ADMIN]: 4,
-  [UserRole.SALES]: 3,
-  [UserRole.USER]: 2,
-};
+import {
+  getCurrentAccount,
+  listManagedUserParentOptions,
+  listManagedUsers,
+} from '@/lib/auth-read-service';
 
 function badRequest(request: NextRequest, message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown) {
   return createApiErrorResponse({ code, status: 400, message, detail }, request);
@@ -75,7 +70,8 @@ export async function POST(request: NextRequest) {
       if (!user) {
         return unauthorized(request, '未登录');
       }
-      return createApiSuccessResponse({ data: user, message: '当前用户信息已加载' }, request);
+      const result = await getCurrentAccount(user);
+      return createApiSuccessResponse(result, request);
     }
 
     // 创建用户 (管理员/销售)
@@ -120,34 +116,8 @@ export async function POST(request: NextRequest) {
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
         return forbidden(request, '无权限');
       }
-
-      const targetRole = parseManagedRole(body.role);
-      if (!canCreateRole(currentUser.level, currentUser.role, targetRole)) {
-        return forbidden(request, '当前账户无权创建该角色', apiErrorCodes.ROLE_NOT_ALLOWED);
-      }
-
-      const scope = await getHierarchyScope(currentUser);
-      const visibleIds = Array.from(scope.visibleIds);
-      const candidates = await db.user.findMany({
-        where: { id: { in: visibleIds } },
-        select: { id: true, email: true, name: true, role: true, level: true },
-        orderBy: [{ level: 'asc' }, { createdAt: 'asc' }],
-      });
-
-      const filtered = candidates.filter((candidate) => {
-        if (targetRole === UserRole.ADMIN) {
-          return candidate.role === UserRole.ADMIN && candidate.level === 1;
-        }
-        if (targetRole === UserRole.SALES) {
-          return candidate.role === UserRole.ADMIN && (candidate.level === 1 || candidate.level === 2);
-        }
-        return (
-          (candidate.role === UserRole.ADMIN && (candidate.level === 1 || candidate.level === 2)) ||
-          (candidate.role === UserRole.SALES && candidate.level === 3)
-        );
-      });
-
-      return createApiSuccessResponse({ data: filtered, message: `可选上级账户已加载，共 ${filtered.length} 个候选账号` }, request);
+      const result = await listManagedUserParentOptions(currentUser, body.role);
+      return createApiSuccessResponse(result, request);
     }
 
     // 获取用户列表 (管理员/销售)
@@ -156,21 +126,8 @@ export async function POST(request: NextRequest) {
       if (!currentUser || (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES)) {
         return forbidden(request, '无权限');
       }
-
-      const scope = await getHierarchyScope(currentUser);
-
-      const users = await db.user.findMany({
-        where: {
-          OR: [
-            { id: { in: Array.from(scope.visibleIds) } },
-            { level: currentUser.level },
-          ],
-        },
-        select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdAt: true, createdById: true },
-        orderBy: { createdAt: 'desc' }
-      });
-
-      return createApiSuccessResponse({ data: users, message: `用户列表已加载，共 ${users.length} 个账号` }, request);
+      const result = await listManagedUsers(currentUser);
+      return createApiSuccessResponse(result, request);
     }
 
     // 删除用户 (管理员/销售)
@@ -186,18 +143,6 @@ export async function POST(request: NextRequest) {
 
       if (userId === currentUser.id) {
         return badRequest(request, '不能删除自己', apiErrorCodes.SELF_ACTION_FORBIDDEN);
-      }
-
-      const target = await db.user.findUnique({
-        where: { id: userId },
-        select: { id: true, role: true, level: true },
-      });
-      if (!target) {
-        return notFound(request, '用户不存在');
-      }
-      const scope = await getHierarchyScope(currentUser);
-      if (!scope.descendantIds.has(target.id) || target.level <= currentUser.level) {
-        return forbidden(request, '仅可删除下级用户', apiErrorCodes.ROLE_NOT_ALLOWED);
       }
 
       const result = await deleteManagedUser(currentUser, userId);

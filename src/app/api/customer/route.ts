@@ -8,7 +8,6 @@ import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-s
 import { withAuth } from '@/lib/route-auth';
 import { customerAccessWhere, mapPrismaWriteError, resolveCustomerOwnerId } from '@/lib/customer-scope';
 import {
-  canSalesEditExtendedCustomerFields,
   createCustomerRecord,
   deleteCustomerRecord,
   processCustomerImportRows,
@@ -16,7 +15,10 @@ import {
   type CustomerPayload,
   type ImportRow,
 } from '@/lib/customer-service';
-import { filterRowsBySearch } from '@/lib/text-search';
+import {
+  listCustomerOwnerOptions,
+  listCustomers,
+} from '@/lib/customer-read-service';
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -56,27 +58,6 @@ function parsePayload(body: Record<string, unknown>): CustomerPayload {
   };
 }
 
-async function listCustomerOwnerOptions(currentUser: { id: string; role: UserRole }) {
-  if (currentUser.role === UserRole.ADMIN) {
-    return db.user.findMany({
-      where: {
-        OR: [
-          { id: currentUser.id },
-          { role: UserRole.SALES },
-        ],
-      },
-      select: { id: true, email: true, name: true, role: true, level: true },
-      orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-    });
-  }
-
-  const self = await db.user.findUnique({
-    where: { id: currentUser.id },
-    select: { id: true, email: true, name: true, role: true, level: true },
-  });
-  return self ? [self] : [];
-}
-
 function buildImportResponse(processed: Awaited<ReturnType<typeof processCustomerImportRows>>, request: NextRequest) {
   const localizedMessage = processed.success
     ? localizeApiSuccessMessage(processed.message, request)
@@ -113,8 +94,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const search = trimStr(searchParams.get('search'));
 
   if (action === 'owner-options') {
-    const options = await listCustomerOwnerOptions({ id: currentUser.id, role: currentUser.role as UserRole });
-    return createApiSuccessResponse({ data: options, message: `客户归属候选已加载，共 ${options.length} 个账号` }, request);
+    const result = await listCustomerOwnerOptions(currentUser);
+    return createApiSuccessResponse(result, request);
   }
 
   if (action === 'import-template') {
@@ -156,37 +137,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     });
   }
 
-  const where: Record<string, unknown> = {
-    ...customerAccessWhere(currentUser),
-  };
-  if (mark) {
-    where.mark = { equals: mark };
-  }
-
-  const rows = await db.customer.findMany({
-    where,
-    include: {
-      owner: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          level: true,
-        },
-      },
-    },
-    orderBy: [{ mark: 'asc' }, { createdAt: 'desc' }],
-  });
-
-  if (currentUser.role === UserRole.ADMIN) {
-    const data = filterRowsBySearch(rows, search);
-    return createApiSuccessResponse({ data, message: `客户列表已加载，共 ${data.length} 个客户` }, request);
-  }
-
-  const showExtended = await canSalesEditExtendedCustomerFields();
-  const data = filterRowsBySearch(rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search);
-  return createApiSuccessResponse({ data, message: `客户列表已加载，共 ${data.length} 个客户` }, request);
+  const result = await listCustomers(currentUser, { mark, search });
+  return createApiSuccessResponse(result, request);
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {

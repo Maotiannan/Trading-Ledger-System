@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { UserRole } from '@prisma/client';
-import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import {
   addInvoiceOrder,
   applyInvoiceRematch,
-  buildOrderVisibilityWhere,
   createInvoiceRecord,
   deleteInvoiceOrder,
   deleteInvoiceRecord,
@@ -21,21 +19,12 @@ import {
   updateInvoiceOrder,
   type InvoiceImportInputRow,
 } from '@/lib/invoice-service';
-import { deriveOrderGroupKey } from '@/lib/order-group';
-import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
+import {
+  listInvoiceRecords,
+  listOrderMatchCandidates,
+  listOrderReceiptRecords,
+} from '@/lib/invoice-read-service';
 import { withAuth, withRole } from '@/lib/route-auth';
-import { filterRowsBySearch } from '@/lib/text-search';
-import { getHierarchyScope } from '@/lib/user-hierarchy';
-
-function buildInvoiceVisibilityWhere(ownerIds: string[]) {
-  return {
-    OR: [
-      { createdBy: { in: ownerIds } },
-      { orders: { some: { createdBy: { in: ownerIds } } } },
-      { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
-    ],
-  };
-}
 
 function mapInvoiceImportRows(rowsInput: unknown[]): InvoiceImportInputRow[] {
   return rowsInput.map((row, index) => {
@@ -79,8 +68,6 @@ function toImportResponse(
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const scope = await getHierarchyScope(currentUser);
-    const ownerIds = Array.from(scope.ownerVisibleIds);
     const { searchParams } = new URL(request.url);
     const action = (searchParams.get('action') || '').trim();
     const search = (searchParams.get('search') || '').trim();
@@ -123,144 +110,17 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (orderId) {
-      const accessibleOrder = await db.order.findFirst({
-        where: {
-          id: orderId,
-          ...buildOrderVisibilityWhere(ownerIds),
-        },
-        select: { id: true },
-      });
-      if (!accessibleOrder) return createApiSuccessResponse({ data: [], message: '订单收据记录已加载，共 0 条' }, request);
-
-      const receipts = await db.receipt.findMany({
-        where: {
-          orderId,
-          OR: [
-            { createdBy: { in: ownerIds } },
-            { customer: { createdBy: { in: ownerIds } } },
-          ],
-        },
-        select: {
-          id: true,
-          receiptNo: true,
-          usd: true,
-          status: true,
-          date: true,
-          createdAt: true,
-          payer: true,
-          invNo: true,
-          orderNo: true,
-        },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-        take: 30,
-      });
-      return createApiSuccessResponse({ data: receipts, message: `订单收据记录已加载，共 ${receipts.length} 条` }, request);
+      const result = await listOrderReceiptRecords(currentUser, orderId);
+      return createApiSuccessResponse(result, request);
     }
 
     if (orderNo) {
-      const visibilityWhere = buildOrderVisibilityWhere(ownerIds);
-      const matchedOrderId = await findOrderIdByNoOrAlias(orderNo, visibilityWhere);
-      if (matchedOrderId) {
-        const matchedOrder = await db.order.findUnique({
-          where: { id: matchedOrderId },
-          select: {
-            id: true,
-            orderNo: true,
-            customerId: true,
-            customerMark: true,
-            customerName: true,
-            customerPhone: true,
-            customerCity: true,
-            needsCustomerFix: true,
-            createdAt: true,
-          },
-        });
-        const data = matchedOrder ? [matchedOrder] : [];
-        return createApiSuccessResponse({ data, message: `订单匹配候选已加载，共 ${data.length} 条` }, request);
-      }
-
-      const targetKey = deriveOrderGroupKey(orderNo);
-      if (!targetKey) {
-        return createApiSuccessResponse({ data: [], message: '订单匹配候选已加载，共 0 条' }, request);
-      }
-      const allOrders = await db.order.findMany({
-        where: visibilityWhere,
-        select: {
-          id: true,
-          orderNo: true,
-          customerId: true,
-          customerMark: true,
-          customerName: true,
-          customerPhone: true,
-          customerCity: true,
-          needsCustomerFix: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      const matched = allOrders.filter((row) => deriveOrderGroupKey(row.orderNo) === targetKey);
-      return createApiSuccessResponse({ data: matched, message: `订单匹配候选已加载，共 ${matched.length} 条` }, request);
+      const result = await listOrderMatchCandidates(currentUser, orderNo);
+      return createApiSuccessResponse(result, request);
     }
 
-    const invoices = await db.invoice.findMany({
-      where: buildInvoiceVisibilityWhere(ownerIds),
-      include: {
-        orders: {
-          where: buildOrderVisibilityWhere(ownerIds),
-          include: {
-            receipts: {
-              where: {
-                orderId: { not: null },
-                OR: [
-                  { createdBy: { in: ownerIds } },
-                  { customer: { createdBy: { in: ownerIds } } },
-                ],
-              },
-              select: { usd: true, status: true },
-            },
-          },
-        },
-        creator: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const result = invoices.map((invoice) => {
-      const invAmount = invoice.orders.reduce((sum, order) => sum + Number(order.amount), 0);
-      const receivedAmount = invoice.orders.reduce((sum, order) => (
-        sum + order.receipts.reduce((receiptSum, receipt) => receiptSum + Number(receipt.usd), 0)
-      ), 0);
-      const invBalance = invAmount - receivedAmount;
-
-      return {
-        ...invoice,
-        invAmount,
-        invBalance,
-        orders: invoice.orders.map((order) => {
-          const orderReceived = order.receipts.reduce((sum, receipt) => sum + Number(receipt.usd), 0);
-          return {
-            ...order,
-            orderBalance: Number(order.amount) - orderReceived,
-            isSystemOrder: false,
-          };
-        }),
-      };
-    });
-
-    const searchedResult = filterRowsBySearch(result, search);
-    searchedResult.sort((a, b) => {
-      const rank = (invNo: string) => {
-        if (invNo === 'DEPOSIT_POOL') return 0;
-        if (invNo === 'Un_Associated') return 1;
-        return 2;
-      };
-      const rankA = rank(a.invNo);
-      const rankB = rank(b.invNo);
-      if (rankA !== rankB) return rankA - rankB;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-
-    return createApiSuccessResponse({ data: searchedResult, message: `账单列表已加载，共 ${searchedResult.length} 个账单` }, request);
+    const result = await listInvoiceRecords(currentUser, search);
+    return createApiSuccessResponse(result, request);
   } catch (error) {
     console.error('Get invoices error:', error);
     return toApiErrorResponse(error, {

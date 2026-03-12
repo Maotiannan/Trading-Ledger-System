@@ -28,7 +28,7 @@
 - 第一批 workspace hook 测试已覆盖 `invoice / customer / settings`，后续第二、第三批已继续扩到 `receipt / detail / swift / users`
 - `settings` 前端读路径已开始通过 `read-model` 收口：审计元信息、筛选默认值、分页参数 clamp、bootstrap/audit/export-history 归一化都集中在 `src/components/workspace/modules/settings/read-model.ts`，设置页不再直接消费混合响应结构
 - `settings` 审计展示层已新增独立 `view-model`：审计摘要、导出历史摘要、行级展示文本和导出选项都在 `src/components/workspace/modules/settings/view-model.ts` 统一生成，组件层不再直接拼接原始 API 行结构
-- 当前 Jest 已扩展到 `38 suites / 279 tests`；coverage global threshold 现为 `branches 64 / functions 84 / lines 82 / statements 80`
+- 当前 Jest 已扩展到 `38 suites / 290 tests`；coverage global threshold 现为 `branches 64 / functions 84 / lines 82 / statements 80`
 - 第二批隔离 API case 已覆盖层级权限边界与删除审批链路，当前 case 已包括：鉴权/层级权限、客户导入与可见域、账单主链路、设置与报表、删除审批副作用回退
 - 隔离 API case 已扩到 `8` 组，新增 `Receipt -> Detail -> Swift -> mark-received` 生命周期闭环，以及 SWIFT 金额容差 `±5 / ±6 / ±50 / ±51` 边界与错误 SWIFT 直接删除回归
 - 为保证 GitHub Actions 的 `npm ci` 与本地依赖树一致，已通过 `npm overrides` 将 transitive `@swc/helpers` 固定到 `0.5.19`，避免 lockfile 在 Node20/npm10 环境下失配
@@ -961,6 +961,13 @@ src/
 - 🧠 前端错误消费收口为“保留服务端具体文案，错误码只做兜底”：`workspace api client` 不再把详细错误覆写成 `Invalid request` 这类通用文案，避免丢失 `OCR_DISABLED`、容差边界等关键细节。
 - 🧪 针对性补测：新增 `api-error-catalog.test.ts`，扩展 `settings-service / use-settings-actions / use-customer-actions / invoice-service`，并修正 isolated API 用例对中英错误文案的脆弱断言；Jest 扩展到 `26 suites / 141 tests`。
 - 📈 coverage threshold 第十一次小步上调：global 提升到 `50 / 75 / 69 / 67`，并优先提高 `use-customer-actions` 到 `40 / 65 / 50 / 50`、`invoice-service` 到 `39 / 38 / 47 / 44`；本地 `build + test:ci` 全绿。
+
+### v1.0.77 (2026-03-12)
+
+- ✅ 继续补 `settings-write-service` 与 `report-service` 边界：`settings-write-service` 新增“非管理员全库清空拒绝、缺少目标账号/密码、空模块集、目标账号不存在、无变更、非法数值、合法布尔值更新”等分支；`report-service` 新增“Excel fallback 字段为空、PDF 大量收据触发分页截断、导出计数审计”回归。
+- 🎭 新增稳定 Playwright 报表导出闭环：`tests/e2e/dashboard-report.spec.ts` 直接验证 Dashboard 导出按钮、浏览器下载文件名、成功摘要弹窗，不依赖人工检查。
+- 📈 coverage threshold 第二十五次小步上调：保留 global `64 / 84 / 82 / 80` 不变，只提升 `settings-write-service` 到 `65 / 80 / 75 / 75`，并将 `report-service` 首次纳入门禁 `80 / 100 / 90 / 90`。当前全局 coverage 为 `83.31 / 65.94 / 85.85 / 85.91`，Jest 扩展到 `38 suites / 290 tests`。
+- 🏷️ 版本提升到 `1.0.77`；本地容器更新后，设置页顶部应显示 `1.0.77`。
 
 ### v1.0.76 (2026-03-12)
 

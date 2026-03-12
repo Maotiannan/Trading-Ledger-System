@@ -166,4 +166,56 @@ describe('report-service', () => {
       }),
     }));
   });
+
+  it('exports excel report when receipt fallback fields are empty', async () => {
+    mockDb.invoice.findMany.mockResolvedValueOnce([]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      {
+        receiptNo: '',
+        orderNo: null,
+        usd: 10,
+        status: 'SR_Received',
+        date: null,
+      },
+    ]);
+    mockDb.detail.findMany.mockResolvedValueOnce([]);
+    mockDb.swift.findMany.mockResolvedValueOnce([]);
+
+    const result = await exportReport(makeUser() as never, 'excel');
+
+    expect(result.contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    expect(result.fileBuffer.length).toBeGreaterThan(0);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        format: 'excel',
+        receiptCount: 1,
+      }),
+    }));
+  });
+
+  it('exports pdf report when receipts overflow one page row budget and order number is missing', async () => {
+    mockDb.invoice.count.mockResolvedValueOnce(1);
+    mockDb.receipt.count.mockResolvedValueOnce(25);
+    mockDb.detail.count.mockResolvedValueOnce(0);
+    mockDb.swift.count.mockResolvedValueOnce(0);
+    mockDb.receipt.findMany.mockResolvedValueOnce(
+      Array.from({ length: 25 }, (_, index) => ({
+        orderNo: index === 0 ? null : `IB-${index + 1}`,
+        usd: 10 + index,
+        status: 'MATCHED',
+        createdAt: new Date(`2026-03-${String((index % 9) + 1).padStart(2, '0')}T08:00:00.000Z`),
+      }))
+    );
+
+    const result = await exportReport(makeUser() as never, 'pdf');
+
+    expect(result.contentType).toBe('application/pdf');
+    expect(result.fileBuffer.length).toBeGreaterThan(0);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        format: 'pdf',
+        receiptCount: 25,
+      }),
+    }));
+  });
 });

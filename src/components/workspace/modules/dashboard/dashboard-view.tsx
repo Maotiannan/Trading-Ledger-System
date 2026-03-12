@@ -109,6 +109,7 @@ export function Dashboard() {
             variant="outline"
             onClick={() => handleExport('excel')}
             disabled={exporting !== null}
+            data-testid="dashboard-export-excel"
           >
             {exporting === 'excel' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             {t('exportExcel')}
@@ -117,6 +118,7 @@ export function Dashboard() {
             variant="outline"
             onClick={() => handleExport('pdf')}
             disabled={exporting !== null}
+            data-testid="dashboard-export-pdf"
           >
             {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             {t('exportPdf')}

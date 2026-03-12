@@ -40,6 +40,7 @@ const customJestConfig = {
     'src/lib/invoice-service.ts',
     'src/lib/invoice-write.ts',
     'src/lib/invoice-read-service.ts',
+    'src/lib/report-service.ts',
   ],
   coverageThreshold: {
     global: {
@@ -139,10 +140,10 @@ const customJestConfig = {
       statements: 90,
     },
     './src/lib/settings-write-service.ts': {
-      branches: 55,
-      functions: 70,
-      lines: 65,
-      statements: 65,
+      branches: 65,
+      functions: 80,
+      lines: 75,
+      statements: 75,
     },
     './src/lib/swift-service.ts': {
       branches: 40,
@@ -209,6 +210,12 @@ const customJestConfig = {
       functions: 90,
       lines: 80,
       statements: 80,
+    },
+    './src/lib/report-service.ts': {
+      branches: 80,
+      functions: 100,
+      lines: 90,
+      statements: 90,
     },
   },
 };

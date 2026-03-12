@@ -1,7 +1,7 @@
 # Trading-Ledger-System TODO List
 
 > 收汇管理系统后续开发与运维清单  
-> 当前版本：v1.0.76  
+> 当前版本：v1.0.77  
 > 最后更新：2026-03-12
 
 ## P0（本周必须完成）
@@ -161,6 +161,7 @@
 - [x] `use-invoice-actions / use-customer-actions` 再补一轮失败/早退/空结果分支测试，并把两项局部门禁继续小步上调 ✅ 2026-03-12
 - [x] `settings` 页面级读模型继续收口，补齐 `use-settings-actions / customer-read-service / invoice-read-service` 边界分支并继续小步上调门禁 ✅ 2026-03-12
 - [x] 继续补齐读路径与审计导出边界：`settings-read-service` 新增 clamp/异常 metadata/负数导出上限边界测试，`report-service` 新增 PDF/Excel 导出审计回归，并将 `settings-read-service` 与 global 门禁再小步上调 ✅ 2026-03-12
+- [x] 继续补齐 `settings-write-service / report-service` 边界与报表导出 UI 闭环：新增清库参数校验/无变更/非法数值/合法布尔值更新、Excel fallback/PDF 截断/导出摘要、Dashboard 导出下载与成功提示 Playwright 回归，并抬高两项局部门禁 ✅ 2026-03-12
 
 ## P2（持续迭代）
 
@@ -184,6 +185,8 @@
 ---
 
 ## 已完成里程碑摘要
+
+- v1.0.77（2026-03-12）：继续补齐 `settings-write-service` 与 `report-service` 边界，新增非管理员全库清空拒绝、缺少目标账号/密码、空模块集、目标账号不存在、无变更、非法数值与合法布尔值更新等分支；`report-service` 新增 Excel fallback 字段为空、PDF 多行收据分页截断、导出计数审计回归；新增 `dashboard-report.spec.ts`，稳定验证 Dashboard 报表导出下载与成功摘要弹窗；coverage threshold 第二十五次提升，将 `settings-write-service` 提升到 `65/80/75/75`，并将 `report-service` 首次纳入 `80/100/90/90`；Jest 扩展到 `38 suites / 290 tests`
 
 - v1.0.76（2026-03-12）：继续补齐 `settings-read-service` 的审计导出边界，新增“审计能力最小值 clamp、负数 exportLimit 回退为 1 并触发 truncated、导出历史异常 metadata 归一化”等测试；`report-service` 新增 PDF 导出计数审计与 Excel 可见范围/汇总回归；coverage threshold 第二十四次提升到 `64/84/82/80`，并将 `settings-read-service` 提升到 `80/97/95/90`；Jest 扩展到 `38 suites / 279 tests`
 

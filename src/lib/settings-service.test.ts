@@ -769,6 +769,51 @@ describe('settings-service', () => {
     });
   });
 
+  it('rejects invalid numeric config values', async () => {
+    await expect(updateSystemSettings(makeUser(), {
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '-1',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: 'DETAIL_RECEIPT_MATCH_TOLERANCE 必须为不小于 0 的数字',
+    });
+  });
+
+  it('accepts valid boolean config values and records the change', async () => {
+    mockDb.systemSetting.upsert.mockResolvedValue(undefined);
+
+    const result = await updateSystemSettings(makeUser(), {
+      OCR_DISABLED: 'true',
+    });
+
+    expect(result.message).toBe('配置已更新');
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { key: 'OCR_DISABLED' },
+      update: expect.objectContaining({
+        value: 'true',
+      }),
+    }));
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        updatedKeys: ['OCR_DISABLED'],
+      }),
+    }));
+  });
+
+  it('rejects invalid settings payload objects', async () => {
+    await expect(updateSystemSettings(makeUser(), null)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '配置参数无效',
+    });
+  });
+
+  it('returns no-change when no editable settings are provided', async () => {
+    const result = await updateSystemSettings(makeUser(), {});
+
+    expect(result).toEqual({ message: '无变更' });
+    expect(mockDb.systemSetting.upsert).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
   it('tests OCR connectivity for admins and returns detail text', async () => {
     mockTestOcrConnectivity.mockResolvedValueOnce({
       success: true,
@@ -804,6 +849,35 @@ describe('settings-service', () => {
     expect(mockDb.auditLog.deleteMany).toHaveBeenCalled();
   });
 
+  it('rejects full business purge for non-admin users', async () => {
+    await expect(purgeBusinessData(makeUser({ role: UserRole.SALES, level: 3 }))).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+    });
+  });
+
+  it('rejects branch purge when target or password is missing', async () => {
+    await expect(purgeBranchBusinessData(makeUser(), {
+      targetUserId: 'sales-1',
+      password: '',
+      modules: ['all'],
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '缺少目标账号或密码',
+    });
+  });
+
+  it('rejects branch purge when selected modules resolve to empty set', async () => {
+    await expect(purgeBranchBusinessData(makeUser(), {
+      targetUserId: 'sales-1',
+      password: 'Admin@2026!',
+      modules: ['unknown-module'],
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '至少选择一个清理模块',
+    });
+  });
+
   it('rejects branch purge when admin password is wrong', async () => {
     mockDb.user.findUnique.mockResolvedValueOnce({ id: 'admin-1', password: 'hashed' });
     mockVerifyPassword.mockResolvedValueOnce(false);
@@ -816,6 +890,53 @@ describe('settings-service', () => {
       code: 'BAD_REQUEST',
       message: '密码错误',
     });
+  });
+
+  it('rejects branch purge when target account does not exist', async () => {
+    mockDb.user.findUnique
+      .mockResolvedValueOnce({ id: 'admin-1', password: 'hashed' })
+      .mockResolvedValueOnce(null);
+    mockVerifyPassword.mockResolvedValueOnce(true);
+
+    await expect(purgeBranchBusinessData(makeUser(), {
+      targetUserId: 'missing-user',
+      password: 'Admin@2026!',
+      modules: ['invoice'],
+    })).rejects.toMatchObject({
+      code: 'RESOURCE_NOT_FOUND',
+      message: '目标账户不存在',
+    });
+  });
+
+  it('purges only the requested branch modules when a subset is selected', async () => {
+    mockDb.user.findUnique
+      .mockResolvedValueOnce({ id: 'admin-1', password: 'hashed' })
+      .mockResolvedValueOnce({ id: 'sales-1', role: UserRole.SALES, email: 'sales@example.com', name: 'Sales', level: 3 });
+    mockVerifyPassword.mockResolvedValueOnce(true);
+    mockDb.user.findMany.mockResolvedValueOnce([
+      { id: 'admin-1', parentId: null },
+      { id: 'sales-1', parentId: 'admin-1' },
+      { id: 'user-1', parentId: 'sales-1' },
+    ]);
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', invoiceId: 'invoice-1' }]);
+    mockDb.invoice.findMany.mockResolvedValueOnce([{ id: 'invoice-1' }]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ id: 'receipt-1' }]);
+    mockDb.detail.findMany.mockResolvedValueOnce([{ id: 'detail-1' }]);
+    mockDb.swift.findMany.mockResolvedValueOnce([{ id: 'swift-1', detailId: 'detail-1' }]);
+    mockDb.customer.findMany.mockResolvedValueOnce([{ id: 'customer-1' }]);
+
+    const result = await purgeBranchBusinessData(makeUser(), {
+      targetUserId: 'sales-1',
+      password: 'Admin@2026!',
+      modules: ['invoice', 'swift'],
+    });
+
+    expect(result.data.modules).toEqual(['invoice', 'swift']);
+    expect(mockDb.swift.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['swift-1'] } } });
+    expect(mockDb.order.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['order-1'] } } });
+    expect(mockDb.invoice.deleteMany).toHaveBeenCalled();
+    expect(mockDb.detail.deleteMany).not.toHaveBeenCalled();
+    expect(mockDb.customer.deleteMany).not.toHaveBeenCalled();
   });
 
   it('purges selected branch modules and preserves settings/users', async () => {

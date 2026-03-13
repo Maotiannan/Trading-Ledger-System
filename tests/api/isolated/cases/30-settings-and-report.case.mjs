@@ -1,5 +1,13 @@
 export const name = 'settings-and-report';
 
+function toLocalDateInput(value) {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default async function run(t) {
   await t.initAdmin();
   await t.loginAdmin();
@@ -34,10 +42,15 @@ export default async function run(t) {
   const auditList = await t.request('GET', '/api/settings?view=audit&limit=20', { expectedStatus: 200 });
   t.assertEqual(Array.isArray(auditList.data?.data?.items), true, 'settings audit list returns item array');
   t.assertEqual(Boolean(auditList.data?.data?.meta?.maxPageSize), true, 'settings audit list returns server paging meta');
+  const updatedToleranceAuditEntry = auditList.data?.data?.items?.find(
+    (item) => Array.isArray(item?.updatedKeys) && item.updatedKeys.includes('SWIFT_WARNING_TOLERANCE'),
+  );
+  t.assertEqual(Boolean(updatedToleranceAuditEntry?.createdAt), true, 'settings audit list includes updated tolerance entry');
+  const filterDate = toLocalDateInput(updatedToleranceAuditEntry.createdAt);
 
   const filteredAuditList = await t.request(
     'GET',
-    `/api/settings?view=audit&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_WARNING_TOLERANCE&dateFrom=2026-03-11&dateTo=2026-03-12`,
+    `/api/settings?view=audit&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_WARNING_TOLERANCE&dateFrom=${filterDate}&dateTo=${filterDate}`,
     { expectedStatus: 200 },
   );
   t.assertEqual(

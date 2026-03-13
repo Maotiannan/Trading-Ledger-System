@@ -18,7 +18,12 @@ export const WORKSPACE_ROUTES: WorkspaceRouteItem[] = [
   { id: 'users', path: '/settings', managerOnly: true },
 ];
 
-const PATH_TO_VIEW = new Map<string, WorkspaceView>(WORKSPACE_ROUTES.map((item) => [item.path, item.id]));
+const PATH_TO_VIEW = new Map<string, WorkspaceView>();
+for (const item of WORKSPACE_ROUTES) {
+  if (!PATH_TO_VIEW.has(item.path)) {
+    PATH_TO_VIEW.set(item.path, item.id);
+  }
+}
 
 export function getWorkspacePath(view: WorkspaceView): string {
   return WORKSPACE_ROUTES.find((item) => item.id === view)?.path || '/dashboard';

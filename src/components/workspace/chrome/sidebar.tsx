@@ -106,14 +106,19 @@ export function Sidebar() {
   };
 
   const handleNavigate = useCallback((view: ReturnType<typeof getWorkspaceViewFromPath>) => {
-    if (view === activeView) return;
+    const targetPath = getWorkspacePath(view);
+    if (view === activeView || targetPath === pathname) {
+      setPendingView(null);
+      setNavigationPendingView(null);
+      return;
+    }
     setPendingView(view);
     setNavigationPendingView(view);
     prefetchMenuItem(view);
     startNavigationTransition(() => {
-      router.push(getWorkspacePath(view));
+      router.push(targetPath);
     });
-  }, [activeView, prefetchMenuItem, router, setNavigationPendingView]);
+  }, [activeView, pathname, prefetchMenuItem, router, setNavigationPendingView]);
 
   return (
     <div className={`bg-white dark:bg-gray-800 border-r h-screen flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>

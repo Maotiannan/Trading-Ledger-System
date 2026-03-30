@@ -68,6 +68,11 @@ export default async function run(t) {
   });
   t.assertOk(Boolean(createCustomer.data?.data?.id), 'sales-owned customer create works');
 
+  await t.request('POST', '/api/locale', {
+    json: { locale: 'en' },
+    expectedStatus: 200,
+  });
+
   const duplicatePhoneAllowed = await t.request('POST', '/api/customer', {
     json: {
       action: 'create',
@@ -82,6 +87,11 @@ export default async function run(t) {
   });
   t.assertOk(Boolean(duplicatePhoneAllowed.data?.data?.id), 'duplicate phone is allowed when MARK and NAME differ');
   t.assertEqual(duplicatePhoneAllowed.data?.data?.phoneConflict, true, 'duplicate phone create returns conflict hint');
+  t.assertEqual(
+    duplicatePhoneAllowed.data?.data?.phoneConflictMessage,
+    'Phone number conflict, please update it.',
+    'duplicate phone create returns localized phone conflict message',
+  );
 
   const hardDuplicate = await t.request('POST', '/api/customer', {
     json: {

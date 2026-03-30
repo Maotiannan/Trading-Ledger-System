@@ -44,6 +44,20 @@ function toSalesView<T extends Record<string, unknown>>(row: T, showExtended: bo
   };
 }
 
+function localizeCustomerResponseData<T>(value: T, request: NextRequest): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => localizeCustomerResponseData(item, request)) as T;
+  }
+  if (!value || typeof value !== 'object') return value;
+
+  const row = value as Record<string, unknown>;
+  const nextRow: Record<string, unknown> = { ...row };
+  if (typeof row.phoneConflictMessage === 'string' && row.phoneConflictMessage) {
+    nextRow.phoneConflictMessage = localizeApiSuccessMessage(row.phoneConflictMessage, request) || row.phoneConflictMessage;
+  }
+  return nextRow as T;
+}
+
 function parsePayload(body: Record<string, unknown>): CustomerPayload {
   return {
     mark: trimStr(body.mark),
@@ -138,7 +152,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   }
 
   const result = await listCustomers(currentUser, { mark, search });
-  return createApiSuccessResponse(result, request);
+  return createApiSuccessResponse({ ...result, data: localizeCustomerResponseData(result.data, request) }, request);
 });
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
@@ -268,17 +282,23 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     if (action === 'create') {
       const result = await createCustomerRecord(currentUser, parsePayload(body), trimStr(body.ownerId) || null);
       if (currentUser.role === UserRole.ADMIN) {
-        return createApiSuccessResponse({ data: result.data, message: result.message }, request);
+        return createApiSuccessResponse({ data: localizeCustomerResponseData(result.data, request), message: result.message }, request);
       }
-      return createApiSuccessResponse({ data: toSalesView(result.data as Record<string, unknown>, result.showExtended), message: result.message }, request);
+      return createApiSuccessResponse({
+        data: localizeCustomerResponseData(toSalesView(result.data as Record<string, unknown>, result.showExtended), request),
+        message: result.message,
+      }, request);
     }
 
     if (action === 'update') {
       const result = await updateCustomerRecord(currentUser, trimStr(body.id), parsePayload(body), trimStr(body.ownerId) || null);
       if (currentUser.role === UserRole.ADMIN) {
-        return createApiSuccessResponse({ data: result.data, message: result.message }, request);
+        return createApiSuccessResponse({ data: localizeCustomerResponseData(result.data, request), message: result.message }, request);
       }
-      return createApiSuccessResponse({ data: toSalesView(result.data as Record<string, unknown>, result.showExtended), message: result.message }, request);
+      return createApiSuccessResponse({
+        data: localizeCustomerResponseData(toSalesView(result.data as Record<string, unknown>, result.showExtended), request),
+        message: result.message,
+      }, request);
     }
 
     if (action === 'delete') {

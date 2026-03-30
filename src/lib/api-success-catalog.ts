@@ -16,6 +16,7 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   '客户已删除': { zh: '客户已删除', en: 'Customer deleted' },
   '客户已创建': { zh: '客户已创建', en: 'Customer created' },
   '客户已更新': { zh: '客户已更新', en: 'Customer updated' },
+  '手机号冲突，请修改': { zh: '手机号冲突，请修改', en: 'Phone number conflict, please update it.' },
   '申请已拒绝': { zh: '申请已拒绝', en: 'Request rejected' },
   '删除成功，状态已回退': { zh: '删除成功，状态已回退', en: 'Deletion completed and status reverted' },
   '账单已保存': { zh: '账单已保存', en: 'Invoice saved' },

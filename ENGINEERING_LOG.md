@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.86  
+> 当前版本：v1.0.87  
 > 最后更新：2026-03-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 继续扫清客户手机号冲突提示的 i18n 漏点：`customer` API 的嵌套 `phoneConflictMessage` 现在也按请求语言本地化，隔离 API 新增英文断言 ✅ 2026-03-30
 - [x] 修复客户手机号冲突提示 i18n 漏洞：英文界面下客户列表 tooltip、客户编辑弹窗和保存后 alert 不再直接显示服务端中文文案，而是统一走前端当前语言文案 ✅ 2026-03-30
 - [x] 客户手机号规则收敛：允许手机号重复，不再把 `PHONE` 作为硬冲突；仅保留 `MARK + NAME` 为客户硬重复规则，并在创建/编辑/导入/修复链路统一生效 ✅ 2026-03-30
 - [x] 客户管理冲突可视化：客户列表与客户编辑弹窗对同绑定池手机号冲突做红色提示，前端对保存异常补齐显式提示，不再只在浏览器控制台暴露 ✅ 2026-03-30
@@ -197,6 +198,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.87（2026-03-30）：继续做同类多语言风险扫尾；`customer` API 的嵌套 `phoneConflictMessage` 现在也通过 `localizeApiSuccessMessage` 按请求语言本地化，`customer-import-and-scope` isolated API case 新增英文 locale 断言，确认外部 API 调用拿到的冲突提示不再固定中文
 - v1.0.86（2026-03-30）：修复客户手机号冲突提示的 i18n 回退问题；客户列表 tooltip 不再读取服务端中文 `phoneConflictMessage` 直接展示，`use-customer-actions` 在保存后对手机号冲突也改为使用当前语言的前端文案；补齐英文界面的 `customer-form-dialog` 和 `use-customer-actions` 回归测试，并重新验证构建通过
 - v1.0.85（2026-03-30）：客户手机号规则继续收敛；后端与导入/修复链路允许手机号重复，仅 `(MARK + NAME)` 继续作为硬冲突；客户列表与编辑弹窗新增手机号冲突红色提示与悬浮说明，`use-customer-actions` 补齐保存异常提示，避免仅在控制台暴露；新增 `customer-scope / customer-read-service / customer-form-dialog / use-customer-actions` 回归测试、`invoice-branch-assignment.spec.ts` Playwright 闭环，以及报表导出成功摘要前端断言；本地与隔离回归均通过
 - v1.0.82（2026-03-13）：修复 workspace 路由别名冲突导致的设置页重复点击卡住问题；`/settings` 不再被误判为 `users` 视图，侧边栏同页点击增加 path 级短路保护；新增 `routes.test.ts` 覆盖 `/settings -> settings` 的回归断言

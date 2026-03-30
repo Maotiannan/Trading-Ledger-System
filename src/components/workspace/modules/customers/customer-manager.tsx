@@ -22,6 +22,16 @@ import {
 import type { CustomerOwnerOption } from './types';
 import { useCustomerActions, useCustomerForms, useCustomerImportColumns } from './hooks';
 
+function normalizePhoneToken(value: unknown): string {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function splitPhoneTokens(value: unknown): string[] {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+  return Array.from(new Set(raw.split('/').map((part) => normalizePhoneToken(part)).filter(Boolean)));
+}
+
 export function CustomerManager() {
   const tx = useUiText();
   const { user } = useStore();
@@ -150,6 +160,19 @@ export function CustomerManager() {
     if (normalized.length <= maxLength) return normalized;
     return `${normalized.slice(0, maxLength)}...`;
   };
+  const activeOwnerId = isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId;
+  const formPhoneConflict = (() => {
+    const phoneTokens = splitPhoneTokens(form.phone);
+    if (phoneTokens.length === 0) return false;
+    const editingId = editing ? String(editing.id || '') : '';
+    return customers.some((row) => {
+      const rowOwnerId = String(row.ownerId || '');
+      if (rowOwnerId !== activeOwnerId) return false;
+      if (editingId && String(row.id || '') === editingId) return false;
+      const rowTokens = splitPhoneTokens(row.phone);
+      return rowTokens.some((token) => phoneTokens.includes(token));
+    });
+  })();
 
   return (
     <div className="space-y-6">
@@ -210,6 +233,8 @@ export function CustomerManager() {
         isAdmin={isAdmin}
         ownerOptions={ownerOptions}
         tx={tx}
+        phoneConflict={formPhoneConflict}
+        phoneConflictMessage={tx('手机号冲突，请修改', 'Phone number conflict, please update it.')}
         onOpenChange={setShowCreate}
         onFormChange={(updater) => setForm(updater)}
         onSubmit={handleCreateOrUpdate}

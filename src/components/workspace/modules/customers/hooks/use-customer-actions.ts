@@ -88,66 +88,82 @@ export function useCustomerActions({
   }, [defaultOwnerId, isAdmin, setForm, setImportOwnerId, setOwnerOptions]);
 
   const handleCreateOrUpdate = useCallback(async () => {
-    const payload = {
-      ...(editing ? { action: 'update', id: editing.id } : { action: 'create' }),
-      mark: form.mark,
-      orderName: form.orderName,
-      name: form.name,
-      phone: form.phone,
-      city: form.city,
-      consignee: form.consignee,
-      companyName: form.companyName || null,
-      companyAddress: form.companyAddress || null,
-      credit: form.credit === '' ? null : Number(form.credit),
-      ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
-    };
-    const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
-    if (!result.success) {
-      alert(getErrorMessage(result, tx('保存失败', 'Save failed')));
-      return;
+    try {
+      const payload = {
+        ...(editing ? { action: 'update', id: editing.id } : { action: 'create' }),
+        mark: form.mark,
+        orderName: form.orderName,
+        name: form.name,
+        phone: form.phone,
+        city: form.city,
+        consignee: form.consignee,
+        companyName: form.companyName || null,
+        companyAddress: form.companyAddress || null,
+        credit: form.credit === '' ? null : Number(form.credit),
+        ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
+      };
+      const result = await apiCall('customer', { method: 'POST', body: JSON.stringify(payload) });
+      if (!result.success) {
+        alert(getErrorMessage(result, tx('保存失败', 'Save failed')));
+        return;
+      }
+      setShowCreate(false);
+      setEditing(null);
+      resetForm();
+      await loadCustomers();
+      const phoneConflictMessage = String(result.data?.phoneConflictMessage || '');
+      if (phoneConflictMessage) {
+        alert(phoneConflictMessage);
+      }
+    } catch (error) {
+      alert(getErrorMessage(error, tx('保存失败', 'Save failed')));
     }
-    setShowCreate(false);
-    setEditing(null);
-    resetForm();
-    await loadCustomers();
   }, [defaultOwnerId, editing, form, importOwnerId, isAdmin, loadCustomers, resetForm, setEditing, setShowCreate, tx]);
 
   const handleDelete = useCallback(async (id: string) => {
     if (!isAdmin) return;
     if (!confirm(tx('确定删除该客户吗？', 'Delete this customer?'))) return;
-    const result = await apiCall('customer', { method: 'POST', body: JSON.stringify({ action: 'delete', id }) });
-    if (!result.success) {
-      alert(getErrorMessage(result, tx('删除失败', 'Delete failed')));
-      return;
+    try {
+      const result = await apiCall('customer', { method: 'POST', body: JSON.stringify({ action: 'delete', id }) });
+      if (!result.success) {
+        alert(getErrorMessage(result, tx('删除失败', 'Delete failed')));
+        return;
+      }
+      await loadCustomers();
+    } catch (error) {
+      alert(getErrorMessage(error, tx('删除失败', 'Delete failed')));
     }
-    await loadCustomers();
   }, [isAdmin, loadCustomers, tx]);
 
   const submitFix = useCallback(async () => {
     if (!fixingTarget) return;
-    const payload = {
-      action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
-      ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
-      mark: form.mark,
-      orderName: form.orderName,
-      name: form.name,
-      phone: form.phone,
-      city: form.city,
-      consignee: form.consignee,
-      companyName: form.companyName || null,
-      companyAddress: form.companyAddress || null,
-      credit: form.credit === '' ? null : Number(form.credit),
-      ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
-    };
-    const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
-    if (!result.success) {
-      alert(getErrorMessage(result, tx('修复失败', 'Fix failed')));
-      return;
+    try {
+      const payload = {
+        action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
+        ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
+        mark: form.mark,
+        orderName: form.orderName,
+        name: form.name,
+        phone: form.phone,
+        city: form.city,
+        consignee: form.consignee,
+        companyName: form.companyName || null,
+        companyAddress: form.companyAddress || null,
+        credit: form.credit === '' ? null : Number(form.credit),
+        ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
+      };
+      const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
+      if (!result.success) {
+        alert(getErrorMessage(result, tx('修复失败', 'Fix failed')));
+        return;
+      }
+      setFixingTarget(null);
+      resetForm();
+      await loadCustomers();
+      await loadFixes();
+    } catch (error) {
+      alert(getErrorMessage(error, tx('修复失败', 'Fix failed')));
     }
-    setFixingTarget(null);
-    resetForm();
-    await loadCustomers();
-    await loadFixes();
   }, [defaultOwnerId, fixingTarget, form, importOwnerId, isAdmin, loadCustomers, loadFixes, resetForm, setFixingTarget, tx]);
 
   const downloadCustomerImportTemplate = useCallback(async () => {

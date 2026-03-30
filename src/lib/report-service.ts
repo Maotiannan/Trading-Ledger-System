@@ -164,6 +164,7 @@ async function exportPdf(currentUser: CurrentUser) {
 
 export async function exportReport(currentUser: CurrentUser, format: ReportExportFormat) {
   const result = format === 'excel' ? await exportExcel(currentUser) : await exportPdf(currentUser);
+  const summaryMessage = `报表导出已生成：当前可见范围内账单 ${result.counts.invoiceCount}，收据 ${result.counts.receiptCount}，明细 ${result.counts.detailCount}，SWIFT ${result.counts.swiftCount}`;
 
   await recordAuditEvent({
     action: auditActions.REPORT_EXPORT,
@@ -178,6 +179,6 @@ export async function exportReport(currentUser: CurrentUser, format: ReportExpor
   return {
     ...result,
     fileName: buildReportFileName(format === 'excel' ? 'xlsx' : 'pdf'),
-    message: '报表导出已生成',
+    message: summaryMessage,
   };
 }

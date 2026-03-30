@@ -80,6 +80,13 @@ const containsSuccessMessages: Array<[string, Record<SupportedLocale, string>]> 
     zh: ' 分支业务数据（系统配置/用户配置保留）',
     en: ' (system settings and user configuration preserved)',
   }],
+  ['报表导出已生成：当前可见范围内账单 ', {
+    zh: '报表导出已生成：当前可见范围内账单 ',
+    en: 'Report export generated: visible invoices ',
+  }],
+  ['，收据 ', { zh: '，收据 ', en: ', receipts ' }],
+  ['，明细 ', { zh: '，明细 ', en: ', details ' }],
+  ['，SWIFT ', { zh: '，SWIFT ', en: ', SWIFT ' }],
 ];
 
 const reverseLookup = new Map<string, Record<SupportedLocale, string>>();

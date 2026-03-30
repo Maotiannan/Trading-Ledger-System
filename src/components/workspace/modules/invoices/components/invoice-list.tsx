@@ -203,13 +203,13 @@ export function InvoiceList({
                           value={invoiceBranchAdminSelections[invoice.id] || undefined}
                           onValueChange={(value) => onInvoiceBranchAdminSelect(invoice.id, value)}
                         >
-                          <SelectTrigger className="w-[240px]">
+                          <SelectTrigger className="w-[240px]" data-testid={`invoice-assign-admin-select-${invoice.id}`}>
                             <SelectValue placeholder={tx('分配给分支ADMIN', 'Assign to branch admin')} />
                           </SelectTrigger>
                           <SelectContent>
                             {branchAdminOptions.map((option) => (
                               <SelectItem key={option.id} value={option.id}>
-                                {option.name || option.email}
+                                {option.name ? `${option.name} (${option.email})` : option.email}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -218,6 +218,7 @@ export function InvoiceList({
                           size="sm"
                           variant="outline"
                           onClick={() => onAssignInvoiceBranchAdmin(invoice.id)}
+                          data-testid={`invoice-assign-admin-button-${invoice.id}`}
                           disabled={branchAdminLoading || assigningInvoiceId === invoice.id || !invoiceBranchAdminSelections[invoice.id]}
                         >
                           {assigningInvoiceId === invoice.id && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}

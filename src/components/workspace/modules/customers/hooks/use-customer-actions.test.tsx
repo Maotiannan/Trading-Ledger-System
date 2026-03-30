@@ -272,6 +272,94 @@ describe('useCustomerActions', () => {
     expect(loadCustomers).not.toHaveBeenCalled();
   });
 
+  it('shows alert when create request throws', async () => {
+    mockApiCall.mockRejectedValueOnce(new Error('保存失败'));
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: false,
+      defaultOwnerId: 'sales-1',
+      importOwnerId: '',
+      editing: null,
+      fixingTarget: null,
+      form: { ...formState, ownerId: '' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateOrUpdate();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('保存失败');
+    expect(loadCustomers).not.toHaveBeenCalled();
+  });
+
+  it('alerts after save when server reports a phone conflict warning', async () => {
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 'cust-1',
+        phoneConflict: true,
+        phoneConflictMessage: '手机号冲突，请修改',
+      },
+      message: '客户已更新',
+    });
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx,
+      isAdmin: true,
+      defaultOwnerId: 'admin-1',
+      importOwnerId: '',
+      editing: { id: 'cust-1' },
+      fixingTarget: null,
+      form: { ...formState, ownerId: '' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateOrUpdate();
+    });
+
+    expect(loadCustomers).toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith('手机号冲突，请修改');
+  });
+
   it('updates customer with default owner fallback for admin', async () => {
     mockApiCall.mockResolvedValueOnce({ success: true, data: { id: 'cust-1' } });
     const setImportOwnerId = jest.fn();

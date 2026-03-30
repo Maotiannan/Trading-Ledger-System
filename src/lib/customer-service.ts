@@ -8,6 +8,7 @@ import { getSystemSettings } from '@/lib/system-settings';
 import {
   assertNoCustomerScopeConflict,
   findDuplicateCustomersInScope,
+  findPhoneConflictCustomersInScope,
   mapPrismaWriteError,
   resolveCustomerOwnerId,
 } from '@/lib/customer-scope';
@@ -214,6 +215,7 @@ export async function createCustomerRecord(
   try {
     let created;
     let ownerId = currentUser.id;
+    let phoneConflict = false;
     await runInTransaction(async (tx) => {
       ownerId = await resolveCustomerOwnerId(currentUser, requestedOwnerId || null, tx);
       const duplicates = await findDuplicateCustomersInScope(ownerId, {
@@ -246,6 +248,9 @@ export async function createCustomerRecord(
           ownerId,
         },
       });
+
+      const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, created.id, tx);
+      phoneConflict = phoneConflicts.length > 0;
     });
 
     await recordAuditEvent({
@@ -261,7 +266,15 @@ export async function createCustomerRecord(
       },
     });
 
-    return { data: created, message: '客户已创建', showExtended };
+    return {
+      data: {
+        ...created,
+        phoneConflict,
+        phoneConflictMessage: phoneConflict ? '手机号冲突，请修改' : '',
+      },
+      message: '客户已创建',
+      showExtended,
+    };
   } catch (error) {
     asApiError(error, '客户创建失败');
     throw error;
@@ -299,6 +312,7 @@ export async function updateCustomerRecord(
   try {
     let updated;
     let ownerId = existing.ownerId;
+    let phoneConflict = false;
     await runInTransaction(async (tx) => {
       ownerId = await resolveCustomerOwnerId(currentUser, requestedOwnerId || existing.ownerId, tx);
       const duplicates = await findDuplicateCustomersInScope(ownerId, {
@@ -334,6 +348,9 @@ export async function updateCustomerRecord(
             : {}),
         },
       });
+
+      const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, id, tx);
+      phoneConflict = phoneConflicts.length > 0;
     });
 
     await recordAuditEvent({
@@ -351,7 +368,15 @@ export async function updateCustomerRecord(
       },
     });
 
-    return { data: updated, message: '客户已更新', showExtended };
+    return {
+      data: {
+        ...updated,
+        phoneConflict,
+        phoneConflictMessage: phoneConflict ? '手机号冲突，请修改' : '',
+      },
+      message: '客户已更新',
+      showExtended,
+    };
   } catch (error) {
     asApiError(error, '客户更新失败');
     throw error;

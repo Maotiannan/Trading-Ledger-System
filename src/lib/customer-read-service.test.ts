@@ -255,9 +255,7 @@ describe('customer-read-service', () => {
     const result = await listCustomers(makeUser(), { mark: 'IB', search: '' });
 
     expect(mockDb.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        mark: { equals: 'IB' },
-      }),
+      where: {},
     }));
     expect(result.data).toHaveLength(1);
     expect(result.message).toContain('1 个客户');
@@ -290,5 +288,71 @@ describe('customer-read-service', () => {
       action: 'CUSTOMER_LIST_VIEW',
       metadata: expect.objectContaining({ count: 1, search: 'Secret Address', showExtended: true }),
     }));
+  });
+
+  it('marks phone conflicts within the same owner scope', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: null,
+        companyAddress: null,
+        credit: 0,
+        ownerId: 'sales-1',
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+      {
+        id: 'customer-2',
+        mark: 'SARA',
+        orderName: 'SARA',
+        name: 'Sara Diallo',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: null,
+        companyAddress: null,
+        credit: 0,
+        ownerId: 'sales-1',
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-13T00:00:00Z'),
+      },
+      {
+        id: 'customer-3',
+        mark: 'OTHER',
+        orderName: 'OTHER',
+        name: 'Other Branch',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: null,
+        companyAddress: null,
+        credit: 0,
+        ownerId: 'sales-2',
+        owner: { id: 'sales-2', email: 'sales2@example.com', name: 'Sales 2', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-14T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser(), { search: '' });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: 'customer-1',
+        phoneConflict: true,
+        phoneConflictMessage: '手机号冲突，请修改',
+      }),
+      expect.objectContaining({
+        id: 'customer-2',
+        phoneConflict: true,
+        phoneConflictMessage: '手机号冲突，请修改',
+      }),
+      expect.objectContaining({
+        id: 'customer-3',
+        phoneConflict: false,
+      }),
+    ]);
   });
 });

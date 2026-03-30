@@ -20,6 +20,8 @@ export type CustomerDuplicateSummary = {
   ownerEmail: string;
 };
 
+export type CustomerPhoneConflictSummary = CustomerDuplicateSummary;
+
 type CustomerCollision = {
   id: string;
   orderName: string;
@@ -36,12 +38,12 @@ function normalizeMatchText(value: string | null | undefined): string {
   return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-function normalizePhoneToken(value: string | null | undefined): string {
+export function normalizePhoneToken(value: string | null | undefined): string {
   const normalized = (value || '').trim().toLowerCase();
   return normalized.replace(/[^a-z0-9]/g, '');
 }
 
-function splitPhoneCandidates(value: string | null | undefined): string[] {
+export function splitPhoneCandidates(value: string | null | undefined): string[] {
   const raw = (value || '').trim();
   if (!raw) return [];
   return Array.from(new Set(raw.split('/').map((part) => normalizePhoneToken(part)).filter(Boolean)));
@@ -148,7 +150,7 @@ export async function resolveCustomerUpsertTargetId(
   client: CustomerScopeDbClient = db,
 ): Promise<string | null> {
   const companyName = normalizeCompanyName(input.companyName);
-  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, undefined, { includePhone: true }, client);
+  const collisions = await findScopeCollisions(ownerId, { ...input, companyName }, undefined, { includePhone: false }, client);
   if (collisions.length === 0) return null;
 
   const byId = new Map<string, CustomerCollision>();
@@ -158,17 +160,16 @@ export async function resolveCustomerUpsertTargetId(
   }
 
   const orderNameHits = collisions.filter((row) => row.orderName === input.orderName).map((row) => row.id);
-  const phoneHits = collisions.filter((row) => row.phone === input.phone).map((row) => row.id);
   const companyHits = companyName
     ? collisions.filter((row) => row.companyName === companyName).map((row) => row.id)
     : [];
 
-  const allIds = new Set([...orderNameHits, ...phoneHits, ...companyHits]);
+  const allIds = new Set([...orderNameHits, ...companyHits]);
   if (allIds.size === 1) {
     return [...allIds][0];
   }
 
-  throw new Error('同一绑定池中 ORDER_NAME/PHONE/COMPANY_NAME 命中多条不同客户，无法自动导入');
+  throw new Error('同一绑定池中 ORDER_NAME/COMPANY_NAME 命中多条不同客户，无法自动导入');
 }
 
 export async function findDuplicateCustomersInScope(
@@ -179,8 +180,7 @@ export async function findDuplicateCustomersInScope(
 ): Promise<CustomerDuplicateSummary[]> {
   const normalizedMark = normalizeMatchText(input.mark);
   const normalizedName = normalizeMatchText(input.name);
-  const inputPhoneTokens = splitPhoneCandidates(input.phone);
-  if (!normalizedMark && !normalizedName && inputPhoneTokens.length === 0) return [];
+  if (!normalizedMark && !normalizedName) return [];
 
   const rows = await client.customer.findMany({
     where: {
@@ -203,10 +203,46 @@ export async function findDuplicateCustomersInScope(
       normalizedName &&
       normalizeMatchText(row.mark) === normalizedMark &&
       normalizeMatchText(row.name) === normalizedName;
-    const phoneMatched = inputPhoneTokens.length > 0 &&
-      splitPhoneCandidates(row.phone).some((token) => inputPhoneTokens.includes(token));
-    return markNameMatched || phoneMatched;
+    return markNameMatched;
   }).map((row) => ({
+    id: row.id,
+    mark: row.mark,
+    orderName: row.orderName,
+    name: row.name,
+    phone: row.phone,
+    ownerId: row.ownerId,
+    ownerEmail: row.owner.email,
+  }));
+}
+
+export async function findPhoneConflictCustomersInScope(
+  ownerId: string,
+  phone: string,
+  excludeId?: string,
+  client: CustomerScopeDbClient = db,
+): Promise<CustomerPhoneConflictSummary[]> {
+  const inputPhoneTokens = splitPhoneCandidates(phone);
+  if (inputPhoneTokens.length === 0) return [];
+
+  const rows = await client.customer.findMany({
+    where: {
+      ownerId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+    },
+    select: {
+      id: true,
+      mark: true,
+      orderName: true,
+      name: true,
+      phone: true,
+      ownerId: true,
+      owner: { select: { email: true } },
+    },
+  });
+
+  return rows.filter((row) => (
+    splitPhoneCandidates(row.phone).some((token) => inputPhoneTokens.includes(token))
+  )).map((row) => ({
     id: row.id,
     mark: row.mark,
     orderName: row.orderName,

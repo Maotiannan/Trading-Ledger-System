@@ -5,6 +5,7 @@ import { getSystemSettings } from '@/lib/system-settings';
 import {
   assertNoCustomerScopeConflict,
   findDuplicateCustomersInScope,
+  findPhoneConflictCustomersInScope,
   resolveCustomerOwnerId,
 } from '@/lib/customer-scope';
 import {
@@ -42,6 +43,7 @@ jest.mock('@/lib/customer-scope', () => ({
   assertNoCustomerScopeConflict: jest.fn(),
   customerAccessWhere: jest.fn(() => ({})),
   findDuplicateCustomersInScope: jest.fn(),
+  findPhoneConflictCustomersInScope: jest.fn(),
   mapPrismaWriteError: jest.fn((error: unknown) => error instanceof Error ? error.message : '数据库错误'),
   resolveCustomerOwnerId: jest.fn(),
 }));
@@ -81,6 +83,7 @@ const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockGetSystemSettings = getSystemSettings as jest.Mock;
 const mockResolveCustomerOwnerId = resolveCustomerOwnerId as jest.Mock;
 const mockFindDuplicateCustomersInScope = findDuplicateCustomersInScope as jest.Mock;
+const mockFindPhoneConflictCustomersInScope = findPhoneConflictCustomersInScope as jest.Mock;
 const mockAssertNoCustomerScopeConflict = assertNoCustomerScopeConflict as jest.Mock;
 
 describe('customer-service', () => {
@@ -90,6 +93,7 @@ describe('customer-service', () => {
     mockGetSystemSettings.mockResolvedValue({ SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS: 'true' });
     mockResolveCustomerOwnerId.mockResolvedValue('sales-1');
     mockFindDuplicateCustomersInScope.mockResolvedValue([]);
+    mockFindPhoneConflictCustomersInScope.mockResolvedValue([]);
     mockAssertNoCustomerScopeConflict.mockResolvedValue(undefined);
   });
 

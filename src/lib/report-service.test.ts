@@ -75,6 +75,7 @@ describe('report-service', () => {
     expect(result.contentType).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     expect(result.fileName).toMatch(/trading-ledger-report-\d{4}-\d{2}-\d{2}\.xlsx/);
     expect(result.fileBuffer.length).toBeGreaterThan(0);
+    expect(result.message).toBe('报表导出已生成：当前可见范围内账单 0，收据 0，明细 0，SWIFT 0');
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'REPORT_EXPORT',
       metadata: expect.objectContaining({ format: 'excel', invoiceCount: 0 }),
@@ -155,6 +156,7 @@ describe('report-service', () => {
       }),
     }));
     expect(result.fileBuffer.length).toBeGreaterThan(0);
+    expect(result.message).toBe('报表导出已生成：当前可见范围内账单 1，收据 1，明细 1，SWIFT 1');
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'REPORT_EXPORT',
       metadata: expect.objectContaining({

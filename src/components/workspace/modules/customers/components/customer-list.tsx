@@ -56,7 +56,12 @@ export function CustomerList({
                   <TableCell>{String(row.mark || '-')}</TableCell>
                   <TableCell>{String(row.orderName || '-')}</TableCell>
                   <TableCell>{String(row.name || '-')}</TableCell>
-                  <TableCell>{String(row.phone || '-')}</TableCell>
+                  <TableCell
+                    className={row.phoneConflict ? 'text-red-600 font-medium' : undefined}
+                    title={row.phoneConflict ? String(row.phoneConflictMessage || '手机号冲突，请修改') : undefined}
+                  >
+                    {String(row.phone || '-')}
+                  </TableCell>
                   <TableCell>{String(row.city || '-')}</TableCell>
                   <TableCell>
                     {consigneeFull ? (

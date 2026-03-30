@@ -68,7 +68,7 @@ export default async function run(t) {
   });
   t.assertOk(Boolean(createCustomer.data?.data?.id), 'sales-owned customer create works');
 
-  const duplicate = await t.request('POST', '/api/customer', {
+  const duplicatePhoneAllowed = await t.request('POST', '/api/customer', {
     json: {
       action: 'create',
       mark: `MK-${suffix}-DUP`,
@@ -78,14 +78,28 @@ export default async function run(t) {
       city: 'Conakry',
       ownerId: salesId,
     },
+    expectedStatus: 200,
+  });
+  t.assertOk(Boolean(duplicatePhoneAllowed.data?.data?.id), 'duplicate phone is allowed when MARK and NAME differ');
+  t.assertEqual(duplicatePhoneAllowed.data?.data?.phoneConflict, true, 'duplicate phone create returns conflict hint');
+
+  const hardDuplicate = await t.request('POST', '/api/customer', {
+    json: {
+      action: 'create',
+      mark: `MK-${suffix}`,
+      orderName: `ORDER-${suffix}-HARD-DUP`,
+      name: `Customer ${suffix}`,
+      phone: `${basePhone}8`,
+      city: 'Conakry',
+      ownerId: salesId,
+    },
     expectedStatus: 400,
   });
-  t.assertEqual(duplicate.data?.code, 'CUSTOMER_DUPLICATE', 'duplicate customer create returns CUSTOMER_DUPLICATE code');
-  t.assertMatch(duplicate.data?.error || duplicate.text, /PHONE|MARK|NAME|Duplicate|重复/, 'duplicate customer is rejected with detail message');
+  t.assertEqual(hardDuplicate.data?.code, 'CUSTOMER_DUPLICATE', 'duplicate MARK and NAME still return CUSTOMER_DUPLICATE');
 
   const workbookPath = t.writeTempFile(`customer-import-${suffix}.xlsx`, '');
   await buildWorkbook(workbookPath, [
-    [`IMP-${suffix}`, salesOrderName, `Import ${suffix}`, basePhone, 'Conakry', '', '', 0, '', salesEmail],
+    [`IMP-${suffix}`, `ORDER-${suffix}-PHONE`, `Import ${suffix}`, basePhone, 'Conakry', '', '', 0, '', salesEmail],
     [`IMP-${suffix}-OK`, `ORDER-${suffix}-OK`, `Import OK ${suffix}`, `${basePhone}9`, 'Conakry', '', '', 0, '', salesEmail],
   ]);
 
@@ -103,36 +117,7 @@ export default async function run(t) {
   });
   const rowResults = Array.isArray(importResponse.data?.rowResults) ? importResponse.data.rowResults : [];
   t.assertEqual(rowResults.length, 2, 'customer import returns per-row results');
-  t.assertOk(rowResults.some((row) => row.status === 'FAILED'), 'customer import captures failed duplicate rows');
-  t.assertOk(rowResults.some((row) => row.status === 'CREATED'), 'customer import creates valid rows');
-
-  const failedRow = rowResults.find((row) => row.status === 'FAILED');
-  t.assertOk(Boolean(failedRow), 'failed customer import row available for retry');
-
-  const retry = await t.request('POST', '/api/customer', {
-    json: {
-      action: 'import-rows',
-      ownerId: salesId,
-      rows: [
-        {
-          rowNo: failedRow.rowNo,
-          mark: failedRow.mark,
-          orderName: `${failedRow.orderName}-FIX`,
-          name: failedRow.name,
-          phone: `${basePhone}7`,
-          city: failedRow.city,
-          consignee: failedRow.consignee,
-          companyName: failedRow.companyName,
-          credit: failedRow.credit,
-          companyAddress: failedRow.companyAddress,
-          ownerEmail: salesEmail,
-        },
-      ],
-    },
-    expectedStatus: 200,
-  });
-  const retryRows = Array.isArray(retry.data?.rowResults) ? retry.data.rowResults : [];
-  t.assertEqual(retryRows[0]?.status, 'CREATED', 'customer issue row retry succeeds after correction');
+  t.assertOk(rowResults.every((row) => row.status === 'CREATED'), 'customer import allows duplicate phone rows when MARK and NAME differ');
 
   const missingTemplateColumnWorkbookPath = t.writeTempFile(`customer-import-missing-column-${suffix}.xlsx`, '');
   await buildWorkbook(missingTemplateColumnWorkbookPath, []);

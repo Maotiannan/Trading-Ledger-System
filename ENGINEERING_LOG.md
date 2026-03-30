@@ -1,13 +1,16 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.84  
+> 当前版本：v1.0.85  
 > 最后更新：2026-03-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 客户手机号规则收敛：允许手机号重复，不再把 `PHONE` 作为硬冲突；仅保留 `MARK + NAME` 为客户硬重复规则，并在创建/编辑/导入/修复链路统一生效 ✅ 2026-03-30
+- [x] 客户管理冲突可视化：客户列表与客户编辑弹窗对同绑定池手机号冲突做红色提示，前端对保存异常补齐显式提示，不再只在浏览器控制台暴露 ✅ 2026-03-30
+- [x] Playwright 闭环补齐：新增“账单分配给分支 ADMIN”前端回归，以及 Dashboard 报表导出成功摘要断言 ✅ 2026-03-30
 - [x] 账单管理新增发票归属分配：支持 ADMIN 将某个发票及其全部订单直接重分配给下级分支 ADMIN，归属更新在同一事务内完成并写入审计 ✅ 2026-03-30
 - [x] 修复 SALES 对绑定客户的业务数据可见性：`invoice/receipt/detail/swift/report` 改为按 `customer.ownerId` 判断客户绑定，不再错误依赖 `customer.createdBy` ✅ 2026-03-30
 - [x] 账单管理前端新增 ADMIN 专用分配入口：使用现有用户树推导当前管理员的下级 ADMIN 候选，并提交 `assignBranchAdmin` 动作 ✅ 2026-03-30
@@ -193,6 +196,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.85（2026-03-30）：客户手机号规则继续收敛；后端与导入/修复链路允许手机号重复，仅 `(MARK + NAME)` 继续作为硬冲突；客户列表与编辑弹窗新增手机号冲突红色提示与悬浮说明，`use-customer-actions` 补齐保存异常提示，避免仅在控制台暴露；新增 `customer-scope / customer-read-service / customer-form-dialog / use-customer-actions` 回归测试、`invoice-branch-assignment.spec.ts` Playwright 闭环，以及报表导出成功摘要前端断言；本地与隔离回归均通过
 - v1.0.82（2026-03-13）：修复 workspace 路由别名冲突导致的设置页重复点击卡住问题；`/settings` 不再被误判为 `users` 视图，侧边栏同页点击增加 path 级短路保护；新增 `routes.test.ts` 覆盖 `/settings -> settings` 的回归断言
 
 - v1.0.81（2026-03-12）：将 `todolist.md` 正式拆分为“用户可读里程碑”与“纯工程内部流水”两层文档；新增 `ENGINEERING_LOG.md` 保存详细技术变更、测试门禁、服务分层与模块拆分记录；README 文档入口同步调整，主文档继续仅保留用户应阅读内容

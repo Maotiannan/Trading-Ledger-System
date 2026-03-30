@@ -4,7 +4,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
-import { customerAccessWhere } from '@/lib/customer-scope';
+import { customerAccessWhere, splitPhoneCandidates } from '@/lib/customer-scope';
 import { filterRowsBySearch } from '@/lib/text-search';
 import { canSalesEditExtendedCustomerFields } from '@/lib/customer-service';
 
@@ -27,6 +27,33 @@ function toSalesView<T extends Record<string, unknown>>(row: T, showExtended: bo
     companyAddress: null,
     credit: null,
   };
+}
+
+function annotatePhoneConflicts<T extends Record<string, unknown>>(rows: T[]): Array<T & { phoneConflict: boolean; phoneConflictMessage: string }> {
+  const tokenBuckets = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    const id = String(row.id || '');
+    const ownerId = String(row.ownerId || '');
+    if (!id || !ownerId) continue;
+    for (const token of splitPhoneCandidates(String(row.phone || ''))) {
+      const bucketKey = `${ownerId}:${token}`;
+      if (!tokenBuckets.has(bucketKey)) tokenBuckets.set(bucketKey, new Set());
+      tokenBuckets.get(bucketKey)!.add(id);
+    }
+  }
+
+  const conflictedIds = new Set<string>();
+  for (const ids of tokenBuckets.values()) {
+    if (ids.size < 2) continue;
+    for (const id of ids) conflictedIds.add(id);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    phoneConflict: conflictedIds.has(String(row.id || '')),
+    phoneConflictMessage: conflictedIds.has(String(row.id || '')) ? '手机号冲突，请修改' : '',
+  }));
 }
 
 export async function listCustomerOwnerOptions(currentUser: CurrentUser) {
@@ -78,9 +105,6 @@ export async function listCustomers(
 
   const mark = trimStr(filters.mark);
   const search = trimStr(filters.search);
-  if (mark) {
-    where.mark = { equals: mark };
-  }
 
   const rows = await db.customer.findMany({
     where,
@@ -99,9 +123,11 @@ export async function listCustomers(
   });
 
   const showExtended = currentUser.role === UserRole.ADMIN || await canSalesEditExtendedCustomerFields();
+  const conflictAnnotatedRows = annotatePhoneConflicts(rows as Array<Record<string, unknown>>);
+  const markedRows = mark ? conflictAnnotatedRows.filter((row) => trimStr(row.mark) === mark) : conflictAnnotatedRows;
   const data = currentUser.role === UserRole.ADMIN
-    ? filterRowsBySearch(rows, search)
-    : filterRowsBySearch(rows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search);
+    ? filterRowsBySearch(markedRows, search)
+    : filterRowsBySearch(markedRows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search);
 
   await recordAuditEvent({
     action: auditActions.CUSTOMER_LIST_VIEW,

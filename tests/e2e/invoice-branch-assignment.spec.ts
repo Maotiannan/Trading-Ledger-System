@@ -16,6 +16,16 @@ async function logout(page: Page) {
 
 test('admin can assign invoice ownership to a branch admin from the invoice UI', async ({ page, request }) => {
   await ensureAdminInitialized(request);
+  await page.addInitScript(() => {
+    const capturedAlerts: string[] = [];
+    Object.defineProperty(window, '__capturedAlerts', {
+      value: capturedAlerts,
+      configurable: true,
+    });
+    window.alert = (message?: string) => {
+      capturedAlerts.push(String(message ?? ''));
+    };
+  });
   await loginAsAdmin(page);
 
   const suffix = uniqueSuffix('assign');
@@ -91,11 +101,10 @@ test('admin can assign invoice ownership to a branch admin from the invoice UI',
   await page.getByTestId(`invoice-assign-admin-select-${invoice.id}`).click();
   await page.getByRole('option', { name: new RegExp(branchAdminEmail, 'i') }).click();
 
-  const assignDialogPromise = page.waitForEvent('dialog');
   await page.getByTestId(`invoice-assign-admin-button-${invoice.id}`).click();
-  const assignDialog = await assignDialogPromise;
-  expect(assignDialog.message()).toMatch(/账单归属已分配|Invoice ownership assigned/i);
-  await assignDialog.accept();
+  await expect
+    .poll(() => page.evaluate(() => ((window as Window & { __capturedAlerts?: string[] }).__capturedAlerts || []).at(-1) || ''))
+    .toMatch(/账单归属已分配|Invoice ownership assigned/i);
 
   await logout(page);
   await loginWithCredentials(page, branchAdminEmail, branchAdminPassword);

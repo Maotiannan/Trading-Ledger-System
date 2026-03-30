@@ -6,6 +6,8 @@ import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-resp
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { getCurrentUser } from '@/lib/request-auth';
 import { clearSessionCookie, createSessionToken, setSessionCookie } from '@/lib/session';
+import { parseJsonRequest } from '@/lib/http-body';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import {
   changeCurrentUserPassword,
   createManagedUser,
@@ -38,11 +40,18 @@ function notFound(request: NextRequest, message: string, detail?: unknown) {
 // 登录
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { action, email, password, name, userId } = body;
+    const body = await parseJsonRequest<Record<string, unknown>>(request);
+    const action = typeof body.action === 'string' ? body.action : '';
+    const email = typeof body.email === 'string' ? body.email : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    const userId = typeof body.userId === 'string' ? body.userId : '';
 
     // 登录
     if (action === 'login') {
+      await enforceRateLimit('login', request, {
+        identityHint: email || null,
+      });
       if (!email || !password) {
         return badRequest(request, '邮箱和密码不能为空', apiErrorCodes.VALIDATION_ERROR);
       }

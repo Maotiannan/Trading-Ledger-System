@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiErrorCodes } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
+import { parseJsonRequest } from '@/lib/http-body';
 import { defaultLocale, isSupportedLocale } from '@/lib/i18n';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await parseJsonRequest<Record<string, unknown>>(request).catch(() => ({} as Record<string, unknown>));
     const locale = typeof body?.locale === 'string' && isSupportedLocale(body.locale)
       ? body.locale
       : defaultLocale;

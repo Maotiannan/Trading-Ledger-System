@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { type ApiErrorCode, apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
+import { parseJsonRequest } from '@/lib/http-body';
 import { withAuth } from '@/lib/route-auth';
 import { customerAccessWhere, mapPrismaWriteError, resolveCustomerOwnerId } from '@/lib/customer-scope';
 import {
@@ -239,7 +240,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       return buildImportResponse(processed, request);
     }
 
-    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseJsonRequest<Record<string, unknown>>(request).catch(() => ({} as Record<string, unknown>));
     const action = trimStr(body.action);
 
     if (action === 'import-rows') {

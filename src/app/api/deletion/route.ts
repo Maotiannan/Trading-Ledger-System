@@ -3,6 +3,8 @@ import { withAuth } from '@/lib/route-auth';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { parseJsonRequest } from '@/lib/http-body';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import {
   createDeletionRequest,
   listDeletionRequests,
@@ -27,8 +29,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 // 创建/审批删除申请
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const body = await request.json();
-    const { action, targetType, targetId, reason, requestId } = body;
+    const body = await parseJsonRequest<Record<string, unknown>>(request);
+    const action = typeof body.action === 'string' ? body.action : '';
+    const targetType = typeof body.targetType === 'string' ? body.targetType : '';
+    const targetId = typeof body.targetId === 'string' ? body.targetId : '';
+    const reason = typeof body.reason === 'string' ? body.reason : undefined;
+    const requestId = typeof body.requestId === 'string' ? body.requestId : '';
+
+    await enforceRateLimit('deletion', request, { currentUser });
 
     // 发起删除申请
     if (action === 'request') {

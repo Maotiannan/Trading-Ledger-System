@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { parseJsonRequest } from '@/lib/http-body';
 import { withAuth } from '@/lib/route-auth';
 import { listCustomerFixQueue } from '@/lib/customer-fix-read-service';
 import {
@@ -32,7 +33,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   if (denied) return denied;
 
   try {
-    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = await parseJsonRequest<Record<string, unknown>>(request).catch(() => ({} as Record<string, unknown>));
     const action = trimStr(body.action);
 
     if (action !== 'resolve-order' && action !== 'resolve-receipt') {

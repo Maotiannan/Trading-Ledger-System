@@ -4,6 +4,7 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { resolveRequestLocale } from '@/lib/api-response-locale';
 import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
+import { parseJsonRequest } from '@/lib/http-body';
 import {
   listAllSystemSettingsAuditLogs,
   listSettings,
@@ -144,7 +145,7 @@ export const GET = withAuth(async (_request, currentUser) => {
 
 export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await parseJsonRequest<Record<string, unknown>>(request).catch(() => ({} as Record<string, unknown>));
     const action = typeof body?.action === 'string' ? body.action : '';
 
     if (action === 'test-ocr') {

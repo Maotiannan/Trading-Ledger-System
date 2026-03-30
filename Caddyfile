@@ -3,6 +3,9 @@
 }
 
 (app_proxy) {
+	request_body {
+		max_size {$CADDY_MAX_REQUEST_BODY_SIZE:10MB}
+	}
 	encode zstd gzip
 	reverse_proxy app:3000
 }

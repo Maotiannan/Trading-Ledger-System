@@ -26,6 +26,7 @@ import {
   listOrderReceiptRecords,
 } from '@/lib/invoice-read-service';
 import { withAuth, withRole } from '@/lib/route-auth';
+import { parseJsonRequest } from '@/lib/http-body';
 
 function mapInvoiceImportRows(rowsInput: unknown[]): InvoiceImportInputRow[] {
   return rowsInput.map((row, index) => {
@@ -219,7 +220,7 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
       return toImportResponse(processed, request);
     }
 
-    const body = await request.json();
+    const body = await parseJsonRequest<Record<string, unknown>>(request);
     if (body?.action === 'import-rows') {
       const rowsInput = Array.isArray(body?.rows) ? body.rows : [];
       const processed = await processInvoiceImportRows(mapInvoiceImportRows(rowsInput), currentUser);
@@ -277,7 +278,7 @@ export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request:
 
 export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
   try {
-    const body = await request.json();
+    const body = await parseJsonRequest<Record<string, unknown>>(request);
     const action = typeof body?.action === 'string' ? body.action : '';
 
     if (action === 'rematch-preview') {
@@ -299,22 +300,45 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
     }
 
     if (action === 'updateInvoiceDates') {
-      const result = await updateInvoiceDates(currentUser, body ?? {});
+      const result = await updateInvoiceDates(currentUser, {
+        invoiceId: typeof body.invoiceId === 'string' ? body.invoiceId : '',
+        shipDate: body.shipDate,
+        releaseDate: body.releaseDate,
+      });
       return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
 
     if (action === 'assignBranchAdmin') {
-      const result = await assignInvoiceToBranchAdmin(currentUser, body ?? {});
+      const result = await assignInvoiceToBranchAdmin(currentUser, {
+        invoiceId: typeof body.invoiceId === 'string' ? body.invoiceId : '',
+        targetAdminId: typeof body.targetAdminId === 'string' ? body.targetAdminId : '',
+      });
       return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
 
     if (action === 'updateOrder') {
-      const result = await updateInvoiceOrder(currentUser, body ?? {});
+      const result = await updateInvoiceOrder(currentUser, {
+        orderId: typeof body.orderId === 'string' ? body.orderId : '',
+        orderNo: typeof body.orderNo === 'string' ? body.orderNo : undefined,
+        amount: body.amount !== undefined ? Number(body.amount) : undefined,
+        customerMark: typeof body.customerMark === 'string' ? body.customerMark : undefined,
+        customerName: typeof body.customerName === 'string' ? body.customerName : undefined,
+        customerId: typeof body.customerId === 'string' ? body.customerId : undefined,
+        customerPhone: typeof body.customerPhone === 'string' ? body.customerPhone : undefined,
+        customerCity: typeof body.customerCity === 'string' ? body.customerCity : undefined,
+      });
       return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
 
     if (action === 'addOrder') {
-      const result = await addInvoiceOrder(currentUser, body ?? {});
+      const result = await addInvoiceOrder(currentUser, {
+        invoiceId: typeof body.invoiceId === 'string' ? body.invoiceId : '',
+        orderNo: typeof body.orderNo === 'string' ? body.orderNo : '',
+        amount: Number(body.amount),
+        customerMark: typeof body.customerMark === 'string' ? body.customerMark : '',
+        customerName: typeof body.customerName === 'string' ? body.customerName : undefined,
+        customerId: typeof body.customerId === 'string' ? body.customerId : undefined,
+      });
       return createApiSuccessResponse({ data: result.data, merged: result.merged, message: result.message }, request);
     }
 
@@ -324,7 +348,11 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
     }
 
     if (action === 'transferBalance') {
-      const result = await transferInvoiceBalance(currentUser, body ?? {});
+      const result = await transferInvoiceBalance(currentUser, {
+        fromOrderId: typeof body.fromOrderId === 'string' ? body.fromOrderId : '',
+        toOrderNo: typeof body.toOrderNo === 'string' ? body.toOrderNo : '',
+        transferAmount: Number(body.transferAmount),
+      });
       return createApiSuccessResponse({ message: result.message }, request);
     }
 

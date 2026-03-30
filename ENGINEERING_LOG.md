@@ -1,7 +1,7 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.88  
+> 当前版本：v1.0.89  
 > 最后更新：2026-03-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
@@ -76,8 +76,8 @@
 - [x] 账单导入问题行弹窗宽度修复：列宽/输入宽度自适应，超宽表格横向滚动完整显示 ✅ 2026-03-05
 - [x] Customer List 长文本展示优化：`CONSIGNEE/COMPANY_ADDRESS` 前 20 字 + 悬浮/点击查看全文 ✅ 2026-03-05
 - [x] 客户导入重复更新修复补强：占位值（如 `-`）不再触发导入更新，重复导入不再反复计入 `updatedCount` ✅ 2026-03-05
-- [ ] 增加请求体大小限制（Next.js + Caddy 双层，防 DoS）
-- [ ] 对高风险写接口增加速率限制（登录、上传、删除审批）
+- [x] 增加请求体大小限制（Next.js + Caddy 双层，防 DoS）✅ 2026-03-30
+- [x] 对高风险写接口增加速率限制（登录、上传、删除审批）✅ 2026-03-30
 
 ### 自动化回归
 - [x] 新增 `matching` 单测（余额计算关键口径）✅ 2026-03-02
@@ -200,6 +200,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.89（2026-03-30）：补齐当前版本基线剩余的两项安全硬化：新增 Next.js + Caddy 双层请求体大小限制，防止超大 JSON/上传请求直接压垮应用；对登录、上传识别、删除申请/审批加入统一速率限制，并把 `REQUEST_TOO_LARGE / RATE_LIMITED` 纳入错误码目录、系统配置、单测、isolated API 回归与本地 Docker/Caddy 验证链路
 - v1.0.87（2026-03-30）：继续做同类多语言风险扫尾；`customer` API 的嵌套 `phoneConflictMessage` 现在也通过 `localizeApiSuccessMessage` 按请求语言本地化，`customer-import-and-scope` isolated API case 新增英文 locale 断言，确认外部 API 调用拿到的冲突提示不再固定中文
 - v1.0.86（2026-03-30）：修复客户手机号冲突提示的 i18n 回退问题；客户列表 tooltip 不再读取服务端中文 `phoneConflictMessage` 直接展示，`use-customer-actions` 在保存后对手机号冲突也改为使用当前语言的前端文案；补齐英文界面的 `customer-form-dialog` 和 `use-customer-actions` 回归测试，并重新验证构建通过
 - v1.0.85（2026-03-30）：客户手机号规则继续收敛；后端与导入/修复链路允许手机号重复，仅 `(MARK + NAME)` 继续作为硬冲突；客户列表与编辑弹窗新增手机号冲突红色提示与悬浮说明，`use-customer-actions` 补齐保存异常提示，避免仅在控制台暴露；新增 `customer-scope / customer-read-service / customer-form-dialog / use-customer-actions` 回归测试、`invoice-branch-assignment.spec.ts` Playwright 闭环，以及报表导出成功摘要前端断言；本地与隔离回归均通过

@@ -41,13 +41,15 @@ const customJestConfig = {
     'src/lib/invoice-write.ts',
     'src/lib/invoice-read-service.ts',
     'src/lib/report-service.ts',
+    'src/lib/http-body.ts',
+    'src/lib/rate-limit.ts',
   ],
   coverageThreshold: {
     global: {
-      branches: 64,
+      branches: 65,
       functions: 84,
-      lines: 82,
-      statements: 80,
+      lines: 83,
+      statements: 81,
     },
     './src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts': {
       branches: 60,
@@ -216,6 +218,18 @@ const customJestConfig = {
       functions: 100,
       lines: 90,
       statements: 90,
+    },
+    './src/lib/http-body.ts': {
+      branches: 80,
+      functions: 100,
+      lines: 90,
+      statements: 90,
+    },
+    './src/lib/rate-limit.ts': {
+      branches: 70,
+      functions: 100,
+      lines: 95,
+      statements: 95,
     },
   },
 };

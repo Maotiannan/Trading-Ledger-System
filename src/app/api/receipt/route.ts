@@ -10,6 +10,7 @@ import { toOcrDataUrl } from '@/lib/ocr-input';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import { filterRowsBySearch } from '@/lib/text-search';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
@@ -99,6 +100,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const receiptId = typeof data.receiptId === 'string' ? data.receiptId : '';
 
     if (action === 'recognize') {
+      await enforceRateLimit('upload', request, { currentUser });
       if (!file) {
         throw createApiError({
           code: 'BAD_REQUEST',

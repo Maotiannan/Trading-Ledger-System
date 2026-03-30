@@ -13,6 +13,7 @@ import { filterRowsBySearch } from '@/lib/text-search';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiError } from '@/lib/api-error';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { createSwiftRecord, deleteSwiftRecord } from '@/lib/swift-service';
 
 function parseSwiftPayload(data: Record<string, unknown>) {
@@ -93,6 +94,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const { action, data: requestData, file } = await parseActionRequest(request);
 
     if (action === 'recognize') {
+      await enforceRateLimit('upload', request, { currentUser });
       if (!file) {
         throw createApiError({
           code: 'BAD_REQUEST',

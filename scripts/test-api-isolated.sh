@@ -75,6 +75,8 @@ export INIT_ADMIN_PASSWORD="Admin@2026!"
 export OCR_DISABLED="true"
 export UPLOAD_DIR="$UPLOAD_DIR"
 export NEXT_DIST_DIR="$DIST_DIR"
+export JSON_BODY_MAX_BYTES="${JSON_BODY_MAX_BYTES:-262144}"
+export UPLOAD_BODY_MAX_BYTES="${UPLOAD_BODY_MAX_BYTES:-10485760}"
 
 npx prisma migrate deploy >/dev/null
 rm -rf "$ROOT_DIR/$DIST_DIR"

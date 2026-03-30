@@ -14,6 +14,7 @@ import { filterRowsBySearch } from '@/lib/text-search';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 
 function parseDetailPayload(data: Record<string, unknown>) {
@@ -99,6 +100,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const detailId = typeof requestData.detailId === 'string' ? requestData.detailId : '';
 
     if (action === 'recognize') {
+      await enforceRateLimit('upload', request, { currentUser });
       if (!file) {
         throw createApiError({
           code: 'BAD_REQUEST',

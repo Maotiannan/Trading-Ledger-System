@@ -147,6 +147,7 @@ export function CustomerManager() {
   }, [loadCustomers, loadFixes, loadOwnerOptions]);
 
   const canSeeExtended = isAdmin || customers.some((row) => row.companyName !== null || row.companyAddress !== null || row.credit !== null);
+  const phoneConflictMessage = tx('手机号冲突，请修改', 'Phone number conflict, please update it.');
   const formatOwnerLabel = (row: Record<string, unknown>) => {
     const owner = (row.owner && typeof row.owner === 'object') ? (row.owner as Record<string, unknown>) : null;
     const ownerEmail = owner && typeof owner.email === 'string' ? owner.email : '';
@@ -208,6 +209,7 @@ export function CustomerManager() {
             canSeeExtended={canSeeExtended}
             isAdmin={isAdmin}
             tx={tx}
+            phoneConflictMessage={phoneConflictMessage}
             formatOwnerLabel={formatOwnerLabel}
             truncateLongText={truncateLongText}
             onPreviewLongText={(label, value) => setCustomerLongTextPreview({ label, value })}
@@ -234,7 +236,7 @@ export function CustomerManager() {
         ownerOptions={ownerOptions}
         tx={tx}
         phoneConflict={formPhoneConflict}
-        phoneConflictMessage={tx('手机号冲突，请修改', 'Phone number conflict, please update it.')}
+        phoneConflictMessage={phoneConflictMessage}
         onOpenChange={setShowCreate}
         onFormChange={(updater) => setForm(updater)}
         onSubmit={handleCreateOrUpdate}

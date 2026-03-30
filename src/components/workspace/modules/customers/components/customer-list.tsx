@@ -10,6 +10,7 @@ export type CustomerListProps = {
   canSeeExtended: boolean;
   isAdmin: boolean;
   tx: (zh: string, en: string) => string;
+  phoneConflictMessage: string;
   formatOwnerLabel: (row: Record<string, unknown>) => string;
   truncateLongText: (value: string, maxLength?: number) => string;
   onPreviewLongText: (label: string, value: string) => void;
@@ -22,6 +23,7 @@ export function CustomerList({
   canSeeExtended,
   isAdmin,
   tx,
+  phoneConflictMessage,
   formatOwnerLabel,
   truncateLongText,
   onPreviewLongText,
@@ -58,7 +60,7 @@ export function CustomerList({
                   <TableCell>{String(row.name || '-')}</TableCell>
                   <TableCell
                     className={row.phoneConflict ? 'text-red-600 font-medium' : undefined}
-                    title={row.phoneConflict ? String(row.phoneConflictMessage || '手机号冲突，请修改') : undefined}
+                    title={row.phoneConflict ? phoneConflictMessage : undefined}
                   >
                     {String(row.phone || '-')}
                   </TableCell>

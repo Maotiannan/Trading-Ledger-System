@@ -360,6 +360,54 @@ describe('useCustomerActions', () => {
     expect(window.alert).toHaveBeenCalledWith('手机号冲突，请修改');
   });
 
+  it('alerts with english copy when save returns a phone conflict under english locale', async () => {
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 'cust-1',
+        phoneConflict: true,
+        phoneConflictMessage: '手机号冲突，请修改',
+      },
+      message: 'Customer updated',
+    });
+    const txEn = (_zh: string, en: string) => en;
+    const setImportOwnerId = jest.fn();
+    const setForm = jest.fn();
+
+    const { result } = renderHook(() => useCustomerActions({
+      tx: txEn,
+      isAdmin: false,
+      defaultOwnerId: 'sales-1',
+      importOwnerId: '',
+      editing: { id: 'cust-1' },
+      fixingTarget: null,
+      form: { ...formState, ownerId: '' },
+      latestFailedRows: [],
+      loadCustomers,
+      loadFixes,
+      setOwnerOptions,
+      setImportOwnerId,
+      setForm,
+      setShowCreate,
+      setEditing,
+      setFixingTarget,
+      setCustomerImporting,
+      setCustomerImportRows,
+      setShowCustomerImportIssues,
+      setCustomerIssueSubmitting,
+      setCustomerImportMessage,
+      customerImportInputRef: { current: null },
+      resetForm,
+      resetImportTable,
+    }));
+
+    await act(async () => {
+      await result.current.handleCreateOrUpdate();
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('Phone number conflict, please update it.');
+  });
+
   it('updates customer with default owner fallback for admin', async () => {
     mockApiCall.mockResolvedValueOnce({ success: true, data: { id: 'cust-1' } });
     const setImportOwnerId = jest.fn();

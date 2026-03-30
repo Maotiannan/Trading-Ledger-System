@@ -111,9 +111,8 @@ export function useCustomerActions({
       setEditing(null);
       resetForm();
       await loadCustomers();
-      const phoneConflictMessage = String(result.data?.phoneConflictMessage || '');
-      if (phoneConflictMessage) {
-        alert(phoneConflictMessage);
+      if (result.data?.phoneConflict) {
+        alert(tx('手机号冲突，请修改', 'Phone number conflict, please update it.'));
       }
     } catch (error) {
       alert(getErrorMessage(error, tx('保存失败', 'Save failed')));

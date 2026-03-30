@@ -1,3 +1,4 @@
+import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import { recordAuditEvent } from '@/lib/audit';
@@ -12,6 +13,11 @@ import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 import { customerAccessWhere } from '@/lib/customer-scope';
 import type { CurrentUser } from '@/lib/request-auth';
+import {
+  buildInvoiceVisibilityWhere as buildInvoiceVisibilityWhereShared,
+  buildOrderVisibilityWhere as buildOrderVisibilityWhereShared,
+  buildReceiptVisibilityWhere as buildReceiptVisibilityWhereShared,
+} from '@/lib/resource-visibility';
 import { runInTransaction } from '@/lib/transaction';
 
 export function parseDateInput(value: unknown): Date | null | undefined {
@@ -99,23 +105,13 @@ function conflict(message: string, detail?: unknown) {
   return createApiError({ code: 'CONFLICT', status: 400, message, detail });
 }
 
-export function buildOrderVisibilityWhere(ownerIds: string[]) {
-  return {
-    OR: [
-      { createdBy: { in: ownerIds } },
-      { customer: { createdBy: { in: ownerIds } } },
-    ],
-  };
+function forbidden(message: string, detail?: unknown) {
+  return createApiError({ code: 'FORBIDDEN', status: 403, message, detail });
 }
 
-export function buildReceiptVisibilityWhere(ownerIds: string[]) {
-  return {
-    OR: [
-      { createdBy: { in: ownerIds } },
-      { customer: { createdBy: { in: ownerIds } } },
-    ],
-  };
-}
+export const buildOrderVisibilityWhere = buildOrderVisibilityWhereShared;
+export const buildReceiptVisibilityWhere = buildReceiptVisibilityWhereShared;
+const buildInvoiceVisibilityWhere = buildInvoiceVisibilityWhereShared;
 
 function toInvoiceIssueRow(row: InvoiceImportInputRow, reason: string): InvoiceImportIssueRow {
   return {
@@ -869,6 +865,92 @@ export async function rematchInvoices(currentUser: CurrentUser) {
   return { message };
 }
 
+export async function assignInvoiceToBranchAdmin(currentUser: CurrentUser, payload: {
+  invoiceId: string;
+  targetAdminId: string;
+}) {
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('只有管理员可以分配账单归属');
+  }
+
+  const invoiceId = typeof payload.invoiceId === 'string' ? payload.invoiceId.trim() : '';
+  const targetAdminId = typeof payload.targetAdminId === 'string' ? payload.targetAdminId.trim() : '';
+  if (!invoiceId) {
+    throw badRequest('账单ID不能为空');
+  }
+  if (!targetAdminId) {
+    throw badRequest('目标管理员不能为空');
+  }
+
+  const scope = await getHierarchyScope(currentUser);
+  const descendantIds = Array.from(scope.descendantIds);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
+  if (!descendantIds.includes(targetAdminId)) {
+    throw forbidden('目标管理员不属于当前分支', { targetAdminId });
+  }
+  const targetAdmin = await db.user.findFirst({
+    where: {
+      id: targetAdminId,
+      role: UserRole.ADMIN,
+    },
+    select: { id: true, email: true, level: true },
+  });
+  if (!targetAdmin) {
+    throw forbidden('目标管理员不属于当前分支', { targetAdminId });
+  }
+
+  const invoice = await db.invoice.findFirst({
+    where: {
+      id: invoiceId,
+      ...buildInvoiceVisibilityWhere(ownerIds),
+    },
+    select: {
+      id: true,
+      invNo: true,
+      createdBy: true,
+      orders: { select: { id: true } },
+    },
+  });
+  if (!invoice) {
+    throw notFound('账单不存在或无权限修改', { invoiceId });
+  }
+
+  if (invoice.createdBy !== targetAdminId) {
+    await runInTransaction(async (tx) => {
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: { createdBy: targetAdminId },
+      });
+      await tx.order.updateMany({
+        where: { invoiceId },
+        data: { createdBy: targetAdminId },
+      });
+    });
+  }
+
+  await recordAuditEvent({
+    action: auditActions.INVOICE_ASSIGN_BRANCH_ADMIN,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.INVOICE,
+    targetId: invoiceId,
+    metadata: {
+      invNo: invoice.invNo,
+      previousOwnerId: invoice.createdBy,
+      nextOwnerId: targetAdminId,
+      orderCount: invoice.orders.length,
+      targetAdminEmail: targetAdmin.email,
+    },
+  });
+
+  return {
+    data: {
+      invoiceId,
+      targetAdminId,
+    },
+    message: invoice.createdBy === targetAdminId ? '账单归属未变化' : '账单归属已分配',
+  };
+}
+
 export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
   invoiceId: string;
   shipDate?: unknown;
@@ -884,11 +966,7 @@ export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
   const visibleInvoice = await db.invoice.findFirst({
     where: {
       id: targetInvoiceId,
-      OR: [
-        { createdBy: { in: ownerIds } },
-        { orders: { some: { createdBy: { in: ownerIds } } } },
-        { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
-      ],
+      ...buildInvoiceVisibilityWhere(ownerIds),
     },
     select: { id: true, shipDate: true, releaseDate: true },
   });
@@ -1091,11 +1169,7 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
   const visibleInvoice = await db.invoice.findFirst({
     where: {
       id: payload.invoiceId,
-      OR: [
-        { createdBy: { in: ownerIds } },
-        { orders: { some: { createdBy: { in: ownerIds } } } },
-        { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
-      ],
+      ...buildInvoiceVisibilityWhere(ownerIds),
     },
     select: { id: true },
   });
@@ -1244,11 +1318,7 @@ export async function deleteInvoiceRecord(currentUser: CurrentUser, invoiceId: s
   const invoice = await db.invoice.findFirst({
     where: {
       id: invoiceId,
-      OR: [
-        { createdBy: { in: ownerIds } },
-        { orders: { some: { createdBy: { in: ownerIds } } } },
-        { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
-      ],
+      ...buildInvoiceVisibilityWhere(ownerIds),
     },
     include: {
       orders: {

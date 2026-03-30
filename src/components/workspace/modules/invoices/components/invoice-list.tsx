@@ -6,15 +6,21 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Loader2, Plus, Trash2, ArrowRight, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
-import type { TransferFromOrder } from '../types';
+import type { BranchAdminOption, TransferFromOrder } from '../types';
 
 export type InvoiceListProps = {
   invoices: Invoice[];
   expandedInvoices: Set<string>;
   isManager: boolean;
+  isAdmin: boolean;
   addingOrderToInvoice: string | null;
+  branchAdminOptions: BranchAdminOption[];
+  branchAdminLoading: boolean;
+  assigningInvoiceId: string | null;
+  invoiceBranchAdminSelections: Record<string, string>;
   newOrderNo: string;
   newOrderAmount: string;
   newOrderCustomerMark: string;
@@ -29,6 +35,8 @@ export type InvoiceListProps = {
   tx: (zh: string, en: string) => string;
   onToggleInvoice: (invoiceId: string) => void;
   onOpenInvoiceDateEditor: (invoiceId: string, currentShipDate?: string | null, currentReleaseDate?: string | null) => void;
+  onInvoiceBranchAdminSelect: (invoiceId: string, targetAdminId: string) => void;
+  onAssignInvoiceBranchAdmin: (invoiceId: string) => void;
   onEditingInvoiceShipDateChange: (value: string) => void;
   onEditingInvoiceReleaseDateChange: (value: string) => void;
   onClearInvoiceDates: () => void;
@@ -51,7 +59,12 @@ export function InvoiceList({
   invoices,
   expandedInvoices,
   isManager,
+  isAdmin,
   addingOrderToInvoice,
+  branchAdminOptions,
+  branchAdminLoading,
+  assigningInvoiceId,
+  invoiceBranchAdminSelections,
   newOrderNo,
   newOrderAmount,
   newOrderCustomerMark,
@@ -66,6 +79,8 @@ export function InvoiceList({
   tx,
   onToggleInvoice,
   onOpenInvoiceDateEditor,
+  onInvoiceBranchAdminSelect,
+  onAssignInvoiceBranchAdmin,
   onEditingInvoiceShipDateChange,
   onEditingInvoiceReleaseDateChange,
   onClearInvoiceDates,
@@ -180,12 +195,48 @@ export function InvoiceList({
             <CardContent className="border-t pt-4">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="font-medium">{tx('订单明细', 'Order Details')}</h4>
-                {isManager && (
-                  <Button size="sm" variant="outline" onClick={() => onStartAddOrder(invoice.id)}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    {tx('添加订单', 'Add Order')}
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    branchAdminOptions.length > 0 ? (
+                      <>
+                        <Select
+                          value={invoiceBranchAdminSelections[invoice.id] || undefined}
+                          onValueChange={(value) => onInvoiceBranchAdminSelect(invoice.id, value)}
+                        >
+                          <SelectTrigger className="w-[240px]">
+                            <SelectValue placeholder={tx('分配给分支ADMIN', 'Assign to branch admin')} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branchAdminOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.name || option.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onAssignInvoiceBranchAdmin(invoice.id)}
+                          disabled={branchAdminLoading || assigningInvoiceId === invoice.id || !invoiceBranchAdminSelections[invoice.id]}
+                        >
+                          {assigningInvoiceId === invoice.id && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                          {tx('分配', 'Assign')}
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        {tx('当前无可分配的分支ADMIN', 'No branch admin available')}
+                      </div>
+                    )
+                  )}
+                  {isManager && (
+                    <Button size="sm" variant="outline" onClick={() => onStartAddOrder(invoice.id)}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      {tx('添加订单', 'Add Order')}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <Table>

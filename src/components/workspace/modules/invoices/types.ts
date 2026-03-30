@@ -27,6 +27,14 @@ export type TransferFromOrder = {
   balance: number;
 };
 
+export type BranchAdminOption = {
+  id: string;
+  email: string;
+  name: string | null;
+  level?: number;
+  parentId?: string | null;
+};
+
 export type RematchPreviewGroup = {
   groupId: string;
   groupType: 'exact' | 'customer-group';

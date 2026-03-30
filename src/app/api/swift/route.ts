@@ -8,6 +8,7 @@ import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPay
 import { parseActionRequest } from '@/lib/http-body';
 import { toOcrDataUrl } from '@/lib/ocr-input';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { buildSwiftVisibilityWhere } from '@/lib/resource-visibility';
 import { filterRowsBySearch } from '@/lib/text-search';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiError } from '@/lib/api-error';
@@ -39,12 +40,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const scope = await getHierarchyScope(currentUser);
     const ownerIds = Array.from(scope.ownerVisibleIds);
     const filters: Record<string, unknown>[] = [
-      {
-        OR: [
-          { createdBy: { in: ownerIds } },
-          { detail: { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } } },
-        ],
-      },
+      buildSwiftVisibilityWhere(ownerIds),
     ];
     if (search) assertSearchLength(search);
     if (dateFrom || dateTo) {

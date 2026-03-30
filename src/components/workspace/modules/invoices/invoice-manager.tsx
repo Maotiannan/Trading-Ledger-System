@@ -100,11 +100,18 @@ export function InvoiceManager() {
     editingInvoiceReleaseDate,
     setEditingInvoiceReleaseDate,
     invoiceDateSaving,
+    branchAdminOptions,
+    branchAdminLoading,
+    assigningInvoiceId,
+    invoiceBranchAdminSelections,
+    loadBranchAdminOptions,
+    selectInvoiceBranchAdmin,
+    assignInvoiceBranchAdmin,
     openInvoiceDateEditor,
     clearInvoiceDateInputs,
     cancelInvoiceDateEditor,
     saveInvoiceDates,
-  } = useInvoiceTools(tx, loadInvoices);
+  } = useInvoiceTools(tx, loadInvoices, user);
   const {
     invoiceImporting,
     showInvoiceImportIssues,
@@ -153,7 +160,14 @@ export function InvoiceManager() {
     loadInvoices();
   }, [loadInvoices]);
 
+  useEffect(() => {
+    if (user?.role === 'ADMIN') {
+      void loadBranchAdminOptions();
+    }
+  }, [loadBranchAdminOptions, user?.role]);
+
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <div className="space-y-6">
@@ -181,7 +195,12 @@ export function InvoiceManager() {
         invoices={invoices}
         expandedInvoices={expandedInvoices}
         isManager={isManager}
+        isAdmin={isAdmin}
         addingOrderToInvoice={addingOrderToInvoice}
+        branchAdminOptions={branchAdminOptions}
+        branchAdminLoading={branchAdminLoading}
+        assigningInvoiceId={assigningInvoiceId}
+        invoiceBranchAdminSelections={invoiceBranchAdminSelections}
         newOrderNo={newOrderNo}
         newOrderAmount={newOrderAmount}
         newOrderCustomerMark={newOrderCustomerMark}
@@ -196,6 +215,8 @@ export function InvoiceManager() {
         tx={tx}
         onToggleInvoice={toggleInvoice}
         onOpenInvoiceDateEditor={openInvoiceDateEditor}
+        onInvoiceBranchAdminSelect={selectInvoiceBranchAdmin}
+        onAssignInvoiceBranchAdmin={assignInvoiceBranchAdmin}
         onEditingInvoiceShipDateChange={setEditingInvoiceShipDate}
         onEditingInvoiceReleaseDateChange={setEditingInvoiceReleaseDate}
         onClearInvoiceDates={clearInvoiceDateInputs}

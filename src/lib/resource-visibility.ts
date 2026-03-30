@@ -11,7 +11,7 @@ export function buildOrderVisibilityWhere(ownerIds: string[]): Prisma.OrderWhere
   return {
     OR: [
       { createdBy: { in: ownerIds } },
-      { customer: { createdBy: { in: ownerIds } } },
+      { customer: { ownerId: { in: ownerIds } } },
     ],
   };
 }
@@ -21,7 +21,7 @@ export function buildInvoiceVisibilityWhere(ownerIds: string[]): Prisma.InvoiceW
     OR: [
       { createdBy: { in: ownerIds } },
       { orders: { some: { createdBy: { in: ownerIds } } } },
-      { orders: { some: { customer: { createdBy: { in: ownerIds } } } } },
+      { orders: { some: { customer: { ownerId: { in: ownerIds } } } } },
     ],
   };
 }
@@ -30,9 +30,9 @@ export function buildReceiptVisibilityWhere(ownerIds: string[]): Prisma.ReceiptW
   return {
     OR: [
       { createdBy: { in: ownerIds } },
-      { customer: { createdBy: { in: ownerIds } } },
+      { customer: { ownerId: { in: ownerIds } } },
       { order: { createdBy: { in: ownerIds } } },
-      { order: { customer: { createdBy: { in: ownerIds } } } },
+      { order: { customer: { ownerId: { in: ownerIds } } } },
     ],
   };
 }
@@ -42,7 +42,7 @@ export function buildDetailVisibilityWhere(ownerIds: string[]): Prisma.DetailWhe
     OR: [
       { createdBy: { in: ownerIds } },
       { items: { some: { receipt: { createdBy: { in: ownerIds } } } } },
-      { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } },
+      { items: { some: { receipt: { customer: { ownerId: { in: ownerIds } } } } } },
     ],
   };
 }
@@ -53,7 +53,7 @@ export function buildSwiftVisibilityWhere(ownerIds: string[]): Prisma.SwiftWhere
       { createdBy: { in: ownerIds } },
       { detail: { createdBy: { in: ownerIds } } },
       { detail: { items: { some: { receipt: { createdBy: { in: ownerIds } } } } } },
-      { detail: { items: { some: { receipt: { customer: { createdBy: { in: ownerIds } } } } } } },
+      { detail: { items: { some: { receipt: { customer: { ownerId: { in: ownerIds } } } } } } },
     ],
   };
 }

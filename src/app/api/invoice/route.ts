@@ -6,6 +6,7 @@ import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import {
   addInvoiceOrder,
+  assignInvoiceToBranchAdmin,
   applyInvoiceRematch,
   createInvoiceRecord,
   deleteInvoiceOrder,
@@ -299,6 +300,11 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
 
     if (action === 'updateInvoiceDates') {
       const result = await updateInvoiceDates(currentUser, body ?? {});
+      return createApiSuccessResponse({ data: result.data, message: result.message }, request);
+    }
+
+    if (action === 'assignBranchAdmin') {
+      const result = await assignInvoiceToBranchAdmin(currentUser, body ?? {});
       return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
 

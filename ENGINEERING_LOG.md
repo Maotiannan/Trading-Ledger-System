@@ -1,12 +1,17 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.83  
-> 最后更新：2026-03-12
+> 当前版本：v1.0.84  
+> 最后更新：2026-03-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 账单管理新增发票归属分配：支持 ADMIN 将某个发票及其全部订单直接重分配给下级分支 ADMIN，归属更新在同一事务内完成并写入审计 ✅ 2026-03-30
+- [x] 修复 SALES 对绑定客户的业务数据可见性：`invoice/receipt/detail/swift/report` 改为按 `customer.ownerId` 判断客户绑定，不再错误依赖 `customer.createdBy` ✅ 2026-03-30
+- [x] 账单管理前端新增 ADMIN 专用分配入口：使用现有用户树推导当前管理员的下级 ADMIN 候选，并提交 `assignBranchAdmin` 动作 ✅ 2026-03-30
+- [x] isolated API 回归补齐：新增“发票分配到分支 ADMIN + SALES 查看绑定客户账单/收据/明细/SWIFT”链路断言 ✅ 2026-03-30
 
 ### 数据一致性与安全
 - [x] 修复 `ORDER BALANCE` 口径（`RECEIVED` 也计入已收）✅ 2026-03-02

@@ -6,6 +6,7 @@ import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { updateOrderBalance } from '@/lib/matching';
 import {
   addInvoiceOrder,
+  assignInvoiceToBranchAdmin,
   applyInvoiceRematch,
   createInvoiceRecord,
   deleteInvoiceOrder,
@@ -42,6 +43,7 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
     },
@@ -50,6 +52,9 @@ jest.mock('@/lib/db', () => ({
       findMany: jest.fn(),
       create: jest.fn(),
       updateMany: jest.fn(),
+    },
+    user: {
+      findFirst: jest.fn(),
     },
     balanceTransfer: {
       create: jest.fn(),
@@ -87,6 +92,9 @@ jest.mock('@/lib/matching', () => ({
 function makeUser(overrides: Partial<{
   id: string;
   role: UserRole;
+  level: number;
+  parentId: string | null;
+  createdById: string | null;
 }> = {}) {
   return {
     id: 'sales-1',
@@ -117,6 +125,7 @@ const mockDb = db as unknown as {
     findUnique: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
     delete: jest.Mock;
     count: jest.Mock;
   };
@@ -125,6 +134,9 @@ const mockDb = db as unknown as {
     findMany: jest.Mock;
     create: jest.Mock;
     updateMany: jest.Mock;
+  };
+  user: {
+    findFirst: jest.Mock;
   };
   balanceTransfer: {
     create: jest.Mock;
@@ -146,6 +158,9 @@ describe('invoice-service', () => {
     jest.resetAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockGetHierarchyScope.mockResolvedValue({
+      selfId: 'sales-1',
+      ancestorIds: new Set(['admin-1']),
+      descendantIds: new Set(),
       ownerVisibleIds: new Set(['sales-1']),
     });
     mockSyncOrderAliases.mockResolvedValue(1);
@@ -183,6 +198,86 @@ describe('invoice-service', () => {
         orderCount: 1,
       }),
     }));
+  });
+
+  it('reassigns an invoice and all child orders to a descendant admin in one transaction', async () => {
+    mockGetHierarchyScope.mockResolvedValueOnce({
+      selfId: 'admin-root',
+      ancestorIds: new Set(),
+      descendantIds: new Set(['admin-branch']),
+      ownerVisibleIds: new Set(['admin-root', 'admin-branch']),
+      visibleIds: new Set(['admin-root', 'admin-branch']),
+    });
+    mockDb.user.findFirst.mockResolvedValueOnce({
+      id: 'admin-branch',
+      role: UserRole.ADMIN,
+      level: 2,
+    });
+    mockDb.invoice.findFirst.mockResolvedValueOnce({
+      id: 'inv-1',
+      createdBy: 'admin-root',
+      orders: [{ id: 'order-1' }, { id: 'order-2' }],
+    });
+    mockDb.invoice.update.mockResolvedValueOnce({
+      id: 'inv-1',
+      createdBy: 'admin-branch',
+    });
+    mockDb.order.updateMany.mockResolvedValueOnce({ count: 2 });
+
+    const result = await assignInvoiceToBranchAdmin(makeUser({
+      id: 'admin-root',
+      role: UserRole.ADMIN,
+      level: 1,
+      parentId: null,
+      createdById: null,
+    }), {
+      invoiceId: 'inv-1',
+      targetAdminId: 'admin-branch',
+    });
+
+    expect(result.message).toBe('账单归属已分配');
+    expect(mockDb.invoice.update).toHaveBeenCalledWith({
+      where: { id: 'inv-1' },
+      data: { createdBy: 'admin-branch' },
+    });
+    expect(mockDb.order.updateMany).toHaveBeenCalledWith({
+      where: { invoiceId: 'inv-1' },
+      data: { createdBy: 'admin-branch' },
+    });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'INVOICE_ASSIGN_BRANCH_ADMIN',
+      targetId: 'inv-1',
+      metadata: expect.objectContaining({
+        previousOwnerId: 'admin-root',
+        nextOwnerId: 'admin-branch',
+        orderCount: 2,
+      }),
+    }));
+  });
+
+  it('rejects invoice reassignment when the target admin is not in the current admin branch', async () => {
+    mockGetHierarchyScope.mockResolvedValueOnce({
+      selfId: 'admin-root',
+      ancestorIds: new Set(),
+      descendantIds: new Set(['admin-branch-a']),
+      ownerVisibleIds: new Set(['admin-root', 'admin-branch-a']),
+      visibleIds: new Set(['admin-root', 'admin-branch-a']),
+    });
+    mockDb.user.findFirst.mockResolvedValueOnce(null);
+
+    await expect(assignInvoiceToBranchAdmin(makeUser({
+      id: 'admin-root',
+      role: UserRole.ADMIN,
+      level: 1,
+      parentId: null,
+      createdById: null,
+    }), {
+      invoiceId: 'inv-1',
+      targetAdminId: 'admin-branch-b',
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+    });
   });
 
   it('returns structured errors when invoice creation fails', async () => {

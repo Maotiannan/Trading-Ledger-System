@@ -1,12 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { apiCall, getErrorMessage, toDateInputValue } from '@/components/workspace/shared';
-import type { RematchPreviewGroup, RematchSelection, TransferFromOrder } from '../types';
+import type { User } from '@/lib/store';
+import type { BranchAdminOption, RematchPreviewGroup, RematchSelection, TransferFromOrder } from '../types';
 
 export type InvoiceToolText = (zh: string, en: string) => string;
 
-export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise<void>) {
+function collectDescendantAdminOptions(rows: Array<BranchAdminOption>, currentUserId: string): BranchAdminOption[] {
+  const childrenByParent = new Map<string, BranchAdminOption[]>();
+  for (const row of rows) {
+    if (!row.parentId) continue;
+    if (!childrenByParent.has(row.parentId)) childrenByParent.set(row.parentId, []);
+    childrenByParent.get(row.parentId)!.push(row);
+  }
+
+  const descendantIds = new Set<string>();
+  const stack = [...(childrenByParent.get(currentUserId) || [])];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (descendantIds.has(current.id)) continue;
+    descendantIds.add(current.id);
+    const children = childrenByParent.get(current.id) || [];
+    stack.push(...children);
+  }
+
+  return rows.filter((row) => row.id !== currentUserId && descendantIds.has(row.id));
+}
+
+export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise<void>, currentUser: User | null) {
   const [showTransferDialog, setShowTransferDialog] = useState(false);
   const [transferFromOrder, setTransferFromOrder] = useState<TransferFromOrder | null>(null);
   const [transferToOrderNo, setTransferToOrderNo] = useState('');
@@ -28,6 +50,80 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
   const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
   const [editingInvoiceReleaseDate, setEditingInvoiceReleaseDate] = useState('');
   const [invoiceDateSaving, setInvoiceDateSaving] = useState(false);
+  const [branchAdminOptions, setBranchAdminOptions] = useState<BranchAdminOption[]>([]);
+  const [branchAdminLoading, setBranchAdminLoading] = useState(false);
+  const [assigningInvoiceId, setAssigningInvoiceId] = useState<string | null>(null);
+  const [invoiceBranchAdminSelections, setInvoiceBranchAdminSelections] = useState<Record<string, string>>({});
+
+  const loadBranchAdminOptions = useCallback(async () => {
+    if (currentUser?.role !== 'ADMIN') {
+      setBranchAdminOptions([]);
+      return;
+    }
+    setBranchAdminLoading(true);
+    try {
+      const result = await apiCall('auth', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'list' }),
+      });
+      if (!result.success) {
+        throw new Error(getErrorMessage(result, tx('加载分支管理员失败', 'Failed to load branch admin options')));
+      }
+      const rows = Array.isArray(result.data) ? result.data : [];
+      const adminRows = rows
+        .filter((row): row is BranchAdminOption & { role: string } => Boolean(row?.id) && row?.role === 'ADMIN')
+        .map((row) => ({
+          id: String(row.id),
+          email: String(row.email || ''),
+          name: typeof row.name === 'string' || row.name === null ? row.name : null,
+          level: typeof row.level === 'number' ? row.level : undefined,
+          parentId: typeof row.parentId === 'string' || row.parentId === null ? row.parentId : null,
+        }));
+      setBranchAdminOptions(collectDescendantAdminOptions(adminRows, currentUser.id));
+    } catch (error) {
+      console.error(error);
+      setBranchAdminOptions([]);
+    } finally {
+      setBranchAdminLoading(false);
+    }
+  }, [currentUser?.id, currentUser?.role, tx]);
+
+  const selectInvoiceBranchAdmin = (invoiceId: string, targetAdminId: string) => {
+    setInvoiceBranchAdminSelections((prev) => ({
+      ...prev,
+      [invoiceId]: targetAdminId,
+    }));
+  };
+
+  const assignInvoiceBranchAdmin = async (invoiceId: string) => {
+    const targetAdminId = invoiceBranchAdminSelections[invoiceId];
+    if (!targetAdminId) {
+      alert(tx('请先选择分支管理员', 'Please select a branch admin first.'));
+      return;
+    }
+
+    setAssigningInvoiceId(invoiceId);
+    try {
+      const result = await apiCall('invoice', {
+        method: 'PUT',
+        body: JSON.stringify({
+          action: 'assignBranchAdmin',
+          invoiceId,
+          targetAdminId,
+        }),
+      });
+      if (!result.success) {
+        alert(getErrorMessage(result, tx('分配失败', 'Assignment failed')));
+        return;
+      }
+      alert(result.message || tx('账单归属已分配', 'Invoice ownership assigned.'));
+      await loadInvoices();
+    } catch (error) {
+      alert(getErrorMessage(error, tx('网络错误，请重试', 'Network error, please retry.')));
+    } finally {
+      setAssigningInvoiceId(null);
+    }
+  };
 
   const handleTransferDialogOpenChange = (open: boolean) => {
     setShowTransferDialog(open);
@@ -247,6 +343,13 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     editingInvoiceReleaseDate,
     setEditingInvoiceReleaseDate,
     invoiceDateSaving,
+    branchAdminOptions,
+    branchAdminLoading,
+    assigningInvoiceId,
+    invoiceBranchAdminSelections,
+    loadBranchAdminOptions,
+    selectInvoiceBranchAdmin,
+    assignInvoiceBranchAdmin,
     openInvoiceDateEditor,
     clearInvoiceDateInputs,
     cancelInvoiceDateEditor,

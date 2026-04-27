@@ -591,6 +591,30 @@ async function rematchAllOrders(ownerIds: string[]) {
     });
   }
 
+  for (const row of freshOrders) {
+    if (row.customerId || !row.needsCustomerFix) continue;
+    const resolved = await resolveCustomer({
+      customerMark: typeof row.customerMark === 'string' ? row.customerMark : '',
+      customerName: typeof row.customerName === 'string' ? row.customerName : null,
+      customerId: null,
+    });
+    if (!resolved.customerId || resolved.needsCustomerFix) continue;
+    await runInTransaction(async (tx) => {
+      await tx.order.update({
+        where: { id: row.id },
+        data: {
+          customerId: resolved.customerId,
+          customerMark: resolved.customerMark,
+          customerName: resolved.customerName,
+          customerPhone: resolved.customerPhone,
+          customerCity: resolved.customerCity,
+          needsCustomerFix: false,
+        },
+      });
+    });
+    customerSyncedCount++;
+  }
+
   const allReceipts = await db.receipt.findMany({
     where: {
       ...receiptVisibilityWhere,

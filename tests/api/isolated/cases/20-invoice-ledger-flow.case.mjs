@@ -209,5 +209,62 @@ export default async function run(t) {
   });
   t.step('unused order delete works');
 
+  const lateMark = `LATE-${suffix}`;
+  const lateOrderBase = `LATEORDER-${suffix}`;
+  const lateOrderNo = `${lateOrderBase}-05`;
+  const lateInvoiceNo = `INV-LATE-${suffix}`;
+
+  await t.request('POST', '/api/invoice', {
+    json: {
+      invNo: lateInvoiceNo,
+      orders: [
+        { orderNo: lateOrderNo, amount: 880, customerMark: lateMark, customerName: '' },
+      ],
+    },
+    expectedStatus: 200,
+  });
+  t.step('late-bound invoice created before customer exists');
+
+  const lateInvoiceBefore = await t.request('GET', `/api/invoice?search=${encodeURIComponent(lateInvoiceNo)}`, { expectedStatus: 200 });
+  const lateInvoiceBeforeRow = Array.isArray(lateInvoiceBefore.data?.data)
+    ? lateInvoiceBefore.data.data.find((row) => row.invNo === lateInvoiceNo)
+    : null;
+  const lateOrderBefore = Array.isArray(lateInvoiceBeforeRow?.orders)
+    ? lateInvoiceBeforeRow.orders.find((row) => row.orderNo === lateOrderNo)
+    : null;
+  t.assertOk(Boolean(lateOrderBefore?.needsCustomerFix), 'late-bound order starts as unresolved');
+
+  await t.request('POST', '/api/customer', {
+    json: {
+      action: 'create',
+      mark: lateMark,
+      orderName: lateOrderBase,
+      name: `Late Customer ${suffix}`,
+      phone: `621${Math.floor(Math.random() * 900000 + 100000)}`,
+      city: 'Conakry',
+      ownerId: salesId,
+    },
+    expectedStatus: 200,
+  });
+  t.step('late-bound customer created after invoice');
+
+  await t.request('PUT', '/api/invoice', {
+    json: {
+      action: 'rematch',
+    },
+    expectedStatus: 200,
+  });
+  t.step('invoice rematch reruns customer resolution for unresolved order');
+
+  const lateInvoiceAfter = await t.request('GET', `/api/invoice?search=${encodeURIComponent(lateInvoiceNo)}`, { expectedStatus: 200 });
+  const lateInvoiceAfterRow = Array.isArray(lateInvoiceAfter.data?.data)
+    ? lateInvoiceAfter.data.data.find((row) => row.invNo === lateInvoiceNo)
+    : null;
+  const lateOrderAfter = Array.isArray(lateInvoiceAfterRow?.orders)
+    ? lateInvoiceAfterRow.orders.find((row) => row.orderNo === lateOrderNo)
+    : null;
+  t.assertOk(Boolean(lateOrderAfter?.customerId), 'late-bound order gains customerId after rematch');
+  t.assertEqual(Boolean(lateOrderAfter?.needsCustomerFix), false, 'late-bound order clears needsCustomerFix after rematch');
+
   await t.logout();
 }

@@ -477,6 +477,80 @@ describe('invoice-service', () => {
     }));
   });
 
+  it('rematches a single unresolved order by re-running customer resolution', async () => {
+    mockDb.order.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'order-1',
+          invoiceId: 'inv-1',
+          orderNo: 'TEST-1-05',
+          amount: 100,
+          orderBalance: 100,
+          receipts: [],
+          invoice: { id: 'inv-1', invNo: 'INV-1' },
+        },
+      ]) // allOrders
+      .mockResolvedValueOnce([
+        {
+          id: 'order-1',
+          orderNo: 'TEST-1-05',
+          customerId: null,
+          customerMark: 'ASD-DSA',
+          customerName: null,
+          customerPhone: null,
+          customerCity: null,
+          needsCustomerFix: true,
+        },
+      ]) // freshOrders
+      .mockResolvedValueOnce([]) // orderIds
+      .mockResolvedValueOnce([]); // zeroOrders
+    mockDb.receipt.findMany
+      .mockResolvedValueOnce([]) // allReceipts
+      .mockResolvedValueOnce([]); // receiptRows in grouped sync path not used
+    mockDb.invoice.findMany.mockResolvedValueOnce([
+      { id: 'inv-1', invNo: 'INV-1', _count: { orders: 1 } },
+    ]);
+    mockDb.order.update.mockResolvedValueOnce({
+      id: 'order-1',
+    });
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'cust-1',
+      customerMark: 'ASD-DSA',
+      customerName: 'TEST-1',
+      customerPhone: '620123456',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      matchedBy: 'mark',
+      candidateCount: 1,
+    });
+    mockConsolidateGroupedOrders.mockResolvedValueOnce({
+      mergedGroups: 0,
+      mergedOrders: 0,
+      createdGroups: 0,
+      syncedAliases: 0,
+    });
+
+    const result = await rematchInvoices(makeUser());
+
+    expect(result.message).toContain('同步客户 1');
+    expect(mockResolveCustomer).toHaveBeenCalledWith({
+      customerMark: 'ASD-DSA',
+      customerName: null,
+      customerId: null,
+    });
+    expect(mockDb.order.update).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: {
+        customerId: 'cust-1',
+        customerMark: 'ASD-DSA',
+        customerName: 'TEST-1',
+        customerPhone: '620123456',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+      },
+    });
+  });
+
   it('applies manual rematch resolution and records audit summary', async () => {
     mockDb.order.findMany
       .mockResolvedValueOnce([

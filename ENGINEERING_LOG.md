@@ -1,13 +1,15 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.90  
-> 最后更新：2026-03-30
+> 当前版本：v1.0.91  
+> 最后更新：2026-04-27
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 账单管理 `REMATCH` 新增“单条需修复订单重新解析”：对 `customerId = null && needsCustomerFix = true` 的可见订单，rematch 末尾会重新执行一次 `resolveCustomer(...)` 并只更新当前订单本身 ✅ 2026-04-27
+- [x] 补齐回归：新增 `invoice-service` 单测与 `invoice-ledger-flow` isolated API 断言，覆盖“先建订单、后建客户、再 rematch 自动补客户”链路 ✅ 2026-04-27
 - [x] 收据管理“直接创建收据”新增上传图片入口：复用受保护的 `/api/upload-image` 上传链路，图片按 `receipt-direct -> receipts/direct` 分类写入 NAS 挂载目录，并在 `direct-create` 创建时关联到收据记录 ✅ 2026-04-27
 - [x] Docker 上传目录切换到 NAS bind mount：`/app/upload` 从 Docker named volume 改为宿主机 `UPLOAD_HOST_DIR`，默认指向 `/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload`，并保留历史图片迁移步骤 ✅ 2026-04-27
 - [x] 收据管理“直接创建收据”弹窗字段顺序调整为 `ORDERNO -> INVNO -> 客户MARK -> 付款金额USD`，并补齐组件/Hook/API 回归测试 ✅ 2026-04-27
@@ -204,6 +206,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.91（2026-04-27）：账单管理 `REMATCH` 增加“单条需修复订单重新解析”；对 `customerId = null && needsCustomerFix = true` 的订单，在 rematch 末尾重新执行一次客户解析并仅回填当前订单；新增 `invoice-service` 单测与 `invoice-ledger-flow` isolated API 断言，覆盖“先建订单、后建客户、再 rematch 自动补客户”的真实链路
 - v1.0.89（2026-03-30）：补齐当前版本基线剩余的两项安全硬化：新增 Next.js + Caddy 双层请求体大小限制，防止超大 JSON/上传请求直接压垮应用；对登录、上传识别、删除申请/审批加入统一速率限制，并把 `REQUEST_TOO_LARGE / RATE_LIMITED` 纳入错误码目录、系统配置、单测、isolated API 回归与本地 Docker/Caddy 验证链路
 - v1.0.87（2026-03-30）：继续做同类多语言风险扫尾；`customer` API 的嵌套 `phoneConflictMessage` 现在也通过 `localizeApiSuccessMessage` 按请求语言本地化，`customer-import-and-scope` isolated API case 新增英文 locale 断言，确认外部 API 调用拿到的冲突提示不再固定中文
 - v1.0.86（2026-03-30）：修复客户手机号冲突提示的 i18n 回退问题；客户列表 tooltip 不再读取服务端中文 `phoneConflictMessage` 直接展示，`use-customer-actions` 在保存后对手机号冲突也改为使用当前语言的前端文案；补齐英文界面的 `customer-form-dialog` 和 `use-customer-actions` 回归测试，并重新验证构建通过

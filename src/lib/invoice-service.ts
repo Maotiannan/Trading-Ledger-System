@@ -392,6 +392,7 @@ export async function processInvoiceImportRows(
       createdBy: currentUser.id,
       shipDate: group.shipDate,
       releaseDate: group.releaseDate,
+      ownerIds,
     });
     if (!saved.ok) {
       for (const row of group.sourceRows) {
@@ -451,12 +452,15 @@ export async function createInvoiceRecord(currentUser: CurrentUser, input: {
   shipDate?: Date | null;
   releaseDate?: Date | null;
 }) {
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
   const saved = await saveInvoiceWithOrders({
     invNo: String(input.invNo || ''),
     orders: Array.isArray(input.orders) ? input.orders : [],
     createdBy: currentUser.id,
     shipDate: input.shipDate,
     releaseDate: input.releaseDate,
+    ownerIds,
   });
   if (!saved.ok) {
     throw createApiError({
@@ -597,6 +601,8 @@ async function rematchAllOrders(ownerIds: string[]) {
       customerMark: typeof row.customerMark === 'string' ? row.customerMark : '',
       customerName: typeof row.customerName === 'string' ? row.customerName : null,
       customerId: null,
+      customerOrderNo: row.orderNo,
+      ownerIds,
     });
     if (!resolved.customerId || resolved.needsCustomerFix) continue;
     await runInTransaction(async (tx) => {
@@ -1096,6 +1102,8 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
       customerMark: incomingCustomerMark,
       customerName: incomingCustomerName || null,
       customerId: incomingCustomerId || null,
+      customerOrderNo: incomingOrderNo,
+      ownerIds,
     });
     customerData = {
       customerId: resolved.customerId,
@@ -1205,6 +1213,8 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
     customerMark,
     customerName: customerName || null,
     customerId: customerId || null,
+    customerOrderNo: incomingOrderNo,
+    ownerIds,
   });
 
   const existingOrderId = await findOrderIdByNoOrAlias(incomingOrderNo, buildOrderVisibilityWhere(ownerIds));

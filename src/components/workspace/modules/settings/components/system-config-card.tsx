@@ -1,10 +1,11 @@
 'use client';
 
+import { useState, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Save } from 'lucide-react';
 
 export type SystemConfigCardProps = {
   loading: boolean;
@@ -29,6 +30,8 @@ export function SystemConfigCard({
   onTestOcrConfig,
   onSaveConfig,
 }: SystemConfigCardProps) {
+  const [showOcrApiKey, setShowOcrApiKey] = useState(false);
+
   return (
     <Card>
       <CardHeader>
@@ -53,7 +56,28 @@ export function SystemConfigCard({
               </div>
               <div>
                 <Label>OCR_API_KEY</Label>
-                <Input type="password" value={config.OCR_API_KEY || ''} onChange={(e) => onConfigFieldChange('OCR_API_KEY', e.target.value)} disabled={!canEditConfig} />
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    name="ocr-api-key-config"
+                    autoComplete="off"
+                    data-form-type="other"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    value={config.OCR_API_KEY || ''}
+                    onChange={(e) => onConfigFieldChange('OCR_API_KEY', e.target.value)}
+                    disabled={!canEditConfig}
+                    style={showOcrApiKey ? undefined : ({ WebkitTextSecurity: 'disc' } as CSSProperties)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowOcrApiKey((value) => !value)}
+                    aria-label={showOcrApiKey ? 'Hide OCR API key' : 'Show OCR API key'}
+                  >
+                    {showOcrApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label>OCR_DISABLED</Label>

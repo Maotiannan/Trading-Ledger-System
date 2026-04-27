@@ -1,6 +1,7 @@
 import {
   getApiErrorCode,
   getApiErrorMessage,
+  lookupOrderContextByOrderNo,
   peekPrefetchedApiResult,
   prefetchApiResult,
   WorkspaceApiError,
@@ -87,6 +88,60 @@ describe('workspace api client', () => {
     expect(cached).toEqual({ success: true, data: [{ id: 'row-1' }] });
     expect(second).toEqual({ success: true, data: [{ id: 'row-1' }] });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    Object.assign(global, { fetch: originalFetch });
+  });
+
+  it('prefers exact database invoice context and marks multi-invoice conflicts', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: {
+          exactMatches: [
+            {
+              orderNo: 'TEST-1-05',
+              customerMark: 'ASD-DSA',
+              customerName: 'TEST-1',
+              customerId: 'cust-latest',
+              createdAt: '2026-04-27T02:00:00.000Z',
+              invoice: { invNo: 'INV-LATEST', createdAt: '2026-04-27T02:00:00.000Z' },
+            },
+            {
+              orderNo: 'TEST-1-05',
+              customerMark: 'ASD-DSA',
+              customerName: 'TEST-1',
+              customerId: 'cust-old',
+              createdAt: '2026-04-26T02:00:00.000Z',
+              invoice: { invNo: 'INV-OLD', createdAt: '2026-04-26T02:00:00.000Z' },
+            },
+          ],
+          inferredCustomer: {
+            id: 'cust-fallback',
+            mark: 'FALLBACK',
+            orderName: 'TEST-1',
+            name: 'Fallback',
+          },
+        },
+      }),
+    } as Response);
+    Object.assign(global, { fetch: fetchMock });
+
+    const result = await lookupOrderContextByOrderNo('TEST-1-05');
+
+    expect(result).toEqual({
+      matchedCustomer: {
+        mark: 'ASD-DSA',
+        name: 'TEST-1',
+        customerId: 'cust-latest',
+      },
+      invoiceSuggestion: {
+        invNo: 'INV-LATEST',
+        conflict: true,
+        count: 2,
+      },
+    });
 
     Object.assign(global, { fetch: originalFetch });
   });

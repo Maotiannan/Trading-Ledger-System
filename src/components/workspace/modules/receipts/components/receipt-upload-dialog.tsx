@@ -18,6 +18,8 @@ export type ReceiptUploadDialogProps = {
   ocrCustomerMark: string;
   ocrCustomerId: string;
   ocrCustomerCandidates: CustomerCandidate[];
+  ocrInvConflict: boolean;
+  ocrInvConflictCount: number;
   tx: (zh: string, en: string) => string;
   onOpenChange: (open: boolean) => void;
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -37,6 +39,8 @@ export function ReceiptUploadDialog({
   ocrCustomerMark,
   ocrCustomerId,
   ocrCustomerCandidates,
+  ocrInvConflict,
+  ocrInvConflictCount,
   tx,
   onOpenChange,
   onFileSelect,
@@ -97,7 +101,16 @@ export function ReceiptUploadDialog({
                 </div>
                 <div>
                   <Label className="text-sm text-gray-500">{tx('账单号', 'Invoice No.')}</Label>
-                  <Input value={(ocrResult.invNo as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, invNo: e.target.value })} />
+                  <Input
+                    value={(ocrResult.invNo as string) || ''}
+                    onChange={(e) => onOcrResultChange({ ...ocrResult, invNo: e.target.value })}
+                    className={ocrInvConflict ? 'border-red-500 text-red-600 focus-visible:ring-red-500' : ''}
+                  />
+                  {ocrInvConflict && (
+                    <p className="mt-1 text-xs text-red-600">
+                      {tx(`该 ORDER 命中 ${ocrInvConflictCount} 个发票号，当前已自动选用最新一条，请核对。`, `This ORDER matched ${ocrInvConflictCount} invoice numbers. The latest one was auto-selected. Please verify.`)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label className="text-sm text-gray-500">{tx('付款人', 'Payer')}</Label>

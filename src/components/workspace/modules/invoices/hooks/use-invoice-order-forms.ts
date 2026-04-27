@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { lookupCustomerByOrderNoGroup, type CustomerCandidate } from '@/components/workspace/shared';
+import { lookupOrderContextByOrderNo, type CustomerCandidate } from '@/components/workspace/shared';
 import type { Order } from '@/lib/store';
 import type { EditingInvoiceOrder, InvoiceDraftOrder } from '../types';
 
@@ -130,7 +130,8 @@ export function useInvoiceOrderForms(loadCustomerCandidates: LoadCustomerCandida
       setOrders(newOrders);
       const orderInput = value.trim();
       if (orderInput) {
-        void lookupCustomerByOrderNoGroup(orderInput).then((matched) => {
+        void lookupOrderContextByOrderNo(orderInput).then((context) => {
+          const matched = context.matchedCustomer;
           if (!matched) return;
           setOrders((prev) => {
             const copy = [...prev];
@@ -175,7 +176,8 @@ export function useInvoiceOrderForms(loadCustomerCandidates: LoadCustomerCandida
   const handleNewOrderNoChange = (value: string) => {
     setNewOrderNo(value);
     if (value.trim()) {
-      void lookupCustomerByOrderNoGroup(value).then((matched) => {
+      void lookupOrderContextByOrderNo(value).then((context) => {
+        const matched = context.matchedCustomer;
         if (!matched) return;
         setNewOrderCustomerMark(matched.mark);
         setNewOrderCustomerName(matched.name);

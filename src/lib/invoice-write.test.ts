@@ -137,6 +137,13 @@ describe('invoice-write', () => {
       ok: true,
       message: '账单已保存',
     }));
+    expect(mockResolveCustomer).toHaveBeenCalledWith({
+      customerMark: 'IB',
+      customerName: null,
+      customerId: null,
+      customerOrderNo: 'IB-01',
+      ownerIds: undefined,
+    });
     expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
     expect(mockDb.order.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -201,6 +208,47 @@ describe('invoice-write', () => {
     }));
     expect(mockDb.order.create).not.toHaveBeenCalled();
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+  });
+
+  it('passes owner visibility into customer resolution so wrong MARK can fall back by ORDER', async () => {
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'customer-2',
+      customerMark: 'KIGNA TEXTILE',
+      customerName: 'GANDO',
+      customerPhone: '+224626944105',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+    mockDb.invoice.findFirst.mockResolvedValueOnce(null);
+    mockDb.invoice.create.mockResolvedValueOnce({ id: 'inv-2', invNo: 'INV-002' });
+    mockFindOrderIdByNoOrAliasWithExecutor
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockDb.order.create.mockResolvedValueOnce({ id: 'order-2', orderNo: 'GANDO-07' });
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-2', orderNo: 'GANDO-07' });
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    mockDb.invoice.findUnique.mockResolvedValueOnce({
+      id: 'inv-2',
+      orders: [{ id: 'order-2', orderNo: 'GANDO-07' }],
+    });
+
+    const result = await saveInvoiceWithOrders({
+      invNo: 'INV-002',
+      createdBy: 'admin-1',
+      ownerIds: ['sales-1', 'admin-1'],
+      orders: [
+        { orderNo: 'GANDO-07', amount: 200, customerMark: 'KIGNATEX' },
+      ],
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    expect(mockResolveCustomer).toHaveBeenCalledWith({
+      customerMark: 'KIGNATEX',
+      customerName: null,
+      customerId: null,
+      customerOrderNo: 'GANDO-07',
+      ownerIds: ['sales-1', 'admin-1'],
+    });
   });
 
   it('moves matching Un_Associated orders into the target invoice and re-links receipts', async () => {

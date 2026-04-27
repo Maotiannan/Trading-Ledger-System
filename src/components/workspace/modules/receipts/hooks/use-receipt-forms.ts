@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchServerDate, lookupCustomerByOrderNoGroup, type CustomerCandidate } from '@/components/workspace/shared';
+import { fetchServerDate, lookupOrderContextByOrderNo, type CustomerCandidate } from '@/components/workspace/shared';
 import { EMPTY_RECEIPT_DIRECT_FORM, type ReceiptDirectForm } from '../types';
 
 export type LoadReceiptCustomerCandidates = (
@@ -27,6 +27,10 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
   const [directSavedImagePath, setDirectSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [directUploadedImageName, setDirectUploadedImageName] = useState('');
+  const [directInvConflict, setDirectInvConflict] = useState(false);
+  const [directInvConflictCount, setDirectInvConflictCount] = useState(0);
+  const [ocrInvConflict, setOcrInvConflict] = useState(false);
+  const [ocrInvConflictCount, setOcrInvConflictCount] = useState(0);
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -39,9 +43,25 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   useEffect(() => {
     if (!showDirectCreate) return;
     const currentOrderNo = directForm.orderNo;
-    if (!currentOrderNo.trim()) return;
+    if (!currentOrderNo.trim()) {
+      queueMicrotask(() => {
+        setDirectInvConflict(false);
+        setDirectInvConflictCount(0);
+      });
+      return;
+    }
     const timer = setTimeout(() => {
-      void lookupCustomerByOrderNoGroup(currentOrderNo).then((matched) => {
+      void lookupOrderContextByOrderNo(currentOrderNo).then((context) => {
+        if (context.invoiceSuggestion?.invNo) {
+          setDirectForm((prev) => ({ ...prev, invNo: context.invoiceSuggestion?.invNo || prev.invNo }));
+          setDirectInvConflict(Boolean(context.invoiceSuggestion.conflict));
+          setDirectInvConflictCount(context.invoiceSuggestion.count);
+        } else {
+          setDirectInvConflict(false);
+          setDirectInvConflictCount(0);
+        }
+
+        const matched = context.matchedCustomer;
         if (!matched) return;
         setDirectForm((prev) => ({
           ...prev,
@@ -63,9 +83,25 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   useEffect(() => {
     if (!showUpload || !ocrResult) return;
     const currentOrderNo = typeof ocrResult.orderNo === 'string' ? ocrResult.orderNo : '';
-    if (!currentOrderNo.trim()) return;
+    if (!currentOrderNo.trim()) {
+      queueMicrotask(() => {
+        setOcrInvConflict(false);
+        setOcrInvConflictCount(0);
+      });
+      return;
+    }
     const timer = setTimeout(() => {
-      void lookupCustomerByOrderNoGroup(currentOrderNo).then((matched) => {
+      void lookupOrderContextByOrderNo(currentOrderNo).then((context) => {
+        if (context.invoiceSuggestion?.invNo) {
+          setOcrResult((prev) => prev ? ({ ...prev, invNo: context.invoiceSuggestion?.invNo || prev.invNo }) : prev);
+          setOcrInvConflict(Boolean(context.invoiceSuggestion.conflict));
+          setOcrInvConflictCount(context.invoiceSuggestion.count);
+        } else {
+          setOcrInvConflict(false);
+          setOcrInvConflictCount(0);
+        }
+
+        const matched = context.matchedCustomer;
         if (!matched) return;
         setOcrCustomerMark(matched.mark);
         setOcrCustomerName(matched.name);
@@ -87,6 +123,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setOcrCustomerName('');
       setOcrCustomerId('');
       setOcrCustomerCandidates([]);
+      setOcrInvConflict(false);
+      setOcrInvConflictCount(0);
     }
   };
 
@@ -97,6 +135,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setDirectCustomerCandidates([]);
       setDirectSavedImagePath(null);
       setDirectUploadedImageName('');
+      setDirectInvConflict(false);
+      setDirectInvConflictCount(0);
     }
   };
 
@@ -133,6 +173,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectCustomerCandidates([]);
     setDirectSavedImagePath(null);
     setDirectUploadedImageName('');
+    setDirectInvConflict(false);
+    setDirectInvConflictCount(0);
   };
 
   return {
@@ -163,6 +205,10 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectSavedImagePath,
     directUploadedImageName,
     setDirectUploadedImageName,
+    directInvConflict,
+    directInvConflictCount,
+    ocrInvConflict,
+    ocrInvConflictCount,
     viewingImage,
     setViewingImage,
     handleShowUploadChange,

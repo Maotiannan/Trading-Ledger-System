@@ -22,6 +22,7 @@ import {
 } from '@/lib/invoice-service';
 import {
   listInvoiceRecords,
+  lookupInvoiceOrderContext,
   listOrderMatchCandidates,
   listOrderReceiptRecords,
 } from '@/lib/invoice-read-service';
@@ -111,6 +112,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       });
     }
 
+    if (action === 'order-context') {
+      const result = await lookupInvoiceOrderContext(currentUser, orderNo);
+      return createApiSuccessResponse(result, request);
+    }
+
     if (orderId) {
       const result = await listOrderReceiptRecords(currentUser, orderId);
       return createApiSuccessResponse(result, request);
@@ -133,7 +139,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   }
 });
 
-export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
+export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
   try {
     const contentType = request.headers.get('content-type') || '';
 
@@ -259,9 +265,9 @@ export const POST = withRole([UserRole.ADMIN, UserRole.SALES], async (request: N
       message: '服务器错误',
     }, request);
   }
-}, '只有管理员和销售代表可以创建账单');
+}, '只有管理员可以创建账单');
 
-export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
+export const DELETE = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const result = await deleteInvoiceRecord(currentUser, searchParams.get('id') || '');
@@ -274,9 +280,9 @@ export const DELETE = withRole([UserRole.ADMIN, UserRole.SALES], async (request:
       message: '服务器错误',
     }, request);
   }
-}, '只有管理员和销售代表可以删除账单');
+}, '只有管理员可以删除账单');
 
-export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: NextRequest, currentUser) => {
+export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, currentUser) => {
   try {
     const body = await parseJsonRequest<Record<string, unknown>>(request);
     const action = typeof body?.action === 'string' ? body.action : '';
@@ -370,4 +376,4 @@ export const PUT = withRole([UserRole.ADMIN, UserRole.SALES], async (request: Ne
       message: '服务器错误',
     }, request);
   }
-}, '只有管理员和销售代表可以修改订单');
+}, '只有管理员可以修改账单和订单');

@@ -73,6 +73,10 @@ export function ReceiptManager() {
     setDirectSavedImagePath,
     directUploadedImageName,
     setDirectUploadedImageName,
+    directInvConflict,
+    directInvConflictCount,
+    ocrInvConflict,
+    ocrInvConflictCount,
     viewingImage,
     setViewingImage,
     handleShowUploadChange,
@@ -246,6 +250,8 @@ export function ReceiptManager() {
         ocrCustomerMark={ocrCustomerMark}
         ocrCustomerId={ocrCustomerId}
         ocrCustomerCandidates={ocrCustomerCandidates}
+        ocrInvConflict={ocrInvConflict}
+        ocrInvConflictCount={ocrInvConflictCount}
         tx={tx}
         onOpenChange={handleShowUploadChange}
         onFileSelect={handleFileSelect}
@@ -263,6 +269,8 @@ export function ReceiptManager() {
         tx={tx}
         uploadedImageName={directUploadedImageName}
         directUploading={directUploading}
+        invConflict={directInvConflict}
+        invConflictCount={directInvConflictCount}
         onOpenChange={handleShowDirectCreateChange}
         onFormChange={setDirectForm}
         onCustomerMarkChange={handleDirectCustomerMarkChange}

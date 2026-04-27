@@ -189,6 +189,7 @@ describe('invoice-service', () => {
     expect(mockSaveInvoiceWithOrders).toHaveBeenCalledWith(expect.objectContaining({
       invNo: 'INV-001',
       createdBy: 'sales-1',
+      ownerIds: ['sales-1'],
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_CREATE',
@@ -537,6 +538,8 @@ describe('invoice-service', () => {
       customerMark: 'ASD-DSA',
       customerName: null,
       customerId: null,
+      customerOrderNo: 'TEST-1-05',
+      ownerIds: ['sales-1'],
     });
     expect(mockDb.order.update).toHaveBeenCalledWith({
       where: { id: 'order-1' },
@@ -708,6 +711,50 @@ describe('invoice-service', () => {
     }));
   });
 
+  it('updates invoice orders by retrying customer resolution with ORDER fallback and owner scope', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-1',
+      orderNo: 'GANDO-07',
+      amount: 100,
+      customerId: null,
+      customerMark: 'KIGNATEX',
+      customerName: null,
+      customerPhone: null,
+      customerCity: null,
+      needsCustomerFix: true,
+    });
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'customer-1',
+      customerMark: 'KIGNA TEXTILE',
+      customerName: 'GANDO',
+      customerPhone: '+224626944105',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+    mockDb.order.update.mockResolvedValueOnce({
+      id: 'order-1',
+      orderNo: 'GANDO-07',
+      amount: 100,
+    });
+
+    await updateInvoiceOrder(makeUser(), {
+      orderId: 'order-1',
+      orderNo: 'GANDO-07',
+      amount: 100,
+      customerMark: 'KIGNATEX',
+      customerName: '',
+      customerId: '',
+    });
+
+    expect(mockResolveCustomer).toHaveBeenCalledWith({
+      customerMark: 'KIGNATEX',
+      customerName: null,
+      customerId: null,
+      customerOrderNo: 'GANDO-07',
+      ownerIds: ['sales-1'],
+    });
+  });
+
   it('blocks invoice deletion when a visible receipt already exists', async () => {
     mockDb.invoice.findFirst.mockResolvedValueOnce({
       id: 'inv-1',
@@ -851,6 +898,13 @@ describe('invoice-service', () => {
         createdBy: 'sales-1',
       }),
     }));
+    expect(mockResolveCustomer).toHaveBeenCalledWith({
+      customerMark: 'IB',
+      customerName: 'IB',
+      customerId: 'customer-1',
+      customerOrderNo: 'IB-02',
+      ownerIds: ['sales-1'],
+    });
     expect(mockConsolidateGroupedOrders).toHaveBeenCalledWith({ invoiceIds: ['inv-1'] });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'ORDER_ADD',

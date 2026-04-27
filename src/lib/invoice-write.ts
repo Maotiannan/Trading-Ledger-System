@@ -28,7 +28,7 @@ function normalizeOrderNoLocal(value: string) {
   return normalizeOrderNo(value);
 }
 
-async function prepareInvoiceOrders(orders: InvoiceOrderInput[]) {
+async function prepareInvoiceOrders(orders: InvoiceOrderInput[], ownerIds?: string[]) {
   const preparedOrders: PreparedInvoiceOrderInput[] = [];
   let hasNeedsCustomerFix = false;
 
@@ -52,6 +52,8 @@ async function prepareInvoiceOrders(orders: InvoiceOrderInput[]) {
       customerMark: rowCustomerMark,
       customerName: rowCustomerName || null,
       customerId: rowCustomerId || null,
+      customerOrderNo: canonicalOrderNo,
+      ownerIds,
     });
     if (customerResolution.needsCustomerFix) hasNeedsCustomerFix = true;
 
@@ -283,6 +285,7 @@ export async function saveInvoiceWithOrders(input: {
   createdBy: string;
   shipDate?: Date | null;
   releaseDate?: Date | null;
+  ownerIds?: string[];
 }) {
   const normalizedInvNo = String(input.invNo || '').trim();
   if (!normalizedInvNo) {
@@ -292,7 +295,7 @@ export async function saveInvoiceWithOrders(input: {
     return { ok: false as const, status: 400, error: '订单列表不能为空' };
   }
 
-  const prepared = await prepareInvoiceOrders(input.orders);
+  const prepared = await prepareInvoiceOrders(input.orders, input.ownerIds);
   if (!prepared.ok) {
     return prepared;
   }

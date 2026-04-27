@@ -5,6 +5,8 @@ export type CustomerResolveInput = {
   customerOrderName?: string | null;
   customerName?: string | null;
   customerId?: string | null;
+  customerOrderNo?: string | null;
+  ownerIds?: string[] | null;
 };
 
 export type CustomerResolveResult = {
@@ -22,14 +24,32 @@ function normalize(value: string | null | undefined): string {
   return (value || '').trim();
 }
 
+export function normalizeOrderNameForMatch(value: string | null | undefined): string {
+  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+export function extractOrderNameFromOrderNo(value: string | null | undefined): string | null {
+  const normalized = String(value || '').trim();
+  const lastDashIndex = normalized.lastIndexOf('-');
+  if (lastDashIndex <= 0 || lastDashIndex >= normalized.length - 1) return null;
+  const left = normalized.slice(0, lastDashIndex).trim().replace(/\s+/g, ' ');
+  return left || null;
+}
+
 export async function resolveCustomer(input: CustomerResolveInput): Promise<CustomerResolveResult> {
   const customerMark = normalize(input.customerMark);
-  const customerOrderNameInput = normalize(input.customerOrderName ?? input.customerName);
+  const explicitOrderNameInput = normalize(input.customerOrderName ?? input.customerName);
+  const derivedOrderNameInput = extractOrderNameFromOrderNo(input.customerOrderNo);
+  const customerOrderNameInput = explicitOrderNameInput || normalize(derivedOrderNameInput);
   const customerIdInput = normalize(input.customerId);
+  const baseWhere = Array.isArray(input.ownerIds) && input.ownerIds.length > 0
+    ? { ownerId: { in: input.ownerIds } }
+    : {};
 
   const markCandidates = customerMark
     ? await db.customer.findMany({
         where: {
+          ...baseWhere,
           mark: {
             equals: customerMark,
           },
@@ -71,6 +91,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
   if (customerOrderNameInput) {
     const nameCandidates = await db.customer.findMany({
       where: {
+        ...baseWhere,
         orderName: {
           equals: customerOrderNameInput,
         },

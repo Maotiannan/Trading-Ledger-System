@@ -10,6 +10,9 @@ export default async function run(t) {
   const secondaryOrderNo = `ALT-${suffix}-01`;
   const updatedSecondaryOrderNo = `ALT-${suffix}-02`;
   const invoiceNo = `INV-${suffix}`;
+  const fallbackOrderName = `GANDO-${suffix}`;
+  const fallbackOrderNo = `${fallbackOrderName}-07`;
+  const fallbackInvoiceNo = `INV-FALLBACK-${suffix}`;
   const branchAdminEmail = `${suffix}-branch-admin@example.com`;
   const salesEmail = `${suffix}-sales@example.com`;
 
@@ -46,6 +49,20 @@ export default async function run(t) {
   });
   t.step('invoice test customer created');
 
+  await t.request('POST', '/api/customer', {
+    json: {
+      action: 'create',
+      mark: `KIGNA TEXTILE ${suffix}`,
+      orderName: fallbackOrderName,
+      name: `Fallback Customer ${suffix}`,
+      phone: `622${Math.floor(Math.random() * 900000 + 100000)}`,
+      city: 'Conakry',
+      ownerId: salesId,
+    },
+    expectedStatus: 200,
+  });
+  t.step('fallback customer created for ORDER-based resolution');
+
   await t.request('POST', '/api/invoice', {
     json: {
       invNo: invoiceNo,
@@ -58,6 +75,22 @@ export default async function run(t) {
     expectedStatus: 200,
   });
   t.step('invoice created with first order');
+
+  await t.request('POST', '/api/invoice', {
+    json: {
+      invNo: fallbackInvoiceNo,
+      orders: [
+        { orderNo: fallbackOrderNo, amount: 450, customerMark: 'KIGNATEX', customerName: '' },
+      ],
+    },
+    expectedStatus: 200,
+  });
+  const fallbackInvoiceList = await t.request('GET', `/api/invoice?search=${encodeURIComponent(fallbackInvoiceNo)}`, { expectedStatus: 200 });
+  const fallbackInvoice = Array.isArray(fallbackInvoiceList.data?.data) ? fallbackInvoiceList.data.data.find((row) => row.invNo === fallbackInvoiceNo) : null;
+  const fallbackOrder = Array.isArray(fallbackInvoice?.orders) ? fallbackInvoice.orders.find((row) => row.orderNo === fallbackOrderNo) : null;
+  t.assertOk(Boolean(fallbackOrder?.customerId), 'invoice create falls back from MARK mismatch to ORDER-derived customer match');
+  t.assertEqual(fallbackOrder?.customerMark, `KIGNA TEXTILE ${suffix}`, 'invoice create rewrites customer MARK from ORDER-derived match');
+  t.step('invoice ORDER fallback matching works on create');
 
   const invoiceList = await t.request('GET', `/api/invoice?search=${encodeURIComponent(invoiceNo)}`, { expectedStatus: 200 });
   const invoiceRow = Array.isArray(invoiceList.data?.data) ? invoiceList.data.data.find((row) => row.invNo === invoiceNo) : null;
@@ -196,6 +229,30 @@ export default async function run(t) {
       && row.detail.items.some((item) => item?.receipt?.orderNo === orderNo || item?.orderNo === orderNo))
     : null;
   t.assertOk(Boolean(salesSwift?.id), 'sales can view swift for bound customer');
+
+  await t.request('POST', '/api/invoice', {
+    json: {
+      invNo: `SALES-BLOCKED-${suffix}`,
+      orders: [{ orderNo: `${mark}-SALES-01`, amount: 10, customerMark: mark }],
+    },
+    expectedStatus: 403,
+  });
+  await t.request('PUT', '/api/invoice', {
+    json: {
+      action: 'rematch',
+    },
+    expectedStatus: 403,
+  });
+  await t.request('PUT', '/api/invoice', {
+    json: {
+      action: 'updateInvoiceDates',
+      invoiceId,
+      shipDate: '2026-03-22',
+      releaseDate: '2026-03-23',
+    },
+    expectedStatus: 403,
+  });
+  t.step('sales invoice page is read-only at the API layer');
 
   await t.logout();
   await t.loginAdmin();

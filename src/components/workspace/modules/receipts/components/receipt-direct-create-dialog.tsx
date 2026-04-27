@@ -17,6 +17,8 @@ export type ReceiptDirectCreateDialogProps = {
   tx: (zh: string, en: string) => string;
   uploadedImageName: string;
   directUploading: boolean;
+  invConflict: boolean;
+  invConflictCount: number;
   onOpenChange: (open: boolean) => void;
   onFormChange: (value: ReceiptDirectForm) => void;
   onCustomerMarkChange: (value: string) => void;
@@ -33,6 +35,8 @@ export function ReceiptDirectCreateDialog({
   tx,
   uploadedImageName,
   directUploading,
+  invConflict,
+  invConflictCount,
   onOpenChange,
   onFormChange,
   onCustomerMarkChange,
@@ -51,7 +55,19 @@ export function ReceiptDirectCreateDialog({
         </DialogHeader>
         <div className="space-y-3 py-2">
           <Input placeholder={tx('客户单号(orderNo)', 'Order No. (orderNo)')} value={form.orderNo} onChange={(e) => onFormChange({ ...form, orderNo: e.target.value })} />
-          <Input placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')} value={form.invNo} onChange={(e) => onFormChange({ ...form, invNo: e.target.value })} />
+          <div className="space-y-1">
+            <Input
+              placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')}
+              value={form.invNo}
+              onChange={(e) => onFormChange({ ...form, invNo: e.target.value })}
+              className={invConflict ? 'border-red-500 text-red-600 focus-visible:ring-red-500' : ''}
+            />
+            {invConflict && (
+              <p className="text-xs text-red-600">
+                {tx(`该 ORDER 命中 ${invConflictCount} 个发票号，当前已自动选用最新一条，请核对。`, `This ORDER matched ${invConflictCount} invoice numbers. The latest one was auto-selected. Please verify.`)}
+              </p>
+            )}
+          </div>
           <Input placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')} value={form.customerMark} onChange={(e) => onCustomerMarkChange(e.target.value)} />
           <Input type="number" placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={form.usd} onChange={(e) => onFormChange({ ...form, usd: e.target.value })} />
           {customerCandidates.length > 1 && (

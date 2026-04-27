@@ -24,7 +24,6 @@ import {
   getErrorMessage,
   initCustomerImportRowViews,
   initInvoiceImportRowViews,
-  lookupCustomerByOrderNoGroup,
   mergeCustomerImportRowViews,
   mergeInvoiceImportRowViews,
   summarizeRowsForAlert,

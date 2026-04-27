@@ -24,6 +24,8 @@ describe('ReceiptDirectCreateDialog', () => {
     tx,
     uploadedImageName: '',
     directUploading: false,
+    invConflict: false,
+    invConflictCount: 0,
     onOpenChange: jest.fn(),
     onFormChange: jest.fn(),
     onCustomerMarkChange: jest.fn(),

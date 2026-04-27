@@ -1,7 +1,6 @@
 'use client';
 
 import { translateApiErrorCode, translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
-import { deriveOrderGroupKey } from '@/lib/order-group';
 
 const DECIMAL_KEYS = new Set([
   'amount',
@@ -296,46 +295,84 @@ export async function fetchServerDate(): Promise<string> {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
+export type OrderContextLookupResult = {
+  matchedCustomer: { mark: string; name: string; customerId: string } | null;
+  invoiceSuggestion: { invNo: string; conflict: boolean; count: number } | null;
+};
+
+export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise<OrderContextLookupResult> {
   const normalized = orderNoInput.trim();
-  if (!normalized) return null;
-  const inputGroupKey = deriveOrderGroupKey(normalized);
-  if (!inputGroupKey) return null;
-
-  const result = await apiCall(`invoice?orderNo=${encodeURIComponent(normalized)}`);
-  if (!result.success || !Array.isArray(result.data)) return null;
-
-  const markMap = new Map<string, { mark: string; name: string; customerId: string }>();
-  for (const row of result.data as Array<Record<string, unknown>>) {
-    const rowOrderNo = String(row.orderNo || '');
-    if (!rowOrderNo || deriveOrderGroupKey(rowOrderNo) !== inputGroupKey) continue;
-    const mark = String(row.customerMark || '').trim();
-    if (!mark) continue;
-    const key = mark.toLowerCase();
-    if (!markMap.has(key)) {
-      markMap.set(key, {
-        mark,
-        name: String(row.customerName || ''),
-        customerId: String(row.customerId || ''),
-      });
-    }
-  }
-
-  if (markMap.size === 1) {
-    return Array.from(markMap.values())[0];
-  }
-
-  const byMark = await apiCall(`customer?mark=${encodeURIComponent(inputGroupKey)}`);
-  if (byMark.success && Array.isArray(byMark.data) && byMark.data.length === 1) {
-    const row = byMark.data[0] as Record<string, unknown>;
+  if (!normalized) {
     return {
-      mark: String(row.mark || ''),
-      name: String(row.orderName || row.name || ''),
-      customerId: String(row.id || ''),
+      matchedCustomer: null,
+      invoiceSuggestion: null,
     };
   }
 
-  return null;
+  const result = await apiCall(`invoice?action=order-context&orderNo=${encodeURIComponent(normalized)}`);
+  if (!result.success || !result.data || typeof result.data !== 'object') {
+    return {
+      matchedCustomer: null,
+      invoiceSuggestion: null,
+    };
+  }
+
+  const payload = result.data as Record<string, unknown>;
+  const exactMatches = Array.isArray(payload.exactMatches) ? payload.exactMatches as Array<Record<string, unknown>> : [];
+  const inferredCustomer = payload.inferredCustomer && typeof payload.inferredCustomer === 'object'
+    ? payload.inferredCustomer as Record<string, unknown>
+    : null;
+
+  const invoiceRows = exactMatches
+    .map((row) => {
+      const invoice = row.invoice && typeof row.invoice === 'object'
+        ? row.invoice as Record<string, unknown>
+        : null;
+      return {
+        invNo: String(invoice?.invNo || '').trim(),
+        createdAt: String(invoice?.createdAt || row.createdAt || ''),
+        customerMark: String(row.customerMark || '').trim(),
+        customerName: String(row.customerName || '').trim(),
+        customerId: String(row.customerId || '').trim(),
+      };
+    })
+    .filter((row) => row.invNo);
+
+  invoiceRows.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+
+  const uniqueInvNos = Array.from(new Set(invoiceRows.map((row) => row.invNo.toLowerCase())));
+  const latestInvoice = invoiceRows[0];
+
+  let matchedCustomer: { mark: string; name: string; customerId: string } | null = null;
+  if (latestInvoice?.customerMark) {
+    matchedCustomer = {
+      mark: latestInvoice.customerMark,
+      name: latestInvoice.customerName,
+      customerId: latestInvoice.customerId,
+    };
+  } else if (inferredCustomer) {
+    matchedCustomer = {
+      mark: String(inferredCustomer.mark || ''),
+      name: String(inferredCustomer.orderName || inferredCustomer.name || ''),
+      customerId: String(inferredCustomer.id || ''),
+    };
+  }
+
+  return {
+    matchedCustomer,
+    invoiceSuggestion: latestInvoice
+      ? {
+          invNo: latestInvoice.invNo,
+          conflict: uniqueInvNos.length > 1,
+          count: uniqueInvNos.length,
+        }
+      : null,
+  };
+}
+
+export async function lookupCustomerByOrderNoGroup(orderNoInput: string): Promise<{ mark: string; name: string; customerId: string } | null> {
+  const context = await lookupOrderContextByOrderNo(orderNoInput);
+  return context.matchedCustomer;
 }
 
 export type CustomerCandidate = {

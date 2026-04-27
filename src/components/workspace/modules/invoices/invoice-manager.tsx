@@ -166,13 +166,13 @@ export function InvoiceManager() {
     }
   }, [loadBranchAdminOptions, user?.role]);
 
-  const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const canWriteInvoices = user?.role === 'ADMIN';
   const isAdmin = user?.role === 'ADMIN';
 
   return (
     <div className="space-y-6">
       <InvoiceToolbar
-        isManager={isManager}
+        isManager={canWriteInvoices}
         invoiceImporting={invoiceImporting}
         rematchLoading={rematchLoading}
         tx={tx}
@@ -194,7 +194,7 @@ export function InvoiceManager() {
       <InvoiceList
         invoices={invoices}
         expandedInvoices={expandedInvoices}
-        isManager={isManager}
+        isManager={canWriteInvoices}
         isAdmin={isAdmin}
         addingOrderToInvoice={addingOrderToInvoice}
         branchAdminOptions={branchAdminOptions}

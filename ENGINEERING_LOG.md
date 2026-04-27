@@ -1,7 +1,7 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.94  
+> 当前版本：v1.0.95  
 > 最后更新：2026-04-27
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
@@ -219,7 +219,8 @@
 
 ## 已完成里程碑摘要
 
-- v1.0.94（2026-04-27）：收据管理新增“生成签名收据”完整链路：新增 `SIGNING_PENDING` 收据状态、`ReceiptGeneratorSession` 会话表与 `SystemCounter(RECEIPT_NO)` 原子编号器，`Receipt.receiptNo` 改为真实后端唯一号并从 `0001000` 递增；新增 `/api/receipt-generator` 读写接口与 `/receipt-generator/[sessionId]` 签名页，桌面端用新窗口、手机端用全屏签名页完成双签名；签名前先创建收据记录，签名完成后自动生成 PNG、写入 NAS 的 `receipts/generated/YYYY/MM` 目录、下载到本地，并将最终图片挂回收据记录；同时对 `SIGNING_PENDING` 收据加业务隔离，阻止其提前进入 receipt/detail/swift/mark-received 链路；新增 `receipt-number / receipt-generator-layout / receipt-generator-read-service / receipt-generator-service` 单测和 `receipt-generator-flow` isolated API 闭环，并修复 macOS 下隔离测试脚本 `mktemp` 模板导致的 `test:ci` 脆弱性
+- v1.0.95（2026-04-27）：修复隔离测试脚本的跨平台 `mktemp` 用法，将 API/E2E 隔离脚本统一改为同时兼容 macOS 与 Linux 的临时文件模板，恢复 GitHub Actions 中 `test:ci` 的稳定性；同步更新 README / 里程碑 / 工程流水版本号
+- v1.0.94（2026-04-27）：收据管理新增“生成签名收据”完整链路：新增 `SIGNING_PENDING` 收据状态、`ReceiptGeneratorSession` 会话表与 `SystemCounter(RECEIPT_NO)` 原子编号器，`Receipt.receiptNo` 改为真实后端唯一号并从 `0001000` 递增；新增 `/api/receipt-generator` 读写接口与 `/receipt-generator/[sessionId]` 签名页，桌面端用新窗口、手机端用全屏签名页完成双签名；签名前先创建收据记录，签名完成后自动生成 PNG、写入 NAS 的 `receipts/generated/YYYY/MM` 目录、下载到本地，并将最终图片挂回收据记录；同时对 `SIGNING_PENDING` 收据加业务隔离，阻止其提前进入 receipt/detail/swift/mark-received 链路；新增 `receipt-number / receipt-generator-layout / receipt-generator-read-service / receipt-generator-service` 单测和 `receipt-generator-flow` isolated API 闭环
 
 - v1.0.93（2026-04-27）：`INV` 管理对 `SALES` 改为整页只读，并把账单所有写接口统一收紧到 `ADMIN`；`resolveCustomer(...)` 新增 `customerOrderNo + ownerIds`，账单创建/导入/改单/加单/rematch 在 `MARK` 匹配失败后会再按 `ORDER_NO` 左半部分精确匹配客户 `ORDER_NAME`；新增 `invoice-read-service` 的 `action=order-context`，收据管理在直接创建与 OCR 确认创建时输入 `ORDER` 后可优先得到数据库中的 `INV NO` 建议，多命中时自动选最新一条并标红提醒；同时将设置页 `OCR_API_KEY` 输入改为非密码管理器字段，消除 Chrome 保存密码误提示；补齐 `use-invoice-order-forms / use-receipt-forms / system-config-card / invoice-service / invoice-write / invoice-read-service / client` 回归与 `invoice-ledger-flow` isolated API 断言
 - v1.0.91（2026-04-27）：账单管理 `REMATCH` 增加“单条需修复订单重新解析”；对 `customerId = null && needsCustomerFix = true` 的订单，在 rematch 末尾重新执行一次客户解析并仅回填当前订单；新增 `invoice-service` 单测与 `invoice-ledger-flow` isolated API 断言，覆盖“先建订单、后建客户、再 rematch 自动补客户”的真实链路

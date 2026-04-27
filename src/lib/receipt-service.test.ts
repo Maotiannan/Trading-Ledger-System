@@ -210,8 +210,10 @@ describe('receipt-service', () => {
   it('marks receipt received and advances linked detail/swift when all receipts are received', async () => {
     mockDb.receipt.findUnique.mockResolvedValueOnce({
       id: 'receipt-bank',
+      createdBy: 'sales-1',
       status: ReceiptStatus.Bank_Transfer,
     });
+    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(true);
     mockDb.receipt.update.mockResolvedValueOnce({
       id: 'receipt-bank',
       status: ReceiptStatus.RECEIVED,
@@ -229,7 +231,7 @@ describe('receipt-service', () => {
     ]);
 
     const result = await markReceiptReceived({
-      currentUser: makeUser(),
+      currentUser: makeUser({ role: UserRole.ADMIN }),
       receiptId: 'receipt-bank',
     });
 
@@ -243,5 +245,63 @@ describe('receipt-service', () => {
       data: { status: SwiftStatus.RECEIVED },
     });
     expect(mockRecordAuditEvent).toHaveBeenCalled();
+  });
+
+  it('allows admin to complete a waiting receipt and only updates the receipt when sibling receipts remain unfinished', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-waiting',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.Waiting_SWIFT,
+    });
+    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(true);
+    mockDb.receipt.update.mockResolvedValueOnce({
+      id: 'receipt-waiting',
+      status: ReceiptStatus.RECEIVED,
+    });
+    mockDb.detailItem.findMany.mockResolvedValueOnce([
+      {
+        detail: {
+          id: 'detail-1',
+          items: [
+            { receipt: { status: ReceiptStatus.RECEIVED } },
+            { receipt: { status: ReceiptStatus.Waiting_SWIFT } },
+          ],
+        },
+      },
+    ]);
+
+    const result = await markReceiptReceived({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-waiting',
+    });
+
+    expect(result.data.status).toBe(ReceiptStatus.RECEIVED);
+    expect(mockDb.detail.update).not.toHaveBeenCalled();
+    expect(mockDb.swift.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects mark-received for sales users', async () => {
+    await expect(markReceiptReceived({
+      currentUser: makeUser({ role: UserRole.SALES }),
+      receiptId: 'receipt-1',
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('rejects mark-received when the receipt is outside current admin visibility', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-foreign',
+      createdBy: 'other-sales',
+      status: ReceiptStatus.SR_Received,
+    });
+    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(false);
+
+    await expect(markReceiptReceived({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-foreign',
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 });

@@ -164,7 +164,7 @@ export function ReceiptManager() {
     return <Badge variant={colors[status] || 'default'}>{status}</Badge>;
   };
 
-  const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
     <div className="space-y-6">
@@ -220,7 +220,7 @@ export function ReceiptManager() {
         paginatedReceipts={paginatedReceipts}
         currentPage={currentPage}
         totalPages={totalPages}
-        isManager={isManager}
+        isAdmin={isAdmin}
         tx={tx}
         getStatusBadge={getStatusBadge}
         onViewImage={(receipt) => {

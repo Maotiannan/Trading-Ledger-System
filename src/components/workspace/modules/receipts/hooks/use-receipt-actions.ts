@@ -186,7 +186,7 @@ export function useReceiptActions({
   };
 
   const handleMarkReceived = async (receiptId: string) => {
-    if (!confirm(tx('确定要标记此收据为已签收吗？', 'Mark this receipt as received?'))) return;
+    if (!confirm(tx('确定要确认此收据已完成吗？', 'Confirm this receipt as completed?'))) return;
 
     try {
       const result = await fetch('/api/receipt', {

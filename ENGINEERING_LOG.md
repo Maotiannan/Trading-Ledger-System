@@ -1,12 +1,15 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.91  
+> 当前版本：v1.0.92  
 > 最后更新：2026-04-27
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 收据管理“完成/签收”权限与状态机收敛：仅 `ADMIN` 可执行 `mark-received`；不再要求先进入 `Bank_Transfer`；管理员可直接确认单条收据完成，同时保留“若某 `Detail` 下挂多条收据，则必须全部收据完成后才推进 `Detail/SWIFT -> RECEIVED`”的链路规则 ✅ 2026-04-27
+- [x] 补齐回归：新增 `receipt-service` 单测与 `receipt-detail-swift-lifecycle` isolated API 断言，覆盖 `SALES` 禁止完成、管理员提前完成单条收据、单收据链路直接收口、多收据链路延后收口 ✅ 2026-04-27
 
 - [x] 账单管理 `REMATCH` 新增“单条需修复订单重新解析”：对 `customerId = null && needsCustomerFix = true` 的可见订单，rematch 末尾会重新执行一次 `resolveCustomer(...)` 并只更新当前订单本身 ✅ 2026-04-27
 - [x] 补齐回归：新增 `invoice-service` 单测与 `invoice-ledger-flow` isolated API 断言，覆盖“先建订单、后建客户、再 rematch 自动补客户”链路 ✅ 2026-04-27

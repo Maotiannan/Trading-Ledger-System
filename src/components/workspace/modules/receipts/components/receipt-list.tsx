@@ -11,7 +11,7 @@ export type ReceiptListProps = {
   paginatedReceipts: Receipt[];
   currentPage: number;
   totalPages: number;
-  isManager: boolean;
+  isAdmin: boolean;
   tx: (zh: string, en: string) => string;
   getStatusBadge: (status: string) => React.ReactNode;
   onViewImage: (receipt: Receipt) => void;
@@ -26,7 +26,7 @@ export function ReceiptList({
   paginatedReceipts,
   currentPage,
   totalPages,
-  isManager,
+  isAdmin,
   tx,
   getStatusBadge,
   onViewImage,
@@ -71,12 +71,12 @@ export function ReceiptList({
                         <Eye className="h-4 w-4" />
                       </Button>
                     )}
-                    {receipt.status === 'Bank_Transfer' && isManager && (
+                    {receipt.status !== 'RECEIVED' && isAdmin && (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => onMarkReceived(receipt.id)}
-                        title={tx('签收归档', 'Mark as received')}
+                        title={tx('确认完成', 'Confirm completion')}
                         className="text-green-600 hover:text-green-700"
                       >
                         <Check className="h-4 w-4" />

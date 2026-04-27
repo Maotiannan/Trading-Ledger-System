@@ -51,7 +51,7 @@ export const apiCatalog: ApiModule[] = [
       { action: 'confirm', method: 'POST', description: 'Confirm recognized receipt', bodyExample: { action: 'confirm', receipt: {} } },
       { action: 'direct-create', method: 'POST', description: 'Create receipt directly without OCR', bodyExample: { action: 'direct-create', usd: 100, orderNo: 'ORDER-001', customerMark: 'MAB-1' } },
       { action: 'update', method: 'POST', description: 'Update receipt', bodyExample: { action: 'update', receiptId: 'receipt-id', data: '{}' } },
-      { action: 'mark-received', method: 'POST', description: 'Mark receipt as received (manager)', bodyExample: { action: 'mark-received', receiptId: 'receipt-id' } },
+      { action: 'mark-received', method: 'POST', description: 'Finalize receipt completion (admin only)', bodyExample: { action: 'mark-received', receiptId: 'receipt-id' } },
     ],
   },
   {

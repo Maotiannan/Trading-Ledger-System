@@ -304,8 +304,8 @@ export async function markReceiptReceived(params: {
   receiptId: string;
 }) {
   const { currentUser, receiptId } = params;
-  if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES) {
-    throw forbidden('只有管理员和销售代表可以标记签收', {
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('只有管理员可以确认收据完成', {
       role: currentUser.role,
     });
   }
@@ -324,8 +324,14 @@ export async function markReceiptReceived(params: {
       detail: { receiptId },
     });
   }
-  if (existingReceipt.status !== ReceiptStatus.Bank_Transfer) {
-    throw badRequest('必须在Bank_Transfer状态后才能标记签收', {
+  if (!(await canAccessOwnedResourceAsync(existingReceipt.createdBy, currentUser))) {
+    throw forbidden('无权确认该收据完成', {
+      receiptId,
+      createdBy: existingReceipt.createdBy,
+    });
+  }
+  if (existingReceipt.status === ReceiptStatus.RECEIVED) {
+    throw badRequest('收据已完成，无需重复确认', {
       receiptId,
       status: existingReceipt.status,
     });

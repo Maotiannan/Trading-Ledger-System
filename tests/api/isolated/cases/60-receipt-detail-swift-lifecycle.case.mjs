@@ -31,6 +31,149 @@ export default async function run(t) {
   await t.logout();
   await t.login(salesEmail, 'Sales@2026!');
 
+  const adminOnlyOrderNo = `ADMINONLY-${suffix}-01`;
+  const adminOnlyMark = `ADMINONLY-${suffix}`;
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'direct-create',
+      receiptNo: `RCPT-ADMIN-${suffix}`,
+      usd: 180,
+      orderNo: adminOnlyOrderNo,
+      customerMark: adminOnlyMark,
+      customerName: adminOnlyMark,
+    },
+    expectedStatus: 200,
+  });
+  t.step('admin-only completion receipt created');
+
+  await t.request('POST', '/api/detail', {
+    json: {
+      action: 'direct-create',
+      items: [{ mark: adminOnlyMark, orderNo: adminOnlyOrderNo, amount: 180 }],
+    },
+    expectedStatus: 200,
+  });
+  t.step('admin-only completion detail created');
+
+  const adminOnlyReceiptList = await t.request('GET', `/api/receipt?search=${encodeURIComponent(adminOnlyOrderNo)}`, { expectedStatus: 200 });
+  const adminOnlyReceipt = findReceiptByOrder(adminOnlyReceiptList.data?.data, adminOnlyOrderNo);
+  t.assertEqual(adminOnlyReceipt?.status, 'Waiting_SWIFT', 'admin-only receipt enters Waiting_SWIFT after detail creation');
+
+  const salesMarkReceivedForbidden = await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'mark-received',
+      receiptId: adminOnlyReceipt.id,
+    },
+    expectedStatus: 403,
+  });
+  t.assertMatch(salesMarkReceivedForbidden.data?.code || salesMarkReceivedForbidden.text, /FORBIDDEN/, 'sales cannot finalize receipt completion');
+
+  await t.logout();
+  await t.loginAdmin();
+
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'mark-received',
+      receiptId: adminOnlyReceipt.id,
+    },
+    expectedStatus: 200,
+  });
+  t.step('admin can finalize waiting receipt before swift');
+
+  const adminOnlyReceiptAfter = await t.request('GET', `/api/receipt?search=${encodeURIComponent(adminOnlyOrderNo)}`, { expectedStatus: 200 });
+  const adminOnlyReceived = findReceiptByOrder(adminOnlyReceiptAfter.data?.data, adminOnlyOrderNo);
+  t.assertEqual(adminOnlyReceived?.status, 'RECEIVED', 'admin-only receipt enters RECEIVED after admin completion');
+
+  const adminOnlyDetailAfter = await t.request('GET', `/api/detail?search=${encodeURIComponent(adminOnlyOrderNo)}`, { expectedStatus: 200 });
+  const adminOnlyReceivedDetail = findDetailByOrder(adminOnlyDetailAfter.data?.data, adminOnlyOrderNo);
+  t.assertEqual(adminOnlyReceivedDetail?.status, 'RECEIVED', 'single-receipt detail enters RECEIVED after admin completion');
+
+  const multiOrderNo = `MULTI-${suffix}-01`;
+  const multiMark = `MULTI-${suffix}`;
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'direct-create',
+      receiptNo: `RCPT-MULTI-A-${suffix}`,
+      usd: 100,
+      orderNo: multiOrderNo,
+      customerMark: multiMark,
+      customerName: multiMark,
+    },
+    expectedStatus: 200,
+  });
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'direct-create',
+      receiptNo: `RCPT-MULTI-B-${suffix}`,
+      usd: 120,
+      orderNo: multiOrderNo,
+      customerMark: multiMark,
+      customerName: multiMark,
+    },
+    expectedStatus: 200,
+  });
+  t.step('multi-receipt scenario receipts created');
+
+  const multiReceiptListBefore = await t.request('GET', `/api/receipt?search=${encodeURIComponent(multiOrderNo)}`, { expectedStatus: 200 });
+  const multiReceipts = Array.isArray(multiReceiptListBefore.data?.data)
+    ? multiReceiptListBefore.data.data.filter((row) => row.orderNo === multiOrderNo)
+    : [];
+  t.assertEqual(multiReceipts.length, 2, 'multi-receipt scenario has two receipts');
+
+  await t.request('POST', '/api/detail', {
+    json: {
+      action: 'direct-create',
+      items: multiReceipts.map((row) => ({
+        mark: multiMark,
+        orderNo: multiOrderNo,
+        amount: Number(row.usd),
+        receiptId: row.id,
+      })),
+    },
+    expectedStatus: 200,
+  });
+  t.step('multi-receipt detail created with explicit receipt links');
+
+  const multiDetailBefore = await t.request('GET', `/api/detail?search=${encodeURIComponent(multiOrderNo)}`, { expectedStatus: 200 });
+  const multiDetail = findDetailByOrder(multiDetailBefore.data?.data, multiOrderNo);
+  t.assertEqual(multiDetail?.status, 'Waiting_SWIFT', 'multi-receipt detail starts in Waiting_SWIFT');
+
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'mark-received',
+      receiptId: multiReceipts[0].id,
+    },
+    expectedStatus: 200,
+  });
+  t.step('admin completes first receipt in multi-receipt detail');
+
+  const multiAfterFirstReceipt = await t.request('GET', `/api/receipt?search=${encodeURIComponent(multiOrderNo)}`, { expectedStatus: 200 });
+  const firstPassReceipts = Array.isArray(multiAfterFirstReceipt.data?.data)
+    ? multiAfterFirstReceipt.data.data.filter((row) => row.orderNo === multiOrderNo)
+    : [];
+  t.assertEqual(firstPassReceipts.filter((row) => row.status === 'RECEIVED').length, 1, 'only one receipt is received after first admin completion');
+
+  const multiDetailAfterFirst = await t.request('GET', `/api/detail?search=${encodeURIComponent(multiOrderNo)}`, { expectedStatus: 200 });
+  const stillWaitingDetail = findDetailByOrder(multiDetailAfterFirst.data?.data, multiOrderNo);
+  t.assertEqual(stillWaitingDetail?.status, 'Waiting_SWIFT', 'multi-receipt detail stays waiting until all receipts complete');
+
+  const secondReceipt = firstPassReceipts.find((row) => row.status !== 'RECEIVED');
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'mark-received',
+      receiptId: secondReceipt.id,
+    },
+    expectedStatus: 200,
+  });
+  t.step('admin completes second receipt in multi-receipt detail');
+
+  const multiDetailAfterSecond = await t.request('GET', `/api/detail?search=${encodeURIComponent(multiOrderNo)}`, { expectedStatus: 200 });
+  const receivedMultiDetail = findDetailByOrder(multiDetailAfterSecond.data?.data, multiOrderNo);
+  t.assertEqual(receivedMultiDetail?.status, 'RECEIVED', 'multi-receipt detail enters RECEIVED only after all receipts complete');
+
+  await t.logout();
+  await t.login(salesEmail, 'Sales@2026!');
+
   const orderNo = `LIFE-${suffix}-01`;
   const customerMark = `LIFE-${suffix}`;
   const directReceiptImagePath = `${t.tmpDir}/receipt-direct-${suffix}.png`;

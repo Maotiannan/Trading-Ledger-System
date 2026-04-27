@@ -71,6 +71,17 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
   '收据已直接创建': { zh: '收据已直接创建', en: 'Receipt created directly' },
   '付款明细已直接创建': { zh: '付款明细已直接创建', en: 'Payment detail created directly' },
   'SWIFT已直接创建': { zh: 'SWIFT已直接创建', en: 'SWIFT created directly' },
+  '当前角色无权生成签名收据': { zh: '当前角色无权生成签名收据', en: 'Your role cannot generate signed receipts' },
+  '未找到对应订单，无法生成签名收据': { zh: '未找到对应订单，无法生成签名收据', en: 'Matching order not found for signed receipt generation' },
+  '订单未能唯一匹配客户，请先修复客户信息': { zh: '订单未能唯一匹配客户，请先修复客户信息', en: 'The order could not be matched to a unique customer. Fix the customer information first.' },
+  '签名收据会话不存在': { zh: '签名收据会话不存在', en: 'Signed receipt session not found' },
+  '无权访问该签名收据会话': { zh: '无权访问该签名收据会话', en: 'You do not have access to this signed receipt session' },
+  '无权完成该签名收据': { zh: '无权完成该签名收据', en: 'You do not have permission to finalize this signed receipt' },
+  '签名或收据图片缺失': { zh: '签名或收据图片缺失', en: 'Signature or receipt image is missing' },
+  '签名收据会话已结束或收据状态无效': { zh: '签名收据会话已结束或收据状态无效', en: 'The signed receipt session is closed or the receipt status is invalid' },
+  '签名未完成的收据不能进入业务流程': { zh: '签名未完成的收据不能进入业务流程', en: 'A receipt with unfinished signatures cannot enter the business workflow' },
+  '签名未完成的收据不能进入付款明细流程': { zh: '签名未完成的收据不能进入付款明细流程', en: 'A receipt with unfinished signatures cannot enter the payment-detail workflow' },
+  '签名未完成的收据不能直接修改': { zh: '签名未完成的收据不能直接修改', en: 'A receipt with unfinished signatures cannot be edited directly' },
 };
 
 const containsMessageMap: Array<[string, string]> = [

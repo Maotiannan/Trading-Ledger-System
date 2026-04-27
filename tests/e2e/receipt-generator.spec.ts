@@ -1,0 +1,99 @@
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { ensureAdminInitialized, loginAsAdmin, uniqueSuffix } from './helpers/session';
+
+async function drawSignature(canvas: Locator) {
+  const box = await canvas.boundingBox();
+  if (!box) {
+    throw new Error('Signature canvas is not visible');
+  }
+
+  const startX = box.x + box.width * 0.2;
+  const startY = box.y + box.height * 0.55;
+  const endX = box.x + box.width * 0.8;
+  const endY = box.y + box.height * 0.35;
+  const midX = box.x + box.width * 0.55;
+  const midY = box.y + box.height * 0.75;
+
+  await canvas.page().mouse.move(startX, startY);
+  await canvas.page().mouse.down();
+  await canvas.page().mouse.move(midX, midY, { steps: 6 });
+  await canvas.page().mouse.move(endX, endY, { steps: 6 });
+  await canvas.page().mouse.up();
+}
+
+async function createCustomerAndInvoice(page: Page, suffix: string) {
+  const api = page.context().request;
+  const mark = `SGR-${suffix}`;
+  const orderNo = `${mark}-01`;
+  const invNo = `INV-${suffix}`;
+
+  const createCustomer = await api.post('/api/customer', {
+    data: {
+      action: 'create',
+      mark,
+      orderName: mark,
+      name: `Signed Receipt ${suffix}`,
+      phone: `623${Math.floor(Math.random() * 900000 + 100000)}`,
+      city: 'Conakry',
+    },
+  });
+  expect(createCustomer.ok()).toBeTruthy();
+
+  const createInvoice = await api.post('/api/invoice', {
+    data: {
+      invNo,
+      orders: [
+        {
+          orderNo,
+          amount: 2500,
+          customerMark: mark,
+          customerName: mark,
+        },
+      ],
+    },
+  });
+  expect(createInvoice.ok()).toBeTruthy();
+
+  return { mark, orderNo, invNo };
+}
+
+test('admin can generate a signed receipt and return to receipt list with attached image', async ({ page, request }) => {
+  await ensureAdminInitialized(request);
+  await loginAsAdmin(page);
+
+  const suffix = uniqueSuffix('receipt-gen');
+  const { orderNo, invNo } = await createCustomerAndInvoice(page, suffix);
+
+  await page.goto('/receipts');
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('button', { name: /生成签名收据|Generate Signed Receipt/i }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('ORDER NO').fill(orderNo);
+  await dialog.getByLabel(/收款金额 USD|USD Amount/i).fill('2500');
+  await expect(dialog.getByLabel('ORDER NO')).toHaveValue(orderNo);
+  await expect(dialog.getByText(invNo)).toBeVisible();
+  await expect(dialog.getByText(/\$2500\.00/).first()).toBeVisible();
+  await dialog.getByRole('button', { name: /进入签名|Continue to signing/i }).click();
+
+  const popup = await popupPromise;
+  await popup.waitForURL(/\/receipt-generator\//);
+  await expect(popup.getByText(/签名收据|Signed Receipt/i)).toBeVisible();
+
+  const downloadPromise = popup.waitForEvent('download');
+  await drawSignature(popup.locator('[data-testid="receiver-signature-pad"] canvas'));
+  await drawSignature(popup.locator('[data-testid="payer-signature-pad"] canvas'));
+  await popup.getByRole('button', { name: /确认并生成收据|Confirm and generate receipt/i }).click();
+
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/0001\d{3}\.png$/);
+
+  await expect.poll(() => popup.isClosed()).toBeTruthy();
+
+  const receiptRow = page.locator('tr', { hasText: orderNo }).first();
+  await expect(receiptRow).toBeVisible();
+  await expect(receiptRow.getByTitle(/查看图片|View image/i)).toBeVisible();
+  await expect(receiptRow.getByTitle(/继续签名|Resume signing/i)).toHaveCount(0);
+
+  const receiptNo = (await receiptRow.locator('td').first().textContent())?.trim();
+  expect(receiptNo && receiptNo !== '-').toBeTruthy();
+});

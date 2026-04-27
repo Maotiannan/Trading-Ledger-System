@@ -247,6 +247,22 @@ describe('receipt-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
+  it('rejects mark-received for signing-pending receipts', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-signing',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+
+    await expect(markReceiptReceived({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-signing',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '签名未完成的收据不能进入业务流程',
+    });
+  });
+
   it('allows admin to complete a waiting receipt and only updates the receipt when sibling receipts remain unfinished', async () => {
     mockDb.receipt.findUnique.mockResolvedValueOnce({
       id: 'receipt-waiting',

@@ -18,13 +18,14 @@ import {
 } from '@/components/workspace/shared';
 import {
   ReceiptDirectCreateDialog,
+  ReceiptGeneratorLaunchDialog,
   ReceiptImagePreviewDialog,
   ReceiptList,
   ReceiptUploadDialog,
 } from './components';
-import { useReceiptCustomerLookup, useReceiptForms, useReceiptActions } from './hooks';
+import { useReceiptCustomerLookup, useReceiptForms, useReceiptActions, useReceiptGenerator } from './hooks';
 import {
-  Loader2, Trash2, Plus, Upload, Check
+  Loader2, Trash2, Plus, Upload, Check, PenSquare
 } from 'lucide-react';
 
 export function ReceiptManager() {
@@ -152,6 +153,27 @@ export function ReceiptManager() {
     resetDirectForm,
   });
 
+  const canUseReceiptGenerator = user?.role !== 'USER';
+  const {
+    showGeneratorLaunch,
+    setShowGeneratorLaunch,
+    generatorOrderNo,
+    setGeneratorOrderNo,
+    generatorUsdAmount,
+    setGeneratorUsdAmount,
+    generatorContext,
+    generatorContextLoading,
+    generatorCreating,
+    generatorError,
+    resetGeneratorState,
+    createGeneratorSession,
+    resumeGeneratorSession,
+  } = useReceiptGenerator({
+    tx,
+    loadReceipts,
+    setError,
+  });
+
   useEffect(() => {
     loadReceipts();
   }, [loadReceipts]);
@@ -160,6 +182,7 @@ export function ReceiptManager() {
 
   const getStatusBadge = (status: string) => {
     const colors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+      'SIGNING_PENDING': 'destructive',
       'SR_Received': 'secondary',
       'Waiting_SWIFT': 'outline',
       'Bank_Transfer': 'default',
@@ -175,6 +198,12 @@ export function ReceiptManager() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">{tx('收据管理', 'Receipt Management')}</h2>
         <div className="flex gap-2">
+          {canUseReceiptGenerator && (
+            <Button variant="outline" onClick={() => setShowGeneratorLaunch(true)}>
+              <PenSquare className="h-4 w-4 mr-2" />
+              {tx('生成签名收据', 'Generate Signed Receipt')}
+            </Button>
+          )}
           <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
             <Plus className="h-4 w-4 mr-2" />
             {tx('直接创建', 'Create Directly')}
@@ -191,6 +220,7 @@ export function ReceiptManager() {
           <Input placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')} value={search} onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }} />
           <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); resetToFirstPage(); }}>
             <option value="">{tx('全部状态', 'All statuses')}</option>
+            <option value="SIGNING_PENDING">SIGNING_PENDING</option>
             <option value="SR_Received">SR_Received</option>
             <option value="Waiting_SWIFT">Waiting_SWIFT</option>
             <option value="Bank_Transfer">Bank_Transfer</option>
@@ -225,6 +255,7 @@ export function ReceiptManager() {
         currentPage={currentPage}
         totalPages={totalPages}
         isAdmin={isAdmin}
+        canResumeSigning={canUseReceiptGenerator}
         tx={tx}
         getStatusBadge={getStatusBadge}
         onViewImage={(receipt) => {
@@ -236,8 +267,27 @@ export function ReceiptManager() {
         }}
         onMarkReceived={handleMarkReceived}
         onDeleteReceipt={handleDeleteReceipt}
+        onResumeSigning={resumeGeneratorSession}
         onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
         onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+      />
+
+      <ReceiptGeneratorLaunchDialog
+        open={showGeneratorLaunch}
+        orderNo={generatorOrderNo}
+        usdAmount={generatorUsdAmount}
+        loadingContext={generatorContextLoading}
+        creatingSession={generatorCreating}
+        error={generatorError}
+        context={generatorContext}
+        tx={tx}
+        onOpenChange={(open) => {
+          if (!open) resetGeneratorState();
+          else setShowGeneratorLaunch(true);
+        }}
+        onOrderNoChange={setGeneratorOrderNo}
+        onUsdAmountChange={setGeneratorUsdAmount}
+        onSubmit={createGeneratorSession}
       />
 
       <ReceiptUploadDialog

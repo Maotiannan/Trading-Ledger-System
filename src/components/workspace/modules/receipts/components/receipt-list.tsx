@@ -4,7 +4,7 @@ import type { Receipt } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Check, Eye, Trash2 } from 'lucide-react';
+import { Check, Eye, PenSquare, Trash2 } from 'lucide-react';
 
 export type ReceiptListProps = {
   receipts: Receipt[];
@@ -12,11 +12,13 @@ export type ReceiptListProps = {
   currentPage: number;
   totalPages: number;
   isAdmin: boolean;
+  canResumeSigning: boolean;
   tx: (zh: string, en: string) => string;
   getStatusBadge: (status: string) => React.ReactNode;
   onViewImage: (receipt: Receipt) => void;
   onMarkReceived: (receiptId: string) => void;
   onDeleteReceipt: (receiptId: string) => void;
+  onResumeSigning: (receiptId: string) => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
 };
@@ -27,11 +29,13 @@ export function ReceiptList({
   currentPage,
   totalPages,
   isAdmin,
+  canResumeSigning,
   tx,
   getStatusBadge,
   onViewImage,
   onMarkReceived,
   onDeleteReceipt,
+  onResumeSigning,
   onPreviousPage,
   onNextPage,
 }: ReceiptListProps) {
@@ -71,7 +75,18 @@ export function ReceiptList({
                         <Eye className="h-4 w-4" />
                       </Button>
                     )}
-                    {receipt.status !== 'RECEIVED' && isAdmin && (
+                    {receipt.status === 'SIGNING_PENDING' && canResumeSigning && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onResumeSigning(receipt.id)}
+                        title={tx('继续签名', 'Resume signing')}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <PenSquare className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {receipt.status !== 'RECEIVED' && receipt.status !== 'SIGNING_PENDING' && isAdmin && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -82,7 +97,7 @@ export function ReceiptList({
                         <Check className="h-4 w-4" />
                       </Button>
                     )}
-                    {receipt.status !== 'RECEIVED' && receipt.status !== 'Bank_Transfer' && (
+                    {receipt.status !== 'RECEIVED' && receipt.status !== 'Bank_Transfer' && receipt.status !== 'SIGNING_PENDING' && (
                       <Button size="sm" variant="ghost" onClick={() => onDeleteReceipt(receipt.id)} title={tx('申请删除', 'Request deletion')}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>

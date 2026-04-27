@@ -1,0 +1,208 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+
+type ReceiptGeneratorContext = {
+  invNo: string | null;
+  customer: {
+    id: string;
+    mark: string;
+    name: string;
+    phone: string | null;
+    city: string | null;
+  } | null;
+  balanceBefore: number | null;
+  preview?: {
+    balanceAfter: number | null;
+  } | null;
+} | null;
+
+type ReceiptGeneratorText = (zh: string, en: string) => string;
+
+function isMobileBrowser(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (window.matchMedia('(max-width: 768px)').matches) return true;
+  const ua = navigator.userAgent.toLowerCase();
+  return /iphone|ipad|android|mobile/.test(ua);
+}
+
+function openSigningTarget(path: string): { mode: 'popup' | 'redirect'; popupOpened: boolean } {
+  if (typeof window === 'undefined') {
+    return { mode: 'redirect', popupOpened: false };
+  }
+
+  if (isMobileBrowser()) {
+    window.location.href = path;
+    return { mode: 'redirect', popupOpened: false };
+  }
+
+  const popup = window.open(path, 'receipt-generator-signing', 'width=1440,height=980,resizable=yes,scrollbars=yes');
+  return { mode: 'popup', popupOpened: Boolean(popup) };
+}
+
+export function useReceiptGenerator(params: {
+  tx: ReceiptGeneratorText;
+  loadReceipts: () => Promise<void>;
+  setError: (value: string | null) => void;
+}) {
+  const { tx, loadReceipts, setError } = params;
+  const [showGeneratorLaunch, setShowGeneratorLaunch] = useState(false);
+  const [generatorOrderNo, setGeneratorOrderNo] = useState('');
+  const [generatorUsdAmount, setGeneratorUsdAmount] = useState('');
+  const [generatorContext, setGeneratorContext] = useState<ReceiptGeneratorContext>(null);
+  const [generatorContextLoading, setGeneratorContextLoading] = useState(false);
+  const [generatorCreating, setGeneratorCreating] = useState(false);
+  const [generatorError, setGeneratorError] = useState<string | null>(null);
+  const lastLookupToken = useRef(0);
+
+  const channel = useMemo(() => {
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return null;
+    return new BroadcastChannel('receipt-generator-events');
+  }, []);
+
+  useEffect(() => {
+    if (!channel) return undefined;
+    const listener = async (event: MessageEvent) => {
+      if (event.data?.type === 'receipt-generator-finalized') {
+        await loadReceipts();
+      }
+    };
+    channel.addEventListener('message', listener);
+    return () => {
+      channel.removeEventListener('message', listener);
+      channel.close();
+    };
+  }, [channel, loadReceipts]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const listener = async (event: MessageEvent) => {
+      if (event.data?.type === 'receipt-generator-finalized') {
+        await loadReceipts();
+      }
+    };
+    window.addEventListener('message', listener);
+    return () => window.removeEventListener('message', listener);
+  }, [loadReceipts]);
+
+  useEffect(() => {
+    const orderNo = generatorOrderNo.trim();
+    const usdAmount = generatorUsdAmount.trim();
+    if (!showGeneratorLaunch || !orderNo) {
+      setGeneratorContext(null);
+      setGeneratorContextLoading(false);
+      return;
+    }
+
+    const token = Date.now();
+    lastLookupToken.current = token;
+    setGeneratorContextLoading(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          action: 'order-context',
+          orderNo,
+        });
+        if (usdAmount) params.set('usdAmount', usdAmount);
+        const result = await apiCall(`receipt-generator?${params.toString()}`);
+        if (lastLookupToken.current !== token) return;
+        setGeneratorContext(result.data || null);
+        setGeneratorError(null);
+      } catch (error) {
+        if (lastLookupToken.current !== token) return;
+        setGeneratorContext(null);
+        setGeneratorError(getErrorMessage(error, tx('订单匹配失败，请检查订单号', 'Order lookup failed. Check the order number.')));
+      } finally {
+        if (lastLookupToken.current === token) {
+          setGeneratorContextLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [generatorOrderNo, generatorUsdAmount, showGeneratorLaunch, tx]);
+
+  const resetGeneratorState = useCallback(() => {
+    setShowGeneratorLaunch(false);
+    setGeneratorOrderNo('');
+    setGeneratorUsdAmount('');
+    setGeneratorContext(null);
+    setGeneratorContextLoading(false);
+    setGeneratorCreating(false);
+    setGeneratorError(null);
+  }, []);
+
+  const createGeneratorSession = useCallback(async () => {
+    if (!generatorOrderNo.trim()) {
+      setGeneratorError(tx('ORDER NO 不能为空', 'ORDER NO is required.'));
+      return;
+    }
+    if (!generatorUsdAmount.trim()) {
+      setGeneratorError(tx('收款金额不能为空', 'USD amount is required.'));
+      return;
+    }
+
+    setGeneratorCreating(true);
+    setGeneratorError(null);
+    setError(null);
+    try {
+      const result = await apiCall('receipt-generator', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create-session',
+          orderNo: generatorOrderNo.trim(),
+          usdAmount: Number(generatorUsdAmount),
+        }),
+      });
+      const signingPath = result.data?.signingPath;
+      if (!signingPath || typeof signingPath !== 'string') {
+        throw new Error(tx('签名页面路径缺失', 'Signing path missing.'));
+      }
+      const opened = openSigningTarget(signingPath);
+      if (opened.mode === 'popup' && !opened.popupOpened) {
+        setGeneratorError(tx('浏览器拦截了签名窗口，请允许弹窗后重试。收据记录已创建，可在列表中继续签名。', 'Popup was blocked. Allow popups and retry. The receipt record has been created and can be resumed from the list.'));
+      } else {
+        resetGeneratorState();
+      }
+      await loadReceipts();
+    } catch (error) {
+      setGeneratorError(getErrorMessage(error, tx('创建签名收据失败，请重试', 'Failed to create signed receipt. Please retry.')));
+    } finally {
+      setGeneratorCreating(false);
+    }
+  }, [generatorOrderNo, generatorUsdAmount, loadReceipts, resetGeneratorState, setError, tx]);
+
+  const resumeGeneratorSession = useCallback(async (receiptId: string) => {
+    try {
+      const result = await apiCall(`receipt-generator?action=resume-by-receipt&receiptId=${encodeURIComponent(receiptId)}`);
+      const sessionId = result.data?.id;
+      if (!sessionId || typeof sessionId !== 'string') {
+        throw new Error(tx('签名会话不存在', 'Signing session not found.'));
+      }
+      const path = `/receipt-generator/${sessionId}`;
+      const opened = openSigningTarget(path);
+      if (opened.mode === 'popup' && !opened.popupOpened) {
+        setError(tx('浏览器拦截了签名窗口，请允许弹窗后重试。', 'Popup was blocked. Allow popups and retry.'));
+      }
+    } catch (error) {
+      setError(getErrorMessage(error, tx('无法继续签名，请重试', 'Unable to resume signing. Please retry.')));
+    }
+  }, [setError, tx]);
+
+  return {
+    showGeneratorLaunch,
+    setShowGeneratorLaunch,
+    generatorOrderNo,
+    setGeneratorOrderNo,
+    generatorUsdAmount,
+    setGeneratorUsdAmount,
+    generatorContext,
+    generatorContextLoading,
+    generatorCreating,
+    generatorError,
+    resetGeneratorState,
+    createGeneratorSession,
+    resumeGeneratorSession,
+  };
+}

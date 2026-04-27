@@ -226,6 +226,9 @@ export async function updateReceiptRecord(params: {
   if (existingReceipt.status === ReceiptStatus.RECEIVED) {
     throw badRequest('RECEIVED状态下禁止修改', { receiptId, status: existingReceipt.status });
   }
+  if (existingReceipt.status === ReceiptStatus.SIGNING_PENDING) {
+    throw badRequest('签名未完成的收据不能直接修改', { receiptId, status: existingReceipt.status });
+  }
   if (existingReceipt.status === ReceiptStatus.Bank_Transfer) {
     throw badRequest('Bank_Transfer状态下禁止修改', { receiptId, status: existingReceipt.status });
   }
@@ -332,6 +335,12 @@ export async function markReceiptReceived(params: {
   }
   if (existingReceipt.status === ReceiptStatus.RECEIVED) {
     throw badRequest('收据已完成，无需重复确认', {
+      receiptId,
+      status: existingReceipt.status,
+    });
+  }
+  if (existingReceipt.status === ReceiptStatus.SIGNING_PENDING) {
+    throw badRequest('签名未完成的收据不能进入业务流程', {
       receiptId,
       status: existingReceipt.status,
     });

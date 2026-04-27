@@ -47,6 +47,10 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   '报表导出已生成': { zh: '报表导出已生成', en: 'Report export generated' },
   '客户导入模板已生成': { zh: '客户导入模板已生成', en: 'Customer import template generated' },
   '账单导入模板已生成': { zh: '账单导入模板已生成', en: 'Invoice import template generated' },
+  '签名收据订单上下文已加载': { zh: '签名收据订单上下文已加载', en: 'Signed receipt order context loaded' },
+  '签名收据会话已加载': { zh: '签名收据会话已加载', en: 'Signed receipt session loaded' },
+  '签名收据会话已创建': { zh: '签名收据会话已创建', en: 'Signed receipt session created' },
+  '签名收据已生成': { zh: '签名收据已生成', en: 'Signed receipt generated' },
 };
 
 const containsSuccessMessages: Array<[string, Record<SupportedLocale, string>]> = [

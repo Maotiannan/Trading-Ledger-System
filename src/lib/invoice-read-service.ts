@@ -120,6 +120,7 @@ export async function listOrderMatchCandidates(currentUser: CurrentUser, orderNo
     select: {
       id: true,
       orderNo: true,
+      orderBalance: true,
       customerId: true,
       customerMark: true,
       customerName: true,
@@ -184,6 +185,7 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     select: {
       id: true,
       orderNo: true,
+      orderBalance: true,
       customerId: true,
       customerMark: true,
       customerName: true,

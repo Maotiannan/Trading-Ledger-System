@@ -12,7 +12,7 @@ export type WorkspaceView =
   | 'users'
   | 'customers'
   | 'settings';
-export type ReceiptStatus = 'SR_Received' | 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED';
+export type ReceiptStatus = 'SIGNING_PENDING' | 'SR_Received' | 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED';
 export type DetailStatus = 'Waiting_SWIFT' | 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
 export type SwiftStatus = 'Bank_Transfer' | 'RECEIVED' | 'ERROR';
 

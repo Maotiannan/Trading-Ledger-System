@@ -55,7 +55,7 @@ async function getAccessibleReceipt(
 ) {
   const receipt = await client.receipt.findUnique({
     where: { id: receiptId },
-    select: { id: true, createdBy: true, imageUrl: true, imageName: true },
+    select: { id: true, createdBy: true, imageUrl: true, imageName: true, status: true },
   });
   if (!receipt) {
     throw createApiError({
@@ -70,6 +70,9 @@ async function getAccessibleReceipt(
       receiptId,
       createdBy: receipt.createdBy,
     });
+  }
+  if (receipt.status === ReceiptStatus.SIGNING_PENDING) {
+    throw badRequest('签名未完成的收据不能进入付款明细流程', { receiptId, status: receipt.status });
   }
   return receipt;
 }

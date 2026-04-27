@@ -25,10 +25,17 @@ enum SwiftStatus {
 
 // 收据状态枚举
 enum ReceiptStatus {
+  SIGNING_PENDING // 签名中，未进入业务流程
   SR_Received    // 已收到收据
   Waiting_SWIFT  // 等待SWIFT
   Bank_Transfer  // 银行已转账
   RECEIVED       // 已签收
+}
+
+enum ReceiptGeneratorSessionStatus {
+  PENDING
+  FINALIZED
+  CANCELLED
 }
 
 // 付款明细状态枚举
@@ -84,6 +91,7 @@ model User {
   deletionApprovals DeletionRequest[] @relation("ApprovedBy")
   auditLogs         AuditLog[]
   systemSettings    SystemSetting[]   @relation("SystemSettingUpdatedBy")
+  receiptGeneratorSessions ReceiptGeneratorSession[] @relation("ReceiptGeneratorSessionCreatedBy")
 
   @@index([parentId])
   @@index([createdById])
@@ -156,7 +164,7 @@ model OrderAlias {
 // ==================== 收据表 (Receipt) ====================
 model Receipt {
   id           String         @id @default(cuid())
-  receiptNo    String?        // 收据号 NO.
+  receiptNo    String?        @unique // 收据号 NO.
   date         DateTime?      // 时间
   tel          String?        // 电话 Tel
   usd          Decimal        @db.Decimal(18, 2) // 付款金额 USD
@@ -187,6 +195,7 @@ model Receipt {
   customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
   order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
+  generatorSession ReceiptGeneratorSession?
   orderId          String?
 
   @@index([orderNo])
@@ -406,4 +415,44 @@ model SystemSetting {
   updater User? @relation("SystemSettingUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@index([updatedAt])
+}
+
+model SystemCounter {
+  key       String   @id
+  nextValue Int
+  updatedAt DateTime @updatedAt
+}
+
+model ReceiptGeneratorSession {
+  id                    String                        @id @default(cuid())
+  receiptId             String                        @unique
+  receiptNo             String
+  orderNo               String
+  invNo                 String?
+  customerId            String?
+  customerMark          String?
+  customerName          String?
+  clientTel             String?
+  usd                   Decimal                       @db.Decimal(18, 2)
+  balanceBefore         Decimal?                      @db.Decimal(18, 2)
+  balanceAfter          Decimal?                      @db.Decimal(18, 2)
+  amountInWords         String?                       @db.Text
+  motif                 String?                       @db.Text
+  receiverSignatureUrl  String?                       @db.LongText
+  receiverSignatureName String?                       @db.Text
+  payerSignatureUrl     String?                       @db.LongText
+  payerSignatureName    String?                       @db.Text
+  finalImageUrl         String?                       @db.LongText
+  finalImageName        String?                       @db.Text
+  layoutSnapshot        Json?
+  status                ReceiptGeneratorSessionStatus @default(PENDING)
+  createdBy             String
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  creator User    @relation("ReceiptGeneratorSessionCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([createdBy, createdAt])
+  @@index([status, createdAt])
 }

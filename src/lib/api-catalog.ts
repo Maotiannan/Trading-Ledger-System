@@ -118,6 +118,14 @@ export const apiCatalog: ApiModule[] = [
       { action: 'purge-branch-data', method: 'POST', description: 'Purge selected branch modules with dependency cascade (admin)', bodyExample: { action: 'purge-branch-data', targetUserId: 'user-id', modules: ['all'], password: '***' } },
     ],
   },
+  {
+    endpoint: '/api/upload-image',
+    description: 'Protected business image upload and read',
+    actions: [
+      { action: 'read', method: 'GET', description: 'Read uploaded image by protected path', bodyExample: { path: '/upload/images/receipts/direct/abc.png' } },
+      { action: 'upload', method: 'POST', description: 'Upload protected business image', bodyExample: { action: 'upload', category: 'receipt-direct', file: '<multipart image>' } },
+    ],
+  },
 ];
 
 export const configTemplate = {
@@ -139,5 +147,6 @@ export const configTemplate = {
     'OCR_RETRY_BASE_DELAY_MS',
     'OCR_INPUT_COST_PER_1K',
     'OCR_OUTPUT_COST_PER_1K',
+    'UPLOAD_HOST_DIR',
   ],
 } as const;

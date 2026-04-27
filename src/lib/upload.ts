@@ -13,6 +13,18 @@ const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const DEFAULT_UPLOAD_PUBLIC_PATH = '/upload/images';
 
+function normalizeUploadSubDir(value?: string | null): string {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (!normalized) return '';
+  if (normalized.split('/').some((part) => part === '..' || part === '.')) {
+    throw new UploadValidationError('上传目录无效');
+  }
+  return normalized;
+}
+
 export class UploadValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -72,7 +84,10 @@ function hasValidImageMagic(buffer: Buffer, extension: string): boolean {
   return false;
 }
 
-export async function saveUploadedImage(file: File): Promise<{ path: string; name: string }> {
+export async function saveUploadedImage(
+  file: File,
+  options: { subDir?: string | null } = {},
+): Promise<{ path: string; name: string }> {
   validateUploadFile(file);
 
   const bytes = await file.arrayBuffer();
@@ -84,9 +99,11 @@ export async function saveUploadedImage(file: File): Promise<{ path: string; nam
   }
 
   const configuredDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
-  const uploadDir = path.isAbsolute(configuredDir)
+  const baseUploadDir = path.isAbsolute(configuredDir)
     ? configuredDir
     : path.resolve(process.cwd(), configuredDir);
+  const subDir = normalizeUploadSubDir(options.subDir);
+  const uploadDir = subDir ? path.join(baseUploadDir, subDir) : baseUploadDir;
   await mkdir(uploadDir, { recursive: true });
 
   const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}${extension}`;
@@ -94,5 +111,8 @@ export async function saveUploadedImage(file: File): Promise<{ path: string; nam
   await writeFile(filePath, buffer);
 
   const publicBase = process.env.UPLOAD_PUBLIC_PATH || DEFAULT_UPLOAD_PUBLIC_PATH;
-  return { path: `${publicBase.replace(/\/$/, '')}/${fileName}`, name: safeName };
+  const publicPath = subDir
+    ? `${publicBase.replace(/\/$/, '')}/${subDir}/${fileName}`
+    : `${publicBase.replace(/\/$/, '')}/${fileName}`;
+  return { path: publicPath, name: safeName };
 }

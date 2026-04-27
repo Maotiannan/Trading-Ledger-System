@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
 import type { ReceiptDirectForm } from '../types';
 
 export type ReceiptActionText = (zh: string, en: string) => string;
@@ -15,6 +15,7 @@ export type ReceiptActionDeps = {
   ocrCustomerName: string;
   ocrCustomerId: string;
   savedImagePath: { path: string; name: string } | null;
+  directSavedImagePath: { path: string; name: string } | null;
   directForm: ReceiptDirectForm;
   setOcrResult: (value: Record<string, unknown> | null) => void;
   setOcrCustomerMark: (value: string) => void;
@@ -24,6 +25,8 @@ export type ReceiptActionDeps = {
   setImagePreview: (value: string | null) => void;
   setSelectedFile: (value: File | null) => void;
   setSavedImagePath: (value: { path: string; name: string } | null) => void;
+  setDirectSavedImagePath: (value: { path: string; name: string } | null) => void;
+  setDirectUploadedImageName: (value: string) => void;
   setError: (value: string | null) => void;
   handleShowUploadChange: (open: boolean) => void;
   handleShowDirectCreateChange: (open: boolean) => void;
@@ -39,6 +42,7 @@ export function useReceiptActions({
   ocrCustomerName,
   ocrCustomerId,
   savedImagePath,
+  directSavedImagePath,
   directForm,
   setOcrResult,
   setOcrCustomerMark,
@@ -48,12 +52,15 @@ export function useReceiptActions({
   setImagePreview,
   setSelectedFile,
   setSavedImagePath,
+  setDirectSavedImagePath,
+  setDirectUploadedImageName,
   setError,
   handleShowUploadChange,
   handleShowDirectCreateChange,
   resetDirectForm,
 }: ReceiptActionDeps) {
   const [uploading, setUploading] = useState(false);
+  const [directUploading, setDirectUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,6 +148,43 @@ export function useReceiptActions({
     }
   };
 
+  const handleDirectImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setDirectUploading(true);
+    setError(null);
+
+    const formData = new FormData();
+    formData.append('action', 'upload');
+    formData.append('category', 'receipt-direct');
+    formData.append('file', file);
+
+    try {
+      const result = await apiUploadCall('upload-image', formData, {
+        method: 'POST',
+      });
+      if (result.success && result.data?.path && result.data?.name) {
+        setDirectSavedImagePath({
+          path: String(result.data.path),
+          name: String(result.data.name),
+        });
+        setDirectUploadedImageName(String(result.data.name));
+      } else {
+        setDirectSavedImagePath(null);
+        setDirectUploadedImageName('');
+        setError(getErrorMessage(result, tx('图片上传失败，请重试', 'Image upload failed, please retry.')));
+      }
+    } catch (err) {
+      setDirectSavedImagePath(null);
+      setDirectUploadedImageName('');
+      setError(getErrorMessage(err, tx('图片上传失败，请重试', 'Image upload failed, please retry.')));
+    } finally {
+      setDirectUploading(false);
+      event.target.value = '';
+    }
+  };
+
   const handleMarkReceived = async (receiptId: string) => {
     if (!confirm(tx('确定要标记此收据为已签收吗？', 'Mark this receipt as received?'))) return;
 
@@ -185,6 +229,8 @@ export function useReceiptActions({
           customerName: directForm.customerName || null,
           customerId: directForm.customerId || null,
           isDeposit: directForm.isDeposit,
+          imagePath: directSavedImagePath?.path || null,
+          imageName: directSavedImagePath?.name || null,
         }),
       });
       if (result.success) {
@@ -221,9 +267,11 @@ export function useReceiptActions({
 
   return {
     uploading,
+    directUploading,
     submitting,
     handleFileSelect,
     handleConfirm,
+    handleDirectImageSelect,
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,

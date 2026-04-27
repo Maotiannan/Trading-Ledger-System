@@ -69,6 +69,10 @@ export function ReceiptManager() {
     directForm,
     setDirectForm,
     directCustomerCandidates,
+    directSavedImagePath,
+    setDirectSavedImagePath,
+    directUploadedImageName,
+    setDirectUploadedImageName,
     viewingImage,
     setViewingImage,
     handleShowUploadChange,
@@ -109,9 +113,11 @@ export function ReceiptManager() {
 
   const {
     uploading,
+    directUploading,
     submitting,
     handleFileSelect,
     handleConfirm,
+    handleDirectImageSelect,
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,
@@ -124,6 +130,7 @@ export function ReceiptManager() {
     ocrCustomerName,
     ocrCustomerId,
     savedImagePath,
+    directSavedImagePath,
     directForm,
     setOcrResult,
     setOcrCustomerMark,
@@ -133,6 +140,8 @@ export function ReceiptManager() {
     setImagePreview,
     setSelectedFile,
     setSavedImagePath,
+    setDirectSavedImagePath,
+    setDirectUploadedImageName,
     setError,
     handleShowUploadChange,
     handleShowDirectCreateChange,
@@ -252,10 +261,13 @@ export function ReceiptManager() {
         form={directForm}
         customerCandidates={directCustomerCandidates}
         tx={tx}
+        uploadedImageName={directUploadedImageName}
+        directUploading={directUploading}
         onOpenChange={handleShowDirectCreateChange}
         onFormChange={setDirectForm}
         onCustomerMarkChange={handleDirectCustomerMarkChange}
         onCustomerSelect={handleDirectCustomerSelect}
+        onImageSelect={handleDirectImageSelect}
         onSubmit={handleDirectCreate}
       />
 

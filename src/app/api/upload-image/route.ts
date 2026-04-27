@@ -6,9 +6,17 @@ import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-resp
 import { getCurrentUser } from '@/lib/request-auth';
 import { db } from '@/lib/db';
 import { buildDetailVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds } from '@/lib/resource-visibility';
+import { parseActionRequest } from '@/lib/http-body';
+import { enforceRateLimit } from '@/lib/rate-limit';
+import { createApiError } from '@/lib/api-error';
+import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
+import { createApiSuccessResponse } from '@/lib/api-success-response';
 
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const PUBLIC_UPLOAD_PREFIX = '/upload/images/';
+const UPLOAD_CATEGORY_DIRS: Record<string, string> = {
+  'receipt-direct': 'receipts/direct',
+};
 
 function resolveImageMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -83,6 +91,61 @@ export async function GET(request: NextRequest) {
       code: apiErrorCodes.FILE_READ_FAILED,
       status: 404,
       message: '图片读取失败',
+    }, request);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser(request);
+    if (!currentUser) {
+      return createApiErrorResponse({ code: apiErrorCodes.AUTH_REQUIRED, status: 401, message: '未登录' }, request);
+    }
+
+    await enforceRateLimit('upload', request, { currentUser });
+    const { action, data, file } = await parseActionRequest(request);
+    if (action !== 'upload') {
+      throw createApiError({
+        code: apiErrorCodes.INVALID_ACTION,
+        status: 400,
+        message: '未知操作',
+        detail: { action },
+      });
+    }
+    if (!file) {
+      throw createApiError({
+        code: apiErrorCodes.BAD_REQUEST,
+        status: 400,
+        message: '请上传图片',
+      });
+    }
+
+    const category = typeof data.category === 'string' ? data.category.trim() : '';
+    const subDir = category ? UPLOAD_CATEGORY_DIRS[category] : '';
+    if (category && !subDir) {
+      throw createApiError({
+        code: apiErrorCodes.BAD_REQUEST,
+        status: 400,
+        message: '上传分类无效',
+        detail: { category },
+      });
+    }
+
+    const image = await saveUploadedImage(file, { subDir });
+    return createApiSuccessResponse({ data: image }, request);
+  } catch (error) {
+    console.error('Upload image error:', error);
+    if (error instanceof UploadValidationError) {
+      return toApiErrorResponse(error, {
+        code: apiErrorCodes.BAD_REQUEST,
+        status: 400,
+        message: error.message,
+      }, request);
+    }
+    return toApiErrorResponse(error, {
+      code: apiErrorCodes.INTERNAL_ERROR,
+      status: 500,
+      message: '图片上传失败',
     }, request);
   }
 }

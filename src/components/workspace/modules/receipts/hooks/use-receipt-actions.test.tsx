@@ -1,9 +1,10 @@
 import { act, renderHook } from '@testing-library/react';
 import { useReceiptActions } from './use-receipt-actions';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  apiUploadCall: jest.fn(),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => {
     if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
       return String((error as Record<string, unknown>).error || fallback);
@@ -13,6 +14,7 @@ jest.mock('@/components/workspace/shared', () => ({
 }));
 
 const mockApiCall = apiCall as jest.Mock;
+const mockApiUploadCall = apiUploadCall as jest.Mock;
 const mockGetErrorMessage = getErrorMessage as jest.Mock;
 
 describe('useReceiptActions', () => {
@@ -47,6 +49,7 @@ describe('useReceiptActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockApiUploadCall.mockReset();
     mockGetErrorMessage.mockClear();
     mockFetch.mockReset();
     loadReceipts.mockClear();
@@ -84,6 +87,9 @@ describe('useReceiptActions', () => {
       ocrCustomerName: '',
       ocrCustomerId: '',
       savedImagePath: null,
+      directSavedImagePath: null,
+      setDirectSavedImagePath: jest.fn(),
+      setDirectUploadedImageName: jest.fn(),
       directForm: {
         receiptNo: 'RCPT-1',
         date: '2026-03-11',
@@ -214,11 +220,105 @@ describe('useReceiptActions', () => {
         customerName: 'MAB',
         customerId: 'cust-1',
         isDeposit: false,
+        imagePath: null,
+        imageName: null,
       }),
     }));
     expect(handleShowDirectCreateChange).toHaveBeenCalledWith(false);
     expect(resetDirectForm).toHaveBeenCalled();
     expect(loadReceipts).toHaveBeenCalled();
+  });
+
+  it('uploads direct-create receipt image and stores returned path', async () => {
+    const setDirectSavedImagePath = jest.fn();
+    const setDirectUploadedImageName = jest.fn();
+    const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    mockApiUploadCall.mockResolvedValue({
+      success: true,
+      data: {
+        path: '/upload/images/receipts/direct/direct-receipt.png',
+        name: 'direct-receipt.png',
+      },
+    });
+
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      setDirectSavedImagePath,
+      setDirectUploadedImageName,
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectImageSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(mockApiUploadCall).toHaveBeenCalledWith('upload-image', expect.any(FormData), expect.objectContaining({
+      method: 'POST',
+    }));
+    const [, formData] = mockApiUploadCall.mock.calls[0] as [string, FormData];
+    expect(formData.get('action')).toBe('upload');
+    expect(formData.get('category')).toBe('receipt-direct');
+    expect(setDirectSavedImagePath).toHaveBeenCalledWith({
+      path: '/upload/images/receipts/direct/direct-receipt.png',
+      name: 'direct-receipt.png',
+    });
+    expect(setDirectUploadedImageName).toHaveBeenCalledWith('direct-receipt.png');
+  });
+
+  it('sends uploaded direct-create image path with receipt payload', async () => {
+    mockApiCall.mockResolvedValue({ success: true });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      directSavedImagePath: {
+        path: '/upload/images/receipts/direct/direct-receipt.png',
+        name: 'direct-receipt.png',
+      },
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'direct-create',
+        receiptNo: 'RCPT-1',
+        date: '2026-03-11',
+        tel: null,
+        usd: 120,
+        invNo: null,
+        orderNo: 'MAB-1-01',
+        payer: 'payer',
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+        isDeposit: false,
+        imagePath: '/upload/images/receipts/direct/direct-receipt.png',
+        imageName: 'direct-receipt.png',
+      }),
+    }));
+  });
+
+  it('reports direct-create image upload failure returned by API', async () => {
+    const setDirectSavedImagePath = jest.fn();
+    const setDirectUploadedImageName = jest.fn();
+    const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    mockApiUploadCall.mockResolvedValue({ success: false, error: '上传失败' });
+
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      setDirectSavedImagePath,
+      setDirectUploadedImageName,
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectImageSelect({
+        target: { files: [file], value: 'fake' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setDirectSavedImagePath).toHaveBeenCalledWith(null);
+    expect(setDirectUploadedImageName).toHaveBeenCalledWith('');
+    expect(setError).toHaveBeenCalledWith('上传失败');
   });
 
   it('reports direct-create failure returned by API', async () => {
@@ -230,6 +330,17 @@ describe('useReceiptActions', () => {
     });
 
     expect(setError).toHaveBeenCalledWith('创建失败');
+  });
+
+  it('reports direct-create failure when request throws', async () => {
+    mockApiCall.mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('network down');
   });
 
   it('submits receipt deletion request and reloads on success', async () => {
@@ -252,6 +363,17 @@ describe('useReceiptActions', () => {
     expect(loadReceipts).toHaveBeenCalled();
   });
 
+  it('shows alert when receipt deletion request fails', async () => {
+    mockApiCall.mockResolvedValue({ success: false, error: '申请失败' });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDeleteReceipt('receipt-1');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('申请失败');
+  });
+
   it('marks receipt as received and refreshes list on success', async () => {
     mockFetch.mockResolvedValue({
       json: async () => ({ success: true }),
@@ -267,5 +389,18 @@ describe('useReceiptActions', () => {
       credentials: 'include',
     }));
     expect(loadReceipts).toHaveBeenCalled();
+  });
+
+  it('shows alert when mark-received fails', async () => {
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: false, error: '操作失败' }),
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleMarkReceived('receipt-2');
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('操作失败');
   });
 });

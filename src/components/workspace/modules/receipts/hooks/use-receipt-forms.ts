@@ -25,6 +25,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [error, setError] = useState<string | null>(null);
   const [directForm, setDirectForm] = useState<ReceiptDirectForm>({ ...EMPTY_RECEIPT_DIRECT_FORM });
   const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
+  const [directSavedImagePath, setDirectSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+  const [directUploadedImageName, setDirectUploadedImageName] = useState('');
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -93,6 +95,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     if (!open) {
       setError(null);
       setDirectCustomerCandidates([]);
+      setDirectSavedImagePath(null);
+      setDirectUploadedImageName('');
     }
   };
 
@@ -127,6 +131,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const resetDirectForm = () => {
     setDirectForm({ ...EMPTY_RECEIPT_DIRECT_FORM });
     setDirectCustomerCandidates([]);
+    setDirectSavedImagePath(null);
+    setDirectUploadedImageName('');
   };
 
   return {
@@ -153,6 +159,10 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     directForm,
     setDirectForm,
     directCustomerCandidates,
+    directSavedImagePath,
+    setDirectSavedImagePath,
+    directUploadedImageName,
+    setDirectUploadedImageName,
     viewingImage,
     setViewingImage,
     handleShowUploadChange,

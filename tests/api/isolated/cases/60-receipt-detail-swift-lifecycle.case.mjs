@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs';
+
 export const name = 'receipt-detail-swift-lifecycle';
 
 function findReceiptByOrder(rows, orderNo) {
@@ -31,6 +33,26 @@ export default async function run(t) {
 
   const orderNo = `LIFE-${suffix}-01`;
   const customerMark = `LIFE-${suffix}`;
+  const directReceiptImagePath = `${t.tmpDir}/receipt-direct-${suffix}.png`;
+  writeFileSync(
+    directReceiptImagePath,
+    Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnKXuQAAAAASUVORK5CYII=', 'base64'),
+  );
+
+  const directReceiptImage = await t.request('POST', '/api/upload-image', {
+    form: {
+      action: 'upload',
+      category: 'receipt-direct',
+      file: {
+        filePath: directReceiptImagePath,
+        filename: `receipt-direct-${suffix}.png`,
+        contentType: 'image/png',
+      },
+    },
+    expectedStatus: 200,
+  });
+  t.step('receipt direct-create image uploaded');
+
   await t.request('POST', '/api/receipt', {
     json: {
       action: 'direct-create',
@@ -39,10 +61,17 @@ export default async function run(t) {
       orderNo,
       customerMark,
       customerName: customerMark,
+      imagePath: directReceiptImage.data?.data?.path,
+      imageName: directReceiptImage.data?.data?.name,
     },
     expectedStatus: 200,
   });
   t.step('lifecycle receipt created');
+
+  const directReceiptList = await t.request('GET', `/api/receipt?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
+  const directReceipt = findReceiptByOrder(directReceiptList.data?.data, orderNo);
+  t.assertMatch(directReceipt?.imageUrl || '', /\/upload\/images\/receipts\/direct\//, 'direct-create receipt keeps uploaded image path');
+  t.assertMatch(directReceipt?.imageName || '', /receipt-direct-/, 'direct-create receipt keeps uploaded image name');
 
   await t.request('POST', '/api/detail', {
     json: {

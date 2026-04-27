@@ -1,12 +1,16 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.89  
+> 当前版本：v1.0.90  
 > 最后更新：2026-03-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 收据管理“直接创建收据”新增上传图片入口：复用受保护的 `/api/upload-image` 上传链路，图片按 `receipt-direct -> receipts/direct` 分类写入 NAS 挂载目录，并在 `direct-create` 创建时关联到收据记录 ✅ 2026-04-27
+- [x] Docker 上传目录切换到 NAS bind mount：`/app/upload` 从 Docker named volume 改为宿主机 `UPLOAD_HOST_DIR`，默认指向 `/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload`，并保留历史图片迁移步骤 ✅ 2026-04-27
+- [x] 收据管理“直接创建收据”弹窗字段顺序调整为 `ORDERNO -> INVNO -> 客户MARK -> 付款金额USD`，并补齐组件/Hook/API 回归测试 ✅ 2026-04-27
 
 - [x] 修复 GitHub Actions 中发票归属分配 Playwright 用例的原生 alert 脆弱性：改为注入 alert 捕获并断言文案，隔离 E2E 重新通过 ✅ 2026-03-30
 

@@ -7,6 +7,7 @@ import { ReceiptCanvas, type ReceiptCanvasHandle } from './receipt-canvas';
 import { SignaturePad } from './signature-pad';
 import { MobileOrientationHint } from './mobile-orientation-hint';
 import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { dataUrlToBlob } from './data-url';
 
 type SigningViewProps = {
   sessionId: string;
@@ -27,6 +28,7 @@ type SessionPayload = {
     orderNo: string;
     invNo: string | null;
     customerMark: string | null;
+    customerCompanyName: string | null;
     customerName: string | null;
     clientName: string;
     clientTel: string | null;
@@ -129,7 +131,6 @@ function MobileSignatureMode({
             value={value}
             onChange={onChange}
             mobileMode
-            showRotateControls={false}
             showClearButton={false}
           />
         </div>
@@ -266,8 +267,8 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
       formData.append('layoutSnapshot', JSON.stringify(session.layout));
       formData.append('receiptImage', new File([blob], `${session.layout.receiptNo}.png`, { type: 'image/png' }));
 
-      const receiverBlob = await (await fetch(receiverSignature)).blob();
-      const payerBlob = await (await fetch(payerSignature)).blob();
+      const receiverBlob = dataUrlToBlob(receiverSignature);
+      const payerBlob = dataUrlToBlob(payerSignature);
       formData.append('receiverSignature', new File([receiverBlob], `${session.layout.receiptNo}-receiver.png`, { type: 'image/png' }));
       formData.append('payerSignature', new File([payerBlob], `${session.layout.receiptNo}-payer.png`, { type: 'image/png' }));
 

@@ -8,6 +8,7 @@ type ReceiptGeneratorContext = {
   customer: {
     id: string;
     mark: string;
+    companyName?: string | null;
     name: string;
     phone: string | null;
     city: string | null;

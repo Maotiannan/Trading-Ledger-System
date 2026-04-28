@@ -23,11 +23,15 @@ function assertGeneratorRole(currentUser: CurrentUser) {
 type GeneratorSessionRecord = Awaited<ReturnType<typeof db.receiptGeneratorSession.findUnique>>;
 
 function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
+  const snapshot = session.layoutSnapshot && typeof session.layoutSnapshot === 'object'
+    ? session.layoutSnapshot as Record<string, unknown>
+    : null;
   const layout = buildReceiptGeneratorLayout({
     receiptNo: session.receiptNo,
     orderNo: session.orderNo,
     invNo: session.invNo,
     customerMark: session.customerMark,
+    customerCompanyName: typeof snapshot?.customerCompanyName === 'string' ? snapshot.customerCompanyName : null,
     customerName: session.customerName,
     clientTel: session.clientTel,
     usdAmount: Number(session.usd),
@@ -50,6 +54,14 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
   };
 }
 
+function getCustomerCompanyName(customer: unknown): string | null {
+  if (!customer || typeof customer !== 'object' || !('companyName' in customer)) {
+    return null;
+  }
+  const value = (customer as { companyName?: unknown }).companyName;
+  return typeof value === 'string' ? value : null;
+}
+
 export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUser, orderNo: string, usdAmount?: number) {
   assertGeneratorRole(currentUser);
 
@@ -63,11 +75,22 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
         id: resolvedOrderCustomer.customerId,
         mark: resolvedOrderCustomer.customerMark,
         orderName: context.data?.derivedOrderName || null,
+        companyName: getCustomerCompanyName(resolvedOrderCustomer.customer),
         name: resolvedOrderCustomer.customerName,
         phone: resolvedOrderCustomer.customerPhone,
         city: resolvedOrderCustomer.customerCity,
       }
-    : inferredCustomer;
+    : inferredCustomer
+      ? {
+          id: inferredCustomer.id,
+          mark: inferredCustomer.mark,
+          orderName: inferredCustomer.orderName,
+          companyName: getCustomerCompanyName(inferredCustomer),
+          name: inferredCustomer.name,
+          phone: inferredCustomer.phone,
+          city: inferredCustomer.city,
+        }
+      : null;
 
   const invoiceSuggestion = latestMatch
     ? {
@@ -84,6 +107,7 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
         orderNo: String(orderNo || '').trim(),
         invNo: invoiceSuggestion?.invNo || null,
         customerMark: customer.mark || null,
+        customerCompanyName: customer.companyName || null,
         customerName: customer.name || null,
         clientTel: customer.phone || null,
         usdAmount: Number(usdAmount || 0),

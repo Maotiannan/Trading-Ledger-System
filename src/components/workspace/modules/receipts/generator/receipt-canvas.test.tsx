@@ -99,6 +99,7 @@ describe('ReceiptCanvas', () => {
     orderNo: 'Big Alpha-07',
     invNo: 'L25MH060523',
     customerMark: 'Big Alpha',
+    customerCompanyName: 'Alpha Trading SARL',
     customerName: 'Alpha Oumar Diallo',
     clientTel: '628 38 63 63',
     usdAmount: 2500,
@@ -164,6 +165,7 @@ describe('ReceiptCanvas', () => {
     expect(screen.getByTestId('receipt-number-value')).toHaveStyle({ color: '#e05a00' });
     expect(screen.getByTestId('receiver-signature-slot')).toHaveStyle({ borderBottom: '1px solid #555' });
     expect(screen.getByTestId('payer-signature-slot')).toHaveStyle({ borderBottom: '1px solid #555' });
+    expect(screen.getByText('Alpha Trading SARL "Big Alpha"')).toBeInTheDocument();
   });
 
   it('exports a png with the same receipt number color and signature underline treatment', async () => {
@@ -197,5 +199,40 @@ describe('ReceiptCanvas', () => {
     expect(fillText).toHaveBeenCalledWith('DMD MERCERIE', expect.any(Number), expect.any(Number));
     expect(fillText).toHaveBeenCalledWith('REÇU DE PAIEMENT', expect.any(Number), expect.any(Number));
     expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalled();
+  });
+
+  it('wraps long phone values and keeps payer signature inside the exported canvas bounds', async () => {
+    const ref = createRef<ReceiptCanvasHandle>();
+    const longPhoneLayout = buildReceiptGeneratorLayout({
+      receiptNo: '0001001',
+      orderNo: 'MAB-1-10',
+      invNo: 'L25MH071089C',
+      customerMark: 'MAB-1',
+      customerCompanyName: 'MAB-1',
+      customerName: 'MAB-1',
+      clientTel: '622 49 12 86 / 66484333516 / 6200711 / 657311550',
+      usdAmount: 1,
+      balanceBefore: 8459,
+      generatedAt: new Date('2026-04-28T12:00:00+08:00'),
+    });
+
+    const { container } = render(
+      <ReceiptCanvas
+        ref={ref}
+        layout={longPhoneLayout}
+        receiverSignature="data:image/png;base64,receiver"
+        payerSignature="data:image/png;base64,payer"
+      />,
+    );
+
+    await ref.current?.exportBlob();
+
+    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('Tél:') || call.text.includes('66484333516') || call.text.includes('657311550'));
+    expect(phoneDrawCalls.length).toBeGreaterThan(1);
+
+    const hiddenCanvas = container.querySelector('canvas[aria-hidden="true"]') as HTMLCanvasElement | null;
+    expect(hiddenCanvas).not.toBeNull();
+    const bottomLine = strokeSegments[strokeSegments.length - 1];
+    expect(bottomLine.to.y).toBeLessThanOrEqual(hiddenCanvas!.height);
   });
 });

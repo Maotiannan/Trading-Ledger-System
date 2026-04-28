@@ -81,6 +81,7 @@ describe('receipt-generator-service', () => {
           id: 'customer-1',
           mark: 'Big Alpha',
           orderName: 'Big Alpha',
+          companyName: 'Alpha Trading SARL',
           name: 'Alpha Oumar Diallo',
           phone: '628 38 63 63',
           city: 'Conakry',
@@ -96,6 +97,9 @@ describe('receipt-generator-service', () => {
             customerPhone: '628 38 63 63',
             customerCity: 'Conakry',
             needsCustomerFix: false,
+            customer: {
+              companyName: 'Alpha Trading SARL',
+            },
             invoice: { id: 'inv-1', invNo: 'L25MH060523', createdAt: new Date('2026-04-27T00:00:00Z') },
           },
         ],
@@ -127,6 +131,7 @@ describe('receipt-generator-service', () => {
         status: ReceiptStatus.SIGNING_PENDING,
         orderId: 'order-1',
         invNo: 'L25MH060523',
+        payer: 'Alpha Trading SARL "Big Alpha"',
       }),
     }));
     expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalled();

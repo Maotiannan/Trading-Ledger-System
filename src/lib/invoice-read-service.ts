@@ -193,6 +193,17 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
       customerCity: true,
       needsCustomerFix: true,
       createdAt: true,
+      customer: {
+        select: {
+          id: true,
+          orderName: true,
+          companyName: true,
+          mark: true,
+          name: true,
+          phone: true,
+          city: true,
+        },
+      },
       invoice: {
         select: {
           id: true,
@@ -229,6 +240,7 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
         id: true,
         mark: true,
         orderName: true,
+        companyName: true,
         name: true,
         phone: true,
         city: true,

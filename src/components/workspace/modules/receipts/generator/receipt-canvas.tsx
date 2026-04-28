@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { ReceiptGeneratorLayoutData } from '@/lib/receipt-generator-layout';
 import { RECEIPT_TEMPLATE_ASSETS } from './template-assets';
 import {
@@ -35,6 +35,10 @@ const TEMPLATE_SIGNATURE_LINE_COLOR = '#555';
 
 function mmToPx(mm: number) {
   return (mm * 96) / 25.4;
+}
+
+function ptToPx(pt: number) {
+  return (pt * 96) / 72;
 }
 
 function formatTemplateMoney(value: number) {
@@ -110,11 +114,18 @@ async function drawReceiptCanvas(
   receiverSignature: string | null,
   payerSignature: string | null,
 ) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
   canvas.width = RECEIPT_TEMPLATE_CANVAS.width;
   canvas.height = RECEIPT_TEMPLATE_CANVAS.height;
+
+  const getContext = () => {
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Receipt canvas context unavailable');
+    }
+    return context;
+  };
+
+  let ctx = getContext();
 
   const [leftLogo, rightLogo, watermark, receiverImage, payerImage] = await Promise.all([
     loadImage(RECEIPT_TEMPLATE_ASSETS.leftLogoDataUrl),
@@ -136,6 +147,75 @@ async function drawReceiptCanvas(
   const headerCenterX = headerLeftX + RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.left + headerGap;
   const headerRightX = headerCenterX + RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.center + headerGap;
   const headerTop = padding.top;
+  const metaWidth = RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.right - 8;
+  const phoneLineHeight = Math.ceil(ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt) * 1.35);
+  const fieldLineHeight = 21;
+  const amountBoxHeight = 28;
+  const detailPaddingX = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight;
+  const detailPaddingY = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.topBottom;
+  const labelWidth = 125;
+  const rightLabelWidth = 62;
+  const signatureLabelGap = 18;
+
+  const prepareContext = () => {
+    ctx = getContext();
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.fillStyle = '#1a1a2e';
+    ctx.lineWidth = 1.5;
+    ctx.textBaseline = 'top';
+    return ctx;
+  };
+
+  prepareContext();
+
+  ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
+  const phoneLines = wrapText(ctx, `Tél: ${layout.clientTel || '-'}`, metaWidth);
+  const extraHeaderOffset = Math.max(0, phoneLines.length - 1) * phoneLineHeight;
+
+  const titleY = 112 + extraHeaderOffset;
+  const amountY = 146 + extraHeaderOffset;
+  const detailY = 190 + extraHeaderOffset;
+  const detailX = padding.left;
+  const detailWidth = contentWidth;
+  const detailInnerX = detailX + detailPaddingX;
+  const detailInnerWidth = detailWidth - detailPaddingX * 2;
+  const valueWidth = detailInnerWidth - labelWidth - 12;
+
+  ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+  const fieldLineCounts = [
+    wrapText(ctx, layout.clientName, valueWidth).length,
+    wrapText(ctx, layout.amountInWords, valueWidth).length,
+    wrapText(ctx, layout.motif, valueWidth).length,
+    wrapText(ctx, layout.resteAPayer, valueWidth).length,
+  ];
+  let measuredY = detailY + detailPaddingY + 16;
+  fieldLineCounts.forEach((lineCount) => {
+    const nextLineY = measuredY + Math.max(lineCount, 1) * fieldLineHeight + 2;
+    measuredY = nextLineY + 7;
+  });
+  const receiverBlockY = measuredY + 10;
+  const receiverSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm);
+  const receiverSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm);
+  const receiverSigTop = receiverBlockY + signatureLabelGap;
+  const receiverTextBottom = receiverBlockY + 20 + ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt);
+  const receiverSigBottom = receiverSigTop + receiverSigHeight + 1;
+  const detailHeight = receiverSigBottom + detailPaddingY + 4 - detailY;
+
+  const payerLabelY = detailY + detailHeight + 12;
+  const payerSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm);
+  const payerSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm);
+  const payerSigTop = payerLabelY + signatureLabelGap;
+  const payerBottom = payerSigTop + payerSigHeight + 1;
+
+  const requiredHeight = Math.max(
+    RECEIPT_TEMPLATE_CANVAS.height,
+    Math.ceil(payerBottom + padding.bottom + 4),
+  );
+
+  if (requiredHeight !== canvas.height) {
+    canvas.height = requiredHeight;
+    prepareContext();
+  }
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -187,7 +267,7 @@ async function drawReceiptCanvas(
   }
 
   const metaRightX = padding.left + contentWidth + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm.x);
-  const metaTopY = headerTop + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm.y);
+  const metaTopY = headerTop + RECEIPT_TEMPLATE_LOGO_BLOCKS.right.heightPx + mmToPx(1) + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm.y);
   ctx.textAlign = 'right';
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.numberFontPt}pt Times New Roman`;
   ctx.fillStyle = TEMPLATE_RECEIPT_NUMBER_COLOR;
@@ -197,19 +277,18 @@ async function drawReceiptCanvas(
   ctx.fillStyle = '#1a1a2e';
   ctx.fillText('No: ', metaRightX - receiptNoWidth - 4, metaTopY + 2);
   ctx.fillText(`Date: ${layout.dateText}`, metaRightX, metaTopY + 26);
-  ctx.fillText(`Tél: ${layout.clientTel || '-'}`, metaRightX, metaTopY + 46);
+  phoneLines.forEach((line, index) => {
+    ctx.fillText(line, metaRightX, metaTopY + 46 + index * phoneLineHeight);
+  });
 
   ctx.textAlign = 'center';
   ctx.font = `800 ${RECEIPT_TEMPLATE_TEXT_REGIONS.titleBlock.fontPt}pt Times New Roman`;
-  const titleY = 112;
   ctx.fillText('REÇU DE PAIEMENT', canvas.width / 2, titleY);
 
-  const amountY = 146;
   const amountX = padding.left + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.offsetMm.x);
   const boxGap = mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.boxGapMm);
   const gnfWidth = mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.gnfWidthMm);
   const usdWidth = mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.usdWidthMm);
-  const amountBoxHeight = 28;
   ctx.textAlign = 'left';
   ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.labelFontPt}pt Times New Roman`;
   ctx.fillText('GNF', amountX, amountY + 4);
@@ -227,24 +306,11 @@ async function drawReceiptCanvas(
   ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.valueFontPt}pt Times New Roman`;
   ctx.fillText(`$${formatTemplateMoney(layout.usdAmount)}#`, usdBoxX + usdWidth / 2, amountY + 5);
 
-  const detailX = padding.left;
-  const detailY = 190;
-  const detailWidth = contentWidth;
-  const detailHeight = 230;
   ctx.textAlign = 'left';
   ctx.strokeStyle = '#1a1a2e';
   ctx.lineWidth = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.borderWidthPx;
   ctx.strokeRect(detailX, detailY, detailWidth, detailHeight);
-
-  const detailPaddingX = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight;
-  const detailPaddingY = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.topBottom;
-  const detailInnerX = detailX + detailPaddingX;
   const detailInnerY = detailY + detailPaddingY + 16;
-  const detailInnerWidth = detailWidth - detailPaddingX * 2;
-  const fieldLineHeight = 21;
-  const labelWidth = 125;
-  const rightLabelWidth = 62;
-  const valueWidth = detailInnerWidth - labelWidth - 12;
   let currentY = detailInnerY;
 
   const drawField = (label: string, value: string, options?: { rightLabel?: string; rightValue?: string }) => {
@@ -278,7 +344,6 @@ async function drawReceiptCanvas(
   drawField('Motif :', layout.motif, { rightLabel: 'Frais :', rightValue: TEMPLATE_FRAIS_LABEL });
   drawField('Reste à payer :', layout.resteAPayer);
 
-  const receiverBlockY = detailY + detailHeight - 64;
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';
   ctx.fillText('Reçu par :', detailInnerX, receiverBlockY);
@@ -286,40 +351,34 @@ async function drawReceiptCanvas(
   ctx.fillStyle = '#1a1a2e';
   ctx.fillText(layout.receivedBy, detailInnerX, receiverBlockY + 20);
 
-  const receiverSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm);
-  const receiverSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm);
   const receiverSigX = detailX + detailWidth - detailPaddingX - receiverSigWidth;
-  const receiverSigY = receiverBlockY + 6;
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';
   ctx.textAlign = 'right';
   ctx.fillText('Signature :', receiverSigX + receiverSigWidth, receiverBlockY);
   if (receiverImage) {
-    ctx.drawImage(receiverImage, receiverSigX, receiverSigY + 18, receiverSigWidth, receiverSigHeight);
+    ctx.drawImage(receiverImage, receiverSigX, receiverSigTop, receiverSigWidth, receiverSigHeight);
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
   drawLine(
     ctx,
     receiverSigX,
-    receiverSigY + 18 + receiverSigHeight,
+    receiverSigTop + receiverSigHeight,
     receiverSigX + receiverSigWidth,
-    receiverSigY + 18 + receiverSigHeight,
+    receiverSigTop + receiverSigHeight,
   );
 
-  const payerLabelY = detailY + detailHeight + 12;
-  const payerSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm);
-  const payerSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm);
   ctx.textAlign = 'left';
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';
   ctx.fillText('Signature du payeur :', detailX, payerLabelY);
   if (payerImage) {
-    ctx.drawImage(payerImage, detailX, payerLabelY + 18, payerSigWidth, payerSigHeight);
+    ctx.drawImage(payerImage, detailX, payerSigTop, payerSigWidth, payerSigHeight);
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
-  drawLine(ctx, detailX, payerLabelY + 18 + payerSigHeight, detailX + payerSigWidth, payerLabelY + 18 + payerSigHeight);
+  drawLine(ctx, detailX, payerSigTop + payerSigHeight, detailX + payerSigWidth, payerSigTop + payerSigHeight);
 }
 
 function FieldRow({ label, value, trailing }: { label: string; value: string; trailing?: React.ReactNode }) {
@@ -402,7 +461,38 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const [mobileScale, setMobileScale] = useState(1);
+  const [shellHeight, setShellHeight] = useState<number>(RECEIPT_TEMPLATE_CANVAS.height);
   const usdAmountText = `$${formatTemplateMoney(layout.usdAmount)}#`;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const shell = shellRef.current;
+    if (!shell) return undefined;
+
+    const updateScale = () => {
+      const viewportWidth = window.innerWidth;
+      const nextScale = viewportWidth <= 768
+        ? Math.min(1, Math.max(0.5, (viewportWidth - 32) / RECEIPT_TEMPLATE_CANVAS.width))
+        : 1;
+      setMobileScale(nextScale);
+      setShellHeight(shell.offsetHeight);
+    };
+
+    updateScale();
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => {
+          updateScale();
+        });
+    observer?.observe(shell);
+    window.addEventListener('resize', updateScale);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [layout, receiverSignature, payerSignature]);
 
   useImperativeHandle(
     ref,
@@ -427,39 +517,47 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
     <div className={`rounded-xl border bg-white p-3 shadow-sm ${className}`}>
       <div className="overflow-x-auto">
         <div
-          data-testid="receipt-template-shell"
           style={{
-            width: `${RECEIPT_TEMPLATE_CANVAS.width}px`,
-            minHeight: `${RECEIPT_TEMPLATE_CANVAS.height}px`,
-            maxWidth: '100%',
-            padding: `${RECEIPT_TEMPLATE_CANVAS.paddingMm.top}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.right}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.bottom}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.left}mm`,
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: `${RECEIPT_TEMPLATE_CANVAS.contentGapMm}mm`,
-            background: '#fff',
-            color: '#1a1a2e',
-            fontFamily: "'Times New Roman', Times, serif",
-            overflow: 'hidden',
+            width: `${RECEIPT_TEMPLATE_CANVAS.width * mobileScale}px`,
+            height: `${shellHeight * mobileScale}px`,
             margin: '0 auto',
           }}
         >
-          <img
-            alt="DMD watermark"
-            src={RECEIPT_TEMPLATE_ASSETS.bottomWatermarkDataUrl}
+          <div
+            ref={shellRef}
+            data-testid="receipt-template-shell"
             style={{
-              position: 'absolute',
-              left: '50%',
-              bottom: `${RECEIPT_TEMPLATE_WATERMARK.offsetMm.bottom}mm`,
-              width: `${RECEIPT_TEMPLATE_WATERMARK.widthPercent}%`,
-              height: `${RECEIPT_TEMPLATE_WATERMARK.heightPx}px`,
-              transform: 'translateX(-50%)',
-              opacity: RECEIPT_TEMPLATE_WATERMARK.opacityPercent / 100,
-              objectFit: 'contain',
-              zIndex: 0,
-              pointerEvents: 'none',
+              width: `${RECEIPT_TEMPLATE_CANVAS.width}px`,
+              minHeight: `${RECEIPT_TEMPLATE_CANVAS.height}px`,
+              padding: `${RECEIPT_TEMPLATE_CANVAS.paddingMm.top}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.right}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.bottom}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.left}mm`,
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: `${RECEIPT_TEMPLATE_CANVAS.contentGapMm}mm`,
+              background: '#fff',
+              color: '#1a1a2e',
+              fontFamily: "'Times New Roman', Times, serif",
+              overflow: 'hidden',
+              transform: `scale(${mobileScale})`,
+              transformOrigin: 'top left',
             }}
-          />
+          >
+            <img
+              alt="DMD watermark"
+              src={RECEIPT_TEMPLATE_ASSETS.bottomWatermarkDataUrl}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                bottom: `${RECEIPT_TEMPLATE_WATERMARK.offsetMm.bottom}mm`,
+                width: `${RECEIPT_TEMPLATE_WATERMARK.widthPercent}%`,
+                height: `${RECEIPT_TEMPLATE_WATERMARK.heightPx}px`,
+                transform: 'translateX(-50%)',
+                opacity: RECEIPT_TEMPLATE_WATERMARK.opacityPercent / 100,
+                objectFit: 'contain',
+                zIndex: 0,
+                pointerEvents: 'none',
+              }}
+            />
 
           <div
             style={{
@@ -559,9 +657,20 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
                   <span style={{ fontWeight: 600 }}>Date: </span>
                   {layout.dateText}
                 </div>
-                <div style={{ fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`, marginTop: '.5mm' }}>
+                <div
+                  style={{
+                    fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`,
+                    marginTop: '.5mm',
+                    maxWidth: '160px',
+                    marginLeft: 'auto',
+                    textAlign: 'right',
+                    whiteSpace: 'normal',
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                  }}
+                >
                   <span style={{ fontWeight: 600 }}>Tél: </span>
-                  {layout.clientTel || '-'}
+                  <span>{layout.clientTel || '-'}</span>
                 </div>
               </div>
             </div>
@@ -693,6 +802,7 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               widthMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm}
               heightMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm}
             />
+          </div>
           </div>
         </div>
       </div>

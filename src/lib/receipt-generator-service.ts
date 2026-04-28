@@ -44,6 +44,14 @@ function fileToBuffer(file: File) {
   return new Response(file).arrayBuffer().then((data) => Buffer.from(data));
 }
 
+function getCustomerCompanyName(customer: unknown): string | null {
+  if (!customer || typeof customer !== 'object' || !('companyName' in customer)) {
+    return null;
+  }
+  const value = (customer as { companyName?: unknown }).companyName;
+  return typeof value === 'string' ? value : null;
+}
+
 async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string, usdAmount: number) {
   const context = await lookupInvoiceOrderContext(currentUser, rawOrderNo);
   const exactMatches = Array.isArray(context.data?.exactMatches) ? context.data.exactMatches : [];
@@ -54,11 +62,21 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
     ? {
         id: resolvedCustomerOrder.customerId,
         mark: resolvedCustomerOrder.customerMark,
+        companyName: getCustomerCompanyName(resolvedCustomerOrder.customer),
         name: resolvedCustomerOrder.customerName,
         phone: resolvedCustomerOrder.customerPhone,
         city: resolvedCustomerOrder.customerCity,
       }
-    : inferredCustomer;
+    : inferredCustomer
+      ? {
+          id: inferredCustomer.id,
+          mark: inferredCustomer.mark,
+          companyName: getCustomerCompanyName(inferredCustomer),
+          name: inferredCustomer.name,
+          phone: inferredCustomer.phone,
+          city: inferredCustomer.city,
+        }
+      : null;
 
   if (!latestMatch) {
     throw badRequest('未找到对应订单，无法生成签名收据', { orderNo: rawOrderNo });
@@ -72,14 +90,15 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
 
   const balanceBefore = Number(latestMatch.orderBalance || 0);
   const layout = buildReceiptGeneratorLayout({
-    receiptNo: 'PENDING',
-    orderNo: rawOrderNo,
-    invNo: latestMatch.invoice?.invNo || null,
-    customerMark: customer.mark,
-    customerName: customer.name,
-    clientTel: customer.phone || null,
-    usdAmount,
-    balanceBefore,
+      receiptNo: 'PENDING',
+      orderNo: rawOrderNo,
+      invNo: latestMatch.invoice?.invNo || null,
+      customerMark: customer.mark,
+      customerCompanyName: customer.companyName || null,
+      customerName: customer.name,
+      clientTel: customer.phone || null,
+      usdAmount,
+      balanceBefore,
   });
 
   return {
@@ -87,6 +106,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
     invNo: latestMatch.invoice?.invNo || null,
     customerId: customer.id,
     customerMark: customer.mark,
+    customerCompanyName: customer.companyName || null,
     customerName: customer.name,
     customerPhone: customer.phone || null,
     customerCity: customer.city || null,
@@ -110,13 +130,14 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   const result = await runInTransaction(async (tx) => {
     const receiptNo = await allocateNextReceiptNo(tx);
     const finalizedLayout = buildReceiptGeneratorLayout({
-      receiptNo,
-      orderNo,
-      invNo: creationContext.invNo,
-      customerMark: creationContext.customerMark,
-      customerName: creationContext.customerName,
-      clientTel: creationContext.customerPhone,
-      usdAmount,
+        receiptNo,
+        orderNo,
+        invNo: creationContext.invNo,
+        customerMark: creationContext.customerMark,
+        customerCompanyName: creationContext.customerCompanyName,
+        customerName: creationContext.customerName,
+        clientTel: creationContext.customerPhone,
+        usdAmount,
       balanceBefore: creationContext.balanceBefore,
     });
 

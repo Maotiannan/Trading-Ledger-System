@@ -5,6 +5,7 @@ type ReceiptGeneratorLayoutInput = {
   orderNo: string;
   invNo: string | null;
   customerMark: string | null;
+  customerCompanyName?: string | null;
   customerName: string | null;
   clientTel: string | null;
   usdAmount: number;
@@ -18,6 +19,7 @@ export type ReceiptGeneratorLayoutData = {
   orderNo: string;
   invNo: string | null;
   customerMark: string | null;
+  customerCompanyName: string | null;
   customerName: string | null;
   clientName: string;
   clientTel: string | null;
@@ -101,11 +103,13 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
   const now = input.generatedAt || new Date();
   const balanceBefore = input.balanceBefore === null ? null : Number(input.balanceBefore);
   const balanceAfter = balanceBefore === null ? null : Number((balanceBefore - input.usdAmount).toFixed(2));
+  const customerCompanyName = (input.customerCompanyName || '').trim();
   const customerName = (input.customerName || '').trim();
   const customerMark = (input.customerMark || '').trim();
-  const clientName = customerName && customerMark
-    ? `${customerName} "${customerMark}"`
-    : customerName || customerMark || '-';
+  const displayName = customerCompanyName || customerName;
+  const clientName = displayName && customerMark
+    ? `${displayName} "${customerMark}"`
+    : displayName || customerMark || '-';
   const motifParts = ['Payment for'];
   if (input.invNo) motifParts.push(input.invNo);
   motifParts.push(input.orderNo);
@@ -116,6 +120,7 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
     orderNo: input.orderNo,
     invNo: input.invNo,
     customerMark: input.customerMark,
+    customerCompanyName: input.customerCompanyName || null,
     customerName: input.customerName,
     clientName,
     clientTel: input.clientTel,

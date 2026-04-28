@@ -12,20 +12,25 @@ jest.mock('@/components/workspace/shared', () => ({
   getErrorMessage: jest.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback),
 }));
 
+const exportBlobMock = jest.fn(async () => new Blob(['png'], { type: 'image/png' }));
+
 jest.mock('./receipt-canvas', () => ({
-  ReceiptCanvas: React.forwardRef(function MockReceiptCanvas(_props: unknown, _ref) {
+  ReceiptCanvas: React.forwardRef(function MockReceiptCanvas(_props: unknown, ref) {
+    React.useImperativeHandle(ref, () => ({
+      exportBlob: exportBlobMock,
+    }));
     return <div data-testid="receipt-canvas" />;
   }),
 }));
 
 jest.mock('./signature-pad', () => ({
-  SignaturePad: ({ label, value, onChange, onBack, onConfirm, showRotateControls = true, showClearButton = true }: any) => (
+  SignaturePad: ({ label, value, onChange, onBack, onConfirm, showRotateControls = false, showClearButton = true }: any) => (
     <div data-testid="signature-pad-mock">
       <div>{label}</div>
       <div data-testid="signature-pad-value">{value || 'EMPTY'}</div>
       {showRotateControls ? <div>ROTATE-CONTROLS</div> : null}
       {showClearButton ? <button type="button" onClick={() => onChange(null)}>Clear inline</button> : null}
-      <button type="button" onClick={() => onChange('data:image/png;base64,new-signature')}>Draw</button>
+      <button type="button" onClick={() => onChange('data:image/png;base64,c2lnbmVk')}>Draw</button>
       {onBack ? <button type="button" onClick={onBack}>Back action</button> : null}
       {onConfirm ? <button type="button" onClick={onConfirm}>Confirm action</button> : null}
     </div>
@@ -52,6 +57,7 @@ describe('SigningView mobile signature flow', () => {
         orderNo: 'Big Alpha-07',
         invNo: 'L25MH060523',
         customerMark: 'Big Alpha',
+        customerCompanyName: 'Alpha Trading SARL',
         customerName: 'Alpha Oumar Diallo',
         clientName: 'Alpha Oumar Diallo "Big Alpha"',
         clientTel: '628 38 63 63',
@@ -69,10 +75,13 @@ describe('SigningView mobile signature flow', () => {
   const tx = (zh: string, en: string) => `${zh}|${en}`;
   const mockApiCall = apiCall as jest.Mock;
   const originalMatchMedia = window.matchMedia;
+  const originalFetch = global.fetch;
+  const fetchMock = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockApiCall.mockResolvedValue(sessionPayload);
+    exportBlobMock.mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
     Object.defineProperty(document.documentElement, 'requestFullscreen', {
       configurable: true,
       writable: true,
@@ -93,10 +102,16 @@ describe('SigningView mobile signature flow', () => {
       removeListener: jest.fn(),
       dispatchEvent: jest.fn(),
     }));
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
   });
 
   afterAll(() => {
     window.matchMedia = originalMatchMedia;
+    global.fetch = originalFetch;
   });
 
   it('shows one focused mobile signing mode at a time instead of two inline pads', async () => {
@@ -154,5 +169,32 @@ describe('SigningView mobile signature flow', () => {
     });
 
     expect(screen.getByRole('button', { name: '开始付款方签名|Start payer signature' })).toBeInTheDocument();
+  });
+
+  it('finalizes with a multipart post and does not fetch data urls', async () => {
+    render(<SigningView sessionId="session-1" tx={tx} />);
+
+    await screen.findByText('签名收据|Signed Receipt');
+
+    fireEvent.click(screen.getByRole('button', { name: '开始收款方签名|Start receiver signature' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认|Confirm' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '开始付款方签名|Start payer signature' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认|Confirm' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '确认并生成收据|Confirm and generate receipt' }));
+
+    await waitFor(() => {
+      expect(exportBlobMock).toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchMock).toHaveBeenCalledWith('/api/receipt-generator', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      body: expect.any(FormData),
+    }));
+    expect(fetchMock.mock.calls[0]?.[0]).not.toContain('data:image');
   });
 });

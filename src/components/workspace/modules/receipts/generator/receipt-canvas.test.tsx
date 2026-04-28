@@ -201,7 +201,7 @@ describe('ReceiptCanvas', () => {
     expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalled();
   });
 
-  it('wraps long phone values and keeps payer signature inside the exported canvas bounds', async () => {
+  it('wraps long phone values with a fixed tel label and keeps payer signature inside the exported canvas bounds', async () => {
     const ref = createRef<ReceiptCanvasHandle>();
     const longPhoneLayout = buildReceiptGeneratorLayout({
       receiptNo: '0001001',
@@ -227,8 +227,11 @@ describe('ReceiptCanvas', () => {
 
     await ref.current?.exportBlob();
 
-    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('Tél:') || call.text.includes('66484333516') || call.text.includes('657311550'));
+    const telLabelCall = fillTextCalls.find((call) => call.text === 'Tél:');
+    expect(telLabelCall).toBeDefined();
+    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
     expect(phoneDrawCalls.length).toBeGreaterThan(1);
+    expect(phoneDrawCalls.every((call) => !call.text.startsWith('Tél:'))).toBe(true);
 
     const hiddenCanvas = container.querySelector('canvas[aria-hidden="true"]') as HTMLCanvasElement | null;
     expect(hiddenCanvas).not.toBeNull();

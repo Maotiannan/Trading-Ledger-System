@@ -10,6 +10,9 @@ type SignaturePadProps = {
   onChange: (value: string | null) => void;
   mobileMode?: boolean;
   showClearButton?: boolean;
+  hideHeader?: boolean;
+  frameClassName?: string;
+  canvasClassName?: string;
 };
 
 export function SignaturePad({
@@ -19,6 +22,9 @@ export function SignaturePad({
   onChange,
   mobileMode = false,
   showClearButton = true,
+  hideHeader = false,
+  frameClassName = '',
+  canvasClassName = '',
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [drawing, setDrawing] = useState(false);
@@ -96,24 +102,26 @@ export function SignaturePad({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium">{label}</div>
-        <div className="flex flex-wrap gap-2">
-          {showClearButton ? (
-            <Button type="button" size="sm" variant="outline" onClick={clearPad}>
-              {tx('清除', 'Clear')}
-            </Button>
-          ) : null}
+      {!hideHeader ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="font-medium">{label}</div>
+          <div className="flex flex-wrap gap-2">
+            {showClearButton ? (
+              <Button type="button" size="sm" variant="outline" onClick={clearPad}>
+                {tx('清除', 'Clear')}
+              </Button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className={`overflow-hidden rounded-xl border bg-white ${mobileMode ? 'h-[44vh]' : 'h-64'}`}>
+      <div className={`overflow-hidden rounded-xl border bg-white ${mobileMode ? 'h-[44vh]' : 'h-64'} ${frameClassName}`}>
         <div className="flex h-full w-full items-center justify-center">
           <canvas
             ref={canvasRef}
             width={1000}
             height={320}
-            className={`touch-none rounded-md bg-white ${mobileMode ? 'h-[36vh] w-[92vw]' : 'h-56 w-full'}`}
+            className={`touch-none rounded-md bg-white ${mobileMode ? 'h-[36vh] w-[92vw]' : 'h-56 w-full'} ${canvasClassName}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrawing}

@@ -65,25 +65,78 @@ async function loadImage(dataUrl: string | null): Promise<HTMLImageElement | nul
   });
 }
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [''];
-
-  const lines: string[] = [];
-  let current = words[0];
-
-  for (let index = 1; index < words.length; index += 1) {
-    const next = `${current} ${words[index]}`;
-    if (ctx.measureText(next).width <= maxWidth) {
-      current = next;
-      continue;
-    }
-    lines.push(current);
-    current = words[index];
+function splitLongToken(ctx: CanvasRenderingContext2D, token: string, maxWidth: number) {
+  if (ctx.measureText(token).width <= maxWidth) {
+    return [token];
   }
 
-  lines.push(current);
-  return lines;
+  const segments: string[] = [];
+  let current = '';
+  for (const char of token) {
+    const next = `${current}${char}`;
+    if (current && ctx.measureText(next).width > maxWidth) {
+      segments.push(current);
+      current = char;
+      continue;
+    }
+    current = next;
+  }
+
+  if (current) {
+    segments.push(current);
+  }
+
+  return segments.length ? segments : [token];
+}
+
+function tokenizeForWrap(text: string) {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+  return normalized
+    .split(/(\s+|\/)/)
+    .filter((part) => part.length > 0)
+    .flatMap((part) => (part === '/' ? ['/', ' '] : [part]));
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const tokens = tokenizeForWrap(text);
+  if (tokens.length === 0) return [''];
+
+  const lines: string[] = [];
+  let current = '';
+
+  const pushLine = (line: string) => {
+    const trimmed = line.trimEnd();
+    lines.push(trimmed.length > 0 ? trimmed : '');
+  };
+
+  for (const token of tokens) {
+    const next = `${current}${token}`;
+    if (current && ctx.measureText(next).width > maxWidth) {
+      pushLine(current);
+      current = '';
+    }
+
+    if (ctx.measureText(token).width > maxWidth) {
+      const chunks = splitLongToken(ctx, token.trim(), maxWidth);
+      chunks.forEach((chunk, index) => {
+        if (index < chunks.length - 1) {
+          pushLine(chunk);
+        } else {
+          current = chunk;
+        }
+      });
+      continue;
+    }
+
+    current += token;
+  }
+
+  if (current) {
+    pushLine(current);
+  }
+
+  return lines.length ? lines : [''];
 }
 
 function drawWrappedText(
@@ -169,7 +222,11 @@ async function drawReceiptCanvas(
   prepareContext();
 
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
-  const phoneLines = wrapText(ctx, `Tél: ${layout.clientTel || '-'}`, metaWidth);
+  const phoneLabel = 'Tél:';
+  const phoneLabelWidth = ctx.measureText(`${phoneLabel} `).width;
+  const phoneValue = layout.clientTel || '-';
+  const phoneValueWidth = Math.max(metaWidth - phoneLabelWidth, 40);
+  const phoneLines = wrapText(ctx, phoneValue, phoneValueWidth);
   const extraHeaderOffset = Math.max(0, phoneLines.length - 1) * phoneLineHeight;
 
   const titleY = 112 + extraHeaderOffset;
@@ -277,9 +334,13 @@ async function drawReceiptCanvas(
   ctx.fillStyle = '#1a1a2e';
   ctx.fillText('No: ', metaRightX - receiptNoWidth - 4, metaTopY + 2);
   ctx.fillText(`Date: ${layout.dateText}`, metaRightX, metaTopY + 26);
+  const phoneBlockLeft = metaRightX - metaWidth;
+  ctx.textAlign = 'left';
+  ctx.fillText(phoneLabel, phoneBlockLeft, metaTopY + 46);
   phoneLines.forEach((line, index) => {
-    ctx.fillText(line, metaRightX, metaTopY + 46 + index * phoneLineHeight);
+    ctx.fillText(line, phoneBlockLeft + phoneLabelWidth, metaTopY + 46 + index * phoneLineHeight);
   });
+  ctx.textAlign = 'center';
 
   ctx.textAlign = 'center';
   ctx.font = `800 ${RECEIPT_TEMPLATE_TEXT_REGIONS.titleBlock.fontPt}pt Times New Roman`;
@@ -663,14 +724,23 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
                     marginTop: '.5mm',
                     maxWidth: '160px',
                     marginLeft: 'auto',
-                    textAlign: 'right',
-                    whiteSpace: 'normal',
-                    overflowWrap: 'anywhere',
-                    wordBreak: 'break-word',
+                    display: 'grid',
+                    gridTemplateColumns: '30px minmax(0, 1fr)',
+                    gap: '2px',
+                    alignItems: 'start',
+                    textAlign: 'left',
                   }}
                 >
-                  <span style={{ fontWeight: 600 }}>Tél: </span>
-                  <span>{layout.clientTel || '-'}</span>
+                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Tél:</span>
+                  <span
+                    style={{
+                      whiteSpace: 'normal',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {layout.clientTel || '-'}
+                  </span>
                 </div>
               </div>
             </div>

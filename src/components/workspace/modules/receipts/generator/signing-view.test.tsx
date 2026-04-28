@@ -24,15 +24,13 @@ jest.mock('./receipt-canvas', () => ({
 }));
 
 jest.mock('./signature-pad', () => ({
-  SignaturePad: ({ label, value, onChange, onBack, onConfirm, showRotateControls = false, showClearButton = true }: any) => (
+  SignaturePad: ({ label, value, onChange, showRotateControls = false, showClearButton = true, hideHeader = false }: any) => (
     <div data-testid="signature-pad-mock">
-      <div>{label}</div>
+      {!hideHeader ? <div>{label}</div> : <div>HEADER-HIDDEN</div>}
       <div data-testid="signature-pad-value">{value || 'EMPTY'}</div>
       {showRotateControls ? <div>ROTATE-CONTROLS</div> : null}
       {showClearButton ? <button type="button" onClick={() => onChange(null)}>Clear inline</button> : null}
       <button type="button" onClick={() => onChange('data:image/png;base64,c2lnbmVk')}>Draw</button>
-      {onBack ? <button type="button" onClick={onBack}>Back action</button> : null}
-      {onConfirm ? <button type="button" onClick={onConfirm}>Confirm action</button> : null}
     </div>
   ),
 }));
@@ -131,9 +129,10 @@ describe('SigningView mobile signature flow', () => {
     expect(within(mobileMode).getByTestId('mobile-signature-mode-title')).toHaveTextContent('收款方签名|Receiver signature');
     expect(within(mobileMode).queryByText('付款方签名|Payer signature')).not.toBeInTheDocument();
     expect(within(mobileMode).queryByText('ROTATE-CONTROLS')).not.toBeInTheDocument();
+    expect(within(mobileMode).getByText('HEADER-HIDDEN')).toBeInTheDocument();
     expect(within(mobileMode).getByTestId('mobile-signature-watermark')).toHaveTextContent('Signature in the highlighted area');
 
-    fireEvent.click(within(mobileMode).getByRole('button', { name: '全屏 / 横屏|Fullscreen / landscape' }));
+    fireEvent.click(within(mobileMode).getByRole('button', { name: '全屏|Fullscreen' }));
 
     await waitFor(() => {
       expect(requestFullscreen).toHaveBeenCalled();
@@ -141,7 +140,7 @@ describe('SigningView mobile signature flow', () => {
     });
 
     fireEvent.click(within(mobileMode).getByRole('button', { name: 'Draw' }));
-    fireEvent.click(within(mobileMode).getByRole('button', { name: '确认|Confirm' }));
+    fireEvent.click(within(mobileMode).getByRole('button', { name: '完成|Complete' }));
 
     await waitFor(() => {
       expect(screen.queryByTestId('mobile-signature-mode')).not.toBeInTheDocument();
@@ -171,6 +170,26 @@ describe('SigningView mobile signature flow', () => {
     expect(screen.getByRole('button', { name: '开始付款方签名|Start payer signature' })).toBeInTheDocument();
   });
 
+  it('keeps an unconfirmed mobile signature draft when backing out and reopening', async () => {
+    render(<SigningView sessionId="session-1" tx={tx} />);
+
+    await screen.findByText('签名收据|Signed Receipt');
+
+    fireEvent.click(screen.getByRole('button', { name: '开始收款方签名|Start receiver signature' }));
+    let mobileMode = screen.getByTestId('mobile-signature-mode');
+    fireEvent.click(within(mobileMode).getByRole('button', { name: 'Draw' }));
+    expect(within(mobileMode).getByTestId('signature-pad-value')).toHaveTextContent('data:image/png;base64,c2lnbmVk');
+
+    fireEvent.click(within(mobileMode).getByRole('button', { name: '返回|Back' }));
+    await waitFor(() => {
+      expect(screen.queryByTestId('mobile-signature-mode')).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '开始收款方签名|Start receiver signature' }));
+    mobileMode = screen.getByTestId('mobile-signature-mode');
+    expect(within(mobileMode).getByTestId('signature-pad-value')).toHaveTextContent('data:image/png;base64,c2lnbmVk');
+  });
+
   it('finalizes with a multipart post and does not fetch data urls', async () => {
     render(<SigningView sessionId="session-1" tx={tx} />);
 
@@ -178,11 +197,11 @@ describe('SigningView mobile signature flow', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '开始收款方签名|Start receiver signature' }));
     fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-    fireEvent.click(screen.getByRole('button', { name: '确认|Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: '完成|Complete' }));
 
     fireEvent.click(screen.getByRole('button', { name: '开始付款方签名|Start payer signature' }));
     fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-    fireEvent.click(screen.getByRole('button', { name: '确认|Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: '完成|Complete' }));
 
     fireEvent.click(screen.getByRole('button', { name: '确认并生成收据|Confirm and generate receipt' }));
 

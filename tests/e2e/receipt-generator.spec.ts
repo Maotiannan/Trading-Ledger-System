@@ -133,18 +133,18 @@ test.describe('mobile signed receipt flow', () => {
     const receiverMode = page.getByTestId('mobile-signature-mode');
     await expect(receiverMode).toBeVisible();
     await expect(receiverMode.getByTestId('mobile-signature-watermark')).toContainText('Signature in the highlighted area');
-    await expect(receiverMode.getByRole('button', { name: /全屏 \/ 横屏|Fullscreen \/ landscape/i })).toBeVisible();
+    await expect(receiverMode.getByRole('button', { name: /全屏|Fullscreen/i })).toBeVisible();
     await drawSignature(receiverMode.locator('canvas'));
-    await receiverMode.getByRole('button', { name: /确认|Confirm/i }).click();
+    await receiverMode.getByRole('button', { name: /完成|Complete/i }).click();
     await expect(receiverMode).toHaveCount(0);
     await expect(page.getByText(/已签名|Signed/i).first()).toBeVisible();
 
     await page.getByRole('button', { name: /开始付款方签名|Start payer signature/i }).click();
     const payerMode = page.getByTestId('mobile-signature-mode');
     await expect(payerMode).toBeVisible();
-    await expect(payerMode.getByRole('button', { name: /全屏 \/ 横屏|Fullscreen \/ landscape/i })).toBeVisible();
+    await expect(payerMode.getByRole('button', { name: /全屏|Fullscreen/i })).toBeVisible();
     await drawSignature(payerMode.locator('canvas'));
-    await payerMode.getByRole('button', { name: /确认|Confirm/i }).click();
+    await payerMode.getByRole('button', { name: /完成|Complete/i }).click();
     await expect(payerMode).toHaveCount(0);
 
     await page.getByRole('button', { name: /确认并生成收据|Confirm and generate receipt/i }).click();

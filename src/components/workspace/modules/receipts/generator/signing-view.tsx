@@ -102,23 +102,34 @@ function MobileSignatureMode({
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-white" data-testid="mobile-signature-mode">
-      <div className="flex min-h-screen flex-col bg-white">
-        <div className="relative border-b px-4 py-4">
+      <div className="flex h-screen flex-col bg-white">
+        <div className="relative flex items-center justify-center border-b px-4 py-4">
           <Button
             type="button"
             variant="outline"
             className="absolute left-4 top-4"
-            onClick={() => {
-              void requestMobileSigningFullscreen();
-            }}
+            onClick={onBack}
           >
-            {tx('全屏 / 横屏', 'Fullscreen / landscape')}
+            {tx('返回', 'Back')}
           </Button>
-          <div className="text-lg font-semibold" data-testid="mobile-signature-mode-title">{title}</div>
-          <div className="pl-36 text-sm text-muted-foreground">{tx('请在下方完成当前签名', 'Complete the current signature below.')}</div>
+          <div className="text-base font-semibold" data-testid="mobile-signature-mode-title">{title}</div>
+          <div className="absolute right-4 top-4 flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                void requestMobileSigningFullscreen();
+              }}
+            >
+              {tx('全屏', 'Fullscreen')}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClear}>
+              {tx('清除', 'Clear')}
+            </Button>
+          </div>
         </div>
 
-        <div className="relative flex-1 px-4 py-4">
+        <div className="relative flex-1 overflow-hidden px-4 py-4">
           <div
             data-testid="mobile-signature-watermark"
             className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 text-center text-3xl font-semibold uppercase tracking-[0.35em] text-slate-200"
@@ -132,21 +143,16 @@ function MobileSignatureMode({
             onChange={onChange}
             mobileMode
             showClearButton={false}
+            hideHeader
+            frameClassName="h-full rounded-none border-0 shadow-none"
+            canvasClassName="h-full w-full"
           />
         </div>
 
         <div className="border-t bg-white px-4 py-4">
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onBack}>
-              {tx('返回', 'Back')}
-            </Button>
-            <Button type="button" variant="outline" onClick={onClear}>
-              {tx('清除', 'Clear')}
-            </Button>
-            <Button type="button" onClick={onConfirm}>
-              {tx('确认', 'Confirm')}
-            </Button>
-          </div>
+          <Button type="button" className="h-12 w-full text-base font-semibold" onClick={onConfirm}>
+            {tx('完成', 'Complete')}
+          </Button>
         </div>
       </div>
     </div>
@@ -191,6 +197,10 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
   const [mobileMode, setMobileMode] = useState(false);
   const [activeMobileSignature, setActiveMobileSignature] = useState<MobileSignatureTarget | null>(null);
   const [mobileSignatureDraft, setMobileSignatureDraft] = useState<string | null>(null);
+  const [mobileSignatureCache, setMobileSignatureCache] = useState<{ receiver: string | null; payer: string | null }>({
+    receiver: null,
+    payer: null,
+  });
 
   useEffect(() => {
     setMobileMode(isMobileViewport());
@@ -225,7 +235,11 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
 
   const openMobileSignature = (target: MobileSignatureTarget) => {
     setActiveMobileSignature(target);
-    setMobileSignatureDraft(target === 'receiver' ? receiverSignature : payerSignature);
+    setMobileSignatureDraft(
+      target === 'receiver'
+        ? (mobileSignatureCache.receiver ?? receiverSignature)
+        : (mobileSignatureCache.payer ?? payerSignature),
+    );
   };
 
   const closeMobileSignature = () => {
@@ -236,9 +250,11 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
   const confirmMobileSignature = () => {
     if (activeMobileSignature === 'receiver') {
       setReceiverSignature(mobileSignatureDraft);
+      setMobileSignatureCache((current) => ({ ...current, receiver: mobileSignatureDraft }));
     }
     if (activeMobileSignature === 'payer') {
       setPayerSignature(mobileSignatureDraft);
+      setMobileSignatureCache((current) => ({ ...current, payer: mobileSignatureDraft }));
     }
     closeMobileSignature();
   };
@@ -414,9 +430,19 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
           title={activeMobileTitle}
           tx={tx}
           value={mobileSignatureDraft}
-          onChange={setMobileSignatureDraft}
+          onChange={(value) => {
+            setMobileSignatureDraft(value);
+            if (activeMobileSignature) {
+              setMobileSignatureCache((current) => ({ ...current, [activeMobileSignature]: value }));
+            }
+          }}
           onBack={closeMobileSignature}
-          onClear={() => setMobileSignatureDraft(null)}
+          onClear={() => {
+            setMobileSignatureDraft(null);
+            if (activeMobileSignature) {
+              setMobileSignatureCache((current) => ({ ...current, [activeMobileSignature]: null }));
+            }
+          }}
           onConfirm={confirmMobileSignature}
         />
       ) : null}

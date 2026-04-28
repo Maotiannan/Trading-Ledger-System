@@ -1,7 +1,7 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.97  
+> 当前版本：v1.0.98  
 > 最后更新：2026-04-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
@@ -220,6 +220,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.98（2026-04-28）：继续收口手机签字页与收据头部排版；移动端签字模式改成真正的全屏白底专用界面，顶部只保留 `Back / Fullscreen / Clear`，底部固定 `Complete`，并在用户未确认返回时保留本地签字草稿，下次进入可继续签；`receipt-canvas` 的 `Tel:` 头部改为固定标签 + 可在空格、斜杠、长数字串中强制断行的内容区，避免长电话号码把头部布局顶坏；同步补齐 `signing-view` 和 `receipt-canvas` 回归，并重新跑通 `test:ci`
 - v1.0.97（2026-04-28）：继续修正签名收据模板与手机签字细节；`receipt-canvas` 改为按内容动态扩展详情区与签字区高度，导出 PNG 不再截断收款方/付款方签名；删除签名页多余旋转控件，右上电话信息改为自动换行，手机竖屏预览改成整张收据按比例缩放而非压缩内部元素；`signing-view` 终态提交改为显式 `data:` URL 转 Blob，修复微信/移动端浏览器卡在 `GENERATING...` 的问题；`Reçu de M./Mme.` 现在优先显示 `COMPANY_NAME + "MARK"`，为空时回退 `CUSTOMER_NAME + "MARK"`；签名板导出透明 PNG，不再以白底遮挡收据正文；补齐 `receipt-generator-layout / receipt-generator-read-service / receipt-generator-service / receipt-canvas / signing-view / data-url` 回归测试并重新跑通 `test:ci`
 - v1.0.96（2026-04-28）：签名收据模板正式切换到 DMD HTML 固定样式，冻结左右 logo、底部水印和版式几何；替换旧简化 `receipt-canvas` 预览/导出壳，补齐收据编号橙色与签字下划线细节；手机端签字改为同页单签字框白底全屏模式，新增浅灰英文方向水印、左上角全屏/横屏辅助入口，并移除过时的旋转按钮提示；Playwright 增加桌面弹窗签字和手机同页签字闭环，`receipt-generator` E2E 扩展到双端真实流程
 - v1.0.95（2026-04-27）：修复隔离测试脚本的跨平台 `mktemp` 用法，将 API/E2E 隔离脚本统一改为同时兼容 macOS 与 Linux 的临时文件模板，恢复 GitHub Actions 中 `test:ci` 的稳定性；同步更新 README / 里程碑 / 工程流水版本号

@@ -30,6 +30,8 @@ const TEMPLATE_COMPANY_ADDRESS = [
   'Email: grandtobusiness@gmail.com',
 ] as const;
 const TEMPLATE_FRAIS_LABEL = 'Paid';
+const TEMPLATE_RECEIPT_NUMBER_COLOR = '#e05a00';
+const TEMPLATE_SIGNATURE_LINE_COLOR = '#555';
 
 function mmToPx(mm: number) {
   return (mm * 96) / 25.4;
@@ -188,8 +190,12 @@ async function drawReceiptCanvas(
   const metaTopY = headerTop + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm.y);
   ctx.textAlign = 'right';
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.numberFontPt}pt Times New Roman`;
-  ctx.fillText(`No: ${layout.receiptNo}`, metaRightX, metaTopY);
+  ctx.fillStyle = TEMPLATE_RECEIPT_NUMBER_COLOR;
+  ctx.fillText(layout.receiptNo, metaRightX, metaTopY);
+  const receiptNoWidth = ctx.measureText(layout.receiptNo).width;
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillText('No: ', metaRightX - receiptNoWidth - 4, metaTopY + 2);
   ctx.fillText(`Date: ${layout.dateText}`, metaRightX, metaTopY + 26);
   ctx.fillText(`Tél: ${layout.clientTel || '-'}`, metaRightX, metaTopY + 46);
 
@@ -291,6 +297,15 @@ async function drawReceiptCanvas(
   if (receiverImage) {
     ctx.drawImage(receiverImage, receiverSigX, receiverSigY + 18, receiverSigWidth, receiverSigHeight);
   }
+  ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
+  ctx.lineWidth = 1;
+  drawLine(
+    ctx,
+    receiverSigX,
+    receiverSigY + 18 + receiverSigHeight,
+    receiverSigX + receiverSigWidth,
+    receiverSigY + 18 + receiverSigHeight,
+  );
 
   const payerLabelY = detailY + detailHeight + 12;
   const payerSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm);
@@ -302,6 +317,9 @@ async function drawReceiptCanvas(
   if (payerImage) {
     ctx.drawImage(payerImage, detailX, payerLabelY + 18, payerSigWidth, payerSigHeight);
   }
+  ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
+  ctx.lineWidth = 1;
+  drawLine(ctx, detailX, payerLabelY + 18 + payerSigHeight, detailX + payerSigWidth, payerLabelY + 18 + payerSigHeight);
 }
 
 function FieldRow({ label, value, trailing }: { label: string; value: string; trailing?: React.ReactNode }) {
@@ -329,6 +347,52 @@ function FieldRow({ label, value, trailing }: { label: string; value: string; tr
       </span>
       <span style={{ fontWeight: 600, flex: 1 }}>{value}</span>
       {trailing}
+    </div>
+  );
+}
+
+function SignatureSlot({
+  dataTestId,
+  alt,
+  src,
+  widthMm,
+  heightMm,
+}: {
+  dataTestId: string;
+  alt: string;
+  src: string | null;
+  widthMm: number;
+  heightMm: number;
+}) {
+  return (
+    <div
+      data-testid={dataTestId}
+      style={{
+        width: `${widthMm}mm`,
+        height: `${heightMm}mm`,
+        position: 'relative',
+        cursor: 'pointer',
+        background: 'transparent',
+        borderBottom: `1px solid ${TEMPLATE_SIGNATURE_LINE_COLOR}`,
+        overflow: 'visible',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {src ? (
+        <img
+          alt={alt}
+          src={src}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -480,10 +544,11 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
                 <div>
                   <span style={{ fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`, fontWeight: 600 }}>No: </span>
                   <span
+                    data-testid="receipt-number-value"
                     style={{
                       fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.numberFontPt}pt`,
                       fontWeight: 700,
-                      color: '#1a1a2e',
+                      color: TEMPLATE_RECEIPT_NUMBER_COLOR,
                       letterSpacing: '.04em',
                     }}
                   >
@@ -608,38 +673,26 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontStyle: 'italic', fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`, color: '#333' }}>Signature :</div>
-                {receiverSignature ? (
-                  <img
-                    alt="Receiver signature"
-                    src={receiverSignature}
-                    style={{
-                      width: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm}mm`,
-                      height: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm}mm`,
-                      objectFit: 'contain',
-                    }}
-                  />
-                ) : (
-                  <div style={{ width: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm}mm`, height: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm}mm` }} />
-                )}
+                <SignatureSlot
+                  dataTestId="receiver-signature-slot"
+                  alt="Receiver signature"
+                  src={receiverSignature}
+                  widthMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm}
+                  heightMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm}
+                />
               </div>
             </div>
           </div>
 
           <div style={{ position: 'relative', zIndex: 1 }}>
             <div style={{ fontStyle: 'italic', fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`, color: '#333' }}>Signature du payeur :</div>
-            {payerSignature ? (
-              <img
-                alt="Payer signature"
-                src={payerSignature}
-                style={{
-                  width: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm}mm`,
-                  height: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm}mm`,
-                  objectFit: 'contain',
-                }}
-              />
-            ) : (
-              <div style={{ width: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm}mm`, height: `${RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm}mm` }} />
-            )}
+            <SignatureSlot
+              dataTestId="payer-signature-slot"
+              alt="Payer signature"
+              src={payerSignature}
+              widthMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm}
+              heightMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm}
+            />
           </div>
         </div>
       </div>

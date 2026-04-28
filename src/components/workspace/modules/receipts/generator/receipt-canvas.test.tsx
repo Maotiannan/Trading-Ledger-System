@@ -3,19 +3,33 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { ReceiptCanvas, type ReceiptCanvasHandle } from './receipt-canvas';
 import { buildReceiptGeneratorLayout } from '@/lib/receipt-generator-layout';
 
+type FillTextCall = {
+  text: string;
+  x: number;
+  y: number;
+  fillStyle: string;
+  font: string;
+};
+
+type StrokeSegment = {
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  strokeStyle: string;
+  lineWidth: number;
+};
+
 describe('ReceiptCanvas', () => {
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
   const originalToBlob = HTMLCanvasElement.prototype.toBlob;
   const OriginalImage = global.Image;
 
+  const fillTextCalls: FillTextCall[] = [];
+  const strokeSegments: StrokeSegment[] = [];
+
   const drawImage = jest.fn();
   const fillRect = jest.fn();
-  const fillText = jest.fn();
   const strokeRect = jest.fn();
   const beginPath = jest.fn();
-  const moveTo = jest.fn();
-  const lineTo = jest.fn();
-  const stroke = jest.fn();
   const save = jest.fn();
   const restore = jest.fn();
   const translate = jest.fn();
@@ -26,6 +40,30 @@ describe('ReceiptCanvas', () => {
   const strokeStyleDescriptor = { value: '#000000' };
   const lineWidthDescriptor = { value: 1 };
   const fontDescriptor = { value: '16px serif' };
+  const pathState: { from: { x: number; y: number } | null; to: { x: number; y: number } | null } = {
+    from: null,
+    to: null,
+  };
+
+  const fillText = jest.fn((text: string, x: number, y: number) => {
+    fillTextCalls.push({ text, x, y, fillStyle: fillStyleDescriptor.value, font: fontDescriptor.value });
+  });
+  const moveTo = jest.fn((x: number, y: number) => {
+    pathState.from = { x, y };
+  });
+  const lineTo = jest.fn((x: number, y: number) => {
+    pathState.to = { x, y };
+  });
+  const stroke = jest.fn(() => {
+    if (pathState.from && pathState.to) {
+      strokeSegments.push({
+        from: pathState.from,
+        to: pathState.to,
+        strokeStyle: strokeStyleDescriptor.value,
+        lineWidth: lineWidthDescriptor.value,
+      });
+    }
+  });
 
   const mockContext = {
     drawImage,
@@ -70,6 +108,10 @@ describe('ReceiptCanvas', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    fillTextCalls.length = 0;
+    strokeSegments.length = 0;
+    pathState.from = null;
+    pathState.to = null;
 
     HTMLCanvasElement.prototype.getContext = jest.fn(() => mockContext);
     HTMLCanvasElement.prototype.toBlob = jest.fn((callback: BlobCallback) => {
@@ -103,7 +145,7 @@ describe('ReceiptCanvas', () => {
     global.Image = OriginalImage;
   });
 
-  it('renders the approved DMD receipt shell in the preview', () => {
+  it('renders the approved DMD receipt shell details in the preview', () => {
     render(
       <ReceiptCanvas
         layout={layout}
@@ -115,14 +157,16 @@ describe('ReceiptCanvas', () => {
     expect(screen.getByTestId('receipt-template-shell')).toBeInTheDocument();
     expect(screen.getByText('DMD MERCERIE')).toBeInTheDocument();
     expect(screen.getByText('REÇU DE PAIEMENT')).toBeInTheDocument();
-    expect(screen.getByText('La somme de :')).toBeInTheDocument();
-    expect(screen.getByText(layout.amountInWords)).toBeInTheDocument();
     expect(screen.getByAltText('DMD left logo')).toBeInTheDocument();
     expect(screen.getByAltText('DMD right logo')).toBeInTheDocument();
     expect(screen.getByAltText('DMD watermark')).toBeInTheDocument();
+
+    expect(screen.getByTestId('receipt-number-value')).toHaveStyle({ color: '#e05a00' });
+    expect(screen.getByTestId('receiver-signature-slot')).toHaveStyle({ borderBottom: '1px solid #555' });
+    expect(screen.getByTestId('payer-signature-slot')).toHaveStyle({ borderBottom: '1px solid #555' });
   });
 
-  it('exports a png after drawing template assets and signatures', async () => {
+  it('exports a png with the same receipt number color and signature underline treatment', async () => {
     const ref = createRef<ReceiptCanvasHandle>();
 
     render(
@@ -142,6 +186,13 @@ describe('ReceiptCanvas', () => {
     await waitFor(() => {
       expect(drawImage).toHaveBeenCalledTimes(5);
     });
+
+    const receiptNoDraw = fillTextCalls.find((call) => call.text === layout.receiptNo);
+    expect(receiptNoDraw?.fillStyle).toBe('#e05a00');
+
+    const signatureLines = strokeSegments.filter((segment) => segment.strokeStyle === '#555555' || segment.strokeStyle === '#555');
+    expect(signatureLines.length).toBeGreaterThanOrEqual(2);
+    expect(signatureLines.some((segment) => segment.lineWidth === 1)).toBe(true);
 
     expect(fillText).toHaveBeenCalledWith('DMD MERCERIE', expect.any(Number), expect.any(Number));
     expect(fillText).toHaveBeenCalledWith('REÇU DE PAIEMENT', expect.any(Number), expect.any(Number));

@@ -51,6 +51,11 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   '签名收据会话已加载': { zh: '签名收据会话已加载', en: 'Signed receipt session loaded' },
   '签名收据会话已创建': { zh: '签名收据会话已创建', en: 'Signed receipt session created' },
   '签名收据已生成': { zh: '签名收据已生成', en: 'Signed receipt generated' },
+  'Excel API令牌已加载': { zh: 'Excel API令牌已加载', en: 'Excel API tokens loaded' },
+  'Excel API令牌已生成': { zh: 'Excel API令牌已生成', en: 'Excel API token generated' },
+  'Excel API令牌已撤销': { zh: 'Excel API令牌已撤销', en: 'Excel API token revoked' },
+  'Excel ML查询完成': { zh: 'Excel ML查询完成', en: 'Excel ML lookup completed' },
+  'Excel ML批量查询完成': { zh: 'Excel ML批量查询完成', en: 'Excel ML batch lookup completed' },
 };
 
 const containsSuccessMessages: Array<[string, Record<SupportedLocale, string>]> = [

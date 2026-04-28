@@ -1,8 +1,10 @@
 import { db } from '@/lib/db';
 import {
+  editableSystemSettingKeys,
   getNumericSystemSetting,
   getSystemSettings,
   invalidateSystemSettingsCache,
+  systemSettingDefaults,
 } from '@/lib/system-settings';
 
 jest.mock('@/lib/db', () => ({
@@ -56,5 +58,14 @@ describe('system-settings', () => {
       SWIFT_REJECT_TOLERANCE: '7',
     });
     expect(mockFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes Excel lookup rate-limit settings with defaults', () => {
+    expect(editableSystemSettingKeys).toEqual(expect.arrayContaining([
+      'EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS',
+      'EXCEL_LOOKUP_RATE_LIMIT_MAX',
+    ]));
+    expect(systemSettingDefaults.EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS).toBe('60000');
+    expect(systemSettingDefaults.EXCEL_LOOKUP_RATE_LIMIT_MAX).toBe('240');
   });
 });

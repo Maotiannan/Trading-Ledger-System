@@ -19,6 +19,18 @@ export type PasswordFormState = {
   confirmPassword: string;
 };
 
+export type ExcelApiTokenSummary = {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  lastUsedAt: string | Date | null;
+  lastUsedIp: string | null;
+  revokedAt: string | Date | null;
+  expiresAt: string | Date | null;
+};
+
 export type SettingsAuditChange = {
   key: string;
   before: string;

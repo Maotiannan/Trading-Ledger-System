@@ -6,8 +6,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUiText } from '@/components/workspace/shared';
 import { APP_VERSION } from '@/lib/app-version';
-import { BranchPurgeCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
-import { useSettingsActions, useSettingsForms } from './hooks';
+import { BranchPurgeCard, ExcelTokenCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
+import { useExcelTokenSettings, useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
 import { buildSettingsPageViewModel } from './page-view-model';
 
@@ -15,6 +15,7 @@ export function SettingsManager() {
   const tx = useUiText();
   const didLoadAuditRef = useRef(false);
   const { user } = useStore();
+  const excelTokenSettings = useExcelTokenSettings(tx);
   const {
     loading,
     setLoading,
@@ -136,6 +137,10 @@ export function SettingsManager() {
   }, [loadSettings]);
 
   useEffect(() => {
+    void excelTokenSettings.loadExcelTokens();
+  }, [excelTokenSettings.loadExcelTokens]);
+
+  useEffect(() => {
     if (!canViewAudit) {
       didLoadAuditRef.current = false;
       return;
@@ -194,6 +199,19 @@ export function SettingsManager() {
         tx={tx}
         onPwdChange={setPwd}
         onSubmit={handleChangePassword}
+      />
+
+      <ExcelTokenCard
+        tokens={excelTokenSettings.excelTokens}
+        oneTimeToken={excelTokenSettings.oneTimeExcelToken}
+        loading={excelTokenSettings.excelTokenLoading}
+        saving={excelTokenSettings.excelTokenSaving}
+        message={excelTokenSettings.excelTokenMessage}
+        error={excelTokenSettings.excelTokenError}
+        tx={tx}
+        onRefresh={() => { void excelTokenSettings.loadExcelTokens(); }}
+        onGenerate={() => { void excelTokenSettings.generateExcelToken(); }}
+        onRevoke={(tokenId) => { void excelTokenSettings.revokeExcelToken(tokenId); }}
       />
 
       {settingsPageView.canManageUsers && (

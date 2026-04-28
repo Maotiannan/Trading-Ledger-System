@@ -150,6 +150,14 @@ export function SystemConfigCard({
                 <Input value={config.DELETION_ACTION_RATE_LIMIT_MAX || '20'} onChange={(e) => onConfigFieldChange('DELETION_ACTION_RATE_LIMIT_MAX', e.target.value)} disabled={!canEditConfig} />
               </div>
               <div>
+                <Label>EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS</Label>
+                <Input value={config.EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS || '60000'} onChange={(e) => onConfigFieldChange('EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS', e.target.value)} disabled={!canEditConfig} />
+              </div>
+              <div>
+                <Label>EXCEL_LOOKUP_RATE_LIMIT_MAX</Label>
+                <Input value={config.EXCEL_LOOKUP_RATE_LIMIT_MAX || '240'} onChange={(e) => onConfigFieldChange('EXCEL_LOOKUP_RATE_LIMIT_MAX', e.target.value)} disabled={!canEditConfig} />
+              </div>
+              <div>
                 <Label>SETTINGS_AUDIT_MAX_PAGE_SIZE</Label>
                 <Input value={config.SETTINGS_AUDIT_MAX_PAGE_SIZE || '100'} onChange={(e) => onConfigFieldChange('SETTINGS_AUDIT_MAX_PAGE_SIZE', e.target.value)} disabled={!canEditConfig} />
               </div>

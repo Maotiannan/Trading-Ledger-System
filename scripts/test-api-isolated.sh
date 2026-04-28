@@ -85,6 +85,6 @@ npx next dev -p "$APP_PORT" >"$APP_LOG" 2>&1 &
 APP_PID="$!"
 wait_for_http "$BASE_URL" || fail "app not ready"
 
-node scripts/run-api-isolated-tests.mjs || fail "isolated API cases"
+node scripts/run-api-isolated-tests.mjs "$@" || fail "isolated API cases"
 
 echo "Isolated API tests completed."

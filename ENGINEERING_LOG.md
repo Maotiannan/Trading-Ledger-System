@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.103  
+> 当前版本：v1.0.104
 > 最后更新：2026-04-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] Excel ML token API 落地：新增 `ExcelApiToken` 持久化表（hash-only）、`/api/excel/token` 设置页管理、`/api/excel/ml` 单值纯文本/JSON 查询、`/api/excel/ml/batch` 批量查询；ORDER NO 先按现有订单/alias 匹配，失败后按最右 `-` 左半部分匹配客户 `ORDER_NAME`，字段 2 按 `companyName || Customer.name` 回退；新增服务单测、设置页 hook/card 测试和 `90-excel-ml-token` isolated API 回归 ✅ 2026-04-28
 - [x] 修复移动端签名收据跳转时序：`Generate Signed Receipt` 创建 session 后，手机同标签页跳转分支立即结束当前页逻辑，不再继续执行 `resetGeneratorState()` 和 `loadReceipts()`；同时新增 hook 单测与隔离 Playwright 断言，覆盖三星类浏览器“点击 Continue to signing 后又回到 receipts”的回归场景 ✅ 2026-04-28
 - [x] 签名收据预览与导出彻底统一：`receipt-canvas` 预览层不再维护第二套 DOM 模板，直接显示最终导出 canvas；`Tel` 固定对齐在 `Date` 正下方并按每行最多 `14` 个字符覆盖换行；桌面签字页右侧签字区收成固定宽度与更低的签字高度，避免真实浏览器里继续横向失控 ✅ 2026-04-28
 - [x] 收据管理新增“生成签名收据”流程：在项目内先录入 `ORDER NO + USD Amount`，创建一条 `SIGNING_PENDING` 收据并原子分配真实 `receiptNo`，再进入桌面新窗口/手机全屏签名页完成双签名；最终自动生成 PNG、写入 NAS、下载到本地，并把图片挂回同一条收据记录 ✅ 2026-04-27

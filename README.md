@@ -34,8 +34,8 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.103`
-- 本次更新：修复三星等手机浏览器在 `Generate Signed Receipt -> Continue to signing` 后又回到收据页的问题；移动端同标签页跳转到签字页后不再继续重置弹窗状态或刷新收据列表，避免跳转时序被浏览器打断。
+- 当前版本：`1.0.104`
+- 本次更新：新增 Excel ML 查询 API。每个账号可在 `设置` 中生成独立 token，Excel 通过 `ORDER NO` 查询 `ORDER NAME / COMPANY NAME / CUSTOMER NAME / MARK` 等字段，查询结果沿用该账号现有权限范围。
 - 前端版本号位置：`设置` 页面最上方
 
 ## 系统适合谁
@@ -102,10 +102,41 @@ README 现在只保留用户应该看的内容。
 主要用途：
 - 修改密码
 - 用户管理
+- Excel ML 令牌
 - 系统配置
 - 配置变更审计
 - 分支业务清库
 - 查看当前系统版本
+
+## Excel ML API
+
+Excel 查询使用 `设置 -> Excel ML 令牌` 中生成的账号 token。token 只显示一次，后端只保存哈希；查询时使用 `Authorization: Bearer <token>`，权限沿用生成 token 的账号。
+
+单值查询：
+
+```bash
+GET /api/excel/ml?orderNo=GANDO-10&field=2
+```
+
+默认返回纯文本，适合 Excel 自定义函数读取；加 `format=json` 会返回匹配方式、字段名、客户 ID 等诊断信息。批量查询使用：
+
+```bash
+POST /api/excel/ml/batch
+```
+
+字段编号：
+
+1. `ORDER NAME`
+2. `COMPANY NAME`，为空时回退网页客户管理的 `NAME`
+3. `MARK`
+4. `CUSTOMER NAME`
+5. `COMPANY NAME`
+6. `PHONE`
+7. `CITY`
+8. `CONSIGNEE`
+9. `COMPANY ADDRESS`
+10. `CREDIT`
+11. `CUSTOMER ID`
 
 ## 日常业务流程
 

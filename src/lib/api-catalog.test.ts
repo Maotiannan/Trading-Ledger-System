@@ -22,4 +22,11 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/upload-image', 'read')?.method).toBe('GET');
     expect(findAction('/api/upload-image', 'upload')?.method).toBe('POST');
   });
+
+  it('should expose Excel ML token and lookup routes', () => {
+    expect(findAction('/api/excel/token', 'generate')?.method).toBe('POST');
+    expect(findAction('/api/excel/token', 'revoke')?.method).toBe('POST');
+    expect(findAction('/api/excel/ml', 'lookup')?.method).toBe('GET');
+    expect(findAction('/api/excel/ml/batch', 'batch-lookup')?.method).toBe('POST');
+  });
 });

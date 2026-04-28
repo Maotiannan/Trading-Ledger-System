@@ -3,7 +3,7 @@ import { createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getNumericSystemSetting, type EditableSystemSettingKey } from '@/lib/system-settings';
 
-type RateLimitBucket = 'login' | 'upload' | 'deletion';
+type RateLimitBucket = 'login' | 'upload' | 'deletion' | 'excelLookup';
 
 type RateLimitBucketConfig = {
   windowKey: EditableSystemSettingKey;
@@ -34,6 +34,13 @@ const bucketConfigs: Record<RateLimitBucket, RateLimitBucketConfig> = {
     fallbackWindowMs: 60_000,
     fallbackMax: 20,
     message: '删除相关操作过于频繁，请稍后再试',
+  },
+  excelLookup: {
+    windowKey: 'EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS',
+    maxKey: 'EXCEL_LOOKUP_RATE_LIMIT_MAX',
+    fallbackWindowMs: 60_000,
+    fallbackMax: 240,
+    message: 'Excel查询请求过于频繁，请稍后再试',
   },
 };
 

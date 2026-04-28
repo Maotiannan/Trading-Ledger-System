@@ -78,3 +78,30 @@ For exact supported actions and body examples, call:
 ```bash
 curl -b cookie.txt -s http://127.0.0.1/api/system/routes | jq
 ```
+
+## 5. Excel ML token API
+
+Generate a token after login:
+
+```bash
+curl -b cookie.txt -X POST http://127.0.0.1/api/excel/token \
+  -H "Content-Type: application/json" \
+  --data '{"action":"generate","name":"Excel ML"}' | jq
+```
+
+Lookup a single field with bearer auth:
+
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  "http://127.0.0.1/api/excel/ml?orderNo=GANDO-10&field=2"
+```
+
+Use `format=json` for diagnostics and `POST /api/excel/ml/batch` for multiple rows.
+
+Automated isolated API regression:
+
+```bash
+npm run test:api:isolated -- --case 90-excel-ml-token
+```
+
+This verifies token generation, fields `1/2/3`, JSON diagnostics, batch row errors, and revoke rejection.

@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.103  
+> 当前版本：v1.0.104
 > 最后更新：2026-04-28
 
 ## 当前状态
@@ -42,6 +42,12 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.104
+- 新增 Excel ML 查询 API：每个账号可在设置页生成独立 token，Excel 通过 `ORDER NO` 查询字段
+- 查询权限沿用账号当前权限范围，token 后端只保存哈希，支持撤销与重新生成
+- 字段覆盖 `ORDER NAME / COMPANY NAME(为空回退 CUSTOMER NAME) / MARK / PHONE / CITY / CONSIGNEE / COMPANY ADDRESS / CREDIT / CUSTOMER ID`
+- 新增单值纯文本接口、JSON 诊断接口、批量接口和 isolated API 自动化回归
 
 ### v1.0.103
 - 修复 `Generate Signed Receipt` 在三星等移动浏览器里点击 `Continue to signing` 后又回到收据页的问题

@@ -130,6 +130,39 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/excel/token',
+    description: 'Per-account Excel API token management (session authenticated)',
+    actions: [
+      { action: 'list', method: 'GET', description: 'List current account Excel token metadata' },
+      { action: 'generate', method: 'POST', description: 'Rotate and return a one-time Excel API token', bodyExample: { action: 'generate', name: 'Excel desktop' } },
+      { action: 'revoke', method: 'POST', description: 'Revoke a current account Excel API token', bodyExample: { action: 'revoke', id: 'token-id' } },
+    ],
+  },
+  {
+    endpoint: '/api/excel/ml',
+    description: 'Excel ML single-field lookup (Bearer token authenticated)',
+    actions: [
+      {
+        action: 'lookup',
+        method: 'GET',
+        description: 'Resolve one field by order number. Field 1 ORDER NAME, 2 COMPANY NAME fallback CUSTOMER NAME, 3 MARK, 4 CUSTOMER NAME, 5 COMPANY NAME, 6 PHONE, 7 CITY, 8 CONSIGNEE, 9 COMPANY ADDRESS, 10 CREDIT, 11 CUSTOMER ID.',
+        bodyExample: { header: 'Authorization: Bearer ml_...', query: 'orderNo=GANDO-10&field=2&format=json' },
+      },
+    ],
+  },
+  {
+    endpoint: '/api/excel/ml/batch',
+    description: 'Excel ML batch lookup (Bearer token authenticated)',
+    actions: [
+      {
+        action: 'batch-lookup',
+        method: 'POST',
+        description: 'Resolve multiple order-number field lookups and return per-row success or errors',
+        bodyExample: { items: [{ orderNo: 'GANDO-10', field: 1 }, { orderNo: 'GANDO-10', field: 2 }] },
+      },
+    ],
+  },
+  {
     endpoint: '/api/upload-image',
     description: 'Protected business image upload and read',
     actions: [
@@ -158,6 +191,8 @@ export const configTemplate = {
     'OCR_RETRY_BASE_DELAY_MS',
     'OCR_INPUT_COST_PER_1K',
     'OCR_OUTPUT_COST_PER_1K',
+    'EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS',
+    'EXCEL_LOOKUP_RATE_LIMIT_MAX',
     'UPLOAD_HOST_DIR',
   ],
 } as const;

@@ -77,4 +77,27 @@ describe('rate-limit', () => {
       }),
     });
   });
+
+  it('supports the excel lookup bucket for token-authenticated API calls', async () => {
+    const currentUser = {
+      id: 'sales-1',
+      email: 'sales@example.com',
+      name: 'Sales',
+      role: 'SALES',
+      level: 3,
+      parentId: 'admin-1',
+      createdById: 'admin-1',
+    } as const;
+
+    await enforceRateLimit('excelLookup', makeRequest(), { currentUser });
+    await enforceRateLimit('excelLookup', makeRequest(), { currentUser });
+
+    await expect(enforceRateLimit('excelLookup', makeRequest(), { currentUser })).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      status: 429,
+      detail: expect.objectContaining({
+        bucket: 'excelLookup',
+      }),
+    });
+  });
 });

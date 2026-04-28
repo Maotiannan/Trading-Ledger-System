@@ -39,6 +39,14 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   DELETION_REQUEST_NOT_FOUND: { zh: '删除申请不存在', en: 'Deletion request not found' },
   DELETION_REQUEST_ALREADY_PROCESSED: { zh: '删除申请已处理', en: 'Deletion request has already been processed' },
   DELETION_REQUEST_STATE_CHANGED: { zh: '删除申请状态已变化', en: 'Deletion request state has changed' },
+  EXCEL_TOKEN_REQUIRED: { zh: '缺少Excel API令牌', en: 'Excel API token is required' },
+  EXCEL_TOKEN_INVALID: { zh: 'Excel API令牌无效', en: 'Invalid Excel API token' },
+  EXCEL_TOKEN_REVOKED: { zh: 'Excel API令牌已撤销', en: 'Excel API token has been revoked' },
+  EXCEL_TOKEN_EXPIRED: { zh: 'Excel API令牌已过期', en: 'Excel API token has expired' },
+  EXCEL_TOKEN_NOT_FOUND: { zh: 'Excel API令牌不存在', en: 'Excel API token not found' },
+  EXCEL_FIELD_INVALID: { zh: 'Excel字段编号无效', en: 'Invalid Excel field number' },
+  EXCEL_ORDER_NOT_FOUND: { zh: 'Excel订单未匹配到客户', en: 'Excel order was not matched to a customer' },
+  EXCEL_ORDER_CONFLICT: { zh: 'Excel订单匹配到多个客户', en: 'Excel order matched multiple customers' },
   INTERNAL_ERROR: { zh: '服务器错误', en: 'Server error' },
 };
 

@@ -140,15 +140,17 @@ function MobileSignatureMode({
 
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3">
           <div
+            data-testid="mobile-signature-surface"
             className="relative max-w-full overflow-hidden rounded-xl border border-neutral-300 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
             style={{
               aspectRatio: `${signatureAspectRatio}`,
-              width: `min(100%, ${Math.round(signatureAspectRatio * 28)}vh)`,
+              height: 'min(24vh, 168px)',
+              maxWidth: '100%',
             }}
           >
             <div
               data-testid="mobile-signature-watermark"
-              className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-4 text-center text-xl font-semibold uppercase tracking-[0.25em] text-slate-200"
+              className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-4 text-center text-lg font-semibold uppercase tracking-[0.28em] text-slate-200"
             >
               Signature in the highlighted area
             </div>
@@ -371,7 +373,7 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
-        <div className={`grid gap-4 ${mobileMode ? 'grid-cols-1' : 'grid-cols-[1.15fr_0.85fr]'}`}>
+        <div className={`grid items-start gap-4 ${mobileMode ? 'grid-cols-1' : 'grid-cols-[1.15fr_0.85fr]'}`}>
           <ReceiptCanvas
             ref={canvasRef}
             layout={session.layout}
@@ -380,7 +382,7 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
             className={mobileMode ? 'order-2' : 'order-1'}
           />
 
-          <div className={`space-y-4 ${mobileMode ? 'order-1' : 'order-2'}`}>
+          <div className={`space-y-4 self-start ${mobileMode ? 'order-1' : 'order-2'}`}>
             {mobileMode ? (
               <>
                 <MobileSignatureCard

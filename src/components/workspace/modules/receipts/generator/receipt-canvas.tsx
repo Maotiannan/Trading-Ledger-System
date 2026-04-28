@@ -984,7 +984,6 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
             style={{
               border: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.borderWidthPx}px solid #1a1a2e`,
               padding: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.topBottom}px ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight}px`,
-              flex: 1,
               display: 'flex',
               flexDirection: 'column',
               gap: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldGapPx}px`,

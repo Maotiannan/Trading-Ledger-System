@@ -239,4 +239,44 @@ describe('ReceiptCanvas', () => {
     const bottomLine = strokeSegments[strokeSegments.length - 1];
     expect(bottomLine.to.y).toBeLessThanOrEqual(hiddenCanvas!.height);
   });
+
+  it('keeps amount label gaps and body values attached to each row label colon', async () => {
+    const ref = createRef<ReceiptCanvasHandle>();
+
+    render(
+      <ReceiptCanvas
+        ref={ref}
+        layout={layout}
+        receiverSignature="data:image/png;base64,receiver"
+        payerSignature="data:image/png;base64,payer"
+      />,
+    );
+
+    await ref.current?.exportBlob();
+
+    const gnfLabelCall = fillTextCalls.find((call) => call.text === 'GNF');
+    const usdLabelCall = fillTextCalls.find((call) => call.text === 'USD');
+    expect(gnfLabelCall).toBeDefined();
+    expect(usdLabelCall).toBeDefined();
+
+    const [gnfRectX] = strokeRect.mock.calls[0];
+    const [usdRectX] = strokeRect.mock.calls[1];
+    expect(gnfRectX - gnfLabelCall!.x - 'GNF'.length * 8).toBeGreaterThan(9.5);
+    expect(usdRectX - usdLabelCall!.x - 'USD'.length * 8).toBeGreaterThan(9.5);
+
+    const clientLabelCall = fillTextCalls.find((call) => call.text === 'Reçu de M./Mme. :');
+    const clientValueCall = fillTextCalls.find((call) => call.text === layout.clientName);
+    expect(clientLabelCall).toBeDefined();
+    expect(clientValueCall).toBeDefined();
+    expect(clientValueCall!.x).toBe(clientLabelCall!.x + 'Reçu de M./Mme. :'.length * 8 + 2);
+
+    const motifLabelCall = fillTextCalls.find((call) => call.text === 'Motif :');
+    const motifValueCall = fillTextCalls.find((call) => call.text === layout.motif);
+    const fraisLabelCall = fillTextCalls.find((call) => call.text === 'Frais : ');
+    expect(motifLabelCall).toBeDefined();
+    expect(motifValueCall).toBeDefined();
+    expect(fraisLabelCall).toBeDefined();
+    expect(motifValueCall!.x).toBe(motifLabelCall!.x + 'Motif :'.length * 8 + 2);
+    expect(fraisLabelCall!.x).toBeGreaterThan(motifValueCall!.x);
+  });
 });

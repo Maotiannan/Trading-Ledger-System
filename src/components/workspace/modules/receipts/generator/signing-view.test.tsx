@@ -216,4 +216,24 @@ describe('SigningView mobile signature flow', () => {
     }));
     expect(fetchMock.mock.calls[0]?.[0]).not.toContain('data:image');
   });
+
+  it('keeps the desktop signing column constrained instead of stretching with the preview column', async () => {
+    window.matchMedia = jest.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    }));
+
+    const { container } = render(<SigningView sessionId="session-1" tx={tx} />);
+    await screen.findByText('签名收据|Signed Receipt');
+
+    const grid = container.querySelector('.grid');
+    expect(grid).not.toBeNull();
+    expect(grid?.className).toContain('items-start');
+  });
 });

@@ -97,3 +97,62 @@ test('admin can generate a signed receipt and return to receipt list with attach
   const receiptNo = (await receiptRow.locator('td').first().textContent())?.trim();
   expect(receiptNo && receiptNo !== '-').toBeTruthy();
 });
+
+test.describe('mobile signed receipt flow', () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+
+  test('admin can complete the same-tab focused mobile signing flow and return to receipts', async ({ page, request }) => {
+    await ensureAdminInitialized(request);
+    await loginAsAdmin(page);
+
+    const suffix = uniqueSuffix('receipt-gen-mobile');
+    const { orderNo, invNo } = await createCustomerAndInvoice(page, suffix);
+
+    await page.goto('/receipts');
+    await page.getByRole('button', { name: /生成签名收据|Generate Signed Receipt/i }).click();
+
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('ORDER NO').fill(orderNo);
+    await dialog.getByLabel(/收款金额 USD|USD Amount/i).fill('2500');
+    await expect(dialog.getByText(invNo)).toBeVisible();
+    await dialog.getByRole('button', { name: /进入签名|Continue to signing/i }).click();
+
+    await page.waitForURL(/\/receipt-generator\//);
+    await expect(page.getByText(/签名收据|Signed Receipt/i)).toBeVisible();
+    await expect(page.getByTestId('mobile-orientation-hint')).toBeVisible();
+    await expect(page.getByRole('button', { name: /开始收款方签名|Start receiver signature/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /开始付款方签名|Start payer signature/i })).toBeVisible();
+    await expect(page.getByTestId('receiver-signature-pad')).toHaveCount(0);
+    await expect(page.getByTestId('payer-signature-pad')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /开始收款方签名|Start receiver signature/i }).click();
+    const receiverMode = page.getByTestId('mobile-signature-mode');
+    await expect(receiverMode).toBeVisible();
+    await expect(receiverMode.getByTestId('mobile-signature-watermark')).toContainText('Signature in the highlighted area');
+    await expect(receiverMode.getByRole('button', { name: /全屏 \/ 横屏|Fullscreen \/ landscape/i })).toBeVisible();
+    await drawSignature(receiverMode.locator('canvas'));
+    await receiverMode.getByRole('button', { name: /确认|Confirm/i }).click();
+    await expect(receiverMode).toHaveCount(0);
+    await expect(page.getByText(/已签名|Signed/i).first()).toBeVisible();
+
+    await page.getByRole('button', { name: /开始付款方签名|Start payer signature/i }).click();
+    const payerMode = page.getByTestId('mobile-signature-mode');
+    await expect(payerMode).toBeVisible();
+    await expect(payerMode.getByRole('button', { name: /全屏 \/ 横屏|Fullscreen \/ landscape/i })).toBeVisible();
+    await drawSignature(payerMode.locator('canvas'));
+    await payerMode.getByRole('button', { name: /确认|Confirm/i }).click();
+    await expect(payerMode).toHaveCount(0);
+
+    await page.getByRole('button', { name: /确认并生成收据|Confirm and generate receipt/i }).click();
+    await page.waitForURL(/\/receipts$/);
+
+    const receiptRow = page.locator('tr', { hasText: orderNo }).first();
+    await expect(receiptRow).toBeVisible();
+    await expect(receiptRow.getByTitle(/查看图片|View image/i)).toBeVisible();
+    await expect(receiptRow.getByTitle(/继续签名|Resume signing/i)).toHaveCount(0);
+  });
+});

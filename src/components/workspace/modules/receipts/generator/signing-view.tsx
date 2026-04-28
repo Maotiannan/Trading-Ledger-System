@@ -91,6 +91,7 @@ function MobileSignatureMode({
   onBack,
   onClear,
   onConfirm,
+  target,
 }: {
   title: string;
   tx: (zh: string, en: string) => string;
@@ -99,15 +100,17 @@ function MobileSignatureMode({
   onBack: () => void;
   onClear: () => void;
   onConfirm: () => void;
+  target: MobileSignatureTarget;
 }) {
+  const signatureAspectRatio = target === 'receiver' ? 52 / 16 : 62 / 17;
   return (
-    <div className="fixed inset-0 z-50 bg-white" data-testid="mobile-signature-mode">
-      <div className="flex h-[100dvh] flex-col overflow-hidden bg-white">
-        <div className="relative flex h-20 shrink-0 items-center justify-center border-b px-4">
+    <div className="fixed inset-0 z-50 bg-black text-white" data-testid="mobile-signature-mode">
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-black">
+        <div className="relative flex h-20 shrink-0 items-center justify-center px-4">
           <Button
             type="button"
             variant="outline"
-            className="absolute left-4 top-4"
+            className="absolute left-4 top-4 border-white/30 bg-black/40 text-white hover:bg-white/10 hover:text-white"
             onClick={onBack}
           >
             {tx('返回', 'Back')}
@@ -117,39 +120,53 @@ function MobileSignatureMode({
             <Button
               type="button"
               variant="outline"
+              className="border-white/30 bg-black/40 text-white hover:bg-white/10 hover:text-white"
               onClick={() => {
                 void requestMobileSigningFullscreen();
               }}
             >
               {tx('全屏', 'Fullscreen')}
             </Button>
-            <Button type="button" variant="outline" onClick={onClear}>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-white/30 bg-black/40 text-white hover:bg-white/10 hover:text-white"
+              onClick={onClear}
+            >
               {tx('清除', 'Clear')}
             </Button>
           </div>
         </div>
 
-        <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3">
           <div
-            data-testid="mobile-signature-watermark"
-            className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-8 text-center text-3xl font-semibold uppercase tracking-[0.35em] text-slate-200"
+            className="relative max-w-full overflow-hidden rounded-xl border border-neutral-300 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
+            style={{
+              aspectRatio: `${signatureAspectRatio}`,
+              width: `min(100%, ${Math.round(signatureAspectRatio * 28)}vh)`,
+            }}
           >
-            Signature in the highlighted area
+            <div
+              data-testid="mobile-signature-watermark"
+              className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-4 text-center text-xl font-semibold uppercase tracking-[0.25em] text-slate-200"
+            >
+              Signature in the highlighted area
+            </div>
+            <SignaturePad
+              label={title}
+              tx={tx}
+              value={value}
+              onChange={onChange}
+              mobileMode
+              showClearButton={false}
+              hideHeader
+              frameClassName="relative z-10 h-full rounded-none border-0 bg-transparent shadow-none"
+              canvasClassName="h-full w-full"
+            />
           </div>
-          <SignaturePad
-            label={title}
-            tx={tx}
-            value={value}
-            onChange={onChange}
-            mobileMode
-            showClearButton={false}
-            hideHeader
-            frameClassName="relative z-10 h-full rounded-none border-0 shadow-none"
-            canvasClassName="h-full w-full"
-          />
         </div>
 
-        <div className="shrink-0 border-t bg-white px-4 py-4">
+        <div className="shrink-0 bg-black px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3">
           <Button type="button" className="h-12 w-full text-base font-semibold" onClick={onConfirm}>
             {tx('完成', 'Complete')}
           </Button>
@@ -430,6 +447,7 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
           title={activeMobileTitle}
           tx={tx}
           value={mobileSignatureDraft}
+          target={activeMobileSignature}
           onChange={(value) => {
             setMobileSignatureDraft(value);
             if (activeMobileSignature) {

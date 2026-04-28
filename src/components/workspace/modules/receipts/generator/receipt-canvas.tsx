@@ -166,6 +166,20 @@ function wrapPhoneText(text: string, maxCharsPerLine: number) {
   return lines.length ? lines : ['-'];
 }
 
+function splitFixedWidthText(text: string, maxCharsPerLine: number) {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return ['-'];
+
+  const lines: string[] = [];
+  let cursor = 0;
+  while (cursor < normalized.length) {
+    lines.push(normalized.slice(cursor, cursor + maxCharsPerLine));
+    cursor += maxCharsPerLine;
+  }
+
+  return lines.length ? lines : ['-'];
+}
+
 function cropImageToAlphaBounds(image: HTMLImageElement, padding = 12) {
   const sourceCanvas = document.createElement('canvas');
   sourceCanvas.width = Math.max(1, image.naturalWidth || image.width || 1);
@@ -307,6 +321,8 @@ async function drawReceiptCanvas(
     ctx.fillStyle = '#1a1a2e';
     ctx.lineWidth = 1.5;
     ctx.textBaseline = 'top';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     return ctx;
   };
 
@@ -316,7 +332,7 @@ async function drawReceiptCanvas(
   const phoneLabel = 'Tél:';
   const phoneLabelWidth = ctx.measureText(`${phoneLabel} `).width;
   const phoneValue = layout.clientTel || '-';
-  const phoneLines = wrapPhoneText(phoneValue, 14);
+  const phoneLines = splitFixedWidthText(phoneValue, 14);
 
   const titleY = 112;
   const amountY = 146;
@@ -329,20 +345,34 @@ async function drawReceiptCanvas(
   const payerSignatureSource = payerImage ? cropImageToAlphaBounds(payerImage) : null;
 
   ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
-  const labelMetrics = {
-    client: ctx.measureText('Reçu de M./Mme. :').width,
-    amount: ctx.measureText('La somme de :').width,
-    motif: ctx.measureText('Motif :').width,
-    reste: ctx.measureText('Reste à payer :').width,
+  const measureFieldValueWidth = (
+    label: string,
+    options?: { rightLabel?: string; rightValue?: string },
+  ) => {
+    ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
+    const labelWidth = ctx.measureText(label).width;
+    const valueStartX = detailInnerX + labelWidth + 2;
+
+    let rightBlockWidth = 0;
+    if (options?.rightLabel && options.rightValue) {
+      const rightLabelText = `${options.rightLabel} `;
+      const rightLabelWidth = ctx.measureText(rightLabelText).width;
+      ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+      const rightValueWidth = ctx.measureText(options.rightValue).width;
+      rightBlockWidth = rightLabelWidth + rightValueWidth;
+    }
+
+    ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+    return Math.max(
+      40,
+      detailX + detailWidth - detailPaddingX - valueStartX - (rightBlockWidth ? rightBlockWidth + 16 : 0),
+    );
   };
-  const maxLabelWidth = Math.max(...Object.values(labelMetrics));
-  const fieldValueStartX = detailInnerX + maxLabelWidth + 4;
-  const fieldValueWidth = detailX + detailWidth - detailPaddingX - fieldValueStartX;
   const fieldLineCounts = [
-    wrapText(ctx, layout.clientName, fieldValueWidth).length,
-    wrapText(ctx, layout.amountInWords, fieldValueWidth).length,
-    wrapText(ctx, layout.motif, fieldValueWidth - 140).length,
-    wrapText(ctx, layout.resteAPayer, fieldValueWidth).length,
+    wrapText(ctx, layout.clientName, measureFieldValueWidth('Reçu de M./Mme. :')).length,
+    wrapText(ctx, layout.amountInWords, measureFieldValueWidth('La somme de :')).length,
+    wrapText(ctx, layout.motif, measureFieldValueWidth('Motif :', { rightLabel: 'Frais :', rightValue: TEMPLATE_FRAIS_LABEL })).length,
+    wrapText(ctx, layout.resteAPayer, measureFieldValueWidth('Reste à payer :')).length,
   ];
   let measuredY = detailY + detailPaddingY + 16;
   fieldLineCounts.forEach((lineCount) => {
@@ -452,15 +482,16 @@ async function drawReceiptCanvas(
   ctx.textAlign = 'left';
   ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.labelFontPt}pt Times New Roman`;
   ctx.fillText('GNF', amountX, amountY + 4);
-  const gnfBoxX = amountX + 32;
+  const amountLabelBoxGap = 10;
+  const gnfBoxX = amountX + ctx.measureText('GNF').width + amountLabelBoxGap;
   ctx.strokeStyle = '#999999';
   ctx.lineWidth = RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.borderWidthPx;
   ctx.strokeRect(gnfBoxX, amountY, gnfWidth, amountBoxHeight);
 
-  const usdLabelX = gnfBoxX + gnfWidth + boxGap + 10;
+  const usdLabelX = gnfBoxX + gnfWidth + boxGap + 14;
   ctx.strokeStyle = '#1a1a2e';
   ctx.fillText('USD', usdLabelX, amountY + 4);
-  const usdBoxX = usdLabelX + 34;
+  const usdBoxX = usdLabelX + ctx.measureText('USD').width + amountLabelBoxGap;
   ctx.strokeRect(usdBoxX, amountY, usdWidth, amountBoxHeight);
   ctx.textAlign = 'center';
   ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.valueFontPt}pt Times New Roman`;
@@ -477,6 +508,7 @@ async function drawReceiptCanvas(
     ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
     ctx.fillStyle = '#333333';
     ctx.fillText(label, detailInnerX, currentY);
+    const valueStartX = detailInnerX + ctx.measureText(label).width + 2;
 
     ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
     ctx.fillStyle = '#1a1a2e';
@@ -495,9 +527,9 @@ async function drawReceiptCanvas(
 
     const availableValueWidth = Math.max(
       40,
-      detailX + detailWidth - detailPaddingX - fieldValueStartX - (rightBlockWidth ? rightBlockWidth + 16 : 0),
+      detailX + detailWidth - detailPaddingX - valueStartX - (rightBlockWidth ? rightBlockWidth + 16 : 0),
     );
-    const lines = drawWrappedText(ctx, value, fieldValueStartX, currentY, availableValueWidth, fieldLineHeight);
+    const lines = drawWrappedText(ctx, value, valueStartX, currentY, availableValueWidth, fieldLineHeight);
 
     if (options?.rightLabel && options.rightValue) {
       const rightEdge = detailX + detailWidth - detailPaddingX;
@@ -583,7 +615,7 @@ function FieldRow({ label, value, trailing }: { label: string; value: string; tr
       >
         {label}
       </span>
-      <span style={{ fontWeight: 600, flex: 1, minWidth: 0 }}>{value}</span>
+      <span style={{ fontWeight: 600, flex: trailing ? 1 : 'initial', minWidth: 0 }}>{value}</span>
       {trailing}
     </div>
   );
@@ -758,6 +790,8 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               alignItems: 'start',
               position: 'relative',
               zIndex: 1,
+              height: '118px',
+              overflow: 'visible',
             }}
           >
             <div>
@@ -810,7 +844,7 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               </div>
             </div>
 
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', position: 'relative', overflow: 'visible' }}>
               <img
                 alt="DMD right logo"
                 src={RECEIPT_TEMPLATE_ASSETS.rightLogoDataUrl}
@@ -825,9 +859,12 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               />
               <div
                 style={{
-                  marginTop: '1mm',
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
                   transform: styleTranslate(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm),
                   transformOrigin: 'right top',
+                  width: '160px',
                 }}
               >
                 <div>
@@ -871,7 +908,7 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
                       lineHeight: `${RECEIPT_META_PHONE_LINE_HEIGHT}px`,
                     }}
                   >
-                    {wrapPhoneText(layout.clientTel || '-', 14).map((line, index) => (
+                    {splitFixedWidthText(layout.clientTel || '-', 14).map((line, index) => (
                       <span key={`${index}-${line}`}>{line}</span>
                     ))}
                   </span>
@@ -908,7 +945,7 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               transformOrigin: 'left top',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.boxGapMm}mm` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <label style={{ fontWeight: 700, fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.labelFontPt}pt` }}>GNF</label>
               <div
                 style={{
@@ -925,7 +962,7 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
                 —
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.boxGapMm}mm` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <label style={{ fontWeight: 700, fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.labelFontPt}pt` }}>USD</label>
               <div
                 style={{

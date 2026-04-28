@@ -49,7 +49,7 @@ export function SignaturePad({
 
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.strokeStyle = '#111827';
-      context.lineWidth = mobileMode ? 2.8 : 2;
+      context.lineWidth = mobileMode ? 4.2 : 2.6;
       context.lineCap = 'round';
       context.lineJoin = 'round';
       context.imageSmoothingEnabled = true;

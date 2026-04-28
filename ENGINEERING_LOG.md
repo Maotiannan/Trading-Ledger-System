@@ -1,7 +1,7 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.98  
+> 当前版本：v1.0.99  
 > 最后更新：2026-04-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
@@ -13,6 +13,7 @@
 - [x] `SIGNING_PENDING` 业务隔离落地：未完成签名的收据不能进入正常 receipt/detail/swift/mark-received 链路；新增 `receipt-generator` read/write service、API、签名页与 isolated API 回归 ✅ 2026-04-27
 - [x] 修复隔离测试脚本在 macOS 上的 `mktemp` 模板兼容性问题，恢复 `test:ci` 中 API/E2E 串联执行稳定性 ✅ 2026-04-27
 - [x] 签名收据模板正式对齐 DMD HTML：冻结 logo / watermark / 版式几何参数，替换旧简化 canvas，桌面和导出 PNG 改用正式模板壳；手机端签字切为同页单签字框全屏白底模式，增加浅灰英文方向水印与左上角全屏/横屏辅助入口；Playwright 新增桌面弹窗签字与手机同页签字闭环 ✅ 2026-04-28
+- [x] 收口签名收据剩余版式问题：`Tel:` 固定标签区改为每行最多 14 字符且不推动后续布局；导出前按签名字迹边界裁切，消除最终收据里的“虚线/发虚”笔迹；手机签字页进一步改成无滚动的全屏白底签字模式，背景提示直接落在签字区，底部 `Complete` 固定可见；同步补齐 `receipt-canvas / signing-view / receipt-generator.spec.ts` 回归并重新跑通 `test:ci` ✅ 2026-04-28
 
 - [x] `INV` 页面权限收敛：`SALES` 改为账单页整页只读，前端隐藏新建/导入/rematch/改日期/加单/改单/删单，后端 `POST/PUT/DELETE /api/invoice` 统一改为 `ADMIN` only ✅ 2026-04-27
 - [x] 账单客户解析双阶段兜底：`resolveCustomer(...)` 新增 `customerOrderNo + ownerIds`，账单创建/导入/改单/加单/rematch 在 `MARK` 精确匹配失败后，改为按 `ORDER_NO` 左半部分精确匹配客户 `ORDER_NAME`，并受当前权限树可见范围约束 ✅ 2026-04-27
@@ -220,6 +221,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.99（2026-04-28）：继续收口签名收据模板与手机签字体验；`receipt-canvas` 的 `Tel:` 头部改为固定 `Tel:` 标签 + 每行最多 14 字符的固定高度内容区，长号码只向下覆盖、不再推动标题、金额框和正文表格；正文 `Motif` 行改为值紧跟 `: ` 开始，`Frais : Paid` 始终吸附在行最右端；签名导出前增加按 alpha 边界裁切，消除最终 PNG 里笔迹因整张透明画布缩放而出现的虚线/发虚问题；手机签字页改为真正无滚动的全屏白底专用布局，提示水印直接作为签字背景层，底部 `Complete` 固定可见；同时修正桌面签字弹窗 Playwright 的稳定点击方式，重新跑通 `test:e2e:isolated` 与 `test:ci`
 - v1.0.98（2026-04-28）：继续收口手机签字页与收据头部排版；移动端签字模式改成真正的全屏白底专用界面，顶部只保留 `Back / Fullscreen / Clear`，底部固定 `Complete`，并在用户未确认返回时保留本地签字草稿，下次进入可继续签；`receipt-canvas` 的 `Tel:` 头部改为固定标签 + 可在空格、斜杠、长数字串中强制断行的内容区，避免长电话号码把头部布局顶坏；同步补齐 `signing-view` 和 `receipt-canvas` 回归，并重新跑通 `test:ci`
 - v1.0.97（2026-04-28）：继续修正签名收据模板与手机签字细节；`receipt-canvas` 改为按内容动态扩展详情区与签字区高度，导出 PNG 不再截断收款方/付款方签名；删除签名页多余旋转控件，右上电话信息改为自动换行，手机竖屏预览改成整张收据按比例缩放而非压缩内部元素；`signing-view` 终态提交改为显式 `data:` URL 转 Blob，修复微信/移动端浏览器卡在 `GENERATING...` 的问题；`Reçu de M./Mme.` 现在优先显示 `COMPANY_NAME + "MARK"`，为空时回退 `CUSTOMER_NAME + "MARK"`；签名板导出透明 PNG，不再以白底遮挡收据正文；补齐 `receipt-generator-layout / receipt-generator-read-service / receipt-generator-service / receipt-canvas / signing-view / data-url` 回归测试并重新跑通 `test:ci`
 - v1.0.96（2026-04-28）：签名收据模板正式切换到 DMD HTML 固定样式，冻结左右 logo、底部水印和版式几何；替换旧简化 `receipt-canvas` 预览/导出壳，补齐收据编号橙色与签字下划线细节；手机端签字改为同页单签字框白底全屏模式，新增浅灰英文方向水印、左上角全屏/横屏辅助入口，并移除过时的旋转按钮提示；Playwright 增加桌面弹窗签字和手机同页签字闭环，`receipt-generator` E2E 扩展到双端真实流程

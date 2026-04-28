@@ -82,7 +82,9 @@ test('admin can generate a signed receipt and return to receipt list with attach
   const downloadPromise = popup.waitForEvent('download');
   await drawSignature(popup.locator('[data-testid="receiver-signature-pad"] canvas'));
   await drawSignature(popup.locator('[data-testid="payer-signature-pad"] canvas'));
-  await popup.getByRole('button', { name: /确认并生成收据|Confirm and generate receipt/i }).click();
+  const finalizeButton = popup.getByRole('button', { name: /确认并生成收据|Confirm and generate receipt/i });
+  await popup.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await finalizeButton.evaluate((button: HTMLButtonElement) => button.click());
 
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/0001\d{3}\.png$/);

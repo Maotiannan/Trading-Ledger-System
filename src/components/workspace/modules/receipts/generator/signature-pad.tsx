@@ -27,28 +27,55 @@ export function SignaturePad({
   canvasClassName = '',
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const [drawing, setDrawing] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const frame = frameRef.current;
+    if (!canvas || !frame) return;
     const context = canvas.getContext('2d');
     if (!context) return;
 
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.strokeStyle = '#111827';
-    context.lineWidth = 2;
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
+    const resize = () => {
+      const rect = frame.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(rect.width));
+      const height = Math.max(1, Math.floor(rect.height));
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(width * pixelRatio));
+      canvas.height = Math.max(1, Math.floor(height * pixelRatio));
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
 
-    if (!value) return;
-    const image = new Image();
-    image.onload = () => {
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      context.strokeStyle = '#111827';
+      context.lineWidth = mobileMode ? 2.8 : 2;
+      context.lineCap = 'round';
+      context.lineJoin = 'round';
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+
+      if (!value) return;
+      const image = new Image();
+      image.onload = () => {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      };
+      image.src = value;
     };
-    image.src = value;
-  }, [value]);
+
+    resize();
+
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => resize());
+    observer?.observe(frame);
+    window.addEventListener('resize', resize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', resize);
+    };
+  }, [mobileMode, value]);
 
   const getPoint = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -101,7 +128,7 @@ export function SignaturePad({
   };
 
   return (
-    <div className="space-y-3">
+    <div className={hideHeader ? 'h-full' : 'space-y-3'}>
       {!hideHeader ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-medium">{label}</div>
@@ -115,13 +142,16 @@ export function SignaturePad({
         </div>
       ) : null}
 
-      <div className={`overflow-hidden rounded-xl border bg-white ${mobileMode ? 'h-[44vh]' : 'h-64'} ${frameClassName}`}>
+      <div
+        ref={frameRef}
+        className={`overflow-hidden rounded-xl border bg-white ${mobileMode ? 'h-full min-h-0' : 'h-64'} ${frameClassName}`}
+      >
         <div className="flex h-full w-full items-center justify-center">
           <canvas
             ref={canvasRef}
             width={1000}
             height={320}
-            className={`touch-none rounded-md bg-white ${mobileMode ? 'h-[36vh] w-[92vw]' : 'h-56 w-full'} ${canvasClassName}`}
+            className={`touch-none rounded-md bg-transparent ${mobileMode ? 'h-full w-full' : 'h-56 w-full'} ${canvasClassName}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrawing}

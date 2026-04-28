@@ -41,6 +41,8 @@ function ptToPx(pt: number) {
   return (pt * 96) / 72;
 }
 
+const RECEIPT_META_PHONE_LINE_HEIGHT = Math.ceil(ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt) * 1.35);
+
 function formatTemplateMoney(value: number) {
   const num = Number(value) || 0;
   return num.toLocaleString('en-US', {
@@ -139,6 +141,97 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines.length ? lines : [''];
 }
 
+function wrapPhoneText(text: string, maxCharsPerLine: number) {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return ['-'];
+
+  const lines: string[] = [];
+  let current = '';
+
+  for (const char of normalized) {
+    const isBreak = char === ' ';
+    const next = `${current}${char}`;
+    if (current && next.length > maxCharsPerLine) {
+      lines.push(current.trimEnd());
+      current = isBreak ? '' : char;
+      continue;
+    }
+    current = next;
+  }
+
+  if (current) {
+    lines.push(current.trimEnd());
+  }
+
+  return lines.length ? lines : ['-'];
+}
+
+function cropImageToAlphaBounds(image: HTMLImageElement, padding = 12) {
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = Math.max(1, image.naturalWidth || image.width || 1);
+  sourceCanvas.height = Math.max(1, image.naturalHeight || image.height || 1);
+  const sourceContext = sourceCanvas.getContext('2d');
+  if (!sourceContext || typeof sourceContext.getImageData !== 'function') {
+    return image;
+  }
+
+  sourceContext.drawImage(image, 0, 0, sourceCanvas.width, sourceCanvas.height);
+  let imageData: ImageData;
+  try {
+    imageData = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  } catch {
+    return image;
+  }
+  const { data, width, height } = imageData;
+
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha <= 8) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return image;
+  }
+
+  const cropX = Math.max(0, minX - padding);
+  const cropY = Math.max(0, minY - padding);
+  const cropWidth = Math.min(width - cropX, maxX - minX + 1 + padding * 2);
+  const cropHeight = Math.min(height - cropY, maxY - minY + 1 + padding * 2);
+
+  const croppedCanvas = document.createElement('canvas');
+  croppedCanvas.width = Math.max(1, cropWidth);
+  croppedCanvas.height = Math.max(1, cropHeight);
+  const croppedContext = croppedCanvas.getContext('2d');
+  if (!croppedContext) {
+    return image;
+  }
+
+  croppedContext.drawImage(
+    sourceCanvas,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight,
+  );
+
+  return croppedCanvas;
+}
+
 function drawWrappedText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -201,13 +294,11 @@ async function drawReceiptCanvas(
   const headerRightX = headerCenterX + RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.center + headerGap;
   const headerTop = padding.top;
   const metaWidth = RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.right - 8;
-  const phoneLineHeight = Math.ceil(ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt) * 1.35);
+  const phoneLineHeight = RECEIPT_META_PHONE_LINE_HEIGHT;
   const fieldLineHeight = 21;
   const amountBoxHeight = 28;
   const detailPaddingX = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight;
   const detailPaddingY = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.topBottom;
-  const labelWidth = 125;
-  const rightLabelWidth = 62;
   const signatureLabelGap = 18;
 
   const prepareContext = () => {
@@ -225,25 +316,33 @@ async function drawReceiptCanvas(
   const phoneLabel = 'Tél:';
   const phoneLabelWidth = ctx.measureText(`${phoneLabel} `).width;
   const phoneValue = layout.clientTel || '-';
-  const phoneValueWidth = Math.max(metaWidth - phoneLabelWidth, 40);
-  const phoneLines = wrapText(ctx, phoneValue, phoneValueWidth);
-  const extraHeaderOffset = Math.max(0, phoneLines.length - 1) * phoneLineHeight;
+  const phoneLines = wrapPhoneText(phoneValue, 14);
 
-  const titleY = 112 + extraHeaderOffset;
-  const amountY = 146 + extraHeaderOffset;
-  const detailY = 190 + extraHeaderOffset;
+  const titleY = 112;
+  const amountY = 146;
+  const detailY = 190;
   const detailX = padding.left;
   const detailWidth = contentWidth;
   const detailInnerX = detailX + detailPaddingX;
   const detailInnerWidth = detailWidth - detailPaddingX * 2;
-  const valueWidth = detailInnerWidth - labelWidth - 12;
+  const receiverSignatureSource = receiverImage ? cropImageToAlphaBounds(receiverImage) : null;
+  const payerSignatureSource = payerImage ? cropImageToAlphaBounds(payerImage) : null;
 
   ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+  const labelMetrics = {
+    client: ctx.measureText('Reçu de M./Mme. :').width,
+    amount: ctx.measureText('La somme de :').width,
+    motif: ctx.measureText('Motif :').width,
+    reste: ctx.measureText('Reste à payer :').width,
+  };
+  const maxLabelWidth = Math.max(...Object.values(labelMetrics));
+  const fieldValueStartX = detailInnerX + maxLabelWidth + 4;
+  const fieldValueWidth = detailX + detailWidth - detailPaddingX - fieldValueStartX;
   const fieldLineCounts = [
-    wrapText(ctx, layout.clientName, valueWidth).length,
-    wrapText(ctx, layout.amountInWords, valueWidth).length,
-    wrapText(ctx, layout.motif, valueWidth).length,
-    wrapText(ctx, layout.resteAPayer, valueWidth).length,
+    wrapText(ctx, layout.clientName, fieldValueWidth).length,
+    wrapText(ctx, layout.amountInWords, fieldValueWidth).length,
+    wrapText(ctx, layout.motif, fieldValueWidth - 140).length,
+    wrapText(ctx, layout.resteAPayer, fieldValueWidth).length,
   ];
   let measuredY = detailY + detailPaddingY + 16;
   fieldLineCounts.forEach((lineCount) => {
@@ -381,16 +480,35 @@ async function drawReceiptCanvas(
 
     ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
     ctx.fillStyle = '#1a1a2e';
-    const lines = drawWrappedText(ctx, value, detailInnerX + labelWidth, currentY, valueWidth, fieldLineHeight);
+    let rightBlockWidth = 0;
+    let rightValueWidth = 0;
 
     if (options?.rightLabel && options.rightValue) {
-      const rightX = detailX + detailWidth - 185;
+      ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
+      const rightLabelText = `${options.rightLabel} `;
+      const rightLabelWidth = ctx.measureText(rightLabelText).width;
+      ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+      rightValueWidth = ctx.measureText(options.rightValue).width;
+      rightBlockWidth = rightLabelWidth + rightValueWidth;
+      ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+    }
+
+    const availableValueWidth = Math.max(
+      40,
+      detailX + detailWidth - detailPaddingX - fieldValueStartX - (rightBlockWidth ? rightBlockWidth + 16 : 0),
+    );
+    const lines = drawWrappedText(ctx, value, fieldValueStartX, currentY, availableValueWidth, fieldLineHeight);
+
+    if (options?.rightLabel && options.rightValue) {
+      const rightEdge = detailX + detailWidth - detailPaddingX;
+      const rightLabelText = `${options.rightLabel} `;
+      const rightStartX = rightEdge - rightBlockWidth;
       ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
       ctx.fillStyle = '#333333';
-      ctx.fillText(options.rightLabel, rightX, currentY);
+      ctx.fillText(rightLabelText, rightStartX, currentY);
       ctx.font = `700 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
       ctx.fillStyle = '#1a1a2e';
-      drawWrappedText(ctx, options.rightValue, rightX + rightLabelWidth, currentY, 95, fieldLineHeight);
+      ctx.fillText(options.rightValue, rightEdge - rightValueWidth, currentY);
     }
 
     const lineY = currentY + Math.max(lines, 1) * fieldLineHeight + 2;
@@ -417,8 +535,8 @@ async function drawReceiptCanvas(
   ctx.fillStyle = '#333333';
   ctx.textAlign = 'right';
   ctx.fillText('Signature :', receiverSigX + receiverSigWidth, receiverBlockY);
-  if (receiverImage) {
-    ctx.drawImage(receiverImage, receiverSigX, receiverSigTop, receiverSigWidth, receiverSigHeight);
+  if (receiverSignatureSource) {
+    ctx.drawImage(receiverSignatureSource, receiverSigX, receiverSigTop, receiverSigWidth, receiverSigHeight);
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
@@ -434,8 +552,8 @@ async function drawReceiptCanvas(
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';
   ctx.fillText('Signature du payeur :', detailX, payerLabelY);
-  if (payerImage) {
-    ctx.drawImage(payerImage, detailX, payerSigTop, payerSigWidth, payerSigHeight);
+  if (payerSignatureSource) {
+    ctx.drawImage(payerSignatureSource, detailX, payerSigTop, payerSigWidth, payerSigHeight);
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
@@ -448,7 +566,7 @@ function FieldRow({ label, value, trailing }: { label: string; value: string; tr
       style={{
         display: 'flex',
         alignItems: 'baseline',
-        gap: '2mm',
+        gap: '2px',
         borderBottom: '0.8px dotted #aaa',
         paddingBottom: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldGapPx - 1}px`,
         fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt`,
@@ -465,7 +583,7 @@ function FieldRow({ label, value, trailing }: { label: string; value: string; tr
       >
         {label}
       </span>
-      <span style={{ fontWeight: 600, flex: 1 }}>{value}</span>
+      <span style={{ fontWeight: 600, flex: 1, minWidth: 0 }}>{value}</span>
       {trailing}
     </div>
   );
@@ -538,10 +656,19 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
         ? Math.min(1, Math.max(0.5, (viewportWidth - 32) / RECEIPT_TEMPLATE_CANVAS.width))
         : 1;
       setMobileScale(nextScale);
-      setShellHeight(shell.offsetHeight);
+      if (nextScale < 1) {
+        setShellHeight(shell.offsetHeight);
+      }
     };
 
     updateScale();
+    if (window.innerWidth > 768) {
+      window.addEventListener('resize', updateScale);
+      return () => {
+        window.removeEventListener('resize', updateScale);
+      };
+    }
+
     const observer = typeof ResizeObserver === 'undefined'
       ? null
       : new ResizeObserver(() => {
@@ -578,9 +705,12 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
     <div className={`rounded-xl border bg-white p-3 shadow-sm ${className}`}>
       <div className="overflow-x-auto">
         <div
-          style={{
+          style={mobileScale < 1 ? {
             width: `${RECEIPT_TEMPLATE_CANVAS.width * mobileScale}px`,
             height: `${shellHeight * mobileScale}px`,
+            margin: '0 auto',
+          } : {
+            width: `${RECEIPT_TEMPLATE_CANVAS.width}px`,
             margin: '0 auto',
           }}
         >
@@ -599,8 +729,8 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
               color: '#1a1a2e',
               fontFamily: "'Times New Roman', Times, serif",
               overflow: 'hidden',
-              transform: `scale(${mobileScale})`,
-              transformOrigin: 'top left',
+              transform: mobileScale < 1 ? `scale(${mobileScale})` : 'none',
+              transformOrigin: mobileScale < 1 ? 'top left' : undefined,
             }}
           >
             <img
@@ -723,23 +853,27 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
                     fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`,
                     marginTop: '.5mm',
                     maxWidth: '160px',
+                    height: `${RECEIPT_META_PHONE_LINE_HEIGHT * 4}px`,
                     marginLeft: 'auto',
                     display: 'grid',
                     gridTemplateColumns: '30px minmax(0, 1fr)',
                     gap: '2px',
                     alignItems: 'start',
                     textAlign: 'left',
+                    overflow: 'visible',
                   }}
                 >
                   <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Tél:</span>
                   <span
                     style={{
-                      whiteSpace: 'normal',
-                      overflowWrap: 'anywhere',
-                      wordBreak: 'break-word',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      lineHeight: `${RECEIPT_META_PHONE_LINE_HEIGHT}px`,
                     }}
                   >
-                    {layout.clientTel || '-'}
+                    {wrapPhoneText(layout.clientTel || '-', 14).map((line, index) => (
+                      <span key={`${index}-${line}`}>{line}</span>
+                    ))}
                   </span>
                 </div>
               </div>

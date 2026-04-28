@@ -232,6 +232,7 @@ describe('ReceiptCanvas', () => {
     const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
     expect(phoneDrawCalls.length).toBeGreaterThan(1);
     expect(phoneDrawCalls.every((call) => !call.text.startsWith('Tél:'))).toBe(true);
+    expect(phoneDrawCalls.every((call) => call.text.length <= 14)).toBe(true);
 
     const hiddenCanvas = container.querySelector('canvas[aria-hidden="true"]') as HTMLCanvasElement | null;
     expect(hiddenCanvas).not.toBeNull();

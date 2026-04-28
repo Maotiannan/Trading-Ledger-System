@@ -102,8 +102,8 @@ function MobileSignatureMode({
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-white" data-testid="mobile-signature-mode">
-      <div className="flex h-screen flex-col bg-white">
-        <div className="relative flex items-center justify-center border-b px-4 py-4">
+      <div className="flex h-[100dvh] flex-col overflow-hidden bg-white">
+        <div className="relative flex h-20 shrink-0 items-center justify-center border-b px-4">
           <Button
             type="button"
             variant="outline"
@@ -129,10 +129,10 @@ function MobileSignatureMode({
           </div>
         </div>
 
-        <div className="relative flex-1 overflow-hidden px-4 py-4">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <div
             data-testid="mobile-signature-watermark"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 text-center text-3xl font-semibold uppercase tracking-[0.35em] text-slate-200"
+            className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center px-8 text-center text-3xl font-semibold uppercase tracking-[0.35em] text-slate-200"
           >
             Signature in the highlighted area
           </div>
@@ -144,12 +144,12 @@ function MobileSignatureMode({
             mobileMode
             showClearButton={false}
             hideHeader
-            frameClassName="h-full rounded-none border-0 shadow-none"
+            frameClassName="relative z-10 h-full rounded-none border-0 shadow-none"
             canvasClassName="h-full w-full"
           />
         </div>
 
-        <div className="border-t bg-white px-4 py-4">
+        <div className="shrink-0 border-t bg-white px-4 py-4">
           <Button type="button" className="h-12 w-full text-base font-semibold" onClick={onConfirm}>
             {tx('完成', 'Complete')}
           </Button>

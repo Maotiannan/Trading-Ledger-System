@@ -46,8 +46,9 @@ export function useReceiptGenerator(params: {
   tx: ReceiptGeneratorText;
   loadReceipts: () => Promise<void>;
   setError: (value: string | null) => void;
+  openSigningTargetImpl?: (path: string) => { mode: 'popup' | 'redirect'; popupOpened: boolean };
 }) {
-  const { tx, loadReceipts, setError } = params;
+  const { tx, loadReceipts, setError, openSigningTargetImpl = openSigningTarget } = params;
   const [showGeneratorLaunch, setShowGeneratorLaunch] = useState(false);
   const [generatorOrderNo, setGeneratorOrderNo] = useState('');
   const [generatorUsdAmount, setGeneratorUsdAmount] = useState('');
@@ -160,7 +161,10 @@ export function useReceiptGenerator(params: {
       if (!signingPath || typeof signingPath !== 'string') {
         throw new Error(tx('签名页面路径缺失', 'Signing path missing.'));
       }
-      const opened = openSigningTarget(signingPath);
+      const opened = openSigningTargetImpl(signingPath);
+      if (opened.mode === 'redirect') {
+        return;
+      }
       if (opened.mode === 'popup' && !opened.popupOpened) {
         setGeneratorError(tx('浏览器拦截了签名窗口，请允许弹窗后重试。收据记录已创建，可在列表中继续签名。', 'Popup was blocked. Allow popups and retry. The receipt record has been created and can be resumed from the list.'));
       } else {
@@ -172,7 +176,7 @@ export function useReceiptGenerator(params: {
     } finally {
       setGeneratorCreating(false);
     }
-  }, [generatorOrderNo, generatorUsdAmount, loadReceipts, resetGeneratorState, setError, tx]);
+  }, [generatorOrderNo, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
 
   const resumeGeneratorSession = useCallback(async (receiptId: string) => {
     try {
@@ -182,14 +186,17 @@ export function useReceiptGenerator(params: {
         throw new Error(tx('签名会话不存在', 'Signing session not found.'));
       }
       const path = `/receipt-generator/${sessionId}`;
-      const opened = openSigningTarget(path);
+      const opened = openSigningTargetImpl(path);
+      if (opened.mode === 'redirect') {
+        return;
+      }
       if (opened.mode === 'popup' && !opened.popupOpened) {
         setError(tx('浏览器拦截了签名窗口，请允许弹窗后重试。', 'Popup was blocked. Allow popups and retry.'));
       }
     } catch (error) {
       setError(getErrorMessage(error, tx('无法继续签名，请重试', 'Unable to resume signing. Please retry.')));
     }
-  }, [setError, tx]);
+  }, [openSigningTargetImpl, setError, tx]);
 
   return {
     showGeneratorLaunch,

@@ -9,6 +9,8 @@ type SignaturePadProps = {
   value: string | null;
   onChange: (value: string | null) => void;
   mobileMode?: boolean;
+  showRotateControls?: boolean;
+  showClearButton?: boolean;
 };
 
 export function SignaturePad({
@@ -17,6 +19,8 @@ export function SignaturePad({
   value,
   onChange,
   mobileMode = false,
+  showRotateControls = true,
+  showClearButton = true,
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [drawing, setDrawing] = useState(false);
@@ -105,18 +109,24 @@ export function SignaturePad({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-medium">{label}</div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant={rotation === -90 ? 'default' : 'outline'} onClick={() => setRotation(-90)}>
-            {tx('左转 90°', 'Rotate -90°')}
-          </Button>
-          <Button type="button" size="sm" variant={rotation === 0 ? 'default' : 'outline'} onClick={() => setRotation(0)}>
-            {tx('正向', 'Normal')}
-          </Button>
-          <Button type="button" size="sm" variant={rotation === 90 ? 'default' : 'outline'} onClick={() => setRotation(90)}>
-            {tx('右转 90°', 'Rotate +90°')}
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={clearPad}>
-            {tx('清除', 'Clear')}
-          </Button>
+          {showRotateControls ? (
+            <>
+              <Button type="button" size="sm" variant={rotation === -90 ? 'default' : 'outline'} onClick={() => setRotation(-90)}>
+                {tx('左转 90°', 'Rotate -90°')}
+              </Button>
+              <Button type="button" size="sm" variant={rotation === 0 ? 'default' : 'outline'} onClick={() => setRotation(0)}>
+                {tx('正向', 'Normal')}
+              </Button>
+              <Button type="button" size="sm" variant={rotation === 90 ? 'default' : 'outline'} onClick={() => setRotation(90)}>
+                {tx('右转 90°', 'Rotate +90°')}
+              </Button>
+            </>
+          ) : null}
+          {showClearButton ? (
+            <Button type="button" size="sm" variant="outline" onClick={clearPad}>
+              {tx('清除', 'Clear')}
+            </Button>
+          ) : null}
         </div>
       </div>
 

@@ -13,6 +13,8 @@ type SigningViewProps = {
   tx: (zh: string, en: string) => string;
 };
 
+type MobileSignatureTarget = 'receiver' | 'payer';
+
 type SessionPayload = {
   id: string;
   receiptId: string;
@@ -52,6 +54,87 @@ function downloadBlob(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function MobileSignatureMode({
+  title,
+  tx,
+  value,
+  onChange,
+  onBack,
+  onClear,
+  onConfirm,
+}: {
+  title: string;
+  tx: (zh: string, en: string) => string;
+  value: string | null;
+  onChange: (value: string | null) => void;
+  onBack: () => void;
+  onClear: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-white" data-testid="mobile-signature-mode">
+      <div className="flex min-h-screen flex-col bg-white">
+        <div className="border-b px-4 py-4">
+          <div className="text-lg font-semibold" data-testid="mobile-signature-mode-title">{title}</div>
+          <div className="text-sm text-muted-foreground">{tx('请在下方完成当前签名', 'Complete the current signature below.')}</div>
+        </div>
+
+        <div className="flex-1 px-4 py-4">
+          <SignaturePad
+            label={title}
+            tx={tx}
+            value={value}
+            onChange={onChange}
+            mobileMode
+            showRotateControls={false}
+            showClearButton={false}
+          />
+        </div>
+
+        <div className="border-t bg-white px-4 py-4">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onBack}>
+              {tx('返回', 'Back')}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClear}>
+              {tx('清除', 'Clear')}
+            </Button>
+            <Button type="button" onClick={onConfirm}>
+              {tx('确认', 'Confirm')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileSignatureCard({
+  title,
+  status,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  status: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="font-medium">{title}</div>
+          <div className="text-sm text-muted-foreground">{status}</div>
+        </div>
+        <Button type="button" onClick={onAction}>
+          {actionLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function SigningView({ sessionId, tx }: SigningViewProps) {
   const router = useRouter();
   const canvasRef = useRef<ReceiptCanvasHandle | null>(null);
@@ -62,6 +145,8 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
   const [receiverSignature, setReceiverSignature] = useState<string | null>(null);
   const [payerSignature, setPayerSignature] = useState<string | null>(null);
   const [mobileMode, setMobileMode] = useState(false);
+  const [activeMobileSignature, setActiveMobileSignature] = useState<MobileSignatureTarget | null>(null);
+  const [mobileSignatureDraft, setMobileSignatureDraft] = useState<string | null>(null);
 
   useEffect(() => {
     setMobileMode(isMobileViewport());
@@ -93,6 +178,30 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
   }, [sessionId, tx]);
 
   const title = useMemo(() => session?.layout?.receiptNo || 'PENDING', [session]);
+
+  const openMobileSignature = (target: MobileSignatureTarget) => {
+    setActiveMobileSignature(target);
+    setMobileSignatureDraft(target === 'receiver' ? receiverSignature : payerSignature);
+  };
+
+  const closeMobileSignature = () => {
+    setActiveMobileSignature(null);
+    setMobileSignatureDraft(null);
+  };
+
+  const confirmMobileSignature = () => {
+    if (activeMobileSignature === 'receiver') {
+      setReceiverSignature(mobileSignatureDraft);
+    }
+    if (activeMobileSignature === 'payer') {
+      setPayerSignature(mobileSignatureDraft);
+    }
+    closeMobileSignature();
+  };
+
+  const activeMobileTitle = activeMobileSignature === 'receiver'
+    ? tx('收款方签名', 'Receiver signature')
+    : tx('付款方签名', 'Payer signature');
 
   const finalize = async () => {
     if (!session) return;
@@ -195,24 +304,43 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
           />
 
           <div className={`space-y-4 ${mobileMode ? 'order-1' : 'order-2'}`}>
-            <div className="rounded-xl bg-white p-4 shadow-sm" data-testid="receiver-signature-pad">
-              <SignaturePad
-                label={tx('收款方签名 / Reçu par', 'Receiver signature')}
-                tx={tx}
-                value={receiverSignature}
-                onChange={setReceiverSignature}
-                mobileMode={mobileMode}
-              />
-            </div>
-            <div className="rounded-xl bg-white p-4 shadow-sm" data-testid="payer-signature-pad">
-              <SignaturePad
-                label={tx('付款方签名 / Signature du payeur', 'Payer signature')}
-                tx={tx}
-                value={payerSignature}
-                onChange={setPayerSignature}
-                mobileMode={mobileMode}
-              />
-            </div>
+            {mobileMode ? (
+              <>
+                <MobileSignatureCard
+                  title={tx('收款方签名', 'Receiver signature')}
+                  status={receiverSignature ? tx('已签名', 'Signed') : tx('未签名', 'Not signed')}
+                  actionLabel={receiverSignature ? tx('重新签名', 'Edit signature') : tx('开始收款方签名', 'Start receiver signature')}
+                  onAction={() => openMobileSignature('receiver')}
+                />
+                <MobileSignatureCard
+                  title={tx('付款方签名', 'Payer signature')}
+                  status={payerSignature ? tx('已签名', 'Signed') : tx('未签名', 'Not signed')}
+                  actionLabel={payerSignature ? tx('重新签名', 'Edit signature') : tx('开始付款方签名', 'Start payer signature')}
+                  onAction={() => openMobileSignature('payer')}
+                />
+              </>
+            ) : (
+              <>
+                <div className="rounded-xl bg-white p-4 shadow-sm" data-testid="receiver-signature-pad">
+                  <SignaturePad
+                    label={tx('收款方签名 / Reçu par', 'Receiver signature')}
+                    tx={tx}
+                    value={receiverSignature}
+                    onChange={setReceiverSignature}
+                    mobileMode={mobileMode}
+                  />
+                </div>
+                <div className="rounded-xl bg-white p-4 shadow-sm" data-testid="payer-signature-pad">
+                  <SignaturePad
+                    label={tx('付款方签名 / Signature du payeur', 'Payer signature')}
+                    tx={tx}
+                    value={payerSignature}
+                    onChange={setPayerSignature}
+                    mobileMode={mobileMode}
+                  />
+                </div>
+              </>
+            )}
 
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <div className="flex flex-wrap justify-end gap-2">
@@ -236,6 +364,18 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
           </div>
         </div>
       </div>
+
+      {mobileMode && activeMobileSignature ? (
+        <MobileSignatureMode
+          title={activeMobileTitle}
+          tx={tx}
+          value={mobileSignatureDraft}
+          onChange={setMobileSignatureDraft}
+          onBack={closeMobileSignature}
+          onClear={() => setMobileSignatureDraft(null)}
+          onConfirm={confirmMobileSignature}
+        />
+      ) : null}
     </div>
   );
 }

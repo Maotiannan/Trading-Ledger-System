@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { ReceiptGeneratorLayoutData } from '@/lib/receipt-generator-layout';
 import { RECEIPT_TEMPLATE_ASSETS } from './template-assets';
 import {
@@ -49,12 +49,6 @@ function formatTemplateMoney(value: number) {
     minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
     maximumFractionDigits: 2,
   });
-}
-
-function styleTranslate(offset: { x?: number; y?: number }) {
-  const x = offset.x || 0;
-  const y = offset.y || 0;
-  return `translate(${x}mm, ${y}mm)`;
 }
 
 async function loadImage(dataUrl: string | null): Promise<HTMLImageElement | null> {
@@ -329,8 +323,6 @@ async function drawReceiptCanvas(
   prepareContext();
 
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
-  const phoneLabel = 'Tél:';
-  const phoneLabelWidth = ctx.measureText(`${phoneLabel} `).width;
   const phoneValue = layout.clientTel || '-';
   const phoneLines = splitFixedWidthText(phoneValue, 14);
 
@@ -462,12 +454,13 @@ async function drawReceiptCanvas(
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
   ctx.fillStyle = '#1a1a2e';
   ctx.fillText('No: ', metaRightX - receiptNoWidth - 4, metaTopY + 2);
-  ctx.fillText(`Date: ${layout.dateText}`, metaRightX, metaTopY + 26);
-  const phoneBlockLeft = metaRightX - metaWidth;
+  const dateLine = `Date: ${layout.dateText}`;
+  ctx.fillText(dateLine, metaRightX, metaTopY + 26);
+  const metaBlockLeftX = metaRightX - ctx.measureText(dateLine).width;
   ctx.textAlign = 'left';
-  ctx.fillText(phoneLabel, phoneBlockLeft, metaTopY + 46);
   phoneLines.forEach((line, index) => {
-    ctx.fillText(line, phoneBlockLeft + phoneLabelWidth, metaTopY + 46 + index * phoneLineHeight);
+    const renderedLine = index === 0 ? `Tél: ${line}` : line;
+    ctx.fillText(renderedLine, metaBlockLeftX, metaTopY + 46 + index * phoneLineHeight);
   });
   ctx.textAlign = 'center';
 
@@ -592,125 +585,27 @@ async function drawReceiptCanvas(
   drawLine(ctx, detailX, payerSigTop + payerSigHeight, detailX + payerSigWidth, payerSigTop + payerSigHeight);
 }
 
-function FieldRow({ label, value, trailing }: { label: string; value: string; trailing?: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: '2px',
-        borderBottom: '0.8px dotted #aaa',
-        paddingBottom: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldGapPx - 1}px`,
-        fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt`,
-      }}
-    >
-      <span
-        style={{
-          whiteSpace: 'nowrap',
-          fontStyle: 'italic',
-          fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`,
-          color: '#333',
-          flexShrink: 0,
-        }}
-      >
-        {label}
-      </span>
-      <span style={{ fontWeight: 600, flex: trailing ? 1 : 'initial', minWidth: 0 }}>{value}</span>
-      {trailing}
-    </div>
-  );
-}
-
-function SignatureSlot({
-  dataTestId,
-  alt,
-  src,
-  widthMm,
-  heightMm,
-}: {
-  dataTestId: string;
-  alt: string;
-  src: string | null;
-  widthMm: number;
-  heightMm: number;
-}) {
-  return (
-    <div
-      data-testid={dataTestId}
-      style={{
-        width: `${widthMm}mm`,
-        height: `${heightMm}mm`,
-        position: 'relative',
-        cursor: 'pointer',
-        background: 'transparent',
-        borderBottom: `1px solid ${TEMPLATE_SIGNATURE_LINE_COLOR}`,
-        overflow: 'visible',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {src ? (
-        <img
-          alt={alt}
-          src={src}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-          }}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>(function ReceiptCanvas(
   { layout, receiverSignature, payerSignature, className = '' },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const shellRef = useRef<HTMLDivElement | null>(null);
-  const [mobileScale, setMobileScale] = useState(1);
-  const [shellHeight, setShellHeight] = useState<number>(RECEIPT_TEMPLATE_CANVAS.height);
-  const usdAmountText = `$${formatTemplateMoney(layout.usdAmount)}#`;
 
   useEffect(() => {
-    if (typeof window === 'undefined') return undefined;
-    const shell = shellRef.current;
-    if (!shell) return undefined;
+    let active = true;
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
 
-    const updateScale = () => {
-      const viewportWidth = window.innerWidth;
-      const nextScale = viewportWidth <= 768
-        ? Math.min(1, Math.max(0.5, (viewportWidth - 32) / RECEIPT_TEMPLATE_CANVAS.width))
-        : 1;
-      setMobileScale(nextScale);
-      if (nextScale < 1) {
-        setShellHeight(shell.offsetHeight);
-      }
-    };
+    drawReceiptCanvas(canvas, layout, receiverSignature, payerSignature)
+      .catch(() => {
+        // Preview render failures are surfaced during export/finalize.
+      })
+      .finally(() => {
+        if (!active) return;
+      });
 
-    updateScale();
-    if (window.innerWidth > 768) {
-      window.addEventListener('resize', updateScale);
-      return () => {
-        window.removeEventListener('resize', updateScale);
-      };
-    }
-
-    const observer = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(() => {
-          updateScale();
-        });
-    observer?.observe(shell);
-    window.addEventListener('resize', updateScale);
     return () => {
-      observer?.disconnect();
-      window.removeEventListener('resize', updateScale);
+      active = false;
     };
   }, [layout, receiverSignature, payerSignature]);
 
@@ -737,323 +632,27 @@ export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>
     <div className={`rounded-xl border bg-white p-3 shadow-sm ${className}`}>
       <div className="overflow-x-auto">
         <div
-          style={mobileScale < 1 ? {
-            width: `${RECEIPT_TEMPLATE_CANVAS.width * mobileScale}px`,
-            height: `${shellHeight * mobileScale}px`,
-            margin: '0 auto',
-          } : {
-            width: `${RECEIPT_TEMPLATE_CANVAS.width}px`,
-            margin: '0 auto',
+          data-testid="receipt-template-shell"
+          className="mx-auto"
+          style={{
+            width: '100%',
+            maxWidth: `${RECEIPT_TEMPLATE_CANVAS.width}px`,
           }}
         >
-          <div
-            ref={shellRef}
-            data-testid="receipt-template-shell"
+          <canvas
+            ref={canvasRef}
+            data-testid="receipt-preview-canvas"
+            width={RECEIPT_TEMPLATE_CANVAS.width}
+            height={RECEIPT_TEMPLATE_CANVAS.height}
             style={{
-              width: `${RECEIPT_TEMPLATE_CANVAS.width}px`,
-              minHeight: `${RECEIPT_TEMPLATE_CANVAS.height}px`,
-              padding: `${RECEIPT_TEMPLATE_CANVAS.paddingMm.top}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.right}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.bottom}mm ${RECEIPT_TEMPLATE_CANVAS.paddingMm.left}mm`,
-              position: 'relative',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: `${RECEIPT_TEMPLATE_CANVAS.contentGapMm}mm`,
+              display: 'block',
+              width: '100%',
+              height: 'auto',
               background: '#fff',
-              color: '#1a1a2e',
-              fontFamily: "'Times New Roman', Times, serif",
-              overflow: 'hidden',
-              transform: mobileScale < 1 ? `scale(${mobileScale})` : 'none',
-              transformOrigin: mobileScale < 1 ? 'top left' : undefined,
             }}
-          >
-            <img
-              alt="DMD watermark"
-              src={RECEIPT_TEMPLATE_ASSETS.bottomWatermarkDataUrl}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                bottom: `${RECEIPT_TEMPLATE_WATERMARK.offsetMm.bottom}mm`,
-                width: `${RECEIPT_TEMPLATE_WATERMARK.widthPercent}%`,
-                height: `${RECEIPT_TEMPLATE_WATERMARK.heightPx}px`,
-                transform: 'translateX(-50%)',
-                opacity: RECEIPT_TEMPLATE_WATERMARK.opacityPercent / 100,
-                objectFit: 'contain',
-                zIndex: 0,
-                pointerEvents: 'none',
-              }}
-            />
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: `${RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.left}px ${RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.center}px ${RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.right}px`,
-              gap: `${RECEIPT_TEMPLATE_HEADER_GRID.gapMm}mm`,
-              alignItems: 'start',
-              position: 'relative',
-              zIndex: 1,
-              height: '118px',
-              overflow: 'visible',
-            }}
-          >
-            <div>
-              <img
-                alt="DMD left logo"
-                src={RECEIPT_TEMPLATE_ASSETS.leftLogoDataUrl}
-                style={{
-                  display: 'block',
-                  width: `${RECEIPT_TEMPLATE_LOGO_BLOCKS.left.widthPx}px`,
-                  height: `${RECEIPT_TEMPLATE_LOGO_BLOCKS.left.heightPx}px`,
-                  objectFit: 'contain',
-                  transform: styleTranslate(RECEIPT_TEMPLATE_LOGO_BLOCKS.left.offsetMm),
-                  transformOrigin: 'left top',
-                }}
-              />
-            </div>
-
-            <div
-              style={{
-                textAlign: 'center',
-                minWidth: 0,
-                transform: styleTranslate(RECEIPT_TEMPLATE_TEXT_REGIONS.companyBlock.offsetMm),
-                transformOrigin: 'center top',
-              }}
-            >
-              <div>
-                <span
-                  style={{
-                    fontFamily: "'Algerian', 'Times New Roman', Times, serif",
-                    fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.companyBlock.companyFontPt}pt`,
-                    fontWeight: 400,
-                    letterSpacing: '0.06em',
-                    color: '#1a1a2e',
-                  }}
-                >
-                  {TEMPLATE_COMPANY_NAME}
-                </span>
-              </div>
-              <div
-                style={{
-                  fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.companyBlock.addressFontPt}pt`,
-                  color: '#333',
-                  lineHeight: 1.5,
-                  marginTop: '1mm',
-                }}
-              >
-                {TEMPLATE_COMPANY_ADDRESS.map((line) => (
-                  <div key={line}>{line}</div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ textAlign: 'right', position: 'relative', overflow: 'visible' }}>
-              <img
-                alt="DMD right logo"
-                src={RECEIPT_TEMPLATE_ASSETS.rightLogoDataUrl}
-                style={{
-                  display: 'inline-block',
-                  width: `${RECEIPT_TEMPLATE_LOGO_BLOCKS.right.widthPx}px`,
-                  height: `${RECEIPT_TEMPLATE_LOGO_BLOCKS.right.heightPx}px`,
-                  objectFit: 'contain',
-                  transform: styleTranslate(RECEIPT_TEMPLATE_LOGO_BLOCKS.right.offsetMm),
-                  transformOrigin: 'right top',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  right: 0,
-                  transform: styleTranslate(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm),
-                  transformOrigin: 'right top',
-                  width: '160px',
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`, fontWeight: 600 }}>No: </span>
-                  <span
-                    data-testid="receipt-number-value"
-                    style={{
-                      fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.numberFontPt}pt`,
-                      fontWeight: 700,
-                      color: TEMPLATE_RECEIPT_NUMBER_COLOR,
-                      letterSpacing: '.04em',
-                    }}
-                  >
-                    {layout.receiptNo}
-                  </span>
-                </div>
-                <div style={{ fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`, marginTop: '.5mm' }}>
-                  <span style={{ fontWeight: 600 }}>Date: </span>
-                  {layout.dateText}
-                </div>
-                <div
-                  style={{
-                    fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt`,
-                    marginTop: '.5mm',
-                    maxWidth: '160px',
-                    height: `${RECEIPT_META_PHONE_LINE_HEIGHT * 4}px`,
-                    marginLeft: 'auto',
-                    display: 'grid',
-                    gridTemplateColumns: '30px minmax(0, 1fr)',
-                    gap: '2px',
-                    alignItems: 'start',
-                    textAlign: 'left',
-                    overflow: 'visible',
-                  }}
-                >
-                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Tél:</span>
-                  <span
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      lineHeight: `${RECEIPT_META_PHONE_LINE_HEIGHT}px`,
-                    }}
-                  >
-                    {splitFixedWidthText(layout.clientTel || '-', 14).map((line, index) => (
-                      <span key={`${index}-${line}`}>{line}</span>
-                    ))}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              textAlign: 'center',
-              fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.titleBlock.fontPt}pt`,
-              fontWeight: 800,
-              letterSpacing: `${RECEIPT_TEMPLATE_TEXT_REGIONS.titleBlock.letterSpacingEm}em`,
-              color: '#1a1a2e',
-              margin: '.5mm 0',
-              position: 'relative',
-              zIndex: 1,
-              transform: styleTranslate(RECEIPT_TEMPLATE_TEXT_REGIONS.titleBlock.offsetMm),
-              transformOrigin: 'center top',
-            }}
-          >
-            REÇU DE PAIEMENT
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.rowGapMm}mm`,
-              position: 'relative',
-              zIndex: 1,
-              transform: styleTranslate(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.offsetMm),
-              transformOrigin: 'left top',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <label style={{ fontWeight: 700, fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.labelFontPt}pt` }}>GNF</label>
-              <div
-                style={{
-                  border: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.borderWidthPx}px solid #999`,
-                  minWidth: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.gnfWidthMm}mm`,
-                  padding: `${Math.max(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.paddingPx - 2, 0)}px ${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.paddingPx + 2}px`,
-                  fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.valueFontPt}pt`,
-                  fontWeight: 700,
-                  textAlign: 'center',
-                  color: 'transparent',
-                  background: 'transparent',
-                }}
-              >
-                —
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <label style={{ fontWeight: 700, fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.labelFontPt}pt` }}>USD</label>
-              <div
-                style={{
-                  border: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.borderWidthPx}px solid #1a1a2e`,
-                  minWidth: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.usdWidthMm}mm`,
-                  padding: `${Math.max(RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.paddingPx - 2, 0)}px ${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.paddingPx + 2}px`,
-                  fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.amountRow.valueFontPt}pt`,
-                  fontWeight: 700,
-                  textAlign: 'center',
-                  background: 'transparent',
-                }}
-              >
-                {usdAmountText}
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              border: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.borderWidthPx}px solid #1a1a2e`,
-              padding: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.topBottom}px ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight}px`,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldGapPx}px`,
-              position: 'relative',
-              zIndex: 1,
-              background: 'transparent',
-            }}
-          >
-            <FieldRow label="Reçu de M./Mme. :" value={layout.clientName} />
-            <FieldRow label="La somme de :" value={layout.amountInWords} />
-            <FieldRow
-              label="Motif :"
-              value={layout.motif}
-              trailing={(
-                <span
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    gap: '1mm',
-                    marginLeft: 'auto',
-                    flexShrink: 0,
-                    fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`,
-                  }}
-                >
-                  <span style={{ fontStyle: 'italic', color: '#333' }}>Frais :</span>
-                  <span style={{ fontWeight: 700 }}>{TEMPLATE_FRAIS_LABEL}</span>
-                </span>
-              )}
-            />
-            <FieldRow label="Reste à payer :" value={layout.resteAPayer} />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '1mm' }}>
-              <div>
-                <div style={{ fontStyle: 'italic', fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`, color: '#333' }}>Reçu par :</div>
-                <div style={{ fontWeight: 600, fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt` }}>{layout.receivedBy}</div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontStyle: 'italic', fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`, color: '#333' }}>Signature :</div>
-                <SignatureSlot
-                  dataTestId="receiver-signature-slot"
-                  alt="Receiver signature"
-                  src={receiverSignature}
-                  widthMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm}
-                  heightMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            <div style={{ fontStyle: 'italic', fontSize: `${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt`, color: '#333' }}>Signature du payeur :</div>
-            <SignatureSlot
-              dataTestId="payer-signature-slot"
-              alt="Payer signature"
-              src={payerSignature}
-              widthMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm}
-              heightMm={RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm}
-            />
-          </div>
-          </div>
+          />
         </div>
       </div>
-
-      <canvas
-        ref={canvasRef}
-        width={RECEIPT_TEMPLATE_CANVAS.width}
-        height={RECEIPT_TEMPLATE_CANVAS.height}
-        style={{ display: 'none' }}
-        aria-hidden="true"
-      />
     </div>
   );
 });

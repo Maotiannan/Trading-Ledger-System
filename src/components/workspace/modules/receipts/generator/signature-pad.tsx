@@ -44,8 +44,6 @@ export function SignaturePad({
       const pixelRatio = window.devicePixelRatio || 1;
       canvas.width = Math.max(1, Math.floor(width * pixelRatio));
       canvas.height = Math.max(1, Math.floor(height * pixelRatio));
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
 
       context.clearRect(0, 0, canvas.width, canvas.height);
       context.strokeStyle = '#111827';
@@ -128,7 +126,7 @@ export function SignaturePad({
   };
 
   return (
-    <div className={hideHeader ? 'h-full' : 'space-y-3'}>
+    <div className={hideHeader ? 'h-full w-full min-w-0' : 'w-full min-w-0 space-y-3'}>
       {!hideHeader ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-medium">{label}</div>
@@ -144,14 +142,14 @@ export function SignaturePad({
 
       <div
         ref={frameRef}
-        className={`overflow-hidden rounded-xl border bg-white ${mobileMode ? 'h-full min-h-0' : 'h-64'} ${frameClassName}`}
+        className={`w-full min-w-0 overflow-hidden rounded-xl border bg-white ${mobileMode ? 'h-full min-h-0' : 'h-44'} ${frameClassName}`}
       >
         <div className="flex h-full w-full items-center justify-center">
           <canvas
             ref={canvasRef}
             width={1000}
             height={320}
-            className={`touch-none rounded-md bg-transparent ${mobileMode ? 'h-full w-full' : 'h-56 w-full'} ${canvasClassName}`}
+            className={`touch-none rounded-md bg-transparent ${mobileMode ? 'h-full w-full' : 'block h-full w-full max-w-full'} ${canvasClassName}`}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={finishDrawing}

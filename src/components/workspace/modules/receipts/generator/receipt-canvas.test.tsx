@@ -146,7 +146,7 @@ describe('ReceiptCanvas', () => {
     global.Image = OriginalImage;
   });
 
-  it('renders the approved DMD receipt shell details in the preview', () => {
+  it('renders the preview from the same canvas used for export', async () => {
     render(
       <ReceiptCanvas
         layout={layout}
@@ -156,16 +156,13 @@ describe('ReceiptCanvas', () => {
     );
 
     expect(screen.getByTestId('receipt-template-shell')).toBeInTheDocument();
-    expect(screen.getByText('DMD MERCERIE')).toBeInTheDocument();
-    expect(screen.getByText('REÇU DE PAIEMENT')).toBeInTheDocument();
-    expect(screen.getByAltText('DMD left logo')).toBeInTheDocument();
-    expect(screen.getByAltText('DMD right logo')).toBeInTheDocument();
-    expect(screen.getByAltText('DMD watermark')).toBeInTheDocument();
+    expect(screen.getByTestId('receipt-preview-canvas')).toBeInTheDocument();
 
-    expect(screen.getByTestId('receipt-number-value')).toHaveStyle({ color: '#e05a00' });
-    expect(screen.getByTestId('receiver-signature-slot')).toHaveStyle({ borderBottom: '1px solid #555' });
-    expect(screen.getByTestId('payer-signature-slot')).toHaveStyle({ borderBottom: '1px solid #555' });
-    expect(screen.getByText('Alpha Trading SARL "Big Alpha"')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fillText).toHaveBeenCalledWith('DMD MERCERIE', expect.any(Number), expect.any(Number));
+      expect(fillText).toHaveBeenCalledWith('REÇU DE PAIEMENT', expect.any(Number), expect.any(Number));
+      expect(fillText).toHaveBeenCalledWith('Alpha Trading SARL "Big Alpha"', expect.any(Number), expect.any(Number));
+    });
   });
 
   it('exports a png with the same receipt number color and signature underline treatment', async () => {
@@ -186,7 +183,7 @@ describe('ReceiptCanvas', () => {
     expect(blob?.type).toBe('image/png');
 
     await waitFor(() => {
-      expect(drawImage).toHaveBeenCalledTimes(5);
+      expect(drawImage.mock.calls.length).toBeGreaterThanOrEqual(5);
     });
 
     const receiptNoDraw = fillTextCalls.find((call) => call.text === layout.receiptNo);
@@ -227,17 +224,13 @@ describe('ReceiptCanvas', () => {
 
     await ref.current?.exportBlob();
 
-    const telLabelCall = fillTextCalls.find((call) => call.text === 'Tél:');
-    expect(telLabelCall).toBeDefined();
-    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
+    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.startsWith('Tél:') || call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
     expect(phoneDrawCalls.length).toBeGreaterThan(1);
-    expect(phoneDrawCalls.every((call) => !call.text.startsWith('Tél:'))).toBe(true);
-    expect(phoneDrawCalls.every((call) => call.text.length <= 14)).toBe(true);
-
-    const hiddenCanvas = container.querySelector('canvas[aria-hidden="true"]') as HTMLCanvasElement | null;
-    expect(hiddenCanvas).not.toBeNull();
+    expect(phoneDrawCalls[0]?.text.startsWith('Tél:')).toBe(true);
+    const previewCanvas = container.querySelector('[data-testid="receipt-preview-canvas"]') as HTMLCanvasElement | null;
+    expect(previewCanvas).not.toBeNull();
     const bottomLine = strokeSegments[strokeSegments.length - 1];
-    expect(bottomLine.to.y).toBeLessThanOrEqual(hiddenCanvas!.height);
+    expect(bottomLine.to.y).toBeLessThanOrEqual(previewCanvas!.height);
   });
 
   it('keeps amount label gaps and body values attached to each row label colon', async () => {

@@ -373,16 +373,22 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
 
-        <div className={`grid items-start gap-4 ${mobileMode ? 'grid-cols-1' : 'grid-cols-[1.15fr_0.85fr]'}`}>
+        <div
+          className={
+            mobileMode
+              ? 'grid grid-cols-1 items-start gap-4'
+              : 'grid items-start justify-center gap-4 xl:grid-cols-[minmax(0,720px)_minmax(380px,430px)]'
+          }
+        >
           <ReceiptCanvas
             ref={canvasRef}
             layout={session.layout}
             receiverSignature={receiverSignature}
             payerSignature={payerSignature}
-            className={mobileMode ? 'order-2' : 'order-1'}
+            className={mobileMode ? 'order-2' : 'order-1 w-full max-w-[720px]'}
           />
 
-          <div className={`space-y-4 self-start ${mobileMode ? 'order-1' : 'order-2'}`}>
+          <div className={`space-y-4 self-start ${mobileMode ? 'order-1' : 'order-2 w-full max-w-[430px]'}`}>
             {mobileMode ? (
               <>
                 <MobileSignatureCard

@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.101  
+> 当前版本：v1.0.102  
 > 最后更新：2026-04-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 签名收据预览与导出彻底统一：`receipt-canvas` 预览层不再维护第二套 DOM 模板，直接显示最终导出 canvas；`Tel` 固定对齐在 `Date` 正下方并按每行最多 `14` 个字符覆盖换行；桌面签字页右侧签字区收成固定宽度与更低的签字高度，避免真实浏览器里继续横向失控 ✅ 2026-04-28
 - [x] 收据管理新增“生成签名收据”流程：在项目内先录入 `ORDER NO + USD Amount`，创建一条 `SIGNING_PENDING` 收据并原子分配真实 `receiptNo`，再进入桌面新窗口/手机全屏签名页完成双签名；最终自动生成 PNG、写入 NAS、下载到本地，并把图片挂回同一条收据记录 ✅ 2026-04-27
 - [x] 新增 `ReceiptGeneratorSession + SystemCounter` 数据模型，并把 `Receipt.receiptNo` 升级为全局唯一、从 `0001000` 递增的后端原子编号 ✅ 2026-04-27
 - [x] `SIGNING_PENDING` 业务隔离落地：未完成签名的收据不能进入正常 receipt/detail/swift/mark-received 链路；新增 `receipt-generator` read/write service、API、签名页与 isolated API 回归 ✅ 2026-04-27

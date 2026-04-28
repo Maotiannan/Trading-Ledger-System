@@ -1,8 +1,8 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.95  
-> 最后更新：2026-04-27
+> 当前版本：v1.0.96  
+> 最后更新：2026-04-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
@@ -12,6 +12,7 @@
 - [x] 新增 `ReceiptGeneratorSession + SystemCounter` 数据模型，并把 `Receipt.receiptNo` 升级为全局唯一、从 `0001000` 递增的后端原子编号 ✅ 2026-04-27
 - [x] `SIGNING_PENDING` 业务隔离落地：未完成签名的收据不能进入正常 receipt/detail/swift/mark-received 链路；新增 `receipt-generator` read/write service、API、签名页与 isolated API 回归 ✅ 2026-04-27
 - [x] 修复隔离测试脚本在 macOS 上的 `mktemp` 模板兼容性问题，恢复 `test:ci` 中 API/E2E 串联执行稳定性 ✅ 2026-04-27
+- [x] 签名收据模板正式对齐 DMD HTML：冻结 logo / watermark / 版式几何参数，替换旧简化 canvas，桌面和导出 PNG 改用正式模板壳；手机端签字切为同页单签字框全屏白底模式，增加浅灰英文方向水印与左上角全屏/横屏辅助入口；Playwright 新增桌面弹窗签字与手机同页签字闭环 ✅ 2026-04-28
 
 - [x] `INV` 页面权限收敛：`SALES` 改为账单页整页只读，前端隐藏新建/导入/rematch/改日期/加单/改单/删单，后端 `POST/PUT/DELETE /api/invoice` 统一改为 `ADMIN` only ✅ 2026-04-27
 - [x] 账单客户解析双阶段兜底：`resolveCustomer(...)` 新增 `customerOrderNo + ownerIds`，账单创建/导入/改单/加单/rematch 在 `MARK` 精确匹配失败后，改为按 `ORDER_NO` 左半部分精确匹配客户 `ORDER_NAME`，并受当前权限树可见范围约束 ✅ 2026-04-27
@@ -219,6 +220,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.96（2026-04-28）：签名收据模板正式切换到 DMD HTML 固定样式，冻结左右 logo、底部水印和版式几何；替换旧简化 `receipt-canvas` 预览/导出壳，补齐收据编号橙色与签字下划线细节；手机端签字改为同页单签字框白底全屏模式，新增浅灰英文方向水印、左上角全屏/横屏辅助入口，并移除过时的旋转按钮提示；Playwright 增加桌面弹窗签字和手机同页签字闭环，`receipt-generator` E2E 扩展到双端真实流程
 - v1.0.95（2026-04-27）：修复隔离测试脚本的跨平台 `mktemp` 用法，将 API/E2E 隔离脚本统一改为同时兼容 macOS 与 Linux 的临时文件模板，恢复 GitHub Actions 中 `test:ci` 的稳定性；同步更新 README / 里程碑 / 工程流水版本号
 - v1.0.94（2026-04-27）：收据管理新增“生成签名收据”完整链路：新增 `SIGNING_PENDING` 收据状态、`ReceiptGeneratorSession` 会话表与 `SystemCounter(RECEIPT_NO)` 原子编号器，`Receipt.receiptNo` 改为真实后端唯一号并从 `0001000` 递增；新增 `/api/receipt-generator` 读写接口与 `/receipt-generator/[sessionId]` 签名页，桌面端用新窗口、手机端用全屏签名页完成双签名；签名前先创建收据记录，签名完成后自动生成 PNG、写入 NAS 的 `receipts/generated/YYYY/MM` 目录、下载到本地，并将最终图片挂回收据记录；同时对 `SIGNING_PENDING` 收据加业务隔离，阻止其提前进入 receipt/detail/swift/mark-received 链路；新增 `receipt-number / receipt-generator-layout / receipt-generator-read-service / receipt-generator-service` 单测和 `receipt-generator-flow` isolated API 闭环
 

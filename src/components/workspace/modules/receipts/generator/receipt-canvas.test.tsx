@@ -113,7 +113,7 @@ describe('ReceiptCanvas', () => {
     pathState.from = null;
     pathState.to = null;
 
-    HTMLCanvasElement.prototype.getContext = jest.fn(() => mockContext);
+    HTMLCanvasElement.prototype.getContext = jest.fn(() => mockContext) as unknown as typeof HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.toBlob = jest.fn((callback: BlobCallback) => {
       callback(new Blob(['png'], { type: 'image/png' }));
     });

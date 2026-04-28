@@ -59,6 +59,9 @@ async function requestMobileSigningFullscreen() {
     webkitRequestFullscreen?: () => Promise<void> | void;
     msRequestFullscreen?: () => Promise<void> | void;
   };
+  const orientation = window.screen.orientation as ScreenOrientation & {
+    lock?: (orientation: 'landscape' | 'portrait') => Promise<void>;
+  };
   const requestFullscreen = root.requestFullscreen
     || root.webkitRequestFullscreen
     || root.msRequestFullscreen;
@@ -72,7 +75,7 @@ async function requestMobileSigningFullscreen() {
   }
 
   try {
-    await window.screen.orientation?.lock?.('landscape');
+    await orientation.lock?.('landscape');
   } catch {
     // Orientation lock is best-effort only.
   }

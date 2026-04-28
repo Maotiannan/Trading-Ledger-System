@@ -37,6 +37,8 @@ jest.mock('./mobile-orientation-hint', () => ({
 }));
 
 describe('SigningView mobile signature flow', () => {
+  const requestFullscreen = jest.fn().mockResolvedValue(undefined);
+  const lockOrientation = jest.fn().mockResolvedValue(undefined);
   const sessionPayload = {
     data: {
       id: 'session-1',
@@ -71,6 +73,16 @@ describe('SigningView mobile signature flow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockApiCall.mockResolvedValue(sessionPayload);
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      configurable: true,
+      writable: true,
+      value: requestFullscreen,
+    });
+    Object.defineProperty(window.screen, 'orientation', {
+      configurable: true,
+      writable: true,
+      value: { lock: lockOrientation },
+    });
     window.matchMedia = jest.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 768px)',
       media: query,
@@ -104,6 +116,14 @@ describe('SigningView mobile signature flow', () => {
     expect(within(mobileMode).getByTestId('mobile-signature-mode-title')).toHaveTextContent('收款方签名|Receiver signature');
     expect(within(mobileMode).queryByText('付款方签名|Payer signature')).not.toBeInTheDocument();
     expect(within(mobileMode).queryByText('ROTATE-CONTROLS')).not.toBeInTheDocument();
+    expect(within(mobileMode).getByTestId('mobile-signature-watermark')).toHaveTextContent('Signature in the highlighted area');
+
+    fireEvent.click(within(mobileMode).getByRole('button', { name: '全屏 / 横屏|Fullscreen / landscape' }));
+
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalled();
+      expect(lockOrientation).toHaveBeenCalledWith('landscape');
+    });
 
     fireEvent.click(within(mobileMode).getByRole('button', { name: 'Draw' }));
     fireEvent.click(within(mobileMode).getByRole('button', { name: '确认|Confirm' }));

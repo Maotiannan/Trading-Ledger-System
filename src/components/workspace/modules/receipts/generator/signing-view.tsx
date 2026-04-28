@@ -54,6 +54,30 @@ function downloadBlob(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+async function requestMobileSigningFullscreen() {
+  const root = document.documentElement as HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    msRequestFullscreen?: () => Promise<void> | void;
+  };
+  const requestFullscreen = root.requestFullscreen
+    || root.webkitRequestFullscreen
+    || root.msRequestFullscreen;
+
+  try {
+    if (requestFullscreen) {
+      await requestFullscreen.call(root);
+    }
+  } catch {
+    // Portrait signing remains valid if fullscreen is unavailable or blocked.
+  }
+
+  try {
+    await window.screen.orientation?.lock?.('landscape');
+  } catch {
+    // Orientation lock is best-effort only.
+  }
+}
+
 function MobileSignatureMode({
   title,
   tx,
@@ -74,12 +98,28 @@ function MobileSignatureMode({
   return (
     <div className="fixed inset-0 z-50 bg-white" data-testid="mobile-signature-mode">
       <div className="flex min-h-screen flex-col bg-white">
-        <div className="border-b px-4 py-4">
+        <div className="relative border-b px-4 py-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="absolute left-4 top-4"
+            onClick={() => {
+              void requestMobileSigningFullscreen();
+            }}
+          >
+            {tx('全屏 / 横屏', 'Fullscreen / landscape')}
+          </Button>
           <div className="text-lg font-semibold" data-testid="mobile-signature-mode-title">{title}</div>
-          <div className="text-sm text-muted-foreground">{tx('请在下方完成当前签名', 'Complete the current signature below.')}</div>
+          <div className="pl-36 text-sm text-muted-foreground">{tx('请在下方完成当前签名', 'Complete the current signature below.')}</div>
         </div>
 
-        <div className="flex-1 px-4 py-4">
+        <div className="relative flex-1 px-4 py-4">
+          <div
+            data-testid="mobile-signature-watermark"
+            className="pointer-events-none absolute inset-0 flex items-center justify-center px-8 text-center text-3xl font-semibold uppercase tracking-[0.35em] text-slate-200"
+          >
+            Signature in the highlighted area
+          </div>
           <SignaturePad
             label={title}
             tx={tx}

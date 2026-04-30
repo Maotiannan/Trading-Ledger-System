@@ -13,6 +13,11 @@ import {
   lookupReceiptGeneratorOrderContext,
 } from '@/lib/receipt-generator-read-service';
 
+function isUploadAbortError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error
+    && (error.message === 'aborted' || ('code' in error && (error as NodeJS.ErrnoException).code === 'ECONNRESET'));
+}
+
 export const GET = withAuth(async (request, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
@@ -44,16 +49,6 @@ export const GET = withAuth(async (request, currentUser) => {
       detail: { action },
     });
   } catch (error) {
-    if (error instanceof Error && (error.message === 'aborted' || ('code' in error && (error as NodeJS.ErrnoException).code === 'ECONNRESET'))) {
-      console.error('Receipt generator finalize aborted:', {
-        code: ('code' in error ? (error as NodeJS.ErrnoException).code : 'ABORTED') || 'ABORTED',
-      });
-      return toApiErrorResponse(error, {
-        code: apiErrorCodes.UPLOAD_ABORTED,
-        status: 499,
-        message: '上传中断，请在更稳定的网络下重试',
-      }, request);
-    }
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -137,6 +132,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       message: '请求体格式错误',
     });
   } catch (error) {
+    if (isUploadAbortError(error)) {
+      console.error('Receipt generator finalize aborted:', {
+        code: error.code || 'ABORTED',
+      });
+      return toApiErrorResponse(error, {
+        code: apiErrorCodes.UPLOAD_ABORTED,
+        status: 499,
+        message: '上传中断，请在更稳定的网络下重试',
+      }, request);
+    }
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

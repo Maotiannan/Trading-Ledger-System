@@ -283,6 +283,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
       receiptStatus: session.receipt.status,
     });
   }
+  const receipt = session.receipt;
 
   const [receiptBuffer, receiverSignatureBuffer, payerSignatureBuffer] = await Promise.all([
     fileToBuffer(input.receiptImage),
@@ -331,7 +332,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
       };
 
       await tx.receipt.update({
-        where: { id: session.receipt.id },
+        where: { id: receipt.id },
         data: {
           status: ReceiptStatus.SR_Received,
           imageUrl: receiptImage.path,
@@ -373,7 +374,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
             createdBy: session.createdBy,
             status: UploadedAssetStatus.ATTACHED,
             attachedType: UploadedAssetAttachmentType.RECEIPT,
-            attachedId: session.receipt.id,
+            attachedId: receipt.id,
           },
         ],
       });
@@ -407,7 +408,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
     action: auditActions.RECEIPT_UPDATE,
     actorId: currentUser.id,
     targetType: auditTargetTypes.RECEIPT,
-    targetId: session.receipt.id,
+    targetId: receipt.id,
     metadata: {
       mode: 'generator-finalize',
       sessionId,

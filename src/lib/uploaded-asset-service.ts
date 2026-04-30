@@ -13,7 +13,9 @@ import { saveUploadedImage } from '@/lib/upload';
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const DEFAULT_UPLOAD_PUBLIC_PATH = '/upload/images';
 
-type UploadedAssetClient = Pick<typeof db, 'uploadedAsset'>;
+type UploadedAssetClient = {
+  uploadedAsset: Pick<typeof db.uploadedAsset, 'updateMany'>;
+};
 
 export async function registerUploadedAsset(input: {
   path: string;

@@ -66,13 +66,18 @@ export async function cleanupStaleSigningPendingReceipts(input: { now?: Date } =
   let deletedReceipts = 0;
 
   for (const session of staleSessions) {
+    const receipt = session.receipt;
+    if (!receipt) {
+      continue;
+    }
+
     await db.$transaction(async (tx) => {
       await tx.receiptGeneratorSession.update({
         where: { id: session.id },
         data: { status: ReceiptGeneratorSessionStatus.CANCELLED },
       });
       await tx.receipt.delete({
-        where: { id: session.receipt.id },
+        where: { id: receipt.id },
       });
     });
 
@@ -83,7 +88,7 @@ export async function cleanupStaleSigningPendingReceipts(input: { now?: Date } =
       action: auditActions.RECEIPT_UPDATE,
       actorId: session.createdBy,
       targetType: auditTargetTypes.RECEIPT,
-      targetId: session.receipt.id,
+      targetId: receipt.id,
       metadata: {
         mode: 'generator-stale-signing-cleanup',
         sessionId: session.id,

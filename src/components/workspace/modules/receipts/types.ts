@@ -14,6 +14,12 @@ export type ReceiptDirectForm = {
 
 export type DirectImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
 
+export type PendingDirectImageSelection = {
+  file: File;
+  previewUrl: string;
+  name: string;
+};
+
 export const EMPTY_RECEIPT_DIRECT_FORM: ReceiptDirectForm = {
   receiptNo: '',
   date: '',

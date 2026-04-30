@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchServerDate, lookupOrderContextByOrderNo, type CustomerCandidate } from '@/components/workspace/shared';
-import { EMPTY_RECEIPT_DIRECT_FORM, type DirectImageUploadStatus, type ReceiptDirectForm } from '../types';
+import { EMPTY_RECEIPT_DIRECT_FORM, type DirectImageUploadStatus, type PendingDirectImageSelection, type ReceiptDirectForm } from '../types';
 
 export type LoadReceiptCustomerCandidates = (
   mark: string,
@@ -27,6 +27,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
   const [directSavedImagePath, setDirectSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [directUploadedImageName, setDirectUploadedImageName] = useState('');
+  const [pendingDirectImageSelection, setPendingDirectImageSelection] = useState<PendingDirectImageSelection | null>(null);
   const [directUploadStatus, setDirectUploadStatus] = useState<DirectImageUploadStatus>('idle');
   const [directUploadMessage, setDirectUploadMessage] = useState<string | null>(null);
   const [directUploadProgress, setDirectUploadProgress] = useState<number | null>(null);
@@ -144,6 +145,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setDirectCustomerCandidates([]);
       setDirectSavedImagePath(null);
       setDirectUploadedImageName('');
+      setPendingDirectImageSelection(null);
       setDirectUploadStatus('idle');
       setDirectUploadMessage(null);
       setDirectUploadProgress(null);
@@ -185,6 +187,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectCustomerCandidates([]);
     setDirectSavedImagePath(null);
     setDirectUploadedImageName('');
+    setPendingDirectImageSelection(null);
     setDirectUploadStatus('idle');
     setDirectUploadMessage(null);
     setDirectUploadProgress(null);
@@ -220,6 +223,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectSavedImagePath,
     directUploadedImageName,
     setDirectUploadedImageName,
+    pendingDirectImageSelection,
+    setPendingDirectImageSelection,
     directUploadStatus,
     setDirectUploadStatus,
     directUploadMessage,

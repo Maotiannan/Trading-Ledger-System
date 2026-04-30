@@ -45,6 +45,7 @@ describe('useReceiptActions', () => {
   const setSelectedFile = jest.fn();
   const setSavedImagePath = jest.fn();
   const setError = jest.fn();
+  const setPendingDirectImageSelection = jest.fn();
   const handleShowUploadChange = jest.fn();
   const handleShowDirectCreateChange = jest.fn();
   const resetDirectForm = jest.fn();
@@ -81,6 +82,7 @@ describe('useReceiptActions', () => {
     setSelectedFile.mockClear();
     setSavedImagePath.mockClear();
     setError.mockClear();
+    setPendingDirectImageSelection.mockClear();
     handleShowUploadChange.mockClear();
     handleShowDirectCreateChange.mockClear();
     resetDirectForm.mockClear();
@@ -107,8 +109,10 @@ describe('useReceiptActions', () => {
       ocrCustomerId: '',
       savedImagePath: null,
       directSavedImagePath: null,
+      pendingDirectImageSelection: null,
       setDirectSavedImagePath: jest.fn(),
       setDirectUploadedImageName: jest.fn(),
+      setPendingDirectImageSelection,
       setDirectUploadStatus: jest.fn(),
       setDirectUploadMessage: jest.fn(),
       setDirectUploadProgress: jest.fn(),
@@ -193,6 +197,38 @@ describe('useReceiptActions', () => {
     expect(setOcrCustomerCandidates).toHaveBeenCalledWith([]);
   });
 
+  it('surfaces OCR business failure when upload recognition returns success=false', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: false, error: 'AI识别失败，请重试' }),
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setSavedImagePath).toHaveBeenCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('AI识别失败，请重试');
+  });
+
+  it('surfaces OCR network failure when upload recognition request throws', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockFetch.mockRejectedValue(new Error('network down'));
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setSavedImagePath).toHaveBeenCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('network down');
+  });
+
   it('confirms OCR receipt creation and reloads receipts', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
     mockFetch.mockResolvedValue({
@@ -217,6 +253,58 @@ describe('useReceiptActions', () => {
     expect(handleShowUploadChange).toHaveBeenCalledWith(false);
     expect(setSelectedFile).toHaveBeenCalledWith(null);
     expect(loadReceipts).toHaveBeenCalled();
+  });
+
+  it('blocks OCR confirmation when customer mark is empty', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: 120 },
+      ocrCustomerMark: '   ',
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    expect(setError).toHaveBeenCalledWith('客户MARK不能为空');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('surfaces OCR confirmation failure when confirm API returns success=false', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: false, error: '创建失败，请重试' }),
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: 120 },
+      ocrCustomerMark: 'MAB-1',
+      savedImagePath: { path: '/uploads/receipt.png', name: 'receipt.png' },
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    expect(setError).toHaveBeenCalledWith('创建失败，请重试');
+  });
+
+  it('surfaces OCR confirmation network failure when confirm request throws', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockFetch.mockRejectedValue(new Error('confirm failed'));
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: 120 },
+      ocrCustomerMark: 'MAB-1',
+      savedImagePath: { path: '/uploads/receipt.png', name: 'receipt.png' },
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    expect(setError).toHaveBeenCalledWith('confirm failed');
   });
 
   it('creates receipt directly and refreshes list on success', async () => {
@@ -251,7 +339,52 @@ describe('useReceiptActions', () => {
     expect(loadReceipts).toHaveBeenCalled();
   });
 
-  it('uploads direct-create receipt image and stores returned path', async () => {
+  it('prepares direct-create receipt image for local confirmation before uploading', async () => {
+    const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDirectImageSelect({
+        target: { files: [file], value: 'fake' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setPendingDirectImageSelection).toHaveBeenCalledWith({
+      file,
+      previewUrl: 'data:image/png;base64,mock',
+      name: 'direct-receipt.png',
+    });
+    expect(mockApiUploadCall).not.toHaveBeenCalled();
+  });
+
+  it('surfaces preview-read failure before direct-create image upload confirmation', async () => {
+    class FailingFileReader {
+      result: string | ArrayBuffer | null = null;
+      onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+      onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+
+      readAsDataURL(_file: Blob) {
+        if (this.onerror) {
+          this.onerror.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
+        }
+      }
+    }
+
+    global.FileReader = FailingFileReader as unknown as typeof FileReader;
+    const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDirectImageSelect({
+        target: { files: [file], value: 'fake' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setPendingDirectImageSelection).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenCalledWith('图片预览读取失败，请重试');
+  });
+
+  it('uploads confirmed direct-create receipt image and stores returned path', async () => {
     const setDirectSavedImagePath = jest.fn();
     const setDirectUploadedImageName = jest.fn();
     const setDirectUploadStatus = jest.fn();
@@ -278,15 +411,19 @@ describe('useReceiptActions', () => {
     const { result } = renderHook(() => useReceiptActions(createDeps({
       setDirectSavedImagePath,
       setDirectUploadedImageName,
+      pendingDirectImageSelection: {
+        file,
+        previewUrl: 'data:image/png;base64,mock',
+        name: 'direct-receipt.png',
+      },
+      setPendingDirectImageSelection,
       setDirectUploadStatus,
       setDirectUploadMessage,
       setDirectUploadProgress,
     })));
 
     await act(async () => {
-      await result.current.handleDirectImageSelect({
-        target: { files: [file] },
-      } as unknown as React.ChangeEvent<HTMLInputElement>);
+      await result.current.handleConfirmDirectImageUpload();
     });
 
     expect(mockApiUploadCall).toHaveBeenCalledWith('upload-image', expect.any(FormData), expect.objectContaining({
@@ -300,6 +437,7 @@ describe('useReceiptActions', () => {
       name: 'direct-receipt.png',
     });
     expect(setDirectUploadedImageName).toHaveBeenCalledWith('direct-receipt.png');
+    expect(setPendingDirectImageSelection).toHaveBeenCalledWith(null);
     expect(setDirectUploadProgress).toHaveBeenCalledWith(50);
     expect(setDirectUploadProgress).toHaveBeenCalledWith(100);
     expect(setDirectUploadStatus).toHaveBeenCalledWith('saving');
@@ -357,15 +495,18 @@ describe('useReceiptActions', () => {
     const { result } = renderHook(() => useReceiptActions(createDeps({
       setDirectSavedImagePath,
       setDirectUploadedImageName,
+      pendingDirectImageSelection: {
+        file,
+        previewUrl: 'data:image/png;base64,mock',
+        name: 'direct-receipt.png',
+      },
       setDirectUploadStatus,
       setDirectUploadMessage,
       setDirectUploadProgress,
     })));
 
     await act(async () => {
-      await result.current.handleDirectImageSelect({
-        target: { files: [file], value: 'fake' },
-      } as unknown as React.ChangeEvent<HTMLInputElement>);
+      await result.current.handleConfirmDirectImageUpload();
     });
 
     expect(setDirectSavedImagePath).toHaveBeenCalledWith(null);
@@ -391,15 +532,18 @@ describe('useReceiptActions', () => {
     });
 
     const { result } = renderHook(() => useReceiptActions(createDeps({
+      pendingDirectImageSelection: {
+        file,
+        previewUrl: 'data:image/png;base64,mock',
+        name: 'direct-receipt.png',
+      },
       setDirectUploadStatus,
       setDirectUploadMessage,
       setDirectUploadProgress,
     })));
 
     await act(async () => {
-      await result.current.handleDirectImageSelect({
-        target: { files: [file], value: 'fake' },
-      } as unknown as React.ChangeEvent<HTMLInputElement>);
+      await result.current.handleConfirmDirectImageUpload();
     });
 
     expect(setDirectUploadStatus).toHaveBeenCalledWith('compressing');
@@ -408,6 +552,40 @@ describe('useReceiptActions', () => {
     expect(setDirectUploadMessage).toHaveBeenLastCalledWith('上传中断，请在更稳定的网络下重试');
     expect(setDirectUploadProgress).toHaveBeenLastCalledWith(null);
     expect(setError).toHaveBeenCalledWith('上传中断，请在更稳定的网络下重试');
+  });
+
+  it('surfaces direct-create image compression failure before upload', async () => {
+    const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    const setDirectSavedImagePath = jest.fn();
+    const setDirectUploadedImageName = jest.fn();
+    const setDirectUploadStatus = jest.fn();
+    const setDirectUploadMessage = jest.fn();
+    const setDirectUploadProgress = jest.fn();
+    mockCompressReceiptDirectImage.mockRejectedValue(new Error('图片压缩失败，请重试'));
+
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      pendingDirectImageSelection: {
+        file,
+        previewUrl: 'data:image/png;base64,mock',
+        name: 'direct-receipt.png',
+      },
+      setDirectSavedImagePath,
+      setDirectUploadedImageName,
+      setDirectUploadStatus,
+      setDirectUploadMessage,
+      setDirectUploadProgress,
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirmDirectImageUpload();
+    });
+
+    expect(setDirectSavedImagePath).toHaveBeenCalledWith(null);
+    expect(setDirectUploadedImageName).toHaveBeenCalledWith('');
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('failed');
+    expect(setDirectUploadMessage).toHaveBeenLastCalledWith('图片压缩失败，请重试');
+    expect(setDirectUploadProgress).toHaveBeenLastCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('图片压缩失败，请重试');
   });
 
   it('reports direct-create failure returned by API', async () => {
@@ -419,6 +597,18 @@ describe('useReceiptActions', () => {
     });
 
     expect(setError).toHaveBeenCalledWith('创建失败');
+  });
+
+  it('surfaces mark-received network failure', async () => {
+    mockFetch.mockRejectedValue(new Error('mark received failed'));
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleMarkReceived('receipt-1');
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith('mark received failed');
   });
 
   it('reports direct-create failure when request throws', async () => {

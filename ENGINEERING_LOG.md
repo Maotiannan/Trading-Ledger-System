@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.106
+> 当前版本：v1.0.107
 > 最后更新：2026-04-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] `Create Receipt Directly` 选图确认页落地：新增前端待确认图片状态与 `receipt-direct-image-confirm-dialog`，移动端 `拍照 / 从相册选择` 返回后先进入项目内大图确认页，用户点击“确认上传”才触发既有压缩 + `apiUploadCall` 进度/超时链路；补齐 `use-receipt-actions / receipt-direct-image-confirm-dialog` 自动化并重新跑通 `build + test:ci` ✅ 2026-04-30
 - [x] 收据管理弱网上传二次增强：`apiUploadCall` 升级为基于 `XMLHttpRequest` 的 multipart 上传器，支持真实百分比进度、`15s` 空闲超时、`120s` 总时长兜底与 `uploading -> saving` 分段回调；`Create Receipt Directly` 弹窗新增进度条、`saving` 阶段与更细的错误映射，签名收据 `finalize` 也切到同一套上传器；补齐 `client / use-receipt-actions / receipt-direct-create-dialog / signing-view` 回归并重新跑通整套 `test:ci` ✅ 2026-04-30
 - [x] 收据管理 `Create Receipt Directly` 上传链路弱网增强：新增前端保守压缩（质量下限 `0.30`、文字可读优先）、移动端 `拍照 / 从相册选择` 双入口、弹窗内明确的压缩/上传/成功/失败状态；`ORDER NO` 上下文扩展自动建议回填 `INV NO / MARK / PHONE / PAYER`（`payer = companyName || name`）；`/api/upload-image` 细化 `UPLOAD_ABORTED` 分类，前端映射“上传中断，请在更稳定的网络下重试”，并补齐 image-compression / use-receipt-actions / client / invoice-read-service 回归与全量 `test:ci` ✅ 2026-04-30
 - [x] Excel ML token API 落地：新增 `ExcelApiToken` 持久化表（hash-only）、`/api/excel/token` 设置页管理、`/api/excel/ml` 单值纯文本/JSON 查询、`/api/excel/ml/batch` 批量查询；ORDER NO 先按现有订单/alias 匹配，失败后按最右 `-` 左半部分匹配客户 `ORDER_NAME`，字段 2 按 `companyName || Customer.name` 回退；新增服务单测、设置页 hook/card 测试和 `90-excel-ml-token` isolated API 回归 ✅ 2026-04-28
@@ -226,6 +227,7 @@
 
 ## 已完成里程碑摘要
 
+- v1.0.107（2026-04-30）：`Create Receipt Directly` 图片上传入口从“选图即上传”调整为“两步确认”。新增 `PendingDirectImageSelection` 前端状态与 `receipt-direct-image-confirm-dialog`，用户在拍照/相册返回后先进入项目内大图确认页，点击“确认上传”才触发原有压缩、`XMLHttpRequest` 进度条、`15s` 空闲超时和 `120s` 总时长兜底链路；为此重构 `use-receipt-actions` 中 direct-image 流程，新增待确认图预览、确认上传和失败重试路径的自动化测试，并重新跑通 `build` 与 `test:ci`
 - v1.0.101（2026-04-28）：继续修正签名收据模板中段和签字页的约束问题；`receipt-canvas` 预览层中部正文盒移除错误的 `flex: 1`，防止收据预览在弹窗/窄布局下把中段和签名区异常拉高；`signing-view` 的桌面两列改为 `items-start` + 右侧签字列 `self-start`，避免签字列跟随左侧预览列被拉伸；手机签字模式继续压缩为固定矮白色签字带，黑色非签字区域与固定顶部/底部操作栏保持不滚动；同时新增回归测试校验金额标签间距、正文值起始位置和桌面签字列不被拉伸，整套 `build`、`test:ci`、isolated API 与 isolated Playwright 再次跑通
 - v1.0.100（2026-04-28）：继续对齐签名收据模板的中段与移动签字页体验；`receipt-canvas` 头部电话区改为固定 `Tel:` 标签 + 固定高度内容盒，内容按每行 14 字符硬切分且只向下覆盖，不再影响标题、金额区和正文；导出层正文不再按全局最大标签列对齐，改成每一行的值都从自身标头的 `: ` 后开始，`Motif` 靠左、`Frais : Paid` 继续固定到右侧；手机签字页改成黑底 + 居中窄白签字带布局，非签字区域全部黑底，顶部控制与底部 `Complete` 全程固定可见；同时调高签字线宽并保留 alpha 裁切，改善最终收据中笔迹发虚/虚线感；整套 `test:ci`、isolated API 与 isolated Playwright 重新跑通
 - v1.0.99（2026-04-28）：继续收口签名收据模板与手机签字体验；`receipt-canvas` 的 `Tel:` 头部改为固定 `Tel:` 标签 + 每行最多 14 字符的固定高度内容区，长号码只向下覆盖、不再推动标题、金额框和正文表格；正文 `Motif` 行改为值紧跟 `: ` 开始，`Frais : Paid` 始终吸附在行最右端；签名导出前增加按 alpha 边界裁切，消除最终 PNG 里笔迹因整张透明画布缩放而出现的虚线/发虚问题；手机签字页改为真正无滚动的全屏白底专用布局，提示水印直接作为签字背景层，底部 `Complete` 固定可见；同时修正桌面签字弹窗 Playwright 的稳定点击方式，重新跑通 `test:e2e:isolated` 与 `test:ci`

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
 import { compressReceiptDirectImage } from '../utils/image-compression';
-import type { ReceiptDirectForm } from '../types';
+import type { PendingDirectImageSelection, ReceiptDirectForm } from '../types';
 
 export type ReceiptActionText = (zh: string, en: string) => string;
 
@@ -18,6 +18,7 @@ export type ReceiptActionDeps = {
   savedImagePath: { path: string; name: string } | null;
   directSavedImagePath: { path: string; name: string } | null;
   directForm: ReceiptDirectForm;
+  pendingDirectImageSelection: PendingDirectImageSelection | null;
   setOcrResult: (value: Record<string, unknown> | null) => void;
   setOcrCustomerMark: (value: string) => void;
   setOcrCustomerName: (value: string) => void;
@@ -28,6 +29,7 @@ export type ReceiptActionDeps = {
   setSavedImagePath: (value: { path: string; name: string } | null) => void;
   setDirectSavedImagePath: (value: { path: string; name: string } | null) => void;
   setDirectUploadedImageName: (value: string) => void;
+  setPendingDirectImageSelection: (value: PendingDirectImageSelection | null) => void;
   setDirectUploadStatus: (value: 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed') => void;
   setDirectUploadMessage: (value: string | null) => void;
   setDirectUploadProgress: (value: number | null) => void;
@@ -48,6 +50,7 @@ export function useReceiptActions({
   savedImagePath,
   directSavedImagePath,
   directForm,
+  pendingDirectImageSelection,
   setOcrResult,
   setOcrCustomerMark,
   setOcrCustomerName,
@@ -58,6 +61,7 @@ export function useReceiptActions({
   setSavedImagePath,
   setDirectSavedImagePath,
   setDirectUploadedImageName,
+  setPendingDirectImageSelection,
   setDirectUploadStatus,
   setDirectUploadMessage,
   setDirectUploadProgress,
@@ -71,6 +75,13 @@ export function useReceiptActions({
   const [uploading, setUploading] = useState(false);
   const [directUploading, setDirectUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const readFileAsDataUrl = (file: File) => new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error(tx('图片预览读取失败，请重试', 'Failed to read image preview. Please retry.')));
+    reader.readAsDataURL(file);
+  });
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -161,15 +172,36 @@ export function useReceiptActions({
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setError(null);
+    try {
+      const previewUrl = await readFileAsDataUrl(file);
+      setPendingDirectImageSelection({
+        file,
+        previewUrl,
+        name: file.name,
+      });
+      setDirectUploadStatus('idle');
+      setDirectUploadMessage(null);
+      setDirectUploadProgress(null);
+    } catch (err) {
+      const message = getErrorMessage(err, tx('图片压缩失败，请重试', 'Image compression failed, please retry.'));
+      setError(message);
+    }
+    event.target.value = '';
+  };
+
+  const handleConfirmDirectImageUpload = async () => {
+    if (!pendingDirectImageSelection) return;
+
     setDirectUploading(true);
     setError(null);
     setDirectUploadStatus('compressing');
     setDirectUploadMessage(tx('正在压缩图片...', 'Compressing image...'));
     setDirectUploadProgress(null);
 
-    let uploadFile = file;
+    let uploadFile = pendingDirectImageSelection.file;
     try {
-      const prepared = await compressReceiptDirectImage(file);
+      const prepared = await compressReceiptDirectImage(pendingDirectImageSelection.file);
       uploadFile = prepared.file;
       setDirectUploadStatus('uploading');
       setDirectUploadMessage(prepared.compressed
@@ -185,7 +217,6 @@ export function useReceiptActions({
       setDirectUploadProgress(null);
       setError(message);
       setDirectUploading(false);
-      event.target.value = '';
       return;
     }
 
@@ -219,6 +250,7 @@ export function useReceiptActions({
           name: String(result.data.name),
         });
         setDirectUploadedImageName(String(result.data.name));
+        setPendingDirectImageSelection(null);
         setDirectUploadStatus('success');
         setDirectUploadProgress(100);
         setDirectUploadMessage(tx('图片上传成功', 'Image uploaded successfully.'));
@@ -241,7 +273,6 @@ export function useReceiptActions({
       setError(message);
     } finally {
       setDirectUploading(false);
-      event.target.value = '';
     }
   };
 
@@ -332,6 +363,7 @@ export function useReceiptActions({
     handleFileSelect,
     handleConfirm,
     handleDirectImageSelect,
+    handleConfirmDirectImageUpload,
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,

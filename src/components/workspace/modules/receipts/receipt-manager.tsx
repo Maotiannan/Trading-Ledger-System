@@ -18,6 +18,7 @@ import {
 } from '@/components/workspace/shared';
 import {
   ReceiptDirectCreateDialog,
+  ReceiptDirectImageConfirmDialog,
   ReceiptGeneratorLaunchDialog,
   ReceiptImagePreviewDialog,
   ReceiptList,
@@ -74,6 +75,8 @@ export function ReceiptManager() {
     setDirectSavedImagePath,
     directUploadedImageName,
     setDirectUploadedImageName,
+    pendingDirectImageSelection,
+    setPendingDirectImageSelection,
     directUploadStatus,
     setDirectUploadStatus,
     directUploadMessage,
@@ -129,6 +132,7 @@ export function ReceiptManager() {
     handleFileSelect,
     handleConfirm,
     handleDirectImageSelect,
+    handleConfirmDirectImageUpload,
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,
@@ -143,6 +147,7 @@ export function ReceiptManager() {
     savedImagePath,
     directSavedImagePath,
     directForm,
+    pendingDirectImageSelection,
     setOcrResult,
     setOcrCustomerMark,
     setOcrCustomerName,
@@ -153,6 +158,7 @@ export function ReceiptManager() {
     setSavedImagePath,
     setDirectSavedImagePath,
     setDirectUploadedImageName,
+    setPendingDirectImageSelection,
     setDirectUploadStatus,
     setDirectUploadMessage,
     setDirectUploadProgress,
@@ -339,6 +345,20 @@ export function ReceiptManager() {
         onCustomerSelect={handleDirectCustomerSelect}
         onImageSelect={handleDirectImageSelect}
         onSubmit={handleDirectCreate}
+      />
+
+      <ReceiptDirectImageConfirmDialog
+        selection={pendingDirectImageSelection}
+        tx={tx}
+        uploading={directUploading}
+        uploadMessage={directUploadMessage}
+        uploadProgress={directUploadProgress}
+        onOpenChange={(open) => {
+          if (!open && !directUploading) {
+            setPendingDirectImageSelection(null);
+          }
+        }}
+        onConfirm={handleConfirmDirectImageUpload}
       />
 
       <ReceiptImagePreviewDialog

@@ -1,4 +1,11 @@
-import { ReceiptGeneratorSessionStatus, ReceiptStatus, UserRole } from '@prisma/client';
+import {
+  ReceiptGeneratorSessionStatus,
+  ReceiptStatus,
+  UploadedAssetAttachmentType,
+  UploadedAssetCategory,
+  UploadedAssetStatus,
+  UserRole,
+} from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
@@ -20,6 +27,9 @@ jest.mock('@/lib/db', () => ({
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+    },
+    uploadedAsset: {
+      createMany: jest.fn(),
     },
     $transaction: jest.fn(),
   },
@@ -60,6 +70,7 @@ function makeUser(role: UserRole = UserRole.ADMIN) {
 const mockDb = db as unknown as {
   receipt: { create: jest.Mock; update: jest.Mock };
   receiptGeneratorSession: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+  uploadedAsset: { createMany: jest.Mock };
   $transaction: jest.Mock;
 };
 const mockLookupInvoiceOrderContext = lookupInvoiceOrderContext as jest.Mock;
@@ -142,6 +153,7 @@ describe('receipt-generator-service', () => {
   it('finalizes a signing session into a normal receipt with generated image', async () => {
     mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
       id: 'session-1',
+      createdBy: 'admin-1',
       receiptId: 'receipt-1',
       receiptNo: '0001000',
       layoutSnapshot: { receiptNo: '0001000' },
@@ -154,9 +166,18 @@ describe('receipt-generator-service', () => {
       },
     });
     mockSaveReceiptGeneratorArtifact
-      .mockResolvedValueOnce({ path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png', name: '0001000-receipt.png' })
-      .mockResolvedValueOnce({ path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png', name: '0001000-receiver-signature.png' })
-      .mockResolvedValueOnce({ path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png', name: '0001000-payer-signature.png' });
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
+        name: '0001000-receipt.png',
+      })
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
+        name: '0001000-receiver-signature.png',
+      })
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
+        name: '0001000-payer-signature.png',
+      });
     mockDb.receiptGeneratorSession.update.mockResolvedValueOnce({
       id: 'session-1',
       finalImageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
@@ -196,5 +217,101 @@ describe('receipt-generator-service', () => {
     }));
     expect(mockDb.receiptGeneratorSession.update).toHaveBeenCalled();
     expect(result.data.receiptStatus).toBe('SR_Received');
+  });
+
+  it('registers generator signatures and final image as attached assets on finalize', async () => {
+    mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
+      id: 'session-1',
+      createdBy: 'admin-1',
+      receiptId: 'receipt-1',
+      receiptNo: '0001000',
+      layoutSnapshot: { receiptNo: '0001000' },
+      status: ReceiptGeneratorSessionStatus.PENDING,
+      receipt: {
+        id: 'receipt-1',
+        createdBy: 'admin-1',
+        status: ReceiptStatus.SIGNING_PENDING,
+        receiptNo: '0001000',
+      },
+    });
+    mockSaveReceiptGeneratorArtifact
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
+        name: '0001000-receipt.png',
+      })
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
+        name: '0001000-receiver-signature.png',
+      })
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
+        name: '0001000-payer-signature.png',
+      });
+    mockDb.uploadedAsset.createMany.mockResolvedValueOnce({ count: 3 });
+    mockDb.receiptGeneratorSession.update.mockResolvedValueOnce({
+      id: 'session-1',
+      finalImageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
+      finalImageName: '0001000-receipt.png',
+      receipt: {
+        id: 'receipt-1',
+        receiptNo: '0001000',
+        status: ReceiptStatus.SR_Received,
+        imageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
+        imageName: '0001000-receipt.png',
+      },
+    });
+
+    const pngBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const makeMockFile = (name: string) => ({
+      name,
+      type: 'image/png',
+      arrayBuffer: async () => pngBytes.buffer,
+    }) as unknown as File;
+
+    await finalizeReceiptGeneratorSession(makeUser(), {
+      sessionId: 'session-1',
+      receiptImage: makeMockFile('receipt.png'),
+      receiverSignature: makeMockFile('receiver.png'),
+      payerSignature: makeMockFile('payer.png'),
+      layoutSnapshot: { receiptNo: '0001000', orderNo: 'Big Alpha-07' },
+    });
+
+    expect(mockDb.uploadedAsset.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.arrayContaining([
+        expect.objectContaining({
+          path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
+          name: '0001000-receiver-signature.png',
+          category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
+          mimeType: 'image/png',
+          sizeBytes: pngBytes.byteLength,
+          createdBy: 'admin-1',
+          status: UploadedAssetStatus.ATTACHED,
+          attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
+          attachedId: 'session-1',
+        }),
+        expect.objectContaining({
+          path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
+          name: '0001000-payer-signature.png',
+          category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
+          mimeType: 'image/png',
+          sizeBytes: pngBytes.byteLength,
+          createdBy: 'admin-1',
+          status: UploadedAssetStatus.ATTACHED,
+          attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
+          attachedId: 'session-1',
+        }),
+        expect.objectContaining({
+          path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
+          name: '0001000-receipt.png',
+          category: UploadedAssetCategory.RECEIPT_GENERATOR_FINAL,
+          mimeType: 'image/png',
+          sizeBytes: pngBytes.byteLength,
+          createdBy: 'admin-1',
+          status: UploadedAssetStatus.ATTACHED,
+          attachedType: UploadedAssetAttachmentType.RECEIPT,
+          attachedId: 'receipt-1',
+        }),
+      ]),
+    }));
   });
 });

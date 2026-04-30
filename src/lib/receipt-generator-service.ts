@@ -1,4 +1,12 @@
-import { Prisma, ReceiptGeneratorSessionStatus, ReceiptStatus, UserRole } from '@prisma/client';
+import {
+  Prisma,
+  ReceiptGeneratorSessionStatus,
+  ReceiptStatus,
+  UploadedAssetAttachmentType,
+  UploadedAssetCategory,
+  UploadedAssetStatus,
+  UserRole,
+} from '@prisma/client';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import { recordAuditEvent } from '@/lib/audit';
@@ -321,6 +329,44 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
         imageName: receiptImage.name,
         note: '签名收据已生成',
       },
+    });
+
+    await tx.uploadedAsset.createMany({
+      data: [
+        {
+          path: receiverSignature.path,
+          name: receiverSignature.name,
+          category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
+          mimeType: input.receiverSignature.type || 'image/png',
+          sizeBytes: receiverSignatureBuffer.byteLength,
+          createdBy: session.createdBy,
+          status: UploadedAssetStatus.ATTACHED,
+          attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
+          attachedId: session.id,
+        },
+        {
+          path: payerSignature.path,
+          name: payerSignature.name,
+          category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
+          mimeType: input.payerSignature.type || 'image/png',
+          sizeBytes: payerSignatureBuffer.byteLength,
+          createdBy: session.createdBy,
+          status: UploadedAssetStatus.ATTACHED,
+          attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
+          attachedId: session.id,
+        },
+        {
+          path: receiptImage.path,
+          name: receiptImage.name,
+          category: UploadedAssetCategory.RECEIPT_GENERATOR_FINAL,
+          mimeType: input.receiptImage.type || 'image/png',
+          sizeBytes: receiptBuffer.byteLength,
+          createdBy: session.createdBy,
+          status: UploadedAssetStatus.ATTACHED,
+          attachedType: UploadedAssetAttachmentType.RECEIPT,
+          attachedId: session.receiptId,
+        },
+      ],
     });
 
     const updatedSession = await tx.receiptGeneratorSession.update({

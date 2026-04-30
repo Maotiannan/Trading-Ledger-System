@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { addHours } from 'date-fns';
 import { DetailStatus } from '@prisma/client';
+import { UploadedAssetCategory } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recognizeDetail } from '@/lib/ocr';
 import { findMatchingReceipt } from '@/lib/matching';
@@ -15,6 +17,8 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
+import { getUploadedAssetCleanupSettings } from '@/lib/system-settings';
+import { registerUploadedAsset, uploadedAssetSubDirForCategory } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 
 function parseDetailPayload(data: Record<string, unknown>) {
@@ -119,7 +123,19 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           matchedItems.push({ ...item, matchedReceiptId });
         }
 
-        const imagePath = await saveUploadedImage(file);
+        const { stagedTtlHours } = await getUploadedAssetCleanupSettings();
+        const imagePath = await saveUploadedImage(file, {
+          subDir: uploadedAssetSubDirForCategory(UploadedAssetCategory.DETAIL_OCR),
+        });
+        await registerUploadedAsset({
+          path: imagePath.path,
+          name: imagePath.name,
+          category: UploadedAssetCategory.DETAIL_OCR,
+          mimeType: imagePath.mimeType,
+          sizeBytes: imagePath.sizeBytes,
+          createdBy: currentUser.id,
+          expiresAt: addHours(new Date(), stagedTtlHours),
+        });
 
         return NextResponse.json({
           success: true,

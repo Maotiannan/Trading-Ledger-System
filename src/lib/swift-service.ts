@@ -2,6 +2,7 @@ import {
   DetailStatus,
   ReceiptStatus,
   SwiftStatus,
+  UploadedAssetAttachmentType,
   UserRole,
 } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -14,6 +15,7 @@ import { getNumericSystemSetting } from '@/lib/system-settings';
 import { validateAmountTolerance } from '@/lib/matching';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { SwiftPayload } from '@/lib/validators';
+import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 
 function createForbiddenError(message: string, detail?: unknown) {
   return createApiError({
@@ -145,6 +147,13 @@ export async function createSwiftRecord(params: {
 
       return created;
     });
+    if (swift.imageUrl) {
+      await attachUploadedAssetByPath({
+        path: swift.imageUrl,
+        attachedType: UploadedAssetAttachmentType.SWIFT,
+        attachedId: swift.id,
+      });
+    }
 
     await recordAuditEvent({
       action: auditActions.SWIFT_CREATE,

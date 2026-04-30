@@ -1,4 +1,4 @@
-import { DetailStatus, ReceiptStatus } from '@prisma/client';
+import { DetailStatus, ReceiptStatus, UploadedAssetAttachmentType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
@@ -9,6 +9,7 @@ import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/li
 import { resolveCustomer } from '@/lib/customer-matching';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { DetailPayload } from '@/lib/validators';
+import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -248,6 +249,13 @@ export async function createDetailRecord(params: {
 
   for (const orderId of result.touchedOrderIds) {
     await updateOrderBalance(orderId);
+  }
+  if (result.detail.imageUrl) {
+    await attachUploadedAssetByPath({
+      path: result.detail.imageUrl,
+      attachedType: UploadedAssetAttachmentType.DETAIL,
+      attachedId: result.detail.id,
+    });
   }
 
   await recordAuditEvent({

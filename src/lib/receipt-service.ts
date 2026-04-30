@@ -1,4 +1,4 @@
-import { DetailStatus, ReceiptStatus, SwiftStatus, UserRole } from '@prisma/client';
+import { DetailStatus, ReceiptStatus, SwiftStatus, UploadedAssetAttachmentType, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
@@ -10,6 +10,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { ReceiptPayload } from '@/lib/validators';
+import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 
 function badRequest(message: string, detail?: unknown) {
   return createApiError({ code: 'BAD_REQUEST', status: 400, message, detail });
@@ -175,6 +176,13 @@ export async function createReceiptRecord(params: {
 
   if (receipt.orderId) {
     await updateOrderBalance(receipt.orderId);
+  }
+  if (receipt.created.imageUrl) {
+    await attachUploadedAssetByPath({
+      path: receipt.created.imageUrl,
+      attachedType: UploadedAssetAttachmentType.RECEIPT,
+      attachedId: receipt.created.id,
+    });
   }
 
   await recordAuditEvent({

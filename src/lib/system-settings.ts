@@ -184,13 +184,23 @@ export async function getUploadedAssetCleanupSettings(): Promise<{
   stagedTtlHours: number;
   signingPendingTtlHours: number;
 }> {
-  const settings = await getSystemSettingsWithDefaults([
-    'UPLOADED_ASSET_STAGED_TTL_HOURS',
-    'SIGNING_PENDING_TTL_HOURS',
+  const stagedKey = 'UPLOADED_ASSET_STAGED_TTL_HOURS';
+  const signingPendingKey = 'SIGNING_PENDING_TTL_HOURS';
+  const [stagedTtlHours, signingPendingTtlHours] = await Promise.all([
+    getNumericSystemSetting(
+      stagedKey,
+      Number(systemSettingDefaults[stagedKey]),
+      { min: numericSystemSettingMinimums[stagedKey] }
+    ),
+    getNumericSystemSetting(
+      signingPendingKey,
+      Number(systemSettingDefaults[signingPendingKey]),
+      { min: numericSystemSettingMinimums[signingPendingKey] }
+    ),
   ]);
 
   return {
-    stagedTtlHours: Math.max(1, Number(settings.UPLOADED_ASSET_STAGED_TTL_HOURS) || 24),
-    signingPendingTtlHours: Math.max(24, Number(settings.SIGNING_PENDING_TTL_HOURS) || 72),
+    stagedTtlHours,
+    signingPendingTtlHours,
   };
 }

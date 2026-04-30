@@ -493,7 +493,7 @@ model SystemCounter {
 
 model ReceiptGeneratorSession {
   id                    String                        @id @default(cuid())
-  receiptId             String                        @unique
+  receiptId             String?                       @unique
   receiptNo             String
   orderNo               String
   invNo                 String?
@@ -518,8 +518,8 @@ model ReceiptGeneratorSession {
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt
 
-  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  creator User    @relation("ReceiptGeneratorSessionCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  receipt Receipt? @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  creator User     @relation("ReceiptGeneratorSessionCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([createdBy, createdAt])
   @@index([status, createdAt])

@@ -72,7 +72,7 @@ export async function cleanupStaleSigningPendingReceipts(input: { now?: Date } =
         data: { status: ReceiptGeneratorSessionStatus.CANCELLED },
       });
       await tx.receipt.delete({
-        where: { id: session.receiptId },
+        where: { id: session.receipt.id },
       });
     });
 
@@ -83,7 +83,7 @@ export async function cleanupStaleSigningPendingReceipts(input: { now?: Date } =
       action: auditActions.RECEIPT_UPDATE,
       actorId: session.createdBy,
       targetType: auditTargetTypes.RECEIPT,
-      targetId: session.receiptId,
+      targetId: session.receipt.id,
       metadata: {
         mode: 'generator-stale-signing-cleanup',
         sessionId: session.id,

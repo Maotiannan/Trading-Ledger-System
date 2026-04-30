@@ -1,14 +1,41 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
 export const name = 'uploaded-asset-cleanup';
 
 const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnKXuQAAAAASUVORK5CYII=';
+const PNG_BUFFER = Buffer.from(PNG_BASE64, 'base64');
+const DEFAULT_UPLOAD_DIR = '/app/upload/images';
+const DEFAULT_UPLOAD_PUBLIC_PATH = '/upload/images';
 
 function findDetailByOrder(rows, orderNo) {
   return (Array.isArray(rows) ? rows : []).find(
     (row) => Array.isArray(row.items) && row.items.some((item) => item.orderNo === orderNo),
   );
+}
+
+function resolveUploadDir() {
+  const configuredDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
+  return path.isAbsolute(configuredDir)
+    ? configuredDir
+    : path.resolve(process.cwd(), configuredDir);
+}
+
+function buildUploadedAssetPublicPath(relativePath) {
+  const publicBase = (process.env.UPLOAD_PUBLIC_PATH || DEFAULT_UPLOAD_PUBLIC_PATH).replace(/\/+$/, '');
+  return `${publicBase}/${String(relativePath).replace(/^\/+/, '')}`;
+}
+
+function writeUploadedAssetFixture(relativePath) {
+  const absolutePath = path.join(resolveUploadDir(), relativePath);
+  mkdirSync(path.dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, PNG_BUFFER);
+  return {
+    absolutePath,
+    publicPath: buildUploadedAssetPublicPath(relativePath),
+  };
 }
 
 async function createSalesUser(t, suffix) {
@@ -115,7 +142,7 @@ export default async function run(t) {
     });
     assert.ok(salesUser?.id, 'sales user exists');
 
-    const filePath = t.writeTempFile(`uploaded-asset-${suffix}.png`, Buffer.from(PNG_BASE64, 'base64'));
+    const filePath = t.writeTempFile(`uploaded-asset-${suffix}.png`, PNG_BUFFER);
 
     const directUpload = await uploadReceiptDirectImage(t, filePath);
     const directUploadPath = directUpload.data?.data?.path;
@@ -260,6 +287,103 @@ export default async function run(t) {
     assert.equal(attachedSwiftOcrAsset?.attachedType, 'SWIFT');
     assert.equal(attachedSwiftOcrAsset?.attachedId, swiftId);
     t.step('swift OCR confirm attaches staged asset');
+
+    const cleanupNow = new Date();
+    const expiredFixture = writeUploadedAssetFixture(`receipts/direct/cleanup-expired-${suffix}.png`);
+    const attachedFixture = writeUploadedAssetFixture(`receipts/direct/cleanup-attached-${suffix}.png`);
+    const staleReceiptNo = `RCPT-${suffix}-STALE`;
+    const staleReceiptOrderNo = `${suffix}-STALE-01`;
+
+    const expiredAsset = await prisma.uploadedAsset.create({
+      data: {
+        path: expiredFixture.publicPath,
+        name: `cleanup-expired-${suffix}.png`,
+        category: 'RECEIPT_DIRECT',
+        mimeType: 'image/png',
+        sizeBytes: PNG_BUFFER.byteLength,
+        createdBy: salesUser.id,
+        status: 'STAGED',
+        expiresAt: new Date(cleanupNow.getTime() - 60 * 60 * 1000),
+      },
+    });
+
+    const cleanupProtectedAsset = await prisma.uploadedAsset.create({
+      data: {
+        path: attachedFixture.publicPath,
+        name: `cleanup-attached-${suffix}.png`,
+        category: 'RECEIPT_DIRECT',
+        mimeType: 'image/png',
+        sizeBytes: PNG_BUFFER.byteLength,
+        createdBy: salesUser.id,
+        status: 'ATTACHED',
+        attachedType: 'RECEIPT',
+        attachedId: directReceiptId,
+      },
+    });
+
+    const staleReceipt = await prisma.receipt.create({
+      data: {
+        receiptNo: staleReceiptNo,
+        usd: 88,
+        orderNo: staleReceiptOrderNo,
+        payer: `${suffix}-STALE`,
+        customerMark: `${suffix}-STALE`,
+        customerName: `${suffix}-STALE`,
+        status: 'SIGNING_PENDING',
+        imageUrl: null,
+        imageName: null,
+        createdBy: salesUser.id,
+        createdAt: new Date(cleanupNow.getTime() - 73 * 60 * 60 * 1000),
+      },
+    });
+
+    const staleSession = await prisma.receiptGeneratorSession.create({
+      data: {
+        receiptId: staleReceipt.id,
+        receiptNo: staleReceiptNo,
+        orderNo: staleReceiptOrderNo,
+        usd: 88,
+        createdBy: salesUser.id,
+        status: 'PENDING',
+        createdAt: new Date(cleanupNow.getTime() - 73 * 60 * 60 * 1000),
+      },
+    });
+
+    const maintenanceToken = process.env.MAINTENANCE_JOB_TOKEN || 'replace-with-a-long-random-secret';
+    const cleanupResponse = await t.request('POST', '/api/internal/maintenance/uploaded-assets', {
+      headers: {
+        'x-maintenance-token': maintenanceToken,
+      },
+      expectedStatus: 200,
+    });
+
+    assert.equal(cleanupResponse.data?.data?.stagedAssetCleanup?.deletedAssets, 1);
+    assert.equal(cleanupResponse.data?.data?.staleSigningCleanup?.cancelledSessions, 1);
+    assert.equal(cleanupResponse.data?.data?.staleSigningCleanup?.deletedReceipts, 1);
+
+    const expiredAssetAfterCleanup = await prisma.uploadedAsset.findUnique({
+      where: { id: expiredAsset.id },
+    });
+    assert.equal(expiredAssetAfterCleanup?.status, 'DELETED');
+    assert.ok(!existsSync(expiredFixture.absolutePath), 'expired staged asset file removed');
+
+    const protectedAssetAfterCleanup = await prisma.uploadedAsset.findUnique({
+      where: { id: cleanupProtectedAsset.id },
+    });
+    assert.equal(protectedAssetAfterCleanup?.status, 'ATTACHED');
+    assert.ok(existsSync(attachedFixture.absolutePath), 'attached asset file preserved');
+
+    const staleSessionAfterCleanup = await prisma.receiptGeneratorSession.findUnique({
+      where: { id: staleSession.id },
+    });
+    assert.equal(staleSessionAfterCleanup?.status, 'CANCELLED');
+    assert.equal(staleSessionAfterCleanup?.receiptId, null);
+
+    const staleReceiptAfterCleanup = await prisma.receipt.findUnique({
+      where: { id: staleReceipt.id },
+    });
+    assert.equal(staleReceiptAfterCleanup, null);
+    t.step('maintenance cleanup removes expired staged assets and cancels stale signing sessions');
 
     await t.logout();
   } finally {

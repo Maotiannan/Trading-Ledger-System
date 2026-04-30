@@ -273,7 +273,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
   if (!(await canAccessOwnedResourceAsync(session.receipt.createdBy, currentUser))) {
     throw forbidden('无权完成该签名收据', {
       sessionId,
-      receiptId: session.receiptId,
+      receiptId: session.receipt.id,
     });
   }
   if (session.status !== ReceiptGeneratorSessionStatus.PENDING || session.receipt.status !== ReceiptStatus.SIGNING_PENDING) {
@@ -331,7 +331,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
       };
 
       await tx.receipt.update({
-        where: { id: session.receiptId },
+        where: { id: session.receipt.id },
         data: {
           status: ReceiptStatus.SR_Received,
           imageUrl: receiptImage.path,
@@ -373,7 +373,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
             createdBy: session.createdBy,
             status: UploadedAssetStatus.ATTACHED,
             attachedType: UploadedAssetAttachmentType.RECEIPT,
-            attachedId: session.receiptId,
+            attachedId: session.receipt.id,
           },
         ],
       });
@@ -407,7 +407,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
     action: auditActions.RECEIPT_UPDATE,
     actorId: currentUser.id,
     targetType: auditTargetTypes.RECEIPT,
-    targetId: session.receiptId,
+    targetId: session.receipt.id,
     metadata: {
       mode: 'generator-finalize',
       sessionId,

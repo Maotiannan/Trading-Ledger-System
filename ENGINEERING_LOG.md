@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.107
+> 当前版本：v1.0.108
 > 最后更新：2026-04-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 上传资产清理闭环落地：新增 `UploadedAsset` 生命周期台账（`STAGED -> ATTACHED -> DELETED`），把 `Create Receipt Directly`、收据/明细/SWIFT OCR、签名收据 finalize 的图片写入统一纳管；新增内部维护路由 `/api/internal/maintenance/uploaded-assets` 和 Docker maintenance 服务定时调用，24h 清理孤儿 staged 文件、72h 取消 stale `SIGNING_PENDING` 签名会话并删除其占位收据；本阶段明确“不回填历史文件”，只管理新注册进台账的上传资产，并补齐 unit + isolated API 覆盖 ✅ 2026-04-30
 - [x] `Create Receipt Directly` 选图确认页落地：新增前端待确认图片状态与 `receipt-direct-image-confirm-dialog`，移动端 `拍照 / 从相册选择` 返回后先进入项目内大图确认页，用户点击“确认上传”才触发既有压缩 + `apiUploadCall` 进度/超时链路；补齐 `use-receipt-actions / receipt-direct-image-confirm-dialog` 自动化并重新跑通 `build + test:ci` ✅ 2026-04-30
 - [x] 收据管理弱网上传二次增强：`apiUploadCall` 升级为基于 `XMLHttpRequest` 的 multipart 上传器，支持真实百分比进度、`15s` 空闲超时、`120s` 总时长兜底与 `uploading -> saving` 分段回调；`Create Receipt Directly` 弹窗新增进度条、`saving` 阶段与更细的错误映射，签名收据 `finalize` 也切到同一套上传器；补齐 `client / use-receipt-actions / receipt-direct-create-dialog / signing-view` 回归并重新跑通整套 `test:ci` ✅ 2026-04-30
 - [x] 收据管理 `Create Receipt Directly` 上传链路弱网增强：新增前端保守压缩（质量下限 `0.30`、文字可读优先）、移动端 `拍照 / 从相册选择` 双入口、弹窗内明确的压缩/上传/成功/失败状态；`ORDER NO` 上下文扩展自动建议回填 `INV NO / MARK / PHONE / PAYER`（`payer = companyName || name`）；`/api/upload-image` 细化 `UPLOAD_ABORTED` 分类，前端映射“上传中断，请在更稳定的网络下重试”，并补齐 image-compression / use-receipt-actions / client / invoice-read-service 回归与全量 `test:ci` ✅ 2026-04-30
@@ -105,6 +106,12 @@
 - [x] 客户导入重复更新修复补强：占位值（如 `-`）不再触发导入更新，重复导入不再反复计入 `updatedCount` ✅ 2026-03-05
 - [x] 增加请求体大小限制（Next.js + Caddy 双层，防 DoS）✅ 2026-03-30
 - [x] 对高风险写接口增加速率限制（登录、上传、删除审批）✅ 2026-03-30
+
+### v1.0.108（2026-04-30）
+- `UploadedAsset` 现在是上传文件生命周期的唯一台账：服务端成功写入 NAS 后立即登记为 `STAGED`，业务最终确认时提升为 `ATTACHED`，维护任务删除后标为 `DELETED`。
+- 新增 `/api/internal/maintenance/uploaded-assets` 内部维护路由，使用 `x-maintenance-token` 鉴权；Docker maintenance 服务按 24h 周期调用它，避免依赖宿主机 cron 或进程内定时器。
+- 维护任务拆成两段策略：一段只清理过期 `STAGED` 资产并删 NAS 文件，另一段只处理超过 72h 的 `SIGNING_PENDING` 签名会话，先把会话标成 `CANCELLED`，再删除仍未进入正常业务状态的占位收据。
+- 本次没有做历史文件回填；维护任务只会处理已经登记到 `UploadedAsset` 的新资产，避免对老数据做不安全的猜测式删除。
 
 ### 自动化回归
 - [x] 新增 `matching` 单测（余额计算关键口径）✅ 2026-03-02

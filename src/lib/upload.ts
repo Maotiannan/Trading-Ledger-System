@@ -84,6 +84,24 @@ function hasValidImageMagic(buffer: Buffer, extension: string): boolean {
   return false;
 }
 
+function authoritativeMimeTypeForExtension(extension: string): string {
+  switch (extension) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.webp':
+      return 'image/webp';
+    case '.heic':
+      return 'image/heic';
+    case '.heif':
+      return 'image/heif';
+    default:
+      throw new UploadValidationError('文件扩展名不受支持');
+  }
+}
+
 export async function saveUploadedImage(
   file: File,
   options: { subDir?: string | null } = {},
@@ -92,12 +110,12 @@ export async function saveUploadedImage(
 
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
-  const mimeType = (file.type || '').toLowerCase();
   const safeName = sanitizeFileName(file.name);
   const extension = path.extname(safeName).toLowerCase();
   if (!hasValidImageMagic(buffer, extension)) {
     throw new UploadValidationError('文件内容与扩展名不匹配');
   }
+  const mimeType = authoritativeMimeTypeForExtension(extension);
 
   const configuredDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
   const baseUploadDir = path.isAbsolute(configuredDir)

@@ -33,7 +33,7 @@ export async function attachUploadedAssetByPath(input: {
   attachedType: UploadedAssetAttachmentType;
   attachedId: string;
 }) {
-  await db.uploadedAsset.updateMany({
+  const result = await db.uploadedAsset.updateMany({
     where: {
       path: input.path,
       status: UploadedAssetStatus.STAGED,
@@ -45,6 +45,12 @@ export async function attachUploadedAssetByPath(input: {
       expiresAt: null,
     },
   });
+
+  if (result.count !== 1) {
+    throw new Error(
+      `Expected to attach exactly one staged uploaded asset for path "${input.path}", updated ${result.count}.`,
+    );
+  }
 }
 
 export function uploadedAssetSubDirForCategory(category: UploadedAssetCategory): string {

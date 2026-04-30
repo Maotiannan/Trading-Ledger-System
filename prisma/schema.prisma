@@ -38,6 +38,28 @@ enum ReceiptGeneratorSessionStatus {
   CANCELLED
 }
 
+enum UploadedAssetStatus {
+  STAGED
+  ATTACHED
+  DELETED
+}
+
+enum UploadedAssetAttachmentType {
+  RECEIPT
+  DETAIL
+  SWIFT
+  RECEIPT_GENERATOR_SESSION
+}
+
+enum UploadedAssetCategory {
+  RECEIPT_DIRECT
+  RECEIPT_OCR
+  DETAIL_OCR
+  SWIFT_OCR
+  RECEIPT_GENERATOR_FINAL
+  RECEIPT_GENERATOR_SIGNATURE
+}
+
 // 付款明细状态枚举
 enum DetailStatus {
   Waiting_SWIFT  // 等待SWIFT
@@ -92,6 +114,7 @@ model User {
   auditLogs         AuditLog[]
   systemSettings    SystemSetting[]   @relation("SystemSettingUpdatedBy")
   receiptGeneratorSessions ReceiptGeneratorSession[] @relation("ReceiptGeneratorSessionCreatedBy")
+  uploadedAssets   UploadedAsset[]
   excelApiTokens    ExcelApiToken[]
 
   @@index([parentId])
@@ -116,6 +139,31 @@ model ExcelApiToken {
 
   @@index([userId, revokedAt])
   @@index([lastUsedAt])
+}
+
+model UploadedAsset {
+  id           String                       @id @default(cuid())
+  path         String                       @db.LongText
+  name         String                       @db.Text
+  category     UploadedAssetCategory
+  mimeType     String
+  sizeBytes    Int
+  createdBy    String
+  status       UploadedAssetStatus          @default(STAGED)
+  attachedType UploadedAssetAttachmentType?
+  attachedId   String?
+  expiresAt    DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
+
+  creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([path(length: 255)])
+  @@index([status, expiresAt])
+  @@index([attachedType, attachedId])
+  @@index([category, createdAt])
+  @@index([createdBy, createdAt])
 }
 
 // ==================== 账单表 (Invoice) ====================

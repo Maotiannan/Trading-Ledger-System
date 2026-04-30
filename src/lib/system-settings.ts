@@ -22,6 +22,8 @@ export const editableSystemSettingKeys = [
   'DELETION_ACTION_RATE_LIMIT_MAX',
   'EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS',
   'EXCEL_LOOKUP_RATE_LIMIT_MAX',
+  'UPLOADED_ASSET_STAGED_TTL_HOURS',
+  'SIGNING_PENDING_TTL_HOURS',
   'SETTINGS_AUDIT_MAX_PAGE_SIZE',
   'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
 ] as const;
@@ -63,6 +65,8 @@ export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   DELETION_ACTION_RATE_LIMIT_MAX: process.env.DELETION_ACTION_RATE_LIMIT_MAX ?? '20',
   EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS: process.env.EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS ?? '60000',
   EXCEL_LOOKUP_RATE_LIMIT_MAX: process.env.EXCEL_LOOKUP_RATE_LIMIT_MAX ?? '240',
+  UPLOADED_ASSET_STAGED_TTL_HOURS: process.env.UPLOADED_ASSET_STAGED_TTL_HOURS ?? '24',
+  SIGNING_PENDING_TTL_HOURS: process.env.SIGNING_PENDING_TTL_HOURS ?? '72',
   SETTINGS_AUDIT_MAX_PAGE_SIZE: process.env.SETTINGS_AUDIT_MAX_PAGE_SIZE ?? '100',
   SETTINGS_AUDIT_EXPORT_MAX_ROWS: process.env.SETTINGS_AUDIT_EXPORT_MAX_ROWS ?? '5000',
 };
@@ -84,6 +88,8 @@ export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingK
   DELETION_ACTION_RATE_LIMIT_MAX: 1,
   EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS: 1000,
   EXCEL_LOOKUP_RATE_LIMIT_MAX: 1,
+  UPLOADED_ASSET_STAGED_TTL_HOURS: 1,
+  SIGNING_PENDING_TTL_HOURS: 24,
   SETTINGS_AUDIT_MAX_PAGE_SIZE: 1,
   SETTINGS_AUDIT_EXPORT_MAX_ROWS: 1,
 };
@@ -172,4 +178,19 @@ export async function getNumericSystemSetting(
   if (!Number.isFinite(parsed)) return fallback;
   if (options.min !== undefined && parsed < options.min) return fallback;
   return parsed;
+}
+
+export async function getUploadedAssetCleanupSettings(): Promise<{
+  stagedTtlHours: number;
+  signingPendingTtlHours: number;
+}> {
+  const settings = await getSystemSettingsWithDefaults([
+    'UPLOADED_ASSET_STAGED_TTL_HOURS',
+    'SIGNING_PENDING_TTL_HOURS',
+  ]);
+
+  return {
+    stagedTtlHours: Math.max(1, Number(settings.UPLOADED_ASSET_STAGED_TTL_HOURS) || 24),
+    signingPendingTtlHours: Math.max(24, Number(settings.SIGNING_PENDING_TTL_HOURS) || 72),
+  };
 }

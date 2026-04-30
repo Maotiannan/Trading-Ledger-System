@@ -13,8 +13,29 @@ services:
       INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD:-}
       JSON_BODY_MAX_BYTES: ${JSON_BODY_MAX_BYTES:-262144}
       UPLOAD_BODY_MAX_BYTES: ${UPLOAD_BODY_MAX_BYTES:-10485760}
+      MAINTENANCE_JOB_TOKEN: ${MAINTENANCE_JOB_TOKEN:-replace-with-a-long-random-secret}
+      UPLOADED_ASSET_STAGED_TTL_HOURS: ${UPLOADED_ASSET_STAGED_TTL_HOURS:-24}
+      SIGNING_PENDING_TTL_HOURS: ${SIGNING_PENDING_TTL_HOURS:-72}
     volumes:
       - ${UPLOAD_HOST_DIR:-/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload}:/app/upload
+
+  maintenance:
+    image: curlimages/curl:8.12.1
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      MAINTENANCE_BASE_URL: ${MAINTENANCE_BASE_URL:-http://app:3000}
+      MAINTENANCE_JOB_TOKEN: ${MAINTENANCE_JOB_TOKEN:-replace-with-a-long-random-secret}
+      MAINTENANCE_LOOP_SECONDS: ${MAINTENANCE_LOOP_SECONDS:-86400}
+    command: >
+      sh -c '
+        while true; do
+          curl -fsS -X POST "$$MAINTENANCE_BASE_URL/api/internal/maintenance/uploaded-assets" \
+            -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" || true;
+          sleep "$$MAINTENANCE_LOOP_SECONDS";
+        done
+      '
 
   caddy:
     image: caddy:2.8-alpine

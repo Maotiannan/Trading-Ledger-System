@@ -1,9 +1,44 @@
+import { rm } from 'fs/promises';
 import { subHours } from 'date-fns';
-import { ReceiptGeneratorSessionStatus, ReceiptStatus } from '@prisma/client';
+import { ReceiptGeneratorSessionStatus, ReceiptStatus, UploadedAssetStatus } from '@prisma/client';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
 import { getUploadedAssetCleanupSettings } from '@/lib/system-settings';
+import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
+
+export async function cleanupExpiredStagedUploadedAssets(input: { now?: Date } = {}) {
+  const now = input.now ?? new Date();
+  const expiredAssets = await db.uploadedAsset.findMany({
+    where: {
+      status: UploadedAssetStatus.STAGED,
+      expiresAt: { lte: now },
+    },
+    select: {
+      id: true,
+      path: true,
+    },
+  });
+
+  let deletedAssets = 0;
+
+  for (const asset of expiredAssets) {
+    await rm(resolveUploadedAssetAbsolutePath(asset.path), { force: true });
+    await db.uploadedAsset.update({
+      where: { id: asset.id },
+      data: {
+        status: UploadedAssetStatus.DELETED,
+        deletedAt: now,
+        expiresAt: null,
+      },
+    });
+    deletedAssets += 1;
+  }
+
+  return {
+    deletedAssets,
+  };
+}
 
 export async function cleanupStaleSigningPendingReceipts(input: { now?: Date } = {}) {
   const now = input.now ?? new Date();
@@ -62,5 +97,15 @@ export async function cleanupStaleSigningPendingReceipts(input: { now?: Date } =
   return {
     cancelledSessions,
     deletedReceipts,
+  };
+}
+
+export async function runUploadedAssetMaintenance(input: { now?: Date } = {}) {
+  const stagedAssetCleanup = await cleanupExpiredStagedUploadedAssets(input);
+  const staleSigningCleanup = await cleanupStaleSigningPendingReceipts(input);
+
+  return {
+    stagedAssetCleanup,
+    staleSigningCleanup,
   };
 }

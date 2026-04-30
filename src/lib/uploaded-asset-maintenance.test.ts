@@ -1,16 +1,45 @@
-import { ReceiptGeneratorSessionStatus, ReceiptStatus } from '@prisma/client';
+import {
+  ReceiptGeneratorSessionStatus,
+  ReceiptStatus,
+  UploadedAssetStatus,
+} from '@prisma/client';
+import { rm } from 'fs/promises';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import {
   getUploadedAssetCleanupSettings,
   invalidateSystemSettingsCache,
 } from '@/lib/system-settings';
-import { cleanupStaleSigningPendingReceipts } from '@/lib/uploaded-asset-maintenance';
+import {
+  cleanupExpiredStagedUploadedAssets,
+  cleanupStaleSigningPendingReceipts,
+  runUploadedAssetMaintenance,
+} from '@/lib/uploaded-asset-maintenance';
+import { POST } from '@/app/api/internal/maintenance/uploaded-assets/route';
+
+jest.mock('next/server', () => ({
+  NextResponse: {
+    json: (body: unknown, init?: ResponseInit) => ({
+      status: init?.status ?? 200,
+      async json() {
+        return body;
+      },
+    }),
+  },
+}));
+
+jest.mock('fs/promises', () => ({
+  rm: jest.fn(),
+}));
 
 jest.mock('@/lib/db', () => ({
   db: {
     systemSetting: {
       findMany: jest.fn(),
+    },
+    uploadedAsset: {
+      findMany: jest.fn(),
+      update: jest.fn(),
     },
     receiptGeneratorSession: {
       findMany: jest.fn(),
@@ -28,9 +57,16 @@ jest.mock('@/lib/audit', () => ({
 }));
 
 const mockFindMany = db.systemSetting.findMany as jest.Mock;
+const mockUploadedAssetFindMany = db.uploadedAsset.findMany as jest.Mock;
+const mockUploadedAssetUpdate = db.uploadedAsset.update as jest.Mock;
 const mockReceiptGeneratorSessionFindMany = db.receiptGeneratorSession.findMany as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockRm = rm as jest.MockedFunction<typeof rm>;
 const mockDb = db as unknown as {
+  uploadedAsset: {
+    findMany: jest.Mock;
+    update: jest.Mock;
+  };
   receiptGeneratorSession: {
     findMany: jest.Mock;
     update: jest.Mock;
@@ -42,11 +78,24 @@ const mockDb = db as unknown as {
 };
 
 describe('uploaded-asset-maintenance', () => {
+  const originalMaintenanceJobToken = process.env.MAINTENANCE_JOB_TOKEN;
+  const createMaintenanceRequest = (token: string) => ({
+    headers: {
+      get(name: string) {
+        return name.toLowerCase() === 'x-maintenance-token' ? token : null;
+      },
+    },
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     invalidateSystemSettingsCache();
+    process.env.MAINTENANCE_JOB_TOKEN = 'expected-token';
     mockFindMany.mockResolvedValue([]);
+    mockUploadedAssetFindMany.mockResolvedValue([]);
+    mockUploadedAssetUpdate.mockResolvedValue(undefined);
     mockReceiptGeneratorSessionFindMany.mockResolvedValue([]);
+    mockRm.mockResolvedValue(undefined);
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback({
       receiptGeneratorSession: {
         update: mockDb.receiptGeneratorSession.update,
@@ -55,6 +104,10 @@ describe('uploaded-asset-maintenance', () => {
         delete: mockDb.receipt.delete,
       },
     }));
+  });
+
+  afterAll(() => {
+    process.env.MAINTENANCE_JOB_TOKEN = originalMaintenanceJobToken;
   });
 
   it('returns uploaded asset cleanup ttl defaults when no overrides exist', async () => {
@@ -98,6 +151,42 @@ describe('uploaded-asset-maintenance', () => {
 
     expect(settings.stagedTtlHours).toBe(24);
     expect(settings.signingPendingTtlHours).toBe(72);
+  });
+
+  it('deletes expired staged uploaded assets and marks registry rows deleted', async () => {
+    const now = new Date('2026-05-03T00:00:00.000Z');
+    mockUploadedAssetFindMany.mockResolvedValueOnce([
+      {
+        id: 'asset-1',
+        path: '/upload/images/receipts/direct/orphan.png',
+      },
+    ]);
+
+    const result = await cleanupExpiredStagedUploadedAssets({ now });
+
+    expect(mockUploadedAssetFindMany).toHaveBeenCalledWith({
+      where: {
+        status: UploadedAssetStatus.STAGED,
+        expiresAt: { lte: now },
+      },
+      select: {
+        id: true,
+        path: true,
+      },
+    });
+    expect(mockRm).toHaveBeenCalledWith(
+      expect.stringContaining('/receipts/direct/orphan.png'),
+      { force: true },
+    );
+    expect(mockUploadedAssetUpdate).toHaveBeenCalledWith({
+      where: { id: 'asset-1' },
+      data: {
+        status: UploadedAssetStatus.DELETED,
+        deletedAt: now,
+        expiresAt: null,
+      },
+    });
+    expect(result.deletedAssets).toBe(1);
   });
 
   it('cancels stale signing sessions and removes untouched SIGNING_PENDING receipts after ttl', async () => {
@@ -160,5 +249,84 @@ describe('uploaded-asset-maintenance', () => {
     }));
     expect(result.cancelledSessions).toBe(1);
     expect(result.deletedReceipts).toBe(1);
+  });
+
+  it('runs both maintenance cleanup paths together', async () => {
+    const now = new Date('2026-05-03T00:00:00.000Z');
+    mockUploadedAssetFindMany.mockResolvedValueOnce([
+      {
+        id: 'asset-1',
+        path: '/upload/images/receipts/direct/orphan.png',
+      },
+    ]);
+    mockReceiptGeneratorSessionFindMany.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        receiptId: 'receipt-1',
+        receiptNo: '0001000',
+        createdBy: 'admin-1',
+        createdAt: new Date('2026-04-29T00:00:00.000Z'),
+        finalImageUrl: null,
+        receipt: {
+          id: 'receipt-1',
+          receiptNo: '0001000',
+          status: ReceiptStatus.SIGNING_PENDING,
+          imageUrl: null,
+        },
+      },
+    ]);
+
+    const result = await runUploadedAssetMaintenance({ now });
+
+    expect(result).toMatchObject({
+      stagedAssetCleanup: { deletedAssets: 1 },
+      staleSigningCleanup: { cancelledSessions: 1, deletedReceipts: 1 },
+    });
+  });
+
+  it('rejects maintenance cleanup requests with an invalid token', async () => {
+    const response = await POST(createMaintenanceRequest('bad-token') as Request);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: 'UNAUTHORIZED',
+    });
+  });
+
+  it('runs both staged-asset cleanup and stale-signing cleanup with a valid token', async () => {
+    mockUploadedAssetFindMany.mockResolvedValueOnce([
+      {
+        id: 'asset-1',
+        path: '/upload/images/receipts/direct/orphan.png',
+      },
+    ]);
+    mockReceiptGeneratorSessionFindMany.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        receiptId: 'receipt-1',
+        receiptNo: '0001000',
+        createdBy: 'admin-1',
+        createdAt: new Date('2026-04-29T00:00:00.000Z'),
+        finalImageUrl: null,
+        receipt: {
+          id: 'receipt-1',
+          receiptNo: '0001000',
+          status: ReceiptStatus.SIGNING_PENDING,
+          imageUrl: null,
+        },
+      },
+    ]);
+
+    const response = await POST(createMaintenanceRequest('expected-token') as Request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      success: true,
+      data: {
+        stagedAssetCleanup: { deletedAssets: 1 },
+        staleSigningCleanup: { cancelledSessions: 1, deletedReceipts: 1 },
+      },
+    });
   });
 });

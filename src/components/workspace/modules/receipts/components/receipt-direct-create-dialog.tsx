@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Check, Upload } from 'lucide-react';
-import type { ReceiptDirectForm } from '../types';
+import { cn } from '@/lib/utils';
+import type { DirectImageUploadStatus, ReceiptDirectForm } from '../types';
 
 export type ReceiptDirectCreateDialogProps = {
   open: boolean;
@@ -17,6 +18,8 @@ export type ReceiptDirectCreateDialogProps = {
   tx: (zh: string, en: string) => string;
   uploadedImageName: string;
   directUploading: boolean;
+  directUploadStatus: DirectImageUploadStatus;
+  directUploadMessage: string | null;
   invConflict: boolean;
   invConflictCount: number;
   onOpenChange: (open: boolean) => void;
@@ -35,6 +38,8 @@ export function ReceiptDirectCreateDialog({
   tx,
   uploadedImageName,
   directUploading,
+  directUploadStatus,
+  directUploadMessage,
   invConflict,
   invConflictCount,
   onOpenChange,
@@ -44,7 +49,8 @@ export function ReceiptDirectCreateDialog({
   onImageSelect,
   onSubmit,
 }: ReceiptDirectCreateDialogProps) {
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -80,16 +86,28 @@ export function ReceiptDirectCreateDialog({
           )}
           <div className="space-y-2">
             <Label htmlFor="receipt-direct-image-upload">{tx('收据图片', 'Receipt image')}</Label>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" disabled={directUploading} onClick={() => imageInputRef.current?.click()}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" disabled={directUploading} onClick={() => cameraInputRef.current?.click()}>
                 <Upload className="h-4 w-4 mr-2" />
-                {directUploading ? tx('上传中...', 'Uploading...') : tx('上传图片', 'Upload image')}
+                {tx('拍照', 'Take Photo')}
               </Button>
               <Input
                 id="receipt-direct-image-upload"
-                ref={imageInputRef}
+                ref={cameraInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={onImageSelect}
+              />
+              <Button type="button" variant="outline" disabled={directUploading} onClick={() => galleryInputRef.current?.click()}>
+                <Upload className="h-4 w-4 mr-2" />
+                {tx('从相册选择', 'Choose from Gallery')}
+              </Button>
+              <Input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/*"
                 className="hidden"
                 onChange={onImageSelect}
               />
@@ -97,6 +115,20 @@ export function ReceiptDirectCreateDialog({
                 {uploadedImageName || tx('未选择图片', 'No image selected')}
               </span>
             </div>
+            {directUploadMessage && (
+              <p
+                className={cn(
+                  'text-sm',
+                  directUploadStatus === 'failed'
+                    ? 'text-red-600'
+                    : directUploadStatus === 'success'
+                      ? 'text-green-600'
+                      : 'text-muted-foreground',
+                )}
+              >
+                {directUploadMessage}
+              </p>
+            )}
           </div>
           <Input placeholder={tx('收据号', 'Receipt No.')} value={form.receiptNo} onChange={(e) => onFormChange({ ...form, receiptNo: e.target.value })} />
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} placeholder={tx('日期', 'Date')} value={form.date} onChange={(e) => onFormChange({ ...form, date: e.target.value })} />

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
+import { compressReceiptDirectImage } from '../utils/image-compression';
 import type { ReceiptDirectForm } from '../types';
 
 export type ReceiptActionText = (zh: string, en: string) => string;
@@ -27,6 +28,8 @@ export type ReceiptActionDeps = {
   setSavedImagePath: (value: { path: string; name: string } | null) => void;
   setDirectSavedImagePath: (value: { path: string; name: string } | null) => void;
   setDirectUploadedImageName: (value: string) => void;
+  setDirectUploadStatus: (value: 'idle' | 'compressing' | 'uploading' | 'success' | 'failed') => void;
+  setDirectUploadMessage: (value: string | null) => void;
   setError: (value: string | null) => void;
   handleShowUploadChange: (open: boolean) => void;
   handleShowDirectCreateChange: (open: boolean) => void;
@@ -54,6 +57,8 @@ export function useReceiptActions({
   setSavedImagePath,
   setDirectSavedImagePath,
   setDirectUploadedImageName,
+  setDirectUploadStatus,
+  setDirectUploadMessage,
   setError,
   handleShowUploadChange,
   handleShowDirectCreateChange,
@@ -154,11 +159,33 @@ export function useReceiptActions({
 
     setDirectUploading(true);
     setError(null);
+    setDirectUploadStatus('compressing');
+    setDirectUploadMessage(tx('正在压缩图片...', 'Compressing image...'));
+
+    let uploadFile = file;
+    try {
+      const prepared = await compressReceiptDirectImage(file);
+      uploadFile = prepared.file;
+      setDirectUploadStatus('uploading');
+      setDirectUploadMessage(prepared.compressed
+        ? tx('正在上传压缩后的图片...', 'Uploading compressed image...')
+        : tx('正在上传图片...', 'Uploading image...'));
+    } catch (err) {
+      const message = getErrorMessage(err, tx('图片压缩失败，请重试', 'Image compression failed, please retry.'));
+      setDirectSavedImagePath(null);
+      setDirectUploadedImageName('');
+      setDirectUploadStatus('failed');
+      setDirectUploadMessage(message);
+      setError(message);
+      setDirectUploading(false);
+      event.target.value = '';
+      return;
+    }
 
     const formData = new FormData();
     formData.append('action', 'upload');
     formData.append('category', 'receipt-direct');
-    formData.append('file', file);
+    formData.append('file', uploadFile);
 
     try {
       const result = await apiUploadCall('upload-image', formData, {
@@ -170,15 +197,23 @@ export function useReceiptActions({
           name: String(result.data.name),
         });
         setDirectUploadedImageName(String(result.data.name));
+        setDirectUploadStatus('success');
+        setDirectUploadMessage(tx('图片上传成功', 'Image uploaded successfully.'));
       } else {
         setDirectSavedImagePath(null);
         setDirectUploadedImageName('');
-        setError(getErrorMessage(result, tx('图片上传失败，请重试', 'Image upload failed, please retry.')));
+        const message = getErrorMessage(result, tx('图片上传失败，请重试', 'Image upload failed, please retry.'));
+        setDirectUploadStatus('failed');
+        setDirectUploadMessage(message);
+        setError(message);
       }
     } catch (err) {
       setDirectSavedImagePath(null);
       setDirectUploadedImageName('');
-      setError(getErrorMessage(err, tx('图片上传失败，请重试', 'Image upload failed, please retry.')));
+      const message = getErrorMessage(err, tx('图片上传失败，请重试', 'Image upload failed, please retry.'));
+      setDirectUploadStatus('failed');
+      setDirectUploadMessage(message);
+      setError(message);
     } finally {
       setDirectUploading(false);
       event.target.value = '';

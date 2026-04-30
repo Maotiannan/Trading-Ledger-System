@@ -30,6 +30,8 @@ describe('useReceiptForms', () => {
         name: 'TEST-1',
         customerId: 'cust-1',
       },
+      phoneSuggestion: '622 49 12 86',
+      payerSuggestion: 'MAB SARL',
       invoiceSuggestion: {
         invNo: 'INV-LATEST',
         conflict: true,
@@ -58,6 +60,8 @@ describe('useReceiptForms', () => {
     expect(result.current.directInvConflict).toBe(true);
     expect(result.current.directInvConflictCount).toBe(2);
     expect(result.current.directForm.customerMark).toBe('ASD-DSA');
+    expect(result.current.directForm.tel).toBe('622 49 12 86');
+    expect(result.current.directForm.payer).toBe('MAB SARL');
   });
 
   it('prefers database inv suggestion over OCR inv when upload dialog has an order match', async () => {
@@ -67,6 +71,8 @@ describe('useReceiptForms', () => {
         name: 'TEST-1',
         customerId: 'cust-1',
       },
+      phoneSuggestion: '622 49 12 86',
+      payerSuggestion: 'MAB SARL',
       invoiceSuggestion: {
         invNo: 'INV-DB',
         conflict: false,
@@ -97,5 +103,39 @@ describe('useReceiptForms', () => {
     }));
     expect(result.current.ocrInvConflict).toBe(false);
     expect(result.current.ocrCustomerMark).toBe('ASD-DSA');
+  });
+
+  it('falls back payer suggestion from customer name when company name is empty', async () => {
+    mockLookupOrderContextByOrderNo.mockResolvedValue({
+      matchedCustomer: {
+        mark: 'FALLBACK',
+        name: 'Fallback Name',
+        customerId: 'cust-9',
+      },
+      phoneSuggestion: '620000999',
+      payerSuggestion: 'Fallback Name',
+      invoiceSuggestion: null,
+    });
+
+    const loadCustomerCandidates = jest.fn();
+    const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));
+
+    await act(async () => {
+      result.current.handleShowDirectCreateChange(true);
+    });
+
+    await act(async () => {
+      result.current.setDirectForm((prev) => ({ ...prev, orderNo: 'TEST-2-01' }));
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.directForm.customerMark).toBe('FALLBACK');
+    expect(result.current.directForm.tel).toBe('620000999');
+    expect(result.current.directForm.payer).toBe('Fallback Name');
   });
 });

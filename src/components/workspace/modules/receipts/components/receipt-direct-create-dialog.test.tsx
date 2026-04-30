@@ -24,6 +24,8 @@ describe('ReceiptDirectCreateDialog', () => {
     tx,
     uploadedImageName: '',
     directUploading: false,
+    directUploadStatus: 'idle' as const,
+    directUploadMessage: null,
     invConflict: false,
     invConflictCount: 0,
     onOpenChange: jest.fn(),
@@ -37,7 +39,8 @@ describe('ReceiptDirectCreateDialog', () => {
   it('shows upload button and keeps requested input order', () => {
     render(<ReceiptDirectCreateDialog {...defaultProps} />);
 
-    expect(screen.getByRole('button', { name: '上传图片' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '拍照' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '从相册选择' })).toBeInTheDocument();
 
     const orderNoInput = screen.getByPlaceholderText('客户单号(orderNo)');
     const invNoInput = screen.getByPlaceholderText('账单号(invNo)');
@@ -55,5 +58,11 @@ describe('ReceiptDirectCreateDialog', () => {
     expect(orderNoInput.compareDocumentPosition(invNoInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(invNoInput.compareDocumentPosition(customerMarkInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(customerMarkInput.compareDocumentPosition(usdInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders upload error text when direct upload fails', () => {
+    render(<ReceiptDirectCreateDialog {...defaultProps} directUploadStatus="failed" directUploadMessage="上传中断，请在更稳定的网络下重试" />);
+
+    expect(screen.getByText('上传中断，请在更稳定的网络下重试')).toBeInTheDocument();
   });
 });

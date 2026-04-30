@@ -135,6 +135,16 @@ export async function POST(request: NextRequest) {
     return createApiSuccessResponse({ data: image }, request);
   } catch (error) {
     console.error('Upload image error:', error);
+    if (error instanceof Error && (error.message === 'aborted' || ('code' in error && (error as NodeJS.ErrnoException).code === 'ECONNRESET'))) {
+      console.error('Upload image aborted:', {
+        code: ('code' in error ? (error as NodeJS.ErrnoException).code : 'ABORTED') || 'ABORTED',
+      });
+      return createApiErrorResponse({
+        code: apiErrorCodes.UPLOAD_ABORTED,
+        status: 499,
+        message: '上传中断，请在更稳定的网络下重试',
+      }, request);
+    }
     if (error instanceof UploadValidationError) {
       return toApiErrorResponse(error, {
         code: apiErrorCodes.BAD_REQUEST,

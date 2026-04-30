@@ -185,6 +185,15 @@ describe('invoice-read-service', () => {
           invNo: 'INV-LATEST',
           createdAt: new Date('2026-03-12T00:00:00Z'),
         },
+        customer: {
+          id: 'customer-1',
+          orderName: 'GANDO',
+          companyName: 'KIGNA SARL',
+          mark: 'KIGNA TEXTILE',
+          name: 'Mamdaou Gando Diallo',
+          phone: '622443103',
+          city: 'Conakry',
+        },
       },
       {
         id: 'order-old',
@@ -201,6 +210,7 @@ describe('invoice-read-service', () => {
           invNo: 'INV-OLD',
           createdAt: new Date('2026-03-11T00:00:00Z'),
         },
+        customer: null,
       },
     ]);
     mockDb.customer.findMany.mockResolvedValueOnce([
@@ -219,6 +229,8 @@ describe('invoice-read-service', () => {
     expect(result.data.exactMatches).toHaveLength(2);
     expect(result.data.exactMatches[0]).toEqual(expect.objectContaining({
       id: 'order-latest',
+      customerPhone: '622443103',
+      customerPayer: 'KIGNA SARL',
       invoice: expect.objectContaining({ invNo: 'INV-LATEST' }),
     }));
     expect(result.data.inferredCustomer).toEqual(expect.objectContaining({
@@ -234,6 +246,44 @@ describe('invoice-read-service', () => {
         inferredCustomer: true,
         derivedOrderName: 'GANDO',
       }),
+    }));
+  });
+
+  it('falls back payer suggestion from customer name when company name is empty', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-latest',
+        orderNo: 'TEST-2-01',
+        customerId: 'customer-9',
+        customerMark: 'TEST-2',
+        customerName: 'Fallback Name',
+        customerPhone: '620000999',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+        createdAt: new Date('2026-04-30T00:00:00Z'),
+        invoice: {
+          id: 'inv-9',
+          invNo: 'INV-TEST-2',
+          createdAt: new Date('2026-04-30T00:00:00Z'),
+        },
+        customer: {
+          id: 'customer-9',
+          orderName: 'TEST-2',
+          companyName: '',
+          mark: 'TEST-2',
+          name: 'Fallback Name',
+          phone: '620000999',
+          city: 'Conakry',
+        },
+      },
+    ]);
+    mockDb.customer.findMany.mockResolvedValueOnce([]);
+
+    const result = await lookupInvoiceOrderContext(makeUser() as never, 'TEST-2-01');
+
+    expect(result.data.exactMatches[0]).toEqual(expect.objectContaining({
+      customerPhone: '620000999',
+      customerPayer: 'Fallback Name',
     }));
   });
 

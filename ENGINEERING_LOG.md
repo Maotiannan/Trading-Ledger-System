@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.104
-> 最后更新：2026-04-28
+> 当前版本：v1.0.105
+> 最后更新：2026-04-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 收据管理 `Create Receipt Directly` 上传链路弱网增强：新增前端保守压缩（质量下限 `0.30`、文字可读优先）、移动端 `拍照 / 从相册选择` 双入口、弹窗内明确的压缩/上传/成功/失败状态；`ORDER NO` 上下文扩展自动建议回填 `INV NO / MARK / PHONE / PAYER`（`payer = companyName || name`）；`/api/upload-image` 细化 `UPLOAD_ABORTED` 分类，前端映射“上传中断，请在更稳定的网络下重试”，并补齐 image-compression / use-receipt-actions / client / invoice-read-service 回归与全量 `test:ci` ✅ 2026-04-30
 - [x] Excel ML token API 落地：新增 `ExcelApiToken` 持久化表（hash-only）、`/api/excel/token` 设置页管理、`/api/excel/ml` 单值纯文本/JSON 查询、`/api/excel/ml/batch` 批量查询；ORDER NO 先按现有订单/alias 匹配，失败后按最右 `-` 左半部分匹配客户 `ORDER_NAME`，字段 2 按 `companyName || Customer.name` 回退；新增服务单测、设置页 hook/card 测试和 `90-excel-ml-token` isolated API 回归 ✅ 2026-04-28
 - [x] 修复移动端签名收据跳转时序：`Generate Signed Receipt` 创建 session 后，手机同标签页跳转分支立即结束当前页逻辑，不再继续执行 `resetGeneratorState()` 和 `loadReceipts()`；同时新增 hook 单测与隔离 Playwright 断言，覆盖三星类浏览器“点击 Continue to signing 后又回到 receipts”的回归场景 ✅ 2026-04-28
 - [x] 签名收据预览与导出彻底统一：`receipt-canvas` 预览层不再维护第二套 DOM 模板，直接显示最终导出 canvas；`Tel` 固定对齐在 `Date` 正下方并按每行最多 `14` 个字符覆盖换行；桌面签字页右侧签字区收成固定宽度与更低的签字高度，避免真实浏览器里继续横向失控 ✅ 2026-04-28

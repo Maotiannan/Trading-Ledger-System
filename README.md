@@ -34,8 +34,8 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.104`
-- 本次更新：新增 Excel ML 查询 API。每个账号可在 `设置` 中生成独立 token，Excel 通过 `ORDER NO` 查询 `ORDER NAME / COMPANY NAME / CUSTOMER NAME / MARK` 等字段，查询结果沿用该账号现有权限范围。
+- 当前版本：`1.0.105`
+- 本次更新：`Create Receipt Directly` 上传链路新增弱网优化。上传前会先压缩图片，手机端支持拍照/相册选择，输入 `ORDER NO` 后会自动建议回填 `INV NO / MARK / PHONE / PAYER`，上传成功或失败会在弹窗内明确提示。
 - 前端版本号位置：`设置` 页面最上方
 
 ## 系统适合谁

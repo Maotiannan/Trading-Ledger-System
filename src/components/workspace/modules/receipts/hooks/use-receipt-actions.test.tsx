@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { useReceiptActions } from './use-receipt-actions';
 import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
+import { compressReceiptDirectImage } from '../utils/image-compression';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
@@ -9,13 +10,25 @@ jest.mock('@/components/workspace/shared', () => ({
     if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
       return String((error as Record<string, unknown>).error || fallback);
     }
+    if (error && typeof error === 'object' && 'message' in (error as Record<string, unknown>)) {
+      return String((error as Record<string, unknown>).message || fallback);
+    }
     return error instanceof Error ? error.message : fallback;
   }),
+}));
+
+jest.mock('../utils/image-compression', () => ({
+  compressReceiptDirectImage: jest.fn(async (file: File) => ({
+    file,
+    compressed: false,
+    qualityUsed: null,
+  })),
 }));
 
 const mockApiCall = apiCall as jest.Mock;
 const mockApiUploadCall = apiUploadCall as jest.Mock;
 const mockGetErrorMessage = getErrorMessage as jest.Mock;
+const mockCompressReceiptDirectImage = compressReceiptDirectImage as jest.Mock;
 
 describe('useReceiptActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -51,6 +64,12 @@ describe('useReceiptActions', () => {
     mockApiCall.mockReset();
     mockApiUploadCall.mockReset();
     mockGetErrorMessage.mockClear();
+    mockCompressReceiptDirectImage.mockClear();
+    mockCompressReceiptDirectImage.mockResolvedValue({
+      file: null,
+      compressed: false,
+      qualityUsed: null,
+    });
     mockFetch.mockReset();
     loadReceipts.mockClear();
     setOcrResult.mockClear();
@@ -90,6 +109,8 @@ describe('useReceiptActions', () => {
       directSavedImagePath: null,
       setDirectSavedImagePath: jest.fn(),
       setDirectUploadedImageName: jest.fn(),
+      setDirectUploadStatus: jest.fn(),
+      setDirectUploadMessage: jest.fn(),
       directForm: {
         receiptNo: 'RCPT-1',
         date: '2026-03-11',
@@ -232,7 +253,14 @@ describe('useReceiptActions', () => {
   it('uploads direct-create receipt image and stores returned path', async () => {
     const setDirectSavedImagePath = jest.fn();
     const setDirectUploadedImageName = jest.fn();
+    const setDirectUploadStatus = jest.fn();
+    const setDirectUploadMessage = jest.fn();
     const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    mockCompressReceiptDirectImage.mockResolvedValue({
+      file,
+      compressed: false,
+      qualityUsed: null,
+    });
     mockApiUploadCall.mockResolvedValue({
       success: true,
       data: {
@@ -244,6 +272,8 @@ describe('useReceiptActions', () => {
     const { result } = renderHook(() => useReceiptActions(createDeps({
       setDirectSavedImagePath,
       setDirectUploadedImageName,
+      setDirectUploadStatus,
+      setDirectUploadMessage,
     })));
 
     await act(async () => {
@@ -263,6 +293,7 @@ describe('useReceiptActions', () => {
       name: 'direct-receipt.png',
     });
     expect(setDirectUploadedImageName).toHaveBeenCalledWith('direct-receipt.png');
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('success');
   });
 
   it('sends uploaded direct-create image path with receipt payload', async () => {
@@ -302,12 +333,21 @@ describe('useReceiptActions', () => {
   it('reports direct-create image upload failure returned by API', async () => {
     const setDirectSavedImagePath = jest.fn();
     const setDirectUploadedImageName = jest.fn();
+    const setDirectUploadStatus = jest.fn();
+    const setDirectUploadMessage = jest.fn();
     const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    mockCompressReceiptDirectImage.mockResolvedValue({
+      file,
+      compressed: false,
+      qualityUsed: null,
+    });
     mockApiUploadCall.mockResolvedValue({ success: false, error: '上传失败' });
 
     const { result } = renderHook(() => useReceiptActions(createDeps({
       setDirectSavedImagePath,
       setDirectUploadedImageName,
+      setDirectUploadStatus,
+      setDirectUploadMessage,
     })));
 
     await act(async () => {
@@ -318,7 +358,40 @@ describe('useReceiptActions', () => {
 
     expect(setDirectSavedImagePath).toHaveBeenCalledWith(null);
     expect(setDirectUploadedImageName).toHaveBeenCalledWith('');
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('failed');
     expect(setError).toHaveBeenCalledWith('上传失败');
+  });
+
+  it('maps interrupted direct-create image uploads to a visible retry message', async () => {
+    const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
+    const setDirectUploadStatus = jest.fn();
+    const setDirectUploadMessage = jest.fn();
+    mockCompressReceiptDirectImage.mockResolvedValue({
+      file,
+      compressed: true,
+      qualityUsed: 0.62,
+    });
+    mockApiUploadCall.mockRejectedValue({
+      code: 'UPLOAD_ABORTED',
+      message: '上传中断，请在更稳定的网络下重试',
+    });
+
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      setDirectUploadStatus,
+      setDirectUploadMessage,
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectImageSelect({
+        target: { files: [file], value: 'fake' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('compressing');
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('uploading');
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('failed');
+    expect(setDirectUploadMessage).toHaveBeenLastCalledWith('上传中断，请在更稳定的网络下重试');
+    expect(setError).toHaveBeenCalledWith('上传中断，请在更稳定的网络下重试');
   });
 
   it('reports direct-create failure returned by API', async () => {

@@ -74,6 +74,10 @@ export function ReceiptManager() {
     setDirectSavedImagePath,
     directUploadedImageName,
     setDirectUploadedImageName,
+    directUploadStatus,
+    setDirectUploadStatus,
+    directUploadMessage,
+    setDirectUploadMessage,
     directInvConflict,
     directInvConflictCount,
     ocrInvConflict,
@@ -147,6 +151,8 @@ export function ReceiptManager() {
     setSavedImagePath,
     setDirectSavedImagePath,
     setDirectUploadedImageName,
+    setDirectUploadStatus,
+    setDirectUploadMessage,
     setError,
     handleShowUploadChange,
     handleShowDirectCreateChange,
@@ -319,6 +325,8 @@ export function ReceiptManager() {
         tx={tx}
         uploadedImageName={directUploadedImageName}
         directUploading={directUploading}
+        directUploadStatus={directUploadStatus}
+        directUploadMessage={directUploadMessage}
         invConflict={directInvConflict}
         invConflictCount={directInvConflictCount}
         onOpenChange={handleShowDirectCreateChange}

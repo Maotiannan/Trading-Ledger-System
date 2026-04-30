@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchServerDate, lookupOrderContextByOrderNo, type CustomerCandidate } from '@/components/workspace/shared';
-import { EMPTY_RECEIPT_DIRECT_FORM, type ReceiptDirectForm } from '../types';
+import { EMPTY_RECEIPT_DIRECT_FORM, type DirectImageUploadStatus, type ReceiptDirectForm } from '../types';
 
 export type LoadReceiptCustomerCandidates = (
   mark: string,
@@ -27,6 +27,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
   const [directSavedImagePath, setDirectSavedImagePath] = useState<{ path: string; name: string } | null>(null);
   const [directUploadedImageName, setDirectUploadedImageName] = useState('');
+  const [directUploadStatus, setDirectUploadStatus] = useState<DirectImageUploadStatus>('idle');
+  const [directUploadMessage, setDirectUploadMessage] = useState<string | null>(null);
   const [directInvConflict, setDirectInvConflict] = useState(false);
   const [directInvConflictCount, setDirectInvConflictCount] = useState(0);
   const [ocrInvConflict, setOcrInvConflict] = useState(false);
@@ -62,6 +64,12 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
         }
 
         const matched = context.matchedCustomer;
+        if (context.phoneSuggestion) {
+          setDirectForm((prev) => ({ ...prev, tel: context.phoneSuggestion || prev.tel }));
+        }
+        if (context.payerSuggestion) {
+          setDirectForm((prev) => ({ ...prev, payer: context.payerSuggestion || prev.payer }));
+        }
         if (!matched) return;
         setDirectForm((prev) => ({
           ...prev,
@@ -135,6 +143,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setDirectCustomerCandidates([]);
       setDirectSavedImagePath(null);
       setDirectUploadedImageName('');
+      setDirectUploadStatus('idle');
+      setDirectUploadMessage(null);
       setDirectInvConflict(false);
       setDirectInvConflictCount(0);
     }
@@ -173,6 +183,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectCustomerCandidates([]);
     setDirectSavedImagePath(null);
     setDirectUploadedImageName('');
+    setDirectUploadStatus('idle');
+    setDirectUploadMessage(null);
     setDirectInvConflict(false);
     setDirectInvConflictCount(0);
   };
@@ -205,6 +217,10 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectSavedImagePath,
     directUploadedImageName,
     setDirectUploadedImageName,
+    directUploadStatus,
+    setDirectUploadStatus,
+    directUploadMessage,
+    setDirectUploadMessage,
     directInvConflict,
     directInvConflictCount,
     ocrInvConflict,

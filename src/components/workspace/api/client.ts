@@ -298,6 +298,8 @@ export async function fetchServerDate(): Promise<string> {
 export type OrderContextLookupResult = {
   matchedCustomer: { mark: string; name: string; customerId: string } | null;
   invoiceSuggestion: { invNo: string; conflict: boolean; count: number } | null;
+  phoneSuggestion: string | null;
+  payerSuggestion: string | null;
 };
 
 export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise<OrderContextLookupResult> {
@@ -305,6 +307,8 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
   if (!normalized) {
     return {
       matchedCustomer: null,
+      phoneSuggestion: null,
+      payerSuggestion: null,
       invoiceSuggestion: null,
     };
   }
@@ -313,6 +317,8 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
   if (!result.success || !result.data || typeof result.data !== 'object') {
     return {
       matchedCustomer: null,
+      phoneSuggestion: null,
+      payerSuggestion: null,
       invoiceSuggestion: null,
     };
   }
@@ -334,6 +340,8 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
         customerMark: String(row.customerMark || '').trim(),
         customerName: String(row.customerName || '').trim(),
         customerId: String(row.customerId || '').trim(),
+        customerPhone: String(row.customerPhone || '').trim(),
+        customerPayer: String(row.customerPayer || '').trim(),
       };
     })
     .filter((row) => row.invNo);
@@ -344,22 +352,30 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
   const latestInvoice = invoiceRows[0];
 
   let matchedCustomer: { mark: string; name: string; customerId: string } | null = null;
+  let phoneSuggestion: string | null = null;
+  let payerSuggestion: string | null = null;
   if (latestInvoice?.customerMark) {
     matchedCustomer = {
       mark: latestInvoice.customerMark,
       name: latestInvoice.customerName,
       customerId: latestInvoice.customerId,
     };
+    phoneSuggestion = latestInvoice.customerPhone || null;
+    payerSuggestion = latestInvoice.customerPayer || null;
   } else if (inferredCustomer) {
     matchedCustomer = {
       mark: String(inferredCustomer.mark || ''),
       name: String(inferredCustomer.orderName || inferredCustomer.name || ''),
       customerId: String(inferredCustomer.id || ''),
     };
+    phoneSuggestion = String(inferredCustomer.phone || '').trim() || null;
+    payerSuggestion = String(inferredCustomer.companyName || inferredCustomer.name || '').trim() || null;
   }
 
   return {
     matchedCustomer,
+    phoneSuggestion,
+    payerSuggestion,
     invoiceSuggestion: latestInvoice
       ? {
           invNo: latestInvoice.invNo,

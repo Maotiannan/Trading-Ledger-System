@@ -221,6 +221,14 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
   });
 
+  const exactContextMatches = exactMatches.map((row) => ({
+    ...row,
+    customerPhone: row.customerPhone || row.customer?.phone || null,
+    customerPayer: row.customer?.companyName?.trim()
+      ? row.customer.companyName.trim()
+      : (row.customer?.name?.trim() || null),
+  }));
+
   let inferredCustomer: null | {
     id: string;
     mark: string;
@@ -267,13 +275,13 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
   });
 
   return {
-    data: {
-      exactMatches,
-      inferredCustomer,
-      derivedOrderName,
-    },
-    message: `订单上下文已加载，共 ${exactMatches.length} 条`,
-  };
+      data: {
+        exactMatches: exactContextMatches,
+        inferredCustomer,
+        derivedOrderName,
+      },
+      message: `订单上下文已加载，共 ${exactContextMatches.length} 条`,
+    };
 }
 
 export async function listInvoiceRecords(currentUser: CurrentUser, search: string) {

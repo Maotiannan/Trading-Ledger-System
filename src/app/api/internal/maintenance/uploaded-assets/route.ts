@@ -3,8 +3,9 @@ import { runUploadedAssetMaintenance } from '@/lib/uploaded-asset-maintenance';
 
 export async function POST(request: Request) {
   const token = request.headers.get('x-maintenance-token');
+  const expectedToken = process.env.MAINTENANCE_JOB_TOKEN || 'replace-with-a-long-random-secret';
 
-  if (!token || token !== process.env.MAINTENANCE_JOB_TOKEN) {
+  if (!token || token !== expectedToken) {
     return NextResponse.json(
       { success: false, error: 'UNAUTHORIZED' },
       { status: 401 },

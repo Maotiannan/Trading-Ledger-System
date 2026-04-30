@@ -7,6 +7,9 @@ import { createSwiftRecord, deleteSwiftRecord } from '@/lib/swift-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
+    uploadedAsset: {
+      updateMany: jest.fn(),
+    },
     detail: {
       findUnique: jest.fn(),
       update: jest.fn(),
@@ -52,6 +55,7 @@ function makeUser(overrides: Partial<{
 }
 
 const mockDb = db as unknown as {
+  uploadedAsset: { updateMany: jest.Mock };
   detail: { findUnique: jest.Mock; update: jest.Mock };
   swift: { findUnique: jest.Mock; create: jest.Mock; delete: jest.Mock };
   receipt: { updateMany: jest.Mock };
@@ -150,6 +154,84 @@ describe('swift-service', () => {
       data: { status: ReceiptStatus.Bank_Transfer },
     });
     expect(mockRecordAuditEvent).toHaveBeenCalled();
+  });
+
+  it('attaches uploaded asset inside the swift create transaction', async () => {
+    mockDb.detail.findUnique.mockResolvedValueOnce({
+      id: 'detail-asset',
+      createdBy: 'sales-1',
+      totalAmount: 100,
+      items: [{ receiptId: 'receipt-2' }],
+    });
+    mockDb.swift.findUnique.mockResolvedValueOnce(null);
+    mockDb.swift.create.mockResolvedValueOnce({
+      id: 'swift-asset',
+      detailId: 'detail-asset',
+      imageUrl: '/upload/images/swifts/ocr/test.png',
+      status: SwiftStatus.Bank_Transfer,
+      hasError: false,
+    });
+    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await createSwiftRecord({
+      currentUser: makeUser(),
+      detailId: 'detail-asset',
+      payload: {
+        amount: 100,
+        date: null,
+        senderName: 'sender',
+        senderAddress: null,
+        receiverName: 'receiver',
+        receiverAccount: null,
+      },
+      imagePath: '/upload/images/swifts/ocr/test.png',
+      imageName: 'test.png',
+      mode: 'confirm',
+    });
+
+    expect(mockDb.uploadedAsset.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ path: '/upload/images/swifts/ocr/test.png' }),
+      data: expect.objectContaining({
+        attachedType: 'SWIFT',
+        attachedId: 'swift-asset',
+      }),
+    }));
+  });
+
+  it('aborts swift create before audit when attach fails', async () => {
+    mockDb.detail.findUnique.mockResolvedValueOnce({
+      id: 'detail-asset',
+      createdBy: 'sales-1',
+      totalAmount: 100,
+      items: [{ receiptId: 'receipt-2' }],
+    });
+    mockDb.swift.findUnique.mockResolvedValueOnce(null);
+    mockDb.swift.create.mockResolvedValueOnce({
+      id: 'swift-asset-fail',
+      detailId: 'detail-asset',
+      imageUrl: '/upload/images/swifts/ocr/test.png',
+      status: SwiftStatus.Bank_Transfer,
+      hasError: false,
+    });
+    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(createSwiftRecord({
+      currentUser: makeUser(),
+      detailId: 'detail-asset',
+      payload: {
+        amount: 100,
+        date: null,
+        senderName: 'sender',
+        senderAddress: null,
+        receiverName: 'receiver',
+        receiverAccount: null,
+      },
+      imagePath: '/upload/images/swifts/ocr/test.png',
+      imageName: 'test.png',
+      mode: 'confirm',
+    })).rejects.toThrow('Expected to attach exactly one staged uploaded asset');
+
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
   it('allows creator to directly delete error swift records', async () => {

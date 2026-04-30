@@ -117,9 +117,12 @@ export default async function run(t) {
 
     const filePath = t.writeTempFile(`uploaded-asset-${suffix}.png`, Buffer.from(PNG_BASE64, 'base64'));
 
-    await uploadReceiptDirectImage(t, filePath);
+    const directUpload = await uploadReceiptDirectImage(t, filePath);
+    const directUploadPath = directUpload.data?.data?.path;
+    assert.ok(directUploadPath, 'direct upload returns image path');
     const stagedDirectAssets = await prisma.uploadedAsset.findMany({
       where: {
+        path: directUploadPath,
         status: 'STAGED',
         category: 'RECEIPT_DIRECT',
         createdBy: salesUser.id,
@@ -129,7 +132,7 @@ export default async function run(t) {
     assert.equal(stagedDirectAssets.length, 1);
     t.step('direct upload registers staged uploaded asset');
 
-    await createReceiptDirectly(t, {
+    const directReceiptCreate = await createReceiptDirectly(t, {
       receiptNo: `RCPT-${suffix}-DIRECT`,
       usd: 120,
       orderNo: `${suffix}-DIRECT-01`,
@@ -139,12 +142,15 @@ export default async function run(t) {
       imagePath: stagedDirectAssets[0].path,
       imageName: stagedDirectAssets[0].name,
     });
+    const directReceiptId = directReceiptCreate.data?.data?.id;
+    assert.ok(directReceiptId, 'direct create returns receipt id');
 
     const attachedDirectAsset = await prisma.uploadedAsset.findFirst({
       where: { path: stagedDirectAssets[0].path },
     });
     assert.equal(attachedDirectAsset?.status, 'ATTACHED');
     assert.equal(attachedDirectAsset?.attachedType, 'RECEIPT');
+    assert.equal(attachedDirectAsset?.attachedId, directReceiptId);
     t.step('direct-create receipt attaches staged uploaded asset');
 
     const receiptRecognize = await recognizeReceiptImage(t, filePath);
@@ -160,7 +166,7 @@ export default async function run(t) {
     assert.ok(stagedReceiptOcrAsset, 'receipt OCR upload is staged');
     t.step('receipt OCR recognize registers staged asset');
 
-    await t.request('POST', '/api/receipt', {
+    const receiptConfirm = await t.request('POST', '/api/receipt', {
       json: {
         action: 'confirm',
         receiptNo: `RCPT-${suffix}-OCR`,
@@ -174,10 +180,13 @@ export default async function run(t) {
       },
       expectedStatus: 200,
     });
+    const receiptId = receiptConfirm.data?.data?.id;
+    assert.ok(receiptId, 'receipt confirm returns receipt id');
 
     const attachedReceiptOcrAsset = await prisma.uploadedAsset.findFirst({ where: { path: stagedReceiptOcrAsset.path } });
     assert.equal(attachedReceiptOcrAsset?.status, 'ATTACHED');
     assert.equal(attachedReceiptOcrAsset?.attachedType, 'RECEIPT');
+    assert.equal(attachedReceiptOcrAsset?.attachedId, receiptId);
     t.step('receipt OCR confirm attaches staged asset');
 
     const detailRecognize = await recognizeDetailImage(t, filePath);
@@ -194,7 +203,7 @@ export default async function run(t) {
     t.step('detail OCR recognize registers staged asset');
 
     const detailOrderNo = `${suffix}-DETAIL-01`;
-    await t.request('POST', '/api/detail', {
+    const detailConfirm = await t.request('POST', '/api/detail', {
       json: {
         action: 'confirm',
         date: '2026-04-30',
@@ -204,10 +213,13 @@ export default async function run(t) {
       },
       expectedStatus: 200,
     });
+    const detailId = detailConfirm.data?.data?.id;
+    assert.ok(detailId, 'detail confirm returns detail id');
 
     const attachedDetailOcrAsset = await prisma.uploadedAsset.findFirst({ where: { path: stagedDetailOcrAsset.path } });
     assert.equal(attachedDetailOcrAsset?.status, 'ATTACHED');
     assert.equal(attachedDetailOcrAsset?.attachedType, 'DETAIL');
+    assert.equal(attachedDetailOcrAsset?.attachedId, detailId);
     t.step('detail OCR confirm attaches staged asset');
 
     const detailList = await t.request('GET', `/api/detail?search=${encodeURIComponent(detailOrderNo)}`, { expectedStatus: 200 });
@@ -227,7 +239,7 @@ export default async function run(t) {
     assert.ok(stagedSwiftOcrAsset, 'swift OCR upload is staged');
     t.step('swift OCR recognize registers staged asset');
 
-    await t.request('POST', '/api/swift', {
+    const swiftConfirm = await t.request('POST', '/api/swift', {
       json: {
         action: 'confirm',
         detailId: createdDetail.id,
@@ -240,10 +252,13 @@ export default async function run(t) {
       },
       expectedStatus: 200,
     });
+    const swiftId = swiftConfirm.data?.data?.swift?.id;
+    assert.ok(swiftId, 'swift confirm returns swift id');
 
     const attachedSwiftOcrAsset = await prisma.uploadedAsset.findFirst({ where: { path: stagedSwiftOcrAsset.path } });
     assert.equal(attachedSwiftOcrAsset?.status, 'ATTACHED');
     assert.equal(attachedSwiftOcrAsset?.attachedType, 'SWIFT');
+    assert.equal(attachedSwiftOcrAsset?.attachedId, swiftId);
     t.step('swift OCR confirm attaches staged asset');
 
     await t.logout();

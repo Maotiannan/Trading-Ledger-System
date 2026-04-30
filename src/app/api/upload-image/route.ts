@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { addHours } from 'date-fns';
 import { UploadedAssetCategory } from '@prisma/client';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
@@ -13,8 +12,7 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { createApiError } from '@/lib/api-error';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
-import { getUploadedAssetCleanupSettings } from '@/lib/system-settings';
-import { registerUploadedAsset, uploadedAssetSubDirForCategory } from '@/lib/uploaded-asset-service';
+import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const PUBLIC_UPLOAD_PREFIX = '/upload/images/';
@@ -135,20 +133,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const { stagedTtlHours } = await getUploadedAssetCleanupSettings();
-    const subDir = uploadedAssetCategory ? uploadedAssetSubDirForCategory(uploadedAssetCategory) : '';
-    const image = await saveUploadedImage(file, { subDir });
-    if (uploadedAssetCategory) {
-      await registerUploadedAsset({
-        path: image.path,
-        name: image.name,
-        category: uploadedAssetCategory,
-        mimeType: image.mimeType,
-        sizeBytes: image.sizeBytes,
-        createdBy: currentUser.id,
-        expiresAt: addHours(new Date(), stagedTtlHours),
-      });
-    }
+    const image = uploadedAssetCategory
+      ? await stageUploadedAsset({
+          file,
+          category: uploadedAssetCategory,
+          createdBy: currentUser.id,
+        })
+      : await saveUploadedImage(file);
 
     return createApiSuccessResponse({ data: image }, request);
   } catch (error) {

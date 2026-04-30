@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addHours } from 'date-fns';
 import { DetailStatus, ReceiptStatus, SwiftStatus } from '@prisma/client';
 import { UploadedAssetCategory } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recognizeSwift } from '@/lib/ocr';
 import { withAuth } from '@/lib/route-auth';
-import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
+import { UploadValidationError } from '@/lib/upload';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPayloadSchema } from '@/lib/validators';
 import { parseActionRequest } from '@/lib/http-body';
 import { toOcrDataUrl } from '@/lib/ocr-input';
@@ -16,8 +15,7 @@ import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiError } from '@/lib/api-error';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
-import { getUploadedAssetCleanupSettings } from '@/lib/system-settings';
-import { registerUploadedAsset, uploadedAssetSubDirForCategory } from '@/lib/uploaded-asset-service';
+import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createSwiftRecord, deleteSwiftRecord } from '@/lib/swift-service';
 
 function parseSwiftPayload(data: Record<string, unknown>) {
@@ -110,18 +108,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       try {
         const base64 = await toOcrDataUrl(file);
         const ocrResult = await recognizeSwift(base64);
-        const { stagedTtlHours } = await getUploadedAssetCleanupSettings();
-        const imagePath = await saveUploadedImage(file, {
-          subDir: uploadedAssetSubDirForCategory(UploadedAssetCategory.SWIFT_OCR),
-        });
-        await registerUploadedAsset({
-          path: imagePath.path,
-          name: imagePath.name,
+        const imagePath = await stageUploadedAsset({
+          file,
           category: UploadedAssetCategory.SWIFT_OCR,
-          mimeType: imagePath.mimeType,
-          sizeBytes: imagePath.sizeBytes,
           createdBy: currentUser.id,
-          expiresAt: addHours(new Date(), stagedTtlHours),
         });
 
         return NextResponse.json({

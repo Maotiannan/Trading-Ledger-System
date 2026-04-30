@@ -8,6 +8,9 @@ import { resolveCustomer } from '@/lib/customer-matching';
 
 jest.mock('@/lib/db', () => ({
   db: {
+    uploadedAsset: {
+      updateMany: jest.fn(),
+    },
     receipt: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -74,6 +77,7 @@ function makeUser(overrides: Partial<{ id: string; role: UserRole }> = {}) {
 }
 
 const mockDb = db as unknown as {
+  uploadedAsset: { updateMany: jest.Mock };
   receipt: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
   receiptHistory: { create: jest.Mock };
   detailItem: { findMany: jest.Mock };
@@ -153,6 +157,87 @@ describe('receipt-service', () => {
     })).rejects.toMatchObject({
       code: 'CONFLICT',
     });
+  });
+
+  it('attaches uploaded asset inside the receipt create transaction', async () => {
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+    mockFindMatchingOrder.mockResolvedValueOnce(null);
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-asset',
+      imageUrl: '/upload/images/receipts/direct/test.png',
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await createReceiptRecord({
+      currentUser: makeUser(),
+      payload: {
+        receiptNo: 'R-ASSET',
+        date: null,
+        tel: null,
+        usd: 100,
+        invNo: null,
+        orderNo: 'IB-1',
+        payer: null,
+        customerMark: 'IB',
+        customerName: null,
+        customerPhone: null,
+        customerCity: null,
+        customerId: null,
+        isDeposit: false,
+      },
+      imagePath: '/upload/images/receipts/direct/test.png',
+      imageName: 'test.png',
+      mode: 'direct-create',
+    });
+
+    expect(mockDb.uploadedAsset.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        path: '/upload/images/receipts/direct/test.png',
+        status: 'STAGED',
+      }),
+      data: expect.objectContaining({
+        attachedType: 'RECEIPT',
+        attachedId: 'receipt-asset',
+      }),
+    }));
+    expect(mockRecordAuditEvent).toHaveBeenCalled();
+  });
+
+  it('aborts receipt create before post-transaction work when attach fails', async () => {
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+    mockFindMatchingOrder.mockResolvedValueOnce(null);
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-asset-fail',
+      imageUrl: '/upload/images/receipts/direct/test.png',
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(createReceiptRecord({
+      currentUser: makeUser(),
+      payload: {
+        receiptNo: 'R-ASSET-FAIL',
+        date: null,
+        tel: null,
+        usd: 100,
+        invNo: null,
+        orderNo: 'IB-1',
+        payer: null,
+        customerMark: 'IB',
+        customerName: null,
+        customerPhone: null,
+        customerCity: null,
+        customerId: null,
+        isDeposit: false,
+      },
+      imagePath: '/upload/images/receipts/direct/test.png',
+      imageName: 'test.png',
+      mode: 'confirm',
+    })).rejects.toThrow('Expected to attach exactly one staged uploaded asset');
+
+    expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
   it('updates receipt history and balances when modifying a receipt', async () => {

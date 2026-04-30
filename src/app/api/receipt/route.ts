@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addHours } from 'date-fns';
 import { UploadedAssetCategory } from '@prisma/client';
 import { ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recognizeReceipt } from '@/lib/ocr';
 import { withAuth } from '@/lib/route-auth';
-import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
+import { UploadValidationError } from '@/lib/upload';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, receiptPayloadSchema } from '@/lib/validators';
 import { parseActionRequest } from '@/lib/http-body';
 import { toOcrDataUrl } from '@/lib/ocr-input';
@@ -16,8 +15,7 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
-import { getUploadedAssetCleanupSettings } from '@/lib/system-settings';
-import { registerUploadedAsset, uploadedAssetSubDirForCategory } from '@/lib/uploaded-asset-service';
+import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import {
   createReceiptRecord,
   markReceiptReceived,
@@ -116,18 +114,10 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       try {
         const base64 = await toOcrDataUrl(file);
         const ocrResult = await recognizeReceipt(base64);
-        const { stagedTtlHours } = await getUploadedAssetCleanupSettings();
-        const imagePath = await saveUploadedImage(file, {
-          subDir: uploadedAssetSubDirForCategory(UploadedAssetCategory.RECEIPT_OCR),
-        });
-        await registerUploadedAsset({
-          path: imagePath.path,
-          name: imagePath.name,
+        const imagePath = await stageUploadedAsset({
+          file,
           category: UploadedAssetCategory.RECEIPT_OCR,
-          mimeType: imagePath.mimeType,
-          sizeBytes: imagePath.sizeBytes,
           createdBy: currentUser.id,
-          expiresAt: addHours(new Date(), stagedTtlHours),
         });
 
         return NextResponse.json({

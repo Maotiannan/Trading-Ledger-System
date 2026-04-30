@@ -170,19 +170,20 @@ export async function createReceiptRecord(params: {
         },
       });
     }
+    if (created.imageUrl) {
+      await attachUploadedAssetByPath({
+        client: tx,
+        path: created.imageUrl,
+        attachedType: UploadedAssetAttachmentType.RECEIPT,
+        attachedId: created.id,
+      });
+    }
 
     return { created, orderId };
   });
 
   if (receipt.orderId) {
     await updateOrderBalance(receipt.orderId);
-  }
-  if (receipt.created.imageUrl) {
-    await attachUploadedAssetByPath({
-      path: receipt.created.imageUrl,
-      attachedType: UploadedAssetAttachmentType.RECEIPT,
-      attachedId: receipt.created.id,
-    });
   }
 
   await recordAuditEvent({

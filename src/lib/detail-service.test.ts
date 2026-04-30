@@ -8,6 +8,9 @@ import { resolveCustomer } from '@/lib/customer-matching';
 
 jest.mock('@/lib/db', () => ({
   db: {
+    uploadedAsset: {
+      updateMany: jest.fn(),
+    },
     receipt: {
       findUnique: jest.fn(),
       create: jest.fn(),
@@ -64,6 +67,7 @@ function makeUser(overrides: Partial<{ id: string; role: UserRole }> = {}) {
 }
 
 const mockDb = db as unknown as {
+  uploadedAsset: { updateMany: jest.Mock };
   receipt: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
   order: { update: jest.Mock };
   detail: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
@@ -122,6 +126,65 @@ describe('detail-service', () => {
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
     expect(result.message).toBe('付款明细已直接创建');
     expect(mockRecordAuditEvent).toHaveBeenCalled();
+  });
+
+  it('attaches uploaded asset inside the detail create transaction', async () => {
+    mockFindMatchingReceipt.mockResolvedValueOnce(null);
+    mockFindOrCreateOrder.mockResolvedValueOnce('order-asset');
+    mockDb.receipt.create.mockResolvedValueOnce({ id: 'receipt-asset' });
+    mockDb.detail.create.mockResolvedValueOnce({
+      id: 'detail-asset',
+      imageUrl: '/upload/images/details/ocr/test.png',
+      items: [{ receiptId: 'receipt-asset', receipt: { id: 'receipt-asset' } }],
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await createDetailRecord({
+      currentUser: makeUser(),
+      payload: {
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
+      },
+      imagePath: '/upload/images/details/ocr/test.png',
+      imageName: 'test.png',
+      mode: 'confirm',
+    });
+
+    expect(mockDb.uploadedAsset.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ path: '/upload/images/details/ocr/test.png' }),
+      data: expect.objectContaining({
+        attachedType: 'DETAIL',
+        attachedId: 'detail-asset',
+      }),
+    }));
+  });
+
+  it('aborts detail create before post-transaction work when attach fails', async () => {
+    mockFindMatchingReceipt.mockResolvedValueOnce(null);
+    mockFindOrCreateOrder.mockResolvedValueOnce('order-asset');
+    mockDb.receipt.create.mockResolvedValueOnce({ id: 'receipt-asset' });
+    mockDb.detail.create.mockResolvedValueOnce({
+      id: 'detail-asset-fail',
+      imageUrl: '/upload/images/details/ocr/test.png',
+      items: [{ receiptId: 'receipt-asset', receipt: { id: 'receipt-asset' } }],
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await expect(createDetailRecord({
+      currentUser: makeUser(),
+      payload: {
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
+      },
+      imagePath: '/upload/images/details/ocr/test.png',
+      imageName: 'test.png',
+      mode: 'confirm',
+    })).rejects.toThrow('Expected to attach exactly one staged uploaded asset');
+
+    expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
   it('rejects detail update when status is RECEIVED', async () => {

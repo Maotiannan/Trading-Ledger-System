@@ -144,16 +144,17 @@ export async function createSwiftRecord(params: {
           });
         }
       }
+      if (created.imageUrl) {
+        await attachUploadedAssetByPath({
+          client: tx,
+          path: created.imageUrl,
+          attachedType: UploadedAssetAttachmentType.SWIFT,
+          attachedId: created.id,
+        });
+      }
 
       return created;
     });
-    if (swift.imageUrl) {
-      await attachUploadedAssetByPath({
-        path: swift.imageUrl,
-        attachedType: UploadedAssetAttachmentType.SWIFT,
-        attachedId: swift.id,
-      });
-    }
 
     await recordAuditEvent({
       action: auditActions.SWIFT_CREATE,

@@ -243,19 +243,20 @@ export async function createDetailRecord(params: {
       .map((item) => item.receiptId)
       .filter((receiptId): receiptId is string => Boolean(receiptId));
     await setReceiptsWaitingSwift(tx, receiptIds);
+    if (created.imageUrl) {
+      await attachUploadedAssetByPath({
+        client: tx,
+        path: created.imageUrl,
+        attachedType: UploadedAssetAttachmentType.DETAIL,
+        attachedId: created.id,
+      });
+    }
 
     return { detail: created, touchedOrderIds: processedItems.touchedOrderIds };
   });
 
   for (const orderId of result.touchedOrderIds) {
     await updateOrderBalance(orderId);
-  }
-  if (result.detail.imageUrl) {
-    await attachUploadedAssetByPath({
-      path: result.detail.imageUrl,
-      attachedType: UploadedAssetAttachmentType.DETAIL,
-      attachedId: result.detail.id,
-    });
   }
 
   await recordAuditEvent({

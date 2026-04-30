@@ -7,6 +7,7 @@ import {
   UploadedAssetStatus,
   UserRole,
 } from '@prisma/client';
+import { rm } from 'fs/promises';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import { recordAuditEvent } from '@/lib/audit';
@@ -17,6 +18,7 @@ import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { runInTransaction } from '@/lib/transaction';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
+import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
 import type { CurrentUser } from '@/lib/request-auth';
 
 function badRequest(message: string, detail?: unknown) {
@@ -288,105 +290,118 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
     fileToBuffer(input.payerSignature),
   ]);
 
-  const [receiptImage, receiverSignature, payerSignature] = await Promise.all([
-    saveReceiptGeneratorArtifact({
+  const savedArtifacts: Array<{ path: string }> = [];
+  let updated;
+
+  try {
+    const receiptImage = await saveReceiptGeneratorArtifact({
       kind: 'receipt',
       receiptNo: session.receiptNo,
       buffer: receiptBuffer,
       mime: input.receiptImage.type || 'image/png',
-    }),
-    saveReceiptGeneratorArtifact({
+    });
+    savedArtifacts.push(receiptImage);
+
+    const receiverSignature = await saveReceiptGeneratorArtifact({
       kind: 'receiver-signature',
       receiptNo: session.receiptNo,
       buffer: receiverSignatureBuffer,
       mime: input.receiverSignature.type || 'image/png',
-    }),
-    saveReceiptGeneratorArtifact({
+    });
+    savedArtifacts.push(receiverSignature);
+
+    const payerSignature = await saveReceiptGeneratorArtifact({
       kind: 'payer-signature',
       receiptNo: session.receiptNo,
       buffer: payerSignatureBuffer,
       mime: input.payerSignature.type || 'image/png',
-    }),
-  ]);
-
-  const updated = await runInTransaction(async (tx) => {
-    const sessionUpdateData: Prisma.ReceiptGeneratorSessionUpdateInput = {
-      status: ReceiptGeneratorSessionStatus.FINALIZED,
-      receiverSignatureUrl: receiverSignature.path,
-      receiverSignatureName: receiverSignature.name,
-      payerSignatureUrl: payerSignature.path,
-      payerSignatureName: payerSignature.name,
-      finalImageUrl: receiptImage.path,
-      finalImageName: receiptImage.name,
-      ...(typeof input.layoutSnapshot === 'undefined' ? {} : { layoutSnapshot: input.layoutSnapshot as Prisma.InputJsonValue }),
-    };
-
-    await tx.receipt.update({
-      where: { id: session.receiptId },
-      data: {
-        status: ReceiptStatus.SR_Received,
-        imageUrl: receiptImage.path,
-        imageName: receiptImage.name,
-        note: '签名收据已生成',
-      },
     });
+    savedArtifacts.push(payerSignature);
 
-    await tx.uploadedAsset.createMany({
-      data: [
-        {
-          path: receiverSignature.path,
-          name: receiverSignature.name,
-          category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
-          mimeType: input.receiverSignature.type || 'image/png',
-          sizeBytes: receiverSignatureBuffer.byteLength,
-          createdBy: session.createdBy,
-          status: UploadedAssetStatus.ATTACHED,
-          attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
-          attachedId: session.id,
-        },
-        {
-          path: payerSignature.path,
-          name: payerSignature.name,
-          category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
-          mimeType: input.payerSignature.type || 'image/png',
-          sizeBytes: payerSignatureBuffer.byteLength,
-          createdBy: session.createdBy,
-          status: UploadedAssetStatus.ATTACHED,
-          attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
-          attachedId: session.id,
-        },
-        {
-          path: receiptImage.path,
-          name: receiptImage.name,
-          category: UploadedAssetCategory.RECEIPT_GENERATOR_FINAL,
-          mimeType: input.receiptImage.type || 'image/png',
-          sizeBytes: receiptBuffer.byteLength,
-          createdBy: session.createdBy,
-          status: UploadedAssetStatus.ATTACHED,
-          attachedType: UploadedAssetAttachmentType.RECEIPT,
-          attachedId: session.receiptId,
-        },
-      ],
-    });
+    updated = await runInTransaction(async (tx) => {
+      const sessionUpdateData: Prisma.ReceiptGeneratorSessionUpdateInput = {
+        status: ReceiptGeneratorSessionStatus.FINALIZED,
+        receiverSignatureUrl: receiverSignature.path,
+        receiverSignatureName: receiverSignature.name,
+        payerSignatureUrl: payerSignature.path,
+        payerSignatureName: payerSignature.name,
+        finalImageUrl: receiptImage.path,
+        finalImageName: receiptImage.name,
+        ...(typeof input.layoutSnapshot === 'undefined' ? {} : { layoutSnapshot: input.layoutSnapshot as Prisma.InputJsonValue }),
+      };
 
-    const updatedSession = await tx.receiptGeneratorSession.update({
-      where: { id: sessionId },
-      data: sessionUpdateData,
-      include: {
-        receipt: {
-          select: {
-            id: true,
-            receiptNo: true,
-            status: true,
-            imageUrl: true,
-            imageName: true,
+      await tx.receipt.update({
+        where: { id: session.receiptId },
+        data: {
+          status: ReceiptStatus.SR_Received,
+          imageUrl: receiptImage.path,
+          imageName: receiptImage.name,
+          note: '签名收据已生成',
+        },
+      });
+
+      await tx.uploadedAsset.createMany({
+        data: [
+          {
+            path: receiverSignature.path,
+            name: receiverSignature.name,
+            category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
+            mimeType: input.receiverSignature.type || 'image/png',
+            sizeBytes: receiverSignatureBuffer.byteLength,
+            createdBy: session.createdBy,
+            status: UploadedAssetStatus.ATTACHED,
+            attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
+            attachedId: session.id,
+          },
+          {
+            path: payerSignature.path,
+            name: payerSignature.name,
+            category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
+            mimeType: input.payerSignature.type || 'image/png',
+            sizeBytes: payerSignatureBuffer.byteLength,
+            createdBy: session.createdBy,
+            status: UploadedAssetStatus.ATTACHED,
+            attachedType: UploadedAssetAttachmentType.RECEIPT_GENERATOR_SESSION,
+            attachedId: session.id,
+          },
+          {
+            path: receiptImage.path,
+            name: receiptImage.name,
+            category: UploadedAssetCategory.RECEIPT_GENERATOR_FINAL,
+            mimeType: input.receiptImage.type || 'image/png',
+            sizeBytes: receiptBuffer.byteLength,
+            createdBy: session.createdBy,
+            status: UploadedAssetStatus.ATTACHED,
+            attachedType: UploadedAssetAttachmentType.RECEIPT,
+            attachedId: session.receiptId,
+          },
+        ],
+      });
+
+      return tx.receiptGeneratorSession.update({
+        where: { id: sessionId },
+        data: sessionUpdateData,
+        include: {
+          receipt: {
+            select: {
+              id: true,
+              receiptNo: true,
+              status: true,
+              imageUrl: true,
+              imageName: true,
+            },
           },
         },
-      },
+      });
     });
-
-    return updatedSession;
-  });
+  } catch (error) {
+    await Promise.all(
+      savedArtifacts.map((artifact) =>
+        rm(resolveUploadedAssetAbsolutePath(artifact.path), { force: true }).catch(() => undefined),
+      ),
+    );
+    throw error;
+  }
 
   await recordAuditEvent({
     action: auditActions.RECEIPT_UPDATE,

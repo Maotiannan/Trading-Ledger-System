@@ -65,7 +65,7 @@ export async function attachUploadedAssetByPath(input: {
   }
 }
 
-function resolveUploadedAssetAbsolutePath(publicPath: string): string {
+export function resolveUploadedAssetAbsolutePath(publicPath: string): string {
   const configuredDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
   const baseUploadDir = path.isAbsolute(configuredDir)
     ? configuredDir

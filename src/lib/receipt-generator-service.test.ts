@@ -6,6 +6,7 @@ import {
   UploadedAssetStatus,
   UserRole,
 } from '@prisma/client';
+import { rm } from 'fs/promises';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
@@ -55,6 +56,10 @@ jest.mock('@/lib/receipt-generator-image', () => ({
   saveReceiptGeneratorArtifact: jest.fn(),
 }));
 
+jest.mock('fs/promises', () => ({
+  rm: jest.fn(),
+}));
+
 function makeUser(role: UserRole = UserRole.ADMIN) {
   return {
     id: 'admin-1',
@@ -78,6 +83,7 @@ const mockAllocateNextReceiptNo = allocateNextReceiptNo as jest.Mock;
 const mockSaveReceiptGeneratorArtifact = saveReceiptGeneratorArtifact as jest.Mock;
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockRm = rm as jest.MockedFunction<typeof rm>;
 
 describe('receipt-generator-service', () => {
   beforeEach(() => {
@@ -85,6 +91,7 @@ describe('receipt-generator-service', () => {
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockAllocateNextReceiptNo.mockResolvedValue('0001000');
+    mockRm.mockResolvedValue(undefined);
     mockLookupInvoiceOrderContext.mockResolvedValue({
       data: {
         derivedOrderName: 'Big Alpha',
@@ -313,5 +320,65 @@ describe('receipt-generator-service', () => {
         }),
       ]),
     }));
+  });
+
+  it('removes written generator artifacts when finalize persistence fails after files are saved', async () => {
+    mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
+      id: 'session-1',
+      createdBy: 'admin-1',
+      receiptId: 'receipt-1',
+      receiptNo: '0001000',
+      layoutSnapshot: { receiptNo: '0001000' },
+      status: ReceiptGeneratorSessionStatus.PENDING,
+      receipt: {
+        id: 'receipt-1',
+        createdBy: 'admin-1',
+        status: ReceiptStatus.SIGNING_PENDING,
+        receiptNo: '0001000',
+      },
+    });
+    mockSaveReceiptGeneratorArtifact
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
+        name: '0001000-receipt.png',
+      })
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
+        name: '0001000-receiver-signature.png',
+      })
+      .mockResolvedValueOnce({
+        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
+        name: '0001000-payer-signature.png',
+      });
+    mockDb.uploadedAsset.createMany.mockRejectedValueOnce(new Error('attach failed'));
+
+    const pngBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const makeMockFile = (name: string) => ({
+      name,
+      type: 'image/png',
+      arrayBuffer: async () => pngBytes.buffer,
+    }) as unknown as File;
+
+    await expect(finalizeReceiptGeneratorSession(makeUser(), {
+      sessionId: 'session-1',
+      receiptImage: makeMockFile('receipt.png'),
+      receiverSignature: makeMockFile('receiver.png'),
+      payerSignature: makeMockFile('payer.png'),
+      layoutSnapshot: { receiptNo: '0001000', orderNo: 'Big Alpha-07' },
+    })).rejects.toThrow('attach failed');
+
+    expect(mockRm).toHaveBeenCalledTimes(3);
+    expect(mockRm).toHaveBeenCalledWith(
+      expect.stringContaining('/receipts/generated/2026/04/0001000-receipt.png'),
+      { force: true },
+    );
+    expect(mockRm).toHaveBeenCalledWith(
+      expect.stringContaining('/receipts/generated/2026/04/signatures/0001000-receiver-signature.png'),
+      { force: true },
+    );
+    expect(mockRm).toHaveBeenCalledWith(
+      expect.stringContaining('/receipts/generated/2026/04/signatures/0001000-payer-signature.png'),
+      { force: true },
+    );
   });
 });

@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import {
@@ -67,7 +68,7 @@ describe('excel-token-service', () => {
     const result = await generateExcelApiToken(currentUser, 'Excel desktop');
     const createCall = mockDb.excelApiToken.create.mock.calls[0][0];
 
-    expect(result.token).toMatch(/^ml_[A-Za-z0-9_-]{10,}_[A-Za-z0-9_-]{32,}$/);
+    expect(result.token).toMatch(/^ml_[a-f0-9]{16}_[a-f0-9]{64}$/i);
     expect(result.tokenInfo).toEqual(expect.objectContaining({
       id: 'token-1',
       name: 'Excel desktop',
@@ -139,6 +140,28 @@ describe('excel-token-service', () => {
       where: { id: 'token-1' },
       data: { lastUsedAt: expect.any(Date), lastUsedIp: '127.0.0.1' },
     });
+  });
+
+  it('verifies legacy bearer tokens whose secret contains underscores', async () => {
+    const legacyPrefix = 'abc_defGhIJ';
+    const legacySecret = `secret_value_${'x'.repeat(30)}`;
+    const legacyToken = `ml_${legacyPrefix}_${legacySecret}`;
+    mockDb.excelApiToken.findUnique.mockResolvedValueOnce({
+      id: 'token-legacy',
+      tokenHash: createHash('sha256').update(legacyToken).digest('hex'),
+      tokenPrefix: legacyPrefix,
+      revokedAt: null,
+      expiresAt: null,
+      user: currentUser,
+    });
+
+    const auth = await verifyExcelApiTokenFromHeader(`Bearer ${legacyToken}`, '127.0.0.1');
+
+    expect(mockDb.excelApiToken.findUnique).toHaveBeenCalledWith({
+      where: { tokenPrefix: legacyPrefix },
+      select: expect.any(Object),
+    });
+    expect(auth).toEqual({ user: currentUser, tokenId: 'token-legacy' });
   });
 
   it('rejects missing and malformed tokens with stable API errors', async () => {

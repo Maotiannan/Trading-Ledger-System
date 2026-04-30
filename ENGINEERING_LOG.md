@@ -1,7 +1,7 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.108
+> 当前版本：v1.0.109
 > 最后更新：2026-04-30
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
@@ -112,6 +112,11 @@
 - 新增 `/api/internal/maintenance/uploaded-assets` 内部维护路由，使用 `x-maintenance-token` 鉴权；Docker maintenance 服务按 24h 周期调用它，避免依赖宿主机 cron 或进程内定时器。
 - 维护任务拆成两段策略：一段只清理过期 `STAGED` 资产并删 NAS 文件，另一段只处理超过 72h 的 `SIGNING_PENDING` 签名会话，先把会话标成 `CANCELLED`，再删除仍未进入正常业务状态的占位收据。
 - 本次没有做历史文件回填；维护任务只会处理已经登记到 `UploadedAsset` 的新资产，避免对老数据做不安全的猜测式删除。
+
+### v1.0.109（2026-04-30）
+- 修复 Excel ML token 生成/校验协议中的分隔歧义。旧实现把 `_` 同时用作分隔符和 base64url 内容字符，导致极少数 token 在 `/api/excel/ml` 校验时会错误拆出 `tokenPrefix`，进而返回 `EXCEL_TOKEN_INVALID`。
+- 新 token 改为十六进制编码，仍沿用 `ml_<prefix>_<secret>` 结构但不再产生 `_` 内容；`verifyExcelApiTokenFromHeader()` 同时兼容旧版 11/43 长度的 base64url token，避免让已发出的 token 失效。
+- 针对这条问题补了最小回归：`excel-token-service` 单测新增“legacy secret contains underscores”覆盖，主仓重新跑通 `test:ci + build` 后再推送。
 
 ### 自动化回归
 - [x] 新增 `matching` 单测（余额计算关键口径）✅ 2026-03-02

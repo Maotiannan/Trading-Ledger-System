@@ -5,7 +5,10 @@ import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 
 const TOKEN_PREFIX = 'ml';
-const TOKEN_PATTERN = /^ml_([A-Za-z0-9_-]{10,})_([A-Za-z0-9_-]{32,})$/;
+const MODERN_TOKEN_PATTERN = /^ml_([a-f0-9]{16})_([a-f0-9]{64})$/i;
+const LEGACY_TOKEN_PREFIX_LENGTH = 11;
+const LEGACY_TOKEN_SECRET_LENGTH = 43;
+const LEGACY_TOKEN_ALLOWED_CHARS = /^[A-Za-z0-9_-]+$/;
 
 export type ExcelApiTokenSummary = {
   id: string;
@@ -48,8 +51,8 @@ function toSummary(row: ExcelTokenRow): ExcelApiTokenSummary {
 }
 
 function createRawExcelToken(): { token: string; tokenPrefix: string } {
-  const tokenPrefix = randomBytes(8).toString('base64url');
-  const secret = randomBytes(32).toString('base64url');
+  const tokenPrefix = randomBytes(8).toString('hex');
+  const secret = randomBytes(32).toString('hex');
   return {
     tokenPrefix,
     token: `${TOKEN_PREFIX}_${tokenPrefix}_${secret}`,
@@ -57,8 +60,32 @@ function createRawExcelToken(): { token: string; tokenPrefix: string } {
 }
 
 function extractTokenPrefix(token: string): string | null {
-  const match = TOKEN_PATTERN.exec(token.trim());
-  return match?.[1] || null;
+  const normalized = token.trim();
+  const modernMatch = MODERN_TOKEN_PATTERN.exec(normalized);
+  if (modernMatch?.[1]) {
+    return modernMatch[1];
+  }
+
+  if (!normalized.startsWith(`${TOKEN_PREFIX}_`)) {
+    return null;
+  }
+
+  const remainder = normalized.slice(TOKEN_PREFIX.length + 1);
+  const separatorIndex = LEGACY_TOKEN_PREFIX_LENGTH;
+  if (remainder.length !== LEGACY_TOKEN_PREFIX_LENGTH + 1 + LEGACY_TOKEN_SECRET_LENGTH) {
+    return null;
+  }
+  if (remainder[separatorIndex] !== '_') {
+    return null;
+  }
+
+  const legacyPrefix = remainder.slice(0, separatorIndex);
+  const legacySecret = remainder.slice(separatorIndex + 1);
+  if (!LEGACY_TOKEN_ALLOWED_CHARS.test(legacyPrefix) || !LEGACY_TOKEN_ALLOWED_CHARS.test(legacySecret)) {
+    return null;
+  }
+
+  return legacyPrefix;
 }
 
 function parseBearerToken(headerValue: string | null): string {

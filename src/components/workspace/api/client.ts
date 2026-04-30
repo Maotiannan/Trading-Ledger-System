@@ -43,6 +43,25 @@ export class WorkspaceApiError extends Error {
   }
 }
 
+export type ApiUploadProgress = {
+  loaded: number;
+  total: number | null;
+  percent: number | null;
+};
+
+export type ApiUploadStage = 'uploading' | 'saving';
+
+export type ApiUploadOptions = {
+  method?: string;
+  onUploadProgress?: (progress: ApiUploadProgress) => void;
+  onUploadStageChange?: (stage: ApiUploadStage) => void;
+  idleTimeoutMs?: number;
+  hardTimeoutMs?: number;
+};
+
+export const DEFAULT_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
+export const DEFAULT_UPLOAD_HARD_TIMEOUT_MS = 120_000;
+
 function getCurrentLocale(): string {
   if (typeof document !== 'undefined' && document.documentElement.lang) {
     return document.documentElement.lang;
@@ -115,6 +134,14 @@ function toWorkspaceApiError(input: unknown, status?: number, fallback?: string)
   return new WorkspaceApiError(translated, {
     code: extracted.code,
     detail: extracted.detail,
+    status,
+  });
+}
+
+function createClientUploadError(code: string, zh: string, en: string, status?: number): WorkspaceApiError {
+  const locale = getCurrentLocale();
+  return new WorkspaceApiError(locale.startsWith('en') ? en : zh, {
+    code,
     status,
   });
 }
@@ -195,14 +222,162 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
   return parseApiResponse(response);
 }
 
-export async function apiUploadCall(endpoint: string, formData: FormData, options: Omit<RequestInit, 'body' | 'headers'> = {}) {
-  const response = await fetch(`/api/${endpoint}`, {
-    ...options,
-    body: formData,
-    credentials: 'include',
-  });
+export async function apiUploadCall(endpoint: string, formData: FormData, options: ApiUploadOptions = {}) {
+  const {
+    method = 'POST',
+    onUploadProgress,
+    onUploadStageChange,
+    idleTimeoutMs = DEFAULT_UPLOAD_IDLE_TIMEOUT_MS,
+    hardTimeoutMs = DEFAULT_UPLOAD_HARD_TIMEOUT_MS,
+  } = options;
 
-  return parseApiResponse(response);
+  if (typeof XMLHttpRequest === 'undefined') {
+    const response = await fetch(`/api/${endpoint}`, {
+      method,
+      body: formData,
+      credentials: 'include',
+    });
+    return parseApiResponse(response);
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    let settled = false;
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let hardTimer: ReturnType<typeof setTimeout> | null = null;
+    let abortReason: WorkspaceApiError | null = null;
+
+    const clearIdleTimer = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
+
+    const clearHardTimer = () => {
+      if (hardTimer) {
+        clearTimeout(hardTimer);
+        hardTimer = null;
+      }
+    };
+
+    const clearTimers = () => {
+      clearIdleTimer();
+      clearHardTimer();
+    };
+
+    const refreshIdleTimer = () => {
+      if (!idleTimeoutMs) return;
+      clearIdleTimer();
+      idleTimer = setTimeout(() => {
+        abortReason = createClientUploadError(
+          'UPLOAD_IDLE_TIMEOUT',
+          '上传空闲超时，请检查网络后重试',
+          'Upload stalled for too long. Check your network and retry.',
+        );
+        xhr.abort();
+      }, idleTimeoutMs);
+    };
+
+    const finalizeReject = (error: WorkspaceApiError) => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      reject(error);
+    };
+
+    const finalizeResolve = (value: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimers();
+      resolve(value);
+    };
+
+    xhr.open(method, `/api/${endpoint}`);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+
+    xhr.upload.addEventListener('loadstart', () => {
+      onUploadStageChange?.('uploading');
+      refreshIdleTimer();
+    });
+
+    xhr.upload.addEventListener('progress', (event) => {
+      refreshIdleTimer();
+      const total = event.lengthComputable ? event.total : null;
+      const percent = total && total > 0 ? Math.min(100, Math.round((event.loaded / total) * 100)) : null;
+      onUploadProgress?.({
+        loaded: event.loaded,
+        total,
+        percent,
+      });
+    });
+
+    xhr.upload.addEventListener('load', () => {
+      clearIdleTimer();
+      onUploadStageChange?.('saving');
+      onUploadProgress?.({ loaded: 1, total: 1, percent: 100 });
+    });
+
+    xhr.addEventListener('readystatechange', () => {
+      if (xhr.readyState > 1 && xhr.readyState < 4) {
+        clearIdleTimer();
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      const text = xhr.responseText || '';
+      let payload: unknown = {};
+      if (text) {
+        try {
+          payload = normalizeNumericPayload(JSON.parse(text));
+        } catch {
+          payload = {};
+        }
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        finalizeResolve(payload);
+        return;
+      }
+      finalizeReject(toWorkspaceApiError(payload, xhr.status));
+    });
+
+    xhr.addEventListener('error', () => {
+      finalizeReject(
+        abortReason
+        || createClientUploadError(
+          'UPLOAD_ABORTED',
+          '上传中断，请在更稳定的网络下重试',
+          'Upload interrupted. Please try again on a more stable network.',
+        ),
+      );
+    });
+
+    xhr.addEventListener('abort', () => {
+      finalizeReject(
+        abortReason
+        || createClientUploadError(
+          'UPLOAD_ABORTED',
+          '上传中断，请在更稳定的网络下重试',
+          'Upload interrupted. Please try again on a more stable network.',
+        ),
+      );
+    });
+
+    if (hardTimeoutMs) {
+      hardTimer = setTimeout(() => {
+        abortReason = createClientUploadError(
+          'UPLOAD_HARD_TIMEOUT',
+          '上传耗时过长，请重试',
+          'Upload took too long. Please retry.',
+        );
+        xhr.abort();
+      }, hardTimeoutMs);
+    }
+
+    refreshIdleTimer();
+    xhr.send(formData);
+  });
 }
 
 export async function getApiResponseErrorMessage(response: Response, fallback: string): Promise<string> {

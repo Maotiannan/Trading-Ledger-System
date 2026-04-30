@@ -111,6 +111,7 @@ describe('useReceiptActions', () => {
       setDirectUploadedImageName: jest.fn(),
       setDirectUploadStatus: jest.fn(),
       setDirectUploadMessage: jest.fn(),
+      setDirectUploadProgress: jest.fn(),
       directForm: {
         receiptNo: 'RCPT-1',
         date: '2026-03-11',
@@ -255,18 +256,23 @@ describe('useReceiptActions', () => {
     const setDirectUploadedImageName = jest.fn();
     const setDirectUploadStatus = jest.fn();
     const setDirectUploadMessage = jest.fn();
+    const setDirectUploadProgress = jest.fn();
     const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
     mockCompressReceiptDirectImage.mockResolvedValue({
       file,
       compressed: false,
       qualityUsed: null,
     });
-    mockApiUploadCall.mockResolvedValue({
-      success: true,
-      data: {
-        path: '/upload/images/receipts/direct/direct-receipt.png',
-        name: 'direct-receipt.png',
-      },
+    mockApiUploadCall.mockImplementation(async (_endpoint, _formData, options) => {
+      options?.onUploadProgress?.({ loaded: 50, total: 100, percent: 50 });
+      options?.onUploadStageChange?.('saving');
+      return {
+        success: true,
+        data: {
+          path: '/upload/images/receipts/direct/direct-receipt.png',
+          name: 'direct-receipt.png',
+        },
+      };
     });
 
     const { result } = renderHook(() => useReceiptActions(createDeps({
@@ -274,6 +280,7 @@ describe('useReceiptActions', () => {
       setDirectUploadedImageName,
       setDirectUploadStatus,
       setDirectUploadMessage,
+      setDirectUploadProgress,
     })));
 
     await act(async () => {
@@ -293,6 +300,9 @@ describe('useReceiptActions', () => {
       name: 'direct-receipt.png',
     });
     expect(setDirectUploadedImageName).toHaveBeenCalledWith('direct-receipt.png');
+    expect(setDirectUploadProgress).toHaveBeenCalledWith(50);
+    expect(setDirectUploadProgress).toHaveBeenCalledWith(100);
+    expect(setDirectUploadStatus).toHaveBeenCalledWith('saving');
     expect(setDirectUploadStatus).toHaveBeenCalledWith('success');
   });
 
@@ -335,6 +345,7 @@ describe('useReceiptActions', () => {
     const setDirectUploadedImageName = jest.fn();
     const setDirectUploadStatus = jest.fn();
     const setDirectUploadMessage = jest.fn();
+    const setDirectUploadProgress = jest.fn();
     const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
     mockCompressReceiptDirectImage.mockResolvedValue({
       file,
@@ -348,6 +359,7 @@ describe('useReceiptActions', () => {
       setDirectUploadedImageName,
       setDirectUploadStatus,
       setDirectUploadMessage,
+      setDirectUploadProgress,
     })));
 
     await act(async () => {
@@ -359,6 +371,7 @@ describe('useReceiptActions', () => {
     expect(setDirectSavedImagePath).toHaveBeenCalledWith(null);
     expect(setDirectUploadedImageName).toHaveBeenCalledWith('');
     expect(setDirectUploadStatus).toHaveBeenCalledWith('failed');
+    expect(setDirectUploadProgress).toHaveBeenLastCalledWith(null);
     expect(setError).toHaveBeenCalledWith('上传失败');
   });
 
@@ -366,6 +379,7 @@ describe('useReceiptActions', () => {
     const file = new File(['receipt'], 'direct-receipt.png', { type: 'image/png' });
     const setDirectUploadStatus = jest.fn();
     const setDirectUploadMessage = jest.fn();
+    const setDirectUploadProgress = jest.fn();
     mockCompressReceiptDirectImage.mockResolvedValue({
       file,
       compressed: true,
@@ -379,6 +393,7 @@ describe('useReceiptActions', () => {
     const { result } = renderHook(() => useReceiptActions(createDeps({
       setDirectUploadStatus,
       setDirectUploadMessage,
+      setDirectUploadProgress,
     })));
 
     await act(async () => {
@@ -391,6 +406,7 @@ describe('useReceiptActions', () => {
     expect(setDirectUploadStatus).toHaveBeenCalledWith('uploading');
     expect(setDirectUploadStatus).toHaveBeenCalledWith('failed');
     expect(setDirectUploadMessage).toHaveBeenLastCalledWith('上传中断，请在更稳定的网络下重试');
+    expect(setDirectUploadProgress).toHaveBeenLastCalledWith(null);
     expect(setError).toHaveBeenCalledWith('上传中断，请在更稳定的网络下重试');
   });
 

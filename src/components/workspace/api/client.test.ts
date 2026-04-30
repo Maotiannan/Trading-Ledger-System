@@ -1,4 +1,5 @@
 import {
+  apiUploadCall,
   getApiErrorCode,
   getApiErrorMessage,
   lookupOrderContextByOrderNo,
@@ -150,5 +151,147 @@ describe('workspace api client', () => {
     });
 
     Object.assign(global, { fetch: originalFetch });
+  });
+
+  it('reports upload progress and saving stage for multipart uploads', async () => {
+    const OriginalXHR = global.XMLHttpRequest;
+    const progressSpy = jest.fn();
+    const stageSpy = jest.fn();
+
+    class MockXHR {
+      static instances: MockXHR[] = [];
+      readonly uploadListeners = new Map<string, Array<(event?: any) => void>>();
+      readonly listeners = new Map<string, Array<(event?: any) => void>>();
+      withCredentials = false;
+      responseType = '';
+      responseText = '';
+      status = 200;
+      readyState = 0;
+
+      constructor() {
+        MockXHR.instances.push(this);
+      }
+
+      upload = {
+        addEventListener: (type: string, listener: (event?: any) => void) => {
+          const rows = this.uploadListeners.get(type) || [];
+          rows.push(listener);
+          this.uploadListeners.set(type, rows);
+        },
+      };
+
+      open(_method: string, _url: string) {}
+
+      addEventListener(type: string, listener: (event?: any) => void) {
+        const rows = this.listeners.get(type) || [];
+        rows.push(listener);
+        this.listeners.set(type, rows);
+      }
+
+      send(_formData: FormData) {}
+
+      abort() {
+        this.dispatch('abort');
+      }
+
+      dispatch(type: string, event: any = {}) {
+        for (const listener of this.listeners.get(type) || []) listener(event);
+      }
+
+      dispatchUpload(type: string, event: any = {}) {
+        for (const listener of this.uploadListeners.get(type) || []) listener(event);
+      }
+    }
+
+    Object.assign(global, { XMLHttpRequest: MockXHR });
+    const promise = apiUploadCall('upload-image', new FormData(), {
+      onUploadProgress: progressSpy,
+      onUploadStageChange: stageSpy,
+      idleTimeoutMs: 15_000,
+      hardTimeoutMs: 120_000,
+    });
+
+    const xhr = MockXHR.instances[0];
+    xhr.dispatchUpload('loadstart');
+    xhr.dispatchUpload('progress', { loaded: 50, total: 100, lengthComputable: true });
+    xhr.dispatchUpload('load');
+    xhr.status = 200;
+    xhr.responseText = JSON.stringify({ success: true, data: { path: '/ok' } });
+    xhr.dispatch('load');
+
+    await expect(promise).resolves.toEqual({ success: true, data: { path: '/ok' } });
+    expect(progressSpy).toHaveBeenCalledWith({ loaded: 50, total: 100, percent: 50 });
+    expect(progressSpy).toHaveBeenLastCalledWith({ loaded: 1, total: 1, percent: 100 });
+    expect(stageSpy).toHaveBeenCalledWith('uploading');
+    expect(stageSpy).toHaveBeenCalledWith('saving');
+    expect(xhr.withCredentials).toBe(true);
+
+    Object.assign(global, { XMLHttpRequest: OriginalXHR });
+  });
+
+  it('fails multipart uploads after 15 seconds of idle time with no upload progress', async () => {
+    jest.useFakeTimers();
+    const OriginalXHR = global.XMLHttpRequest;
+
+    class MockXHR {
+      static instances: MockXHR[] = [];
+      readonly uploadListeners = new Map<string, Array<(event?: any) => void>>();
+      readonly listeners = new Map<string, Array<(event?: any) => void>>();
+      withCredentials = false;
+      responseType = '';
+      responseText = '';
+      status = 200;
+      readyState = 0;
+
+      constructor() {
+        MockXHR.instances.push(this);
+      }
+
+      upload = {
+        addEventListener: (type: string, listener: (event?: any) => void) => {
+          const rows = this.uploadListeners.get(type) || [];
+          rows.push(listener);
+          this.uploadListeners.set(type, rows);
+        },
+      };
+
+      open(_method: string, _url: string) {}
+
+      addEventListener(type: string, listener: (event?: any) => void) {
+        const rows = this.listeners.get(type) || [];
+        rows.push(listener);
+        this.listeners.set(type, rows);
+      }
+
+      send(_formData: FormData) {}
+
+      abort() {
+        this.dispatch('abort');
+      }
+
+      dispatch(type: string, event: any = {}) {
+        for (const listener of this.listeners.get(type) || []) listener(event);
+      }
+    }
+
+    Object.assign(global, { XMLHttpRequest: MockXHR });
+    const promise = apiUploadCall('upload-image', new FormData(), {
+      idleTimeoutMs: 15_000,
+      hardTimeoutMs: 120_000,
+    });
+    const captured = promise.catch((error) => error);
+
+    const xhr = MockXHR.instances[0];
+    xhr.uploadListeners.get('loadstart')?.forEach((listener) => listener({}));
+
+    await jest.advanceTimersByTimeAsync(15_001);
+
+    await expect(captured).resolves.toMatchObject({
+      code: 'UPLOAD_IDLE_TIMEOUT',
+      message: 'Upload stalled for too long. Check your network and retry.',
+    });
+
+    Object.assign(global, { XMLHttpRequest: OriginalXHR });
+    jest.useRealTimers();
   });
 });

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Check, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DirectImageUploadStatus, ReceiptDirectForm } from '../types';
@@ -20,6 +21,7 @@ export type ReceiptDirectCreateDialogProps = {
   directUploading: boolean;
   directUploadStatus: DirectImageUploadStatus;
   directUploadMessage: string | null;
+  directUploadProgress: number | null;
   invConflict: boolean;
   invConflictCount: number;
   onOpenChange: (open: boolean) => void;
@@ -40,6 +42,7 @@ export function ReceiptDirectCreateDialog({
   directUploading,
   directUploadStatus,
   directUploadMessage,
+  directUploadProgress,
   invConflict,
   invConflictCount,
   onOpenChange,
@@ -116,18 +119,23 @@ export function ReceiptDirectCreateDialog({
               </span>
             </div>
             {directUploadMessage && (
-              <p
-                className={cn(
-                  'text-sm',
-                  directUploadStatus === 'failed'
-                    ? 'text-red-600'
-                    : directUploadStatus === 'success'
-                      ? 'text-green-600'
-                      : 'text-muted-foreground',
+              <div className="space-y-2">
+                <p
+                  className={cn(
+                    'text-sm',
+                    directUploadStatus === 'failed'
+                      ? 'text-red-600'
+                      : directUploadStatus === 'success'
+                        ? 'text-green-600'
+                        : 'text-muted-foreground',
+                  )}
+                >
+                  {directUploadMessage}
+                </p>
+                {(directUploadStatus === 'uploading' || directUploadStatus === 'saving') && (
+                  <Progress value={directUploadStatus === 'saving' ? 100 : (directUploadProgress ?? 0)} />
                 )}
-              >
-                {directUploadMessage}
-              </p>
+              </div>
             )}
           </div>
           <Input placeholder={tx('收据号', 'Receipt No.')} value={form.receiptNo} onChange={(e) => onFormChange({ ...form, receiptNo: e.target.value })} />

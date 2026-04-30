@@ -29,6 +29,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [directUploadedImageName, setDirectUploadedImageName] = useState('');
   const [directUploadStatus, setDirectUploadStatus] = useState<DirectImageUploadStatus>('idle');
   const [directUploadMessage, setDirectUploadMessage] = useState<string | null>(null);
+  const [directUploadProgress, setDirectUploadProgress] = useState<number | null>(null);
   const [directInvConflict, setDirectInvConflict] = useState(false);
   const [directInvConflictCount, setDirectInvConflictCount] = useState(0);
   const [ocrInvConflict, setOcrInvConflict] = useState(false);
@@ -145,6 +146,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setDirectUploadedImageName('');
       setDirectUploadStatus('idle');
       setDirectUploadMessage(null);
+      setDirectUploadProgress(null);
       setDirectInvConflict(false);
       setDirectInvConflictCount(0);
     }
@@ -185,6 +187,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectUploadedImageName('');
     setDirectUploadStatus('idle');
     setDirectUploadMessage(null);
+    setDirectUploadProgress(null);
     setDirectInvConflict(false);
     setDirectInvConflictCount(0);
   };
@@ -221,6 +224,8 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectUploadStatus,
     directUploadMessage,
     setDirectUploadMessage,
+    directUploadProgress,
+    setDirectUploadProgress,
     directInvConflict,
     directInvConflictCount,
     ocrInvConflict,

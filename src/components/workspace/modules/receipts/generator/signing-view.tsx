@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ReceiptCanvas, type ReceiptCanvasHandle } from './receipt-canvas';
 import { SignaturePad } from './signature-pad';
 import { MobileOrientationHint } from './mobile-orientation-hint';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
 import { dataUrlToBlob } from './data-url';
 
 type SigningViewProps = {
@@ -307,13 +307,12 @@ export function SigningView({ sessionId, tx }: SigningViewProps) {
       formData.append('receiverSignature', new File([receiverBlob], `${session.layout.receiptNo}-receiver.png`, { type: 'image/png' }));
       formData.append('payerSignature', new File([payerBlob], `${session.layout.receiptNo}-payer.png`, { type: 'image/png' }));
 
-      const response = await fetch('/api/receipt-generator', {
+      const result = await apiUploadCall('receipt-generator', formData, {
         method: 'POST',
-        credentials: 'include',
-        body: formData,
+        idleTimeoutMs: 15_000,
+        hardTimeoutMs: 120_000,
       });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
+      if (!result.success) {
         throw result;
       }
 

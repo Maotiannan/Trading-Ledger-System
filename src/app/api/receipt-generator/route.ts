@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/route-auth';
-import { createApiError } from '@/lib/api-error';
+import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import {
@@ -44,6 +44,16 @@ export const GET = withAuth(async (request, currentUser) => {
       detail: { action },
     });
   } catch (error) {
+    if (error instanceof Error && (error.message === 'aborted' || ('code' in error && (error as NodeJS.ErrnoException).code === 'ECONNRESET'))) {
+      console.error('Receipt generator finalize aborted:', {
+        code: ('code' in error ? (error as NodeJS.ErrnoException).code : 'ABORTED') || 'ABORTED',
+      });
+      return toApiErrorResponse(error, {
+        code: apiErrorCodes.UPLOAD_ABORTED,
+        status: 499,
+        message: '上传中断，请在更稳定的网络下重试',
+      }, request);
+    }
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

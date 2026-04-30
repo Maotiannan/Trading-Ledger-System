@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SigningView } from './signing-view';
-import { apiCall } from '@/components/workspace/shared';
+import { apiCall, apiUploadCall } from '@/components/workspace/shared';
 
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(() => ({ replace: jest.fn() })),
@@ -9,6 +9,7 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  apiUploadCall: jest.fn(),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback),
 }));
 
@@ -72,9 +73,8 @@ describe('SigningView mobile signature flow', () => {
 
   const tx = (zh: string, en: string) => `${zh}|${en}`;
   const mockApiCall = apiCall as jest.Mock;
+  const mockApiUploadCall = apiUploadCall as jest.Mock;
   const originalMatchMedia = window.matchMedia;
-  const originalFetch = global.fetch;
-  const fetchMock = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -100,16 +100,11 @@ describe('SigningView mobile signature flow', () => {
       removeListener: jest.fn(),
       dispatchEvent: jest.fn(),
     }));
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true }),
-    });
-    global.fetch = fetchMock as unknown as typeof fetch;
+    mockApiUploadCall.mockResolvedValue({ success: true });
   });
 
   afterAll(() => {
     window.matchMedia = originalMatchMedia;
-    global.fetch = originalFetch;
   });
 
   it('shows one focused mobile signing mode at a time instead of two inline pads', async () => {
@@ -207,14 +202,13 @@ describe('SigningView mobile signature flow', () => {
 
     await waitFor(() => {
       expect(exportBlobMock).toHaveBeenCalled();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(mockApiUploadCall).toHaveBeenCalledTimes(1);
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/receipt-generator', expect.objectContaining({
+    expect(mockApiUploadCall).toHaveBeenCalledWith('receipt-generator', expect.any(FormData), expect.objectContaining({
       method: 'POST',
-      credentials: 'include',
-      body: expect.any(FormData),
+      idleTimeoutMs: 15_000,
+      hardTimeoutMs: 120_000,
     }));
-    expect(fetchMock.mock.calls[0]?.[0]).not.toContain('data:image');
   });
 
   it('keeps the desktop signing column constrained instead of stretching with the preview column', async () => {

@@ -26,6 +26,7 @@ describe('ReceiptDirectCreateDialog', () => {
     directUploading: false,
     directUploadStatus: 'idle' as const,
     directUploadMessage: null,
+    directUploadProgress: null,
     invConflict: false,
     invConflictCount: 0,
     onOpenChange: jest.fn(),
@@ -64,5 +65,12 @@ describe('ReceiptDirectCreateDialog', () => {
     render(<ReceiptDirectCreateDialog {...defaultProps} directUploadStatus="failed" directUploadMessage="上传中断，请在更稳定的网络下重试" />);
 
     expect(screen.getByText('上传中断，请在更稳定的网络下重试')).toBeInTheDocument();
+  });
+
+  it('renders upload progress when direct upload is in flight', () => {
+    render(<ReceiptDirectCreateDialog {...defaultProps} directUploadStatus="uploading" directUploadProgress={42} directUploadMessage="正在上传图片（42%）..." />);
+
+    expect(screen.getByText('正在上传图片（42%）...')).toBeInTheDocument();
+    expect(document.querySelector('[data-slot=\"progress\"]')).not.toBeNull();
   });
 });

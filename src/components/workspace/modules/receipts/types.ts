@@ -12,7 +12,7 @@ export type ReceiptDirectForm = {
   isDeposit: boolean;
 };
 
-export type DirectImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'success' | 'failed';
+export type DirectImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
 
 export const EMPTY_RECEIPT_DIRECT_FORM: ReceiptDirectForm = {
   receiptNo: '',

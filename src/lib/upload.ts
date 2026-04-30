@@ -87,11 +87,12 @@ function hasValidImageMagic(buffer: Buffer, extension: string): boolean {
 export async function saveUploadedImage(
   file: File,
   options: { subDir?: string | null } = {},
-): Promise<{ path: string; name: string }> {
+): Promise<{ path: string; name: string; mimeType: string; sizeBytes: number }> {
   validateUploadFile(file);
 
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
+  const mimeType = (file.type || '').toLowerCase();
   const safeName = sanitizeFileName(file.name);
   const extension = path.extname(safeName).toLowerCase();
   if (!hasValidImageMagic(buffer, extension)) {
@@ -114,5 +115,5 @@ export async function saveUploadedImage(
   const publicPath = subDir
     ? `${publicBase.replace(/\/$/, '')}/${subDir}/${fileName}`
     : `${publicBase.replace(/\/$/, '')}/${fileName}`;
-  return { path: publicPath, name: safeName };
+  return { path: publicPath, name: safeName, mimeType, sizeBytes: buffer.byteLength };
 }

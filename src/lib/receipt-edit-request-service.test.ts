@@ -99,6 +99,7 @@ const mockTx = {
     create: jest.fn(),
   },
   receiptEditRequest: {
+    findUnique: jest.fn(),
     update: jest.fn(),
   },
 };
@@ -197,7 +198,7 @@ describe('receipt-edit-request-service', () => {
   });
 
   it('approves a pending request and updates the receipt in one transaction', async () => {
-    mockDb.receiptEditRequest.findUnique.mockResolvedValueOnce({
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
       id: 'req-1',
       receiptId: 'receipt-1',
       status: ReceiptEditRequestStatus.PENDING,
@@ -268,6 +269,7 @@ describe('receipt-edit-request-service', () => {
       }),
     }));
     expect(mockDb.receipt.update).not.toHaveBeenCalled();
+    expect(mockDb.receiptEditRequest.findUnique).not.toHaveBeenCalled();
     expect(mockDb.receiptEditRequest.update).not.toHaveBeenCalled();
   });
 

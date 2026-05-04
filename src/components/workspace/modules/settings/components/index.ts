@@ -3,3 +3,4 @@ export * from './excel-token-card';
 export * from './password-settings-card';
 export * from './settings-audit-card';
 export * from './system-config-card';
+export * from './user-image-compression-card';

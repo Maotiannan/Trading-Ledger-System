@@ -84,6 +84,11 @@ describe('useSettingsActions', () => {
       canEditConfig: true,
       canViewAudit: true,
       canPurgeBranch: true,
+      userPreferences: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
       config: { DETAIL_RECEIPT_MATCH_TOLERANCE: '5' },
       branchPurgeTargets: [{ id: 'sales-1', email: 'sales@example.com', name: 'Sales', level: 3, role: 'SALES', parentId: 'admin-1' }],
       purgeForm: purgeFormState,
@@ -94,6 +99,8 @@ describe('useSettingsActions', () => {
       auditMeta: auditMetaState,
       setLoading: jest.fn(),
       setSavingConfig: jest.fn(),
+      setUserPreferencesLoading: jest.fn(),
+      setSavingUserPreferences: jest.fn(),
       setTestingConfig: jest.fn(),
       setPasswordLoading: jest.fn(),
       setAuditLoading: jest.fn(),
@@ -102,6 +109,7 @@ describe('useSettingsActions', () => {
       setMessage: jest.fn(),
       setError: jest.fn(),
       setConfig: jest.fn(),
+      setUserPreferences: jest.fn(),
       setCanEditConfig: jest.fn(),
       setCanViewAudit: jest.fn(),
       setCanPurgeBranch: jest.fn(),
@@ -1001,5 +1009,61 @@ describe('useSettingsActions', () => {
     expect(deps.setError).toHaveBeenCalledWith('purge request failed');
     expect(deps.setPurgingBranch).toHaveBeenCalledWith(true);
     expect(deps.setPurgingBranch).toHaveBeenLastCalledWith(false);
+  });
+
+  it('loads user image compression preferences from the user-preferences view', async () => {
+    const deps = createDeps();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: false,
+        imageCompressionQualityFloor: 0.45,
+        ocrTargetMaxKb: 640,
+      },
+    });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.loadUserPreferences();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings?view=user-preferences');
+    expect(deps.setUserPreferences).toHaveBeenCalledWith({
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: 0.45,
+      ocrTargetMaxKb: 640,
+    });
+  });
+
+  it('saves user image compression preferences through update-user-preferences', async () => {
+    const deps = createDeps();
+    deps.userPreferences = {
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: 0.45,
+      ocrTargetMaxKb: 640,
+    };
+    mockApiCall.mockResolvedValueOnce({ success: true, message: 'saved' });
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleSaveUserPreferences();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update-user-preferences',
+        preferences: {
+          imageCompressionEnabled: false,
+          imageCompressionQualityFloor: 0.45,
+          ocrTargetMaxKb: 640,
+        },
+      }),
+    });
+    expect(deps.setSavingUserPreferences).toHaveBeenNthCalledWith(1, true);
+    expect(deps.setSavingUserPreferences).toHaveBeenLastCalledWith(false);
+    expect(deps.setMessage).toHaveBeenCalledWith('saved');
   });
 });

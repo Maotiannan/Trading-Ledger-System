@@ -10,7 +10,9 @@ import type {
   SettingsAuditExportEntry,
   SettingsAuditFilterState,
   SettingsAuditMeta,
+  UserImageCompressionPreference,
 } from '../types';
+import { defaultUserImageCompressionPreference } from '../types';
 import {
   buildEmptySettingsAuditFilters,
   buildSettingsAuditQuery,
@@ -29,6 +31,7 @@ export type SettingsActionDeps = {
   canPurgeBranch: boolean;
   config: Record<string, string>;
   canViewAudit: boolean;
+  userPreferences: UserImageCompressionPreference;
   branchPurgeTargets: BranchPurgeTarget[];
   purgeForm: PurgeFormState;
   pwd: PasswordFormState;
@@ -38,6 +41,8 @@ export type SettingsActionDeps = {
   auditMeta: SettingsAuditMeta;
   setLoading: (value: boolean) => void;
   setSavingConfig: (value: boolean) => void;
+  setUserPreferencesLoading: (value: boolean) => void;
+  setSavingUserPreferences: (value: boolean) => void;
   setTestingConfig: (value: boolean) => void;
   setPasswordLoading: (value: boolean) => void;
   setAuditLoading: (value: boolean) => void;
@@ -46,6 +51,7 @@ export type SettingsActionDeps = {
   setMessage: (value: string | null) => void;
   setError: (value: string | null) => void;
   setConfig: (value: Record<string, string>) => void;
+  setUserPreferences: (value: UserImageCompressionPreference) => void;
   setCanEditConfig: (value: boolean) => void;
   setCanViewAudit: (value: boolean) => void;
   setCanPurgeBranch: (value: boolean) => void;
@@ -73,6 +79,7 @@ export function useSettingsActions({
   canPurgeBranch,
   config,
   branchPurgeTargets,
+  userPreferences,
   purgeForm,
   pwd,
   auditCursor,
@@ -81,6 +88,8 @@ export function useSettingsActions({
   auditMeta,
   setLoading,
   setSavingConfig,
+  setUserPreferencesLoading,
+  setSavingUserPreferences,
   setTestingConfig,
   setPasswordLoading,
   setAuditLoading,
@@ -89,6 +98,7 @@ export function useSettingsActions({
   setMessage,
   setError,
   setConfig,
+  setUserPreferences,
   setCanEditConfig,
   setCanViewAudit,
   setCanPurgeBranch,
@@ -108,6 +118,25 @@ export function useSettingsActions({
   setPurgeForm,
   setPwd,
 }: SettingsActionDeps) {
+  const normalizeUserPreferences = useCallback((payload: unknown): UserImageCompressionPreference => {
+    if (!payload || typeof payload !== 'object') {
+      return defaultUserImageCompressionPreference;
+    }
+
+    const source = payload as Partial<UserImageCompressionPreference>;
+    return {
+      imageCompressionEnabled: typeof source.imageCompressionEnabled === 'boolean'
+        ? source.imageCompressionEnabled
+        : defaultUserImageCompressionPreference.imageCompressionEnabled,
+      imageCompressionQualityFloor: Number.isFinite(source.imageCompressionQualityFloor)
+        ? Number(source.imageCompressionQualityFloor)
+        : defaultUserImageCompressionPreference.imageCompressionQualityFloor,
+      ocrTargetMaxKb: Number.isFinite(source.ocrTargetMaxKb)
+        ? Number(source.ocrTargetMaxKb)
+        : defaultUserImageCompressionPreference.ocrTargetMaxKb,
+    };
+  }, []);
+
   const applySettingsBootstrap = useCallback((payload: unknown) => {
     const nextState = normalizeSettingsBootstrap(payload);
     setConfig(nextState.config);
@@ -133,6 +162,21 @@ export function useSettingsActions({
       targetUserId: targets.some((row) => row.id === prev.targetUserId) ? prev.targetUserId : (targets[0]?.id || ''),
     }));
   }, [setBranchPurgeTargets, setCanEditConfig, setCanPurgeBranch, setCanViewAudit, setConfig, setPurgeForm, setPurgeModuleKeys, setSettingsAuditCursor, setSettingsAuditEntries, setSettingsAuditExportHistoryCursor, setSettingsAuditExportHistoryEntries, setSettingsAuditExportHistoryHasMore, setSettingsAuditFilters, setSettingsAuditHasMore, setSettingsAuditMeta]);
+
+  const loadUserPreferences = useCallback(async () => {
+    setUserPreferencesLoading(true);
+    setError(null);
+    try {
+      const result = await apiCall('settings?view=user-preferences');
+      if (result.success) {
+        setUserPreferences(normalizeUserPreferences(result.data));
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, tx('加载个人图片压缩偏好失败', 'Failed to load personal image compression preferences')));
+    } finally {
+      setUserPreferencesLoading(false);
+    }
+  }, [normalizeUserPreferences, setError, setUserPreferences, setUserPreferencesLoading, tx]);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
@@ -328,6 +372,31 @@ export function useSettingsActions({
     }
   }, [auditFilters, auditMeta, canEditConfig, config, loadSettings, loadSettingsAudit, setError, setMessage, setSavingConfig, tx]);
 
+  const handleSaveUserPreferences = useCallback(async () => {
+    setSavingUserPreferences(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await apiCall('settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'update-user-preferences',
+          preferences: userPreferences,
+        }),
+      });
+      if (result.success) {
+        setUserPreferences(normalizeUserPreferences(result.data || userPreferences));
+        setMessage(result.message || tx('个人偏好已保存', 'Personal preferences saved'));
+      } else {
+        setError(getApiErrorMessage(result, tx('保存个人偏好失败', 'Failed to save personal preferences')));
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, tx('保存个人偏好失败', 'Failed to save personal preferences')));
+    } finally {
+      setSavingUserPreferences(false);
+    }
+  }, [normalizeUserPreferences, setError, setMessage, setSavingUserPreferences, setUserPreferences, tx, userPreferences]);
+
   const handleTestOcrConfig = useCallback(async () => {
     if (!canEditConfig) return;
     setTestingConfig(true);
@@ -448,7 +517,9 @@ export function useSettingsActions({
 
   return {
     loadSettings,
+    loadUserPreferences,
     handleSaveConfig,
+    handleSaveUserPreferences,
     handleTestOcrConfig,
     handleChangePassword,
     handlePurgeBranch,

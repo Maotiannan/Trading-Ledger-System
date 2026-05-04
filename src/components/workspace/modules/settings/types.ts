@@ -19,6 +19,20 @@ export type PasswordFormState = {
   confirmPassword: string;
 };
 
+export type UserImageCompressionPreference = {
+  imageCompressionEnabled: boolean;
+  imageCompressionQualityFloor: number;
+  ocrTargetMaxKb: number;
+};
+
+export type UserImageCompressionPreferenceField = keyof UserImageCompressionPreference;
+
+export const defaultUserImageCompressionPreference: UserImageCompressionPreference = Object.freeze({
+  imageCompressionEnabled: true,
+  imageCompressionQualityFloor: 0.3,
+  ocrTargetMaxKb: 500,
+});
+
 export type ExcelApiTokenSummary = {
   id: string;
   name: string;

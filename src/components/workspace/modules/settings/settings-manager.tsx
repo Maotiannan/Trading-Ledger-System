@@ -6,7 +6,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUiText } from '@/components/workspace/shared';
 import { APP_VERSION } from '@/lib/app-version';
-import { BranchPurgeCard, ExcelTokenCard, PasswordSettingsCard, SettingsAuditCard, SystemConfigCard } from './components';
+import {
+  BranchPurgeCard,
+  ExcelTokenCard,
+  PasswordSettingsCard,
+  SettingsAuditCard,
+  SystemConfigCard,
+  UserImageCompressionCard,
+} from './components';
 import { useExcelTokenSettings, useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
 import { buildSettingsPageViewModel } from './page-view-model';
@@ -21,6 +28,10 @@ export function SettingsManager() {
     setLoading,
     savingConfig,
     setSavingConfig,
+    userPreferencesLoading,
+    setUserPreferencesLoading,
+    savingUserPreferences,
+    setSavingUserPreferences,
     testingConfig,
     setTestingConfig,
     passwordLoading,
@@ -31,6 +42,8 @@ export function SettingsManager() {
     setError,
     config,
     setConfig,
+    userPreferences,
+    setUserPreferences,
     canEditConfig,
     setCanEditConfig,
     canViewAudit,
@@ -74,6 +87,7 @@ export function SettingsManager() {
     pwd,
     setPwd,
     updateConfigField,
+    updateUserPreferenceField,
     togglePurgeModule,
   } = useSettingsForms();
 
@@ -84,6 +98,8 @@ export function SettingsManager() {
     applyAuditFilters,
     resetAuditFilters,
     handleSaveConfig,
+    loadUserPreferences,
+    handleSaveUserPreferences,
     handleTestOcrConfig,
     handleChangePassword,
     handlePurgeBranch,
@@ -104,6 +120,8 @@ export function SettingsManager() {
     auditMeta: settingsAuditMeta,
     setLoading,
     setSavingConfig,
+    setUserPreferencesLoading,
+    setSavingUserPreferences,
     setTestingConfig,
     setPasswordLoading,
     setAuditLoading,
@@ -112,6 +130,8 @@ export function SettingsManager() {
     setMessage,
     setError,
     setConfig,
+    userPreferences,
+    setUserPreferences,
     setCanEditConfig,
     setCanViewAudit,
     setCanPurgeBranch,
@@ -135,6 +155,10 @@ export function SettingsManager() {
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    void loadUserPreferences();
+  }, [loadUserPreferences]);
 
   useEffect(() => {
     void excelTokenSettings.loadExcelTokens();
@@ -212,6 +236,15 @@ export function SettingsManager() {
         onRefresh={() => { void excelTokenSettings.loadExcelTokens(); }}
         onGenerate={() => { void excelTokenSettings.generateExcelToken(); }}
         onRevoke={(tokenId) => { void excelTokenSettings.revokeExcelToken(tokenId); }}
+      />
+
+      <UserImageCompressionCard
+        loading={userPreferencesLoading}
+        saving={savingUserPreferences}
+        preferences={userPreferences}
+        tx={tx}
+        onPreferenceFieldChange={updateUserPreferenceField}
+        onSavePreferences={handleSaveUserPreferences}
       />
 
       {settingsPageView.canManageUsers && (

@@ -131,7 +131,11 @@ export function useDetailActions({
     }
 
     const candidate = value as DetailOcrResult;
-    if (!(candidate.date === null || typeof candidate.date === 'string') || !Array.isArray(candidate.items)) {
+    if (
+      !(candidate.date === null || typeof candidate.date === 'string')
+      || !Array.isArray(candidate.items)
+      || candidate.items.length === 0
+    ) {
       return false;
     }
 

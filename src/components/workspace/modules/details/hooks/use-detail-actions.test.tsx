@@ -395,7 +395,7 @@ describe('useDetailActions', () => {
     expect(result.current.uploading).toBe(false);
   });
 
-  it('treats malformed OCR success payloads as retryable failures', async () => {
+  it('treats empty OCR item results as retryable failures', async () => {
     const file = new File(['detail'], 'detail.png', { type: 'image/png' });
     mockApiCall.mockResolvedValueOnce({
       success: true,
@@ -408,6 +408,67 @@ describe('useDetailActions', () => {
     mockUploadBusinessImage.mockImplementationOnce(async (options) => {
       options.onStageChange?.({ stage: 'uploading', progress: 42, compressed: false, preparedFile: file });
       options.onStageChange?.({ stage: 'saving', progress: 100, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'success', progress: 100, compressed: false, preparedFile: file });
+      return {
+        prepared: {
+          file,
+          compressed: false,
+          qualityUsed: null,
+          originalSize: file.size,
+          outputSize: file.size,
+          targetMaxBytes: 500 * 1024,
+        },
+        response: {
+          success: true,
+          data: {
+            ocrResult: { date: null, items: [] },
+            image: { path: '/uploads/empty-detail.png', name: 'empty-detail.png' },
+          },
+        },
+      };
+    });
+
+    const { result, history } = renderStatefulDetailActions({
+      ocrResult: { date: 'stale', items: [{ mark: 'OLD', orderNo: 'OLD-01', amount: 1 }] },
+      savedImagePath: { path: '/stale.png', name: 'stale.png' },
+    });
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file], value: 'detail.png' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(result.current.error).toBe('AI识别结果无效，请重试');
+    expect(result.current.ocrUploadStatus).toBe('failed');
+    expect(result.current.ocrUploadMessage).toBe('AI识别结果无效，请重试');
+    expect(result.current.ocrUploadProgress).toBeNull();
+    expect(result.current.ocrResult).toBeNull();
+    expect(result.current.savedImagePath).toBeNull();
+    expect(result.current.selectedFile).toBe(file);
+    expect(history.ocrUploadStatusHistory).toEqual([
+      'compressing',
+      'uploading',
+      'saving',
+      'success',
+      'failed',
+    ]);
+  });
+
+  it('treats malformed OCR success payloads as retryable failures even after upload success stage', async () => {
+    const file = new File(['detail'], 'detail.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+    mockUploadBusinessImage.mockImplementationOnce(async (options) => {
+      options.onStageChange?.({ stage: 'uploading', progress: 42, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'saving', progress: 100, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'success', progress: 100, compressed: false, preparedFile: file });
       return {
         prepared: {
           file,
@@ -449,6 +510,7 @@ describe('useDetailActions', () => {
       'compressing',
       'uploading',
       'saving',
+      'success',
       'failed',
     ]);
   });

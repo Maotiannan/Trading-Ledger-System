@@ -1,5 +1,6 @@
 import {
   apiUploadCall,
+  classifyApiUploadError,
   getApiErrorCode,
   getApiErrorMessage,
   lookupOrderContextByOrderNo,
@@ -293,5 +294,14 @@ describe('workspace api client', () => {
 
     Object.assign(global, { XMLHttpRequest: OriginalXHR });
     jest.useRealTimers();
+  });
+
+  it('classifies upload timeout error codes for shared business upload flows', () => {
+    expect(classifyApiUploadError(new WorkspaceApiError('timed out', {
+      code: 'UPLOAD_IDLE_TIMEOUT',
+    }))).toBe('idle-timeout');
+    expect(classifyApiUploadError({ code: 'UPLOAD_HARD_TIMEOUT', error: '上传耗时过长，请重试' })).toBe('hard-timeout');
+    expect(classifyApiUploadError({ code: 'UPLOAD_ABORTED', error: '上传中断，请在更稳定的网络下重试' })).toBe('aborted');
+    expect(classifyApiUploadError(new Error('boom'))).toBe('unknown');
   });
 });

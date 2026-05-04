@@ -75,6 +75,12 @@ enum DeletionStatus {
   REJECTED  // 已拒绝
 }
 
+enum ReceiptEditRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // 删除目标类型枚举
 enum DeletionTargetType {
   RECEIPT
@@ -117,6 +123,8 @@ model User {
   uploadedAssets   UploadedAsset[]
   excelApiTokens    ExcelApiToken[]
   preference       UserPreference?
+  requestedReceiptEditRequests ReceiptEditRequest[] @relation("ReceiptEditRequester")
+  approvedReceiptEditRequests  ReceiptEditRequest[] @relation("ReceiptEditApprover")
 
   @@index([parentId])
   @@index([createdById])
@@ -273,6 +281,7 @@ model Receipt {
   // 关联
   creator          User             @relation(fields: [createdBy], references: [id])
   histories        ReceiptHistory[]
+  editRequests     ReceiptEditRequest[]
   detailItems      DetailItem[]
   customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
@@ -309,6 +318,29 @@ model ReceiptHistory {
   creator User    @relation(fields: [createdBy], references: [id])
 
   @@index([receiptId])
+}
+
+model ReceiptEditRequest {
+  id             String                   @id @default(cuid())
+  receiptId      String
+  status         ReceiptEditRequestStatus @default(PENDING)
+  requestedBy    String
+  approvedBy     String?
+  requestedAt    DateTime
+  reviewedAt     DateTime?
+  beforeSnapshot Json
+  afterSnapshot  Json
+  reviewComment  String?                  @db.Text
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  requester User    @relation("ReceiptEditRequester", fields: [requestedBy], references: [id], onDelete: Cascade)
+  approver  User?   @relation("ReceiptEditApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([receiptId, status])
+  @@index([requestedBy, status])
+  @@index([approvedBy])
 }
 
 // ==================== 付款明细表 (Detail) ====================

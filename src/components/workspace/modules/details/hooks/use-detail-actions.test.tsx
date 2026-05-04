@@ -86,6 +86,7 @@ describe('useDetailActions', () => {
   afterEach(() => {
     global.FileReader = OriginalFileReader;
     global.fetch = originalFetch;
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -304,6 +305,56 @@ describe('useDetailActions', () => {
     expect(result.current.uploading).toBe(false);
   });
 
+  it('falls back to default compression settings when loading preferences stalls', async () => {
+    jest.useFakeTimers();
+
+    const file = new File(['detail'], 'detail.png', { type: 'image/png' });
+    mockApiCall.mockImplementationOnce(() => new Promise(() => undefined));
+    mockUploadBusinessImage.mockResolvedValueOnce({
+      prepared: {
+        file,
+        compressed: false,
+        qualityUsed: null,
+        originalSize: file.size,
+        outputSize: file.size,
+        targetMaxBytes: 500 * 1024,
+      },
+      response: {
+        success: true,
+        data: {
+          ocrResult: { date: '2026-03-11', items: [{ mark: 'STALL', orderNo: 'STALL-01', amount: 88 }] },
+          image: { path: '/uploads/detail-stall.png', name: 'detail-stall.png' },
+        },
+      },
+    });
+    const { result } = renderHook(() => useDetailActions(createDeps()));
+
+    let pendingSelection!: Promise<void>;
+    await act(async () => {
+      pendingSelection = result.current.handleFileSelect({
+        target: { files: [file], value: 'detail.png' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+      await Promise.resolve();
+    });
+
+    expect(mockUploadBusinessImage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(30_000);
+      await pendingSelection;
+    });
+
+    expect(mockUploadBusinessImage).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: 'detail',
+      compression: expect.objectContaining({
+        preference: undefined,
+      }),
+    }));
+    expect(setOcrResult).toHaveBeenCalledWith({ date: '2026-03-11', items: [{ mark: 'STALL', orderNo: 'STALL-01', amount: 88 }] });
+    expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/detail-stall.png', name: 'detail-stall.png' });
+    expect(result.current.uploading).toBe(false);
+  });
+
   it('clears OCR upload state and surfaces mapped upload errors after OCR upload aborts', async () => {
     const file = new File(['detail'], 'detail.png', { type: 'image/png' });
     const setOcrUploadStatus = jest.fn();
@@ -342,6 +393,64 @@ describe('useDetailActions', () => {
     expect(setOcrUploadProgress).toHaveBeenLastCalledWith(null);
     expect(setError).toHaveBeenCalledWith('上传中断，请在更稳定的网络下重试');
     expect(result.current.uploading).toBe(false);
+  });
+
+  it('treats malformed OCR success payloads as retryable failures', async () => {
+    const file = new File(['detail'], 'detail.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+    mockUploadBusinessImage.mockImplementationOnce(async (options) => {
+      options.onStageChange?.({ stage: 'uploading', progress: 42, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'saving', progress: 100, compressed: false, preparedFile: file });
+      return {
+        prepared: {
+          file,
+          compressed: false,
+          qualityUsed: null,
+          originalSize: file.size,
+          outputSize: file.size,
+          targetMaxBytes: 500 * 1024,
+        },
+        response: {
+          success: true,
+          data: {
+            ocrResult: null,
+            image: { path: '/uploads/malformed-detail.png', name: 'malformed-detail.png' },
+          },
+        },
+      };
+    });
+
+    const { result, history } = renderStatefulDetailActions({
+      ocrResult: { date: 'stale', items: [{ mark: 'OLD', orderNo: 'OLD-01', amount: 1 }] },
+      savedImagePath: { path: '/stale.png', name: 'stale.png' },
+    });
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file], value: 'detail.png' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(result.current.error).toBe('AI识别结果无效，请重试');
+    expect(result.current.ocrUploadStatus).toBe('failed');
+    expect(result.current.ocrUploadMessage).toBe('AI识别结果无效，请重试');
+    expect(result.current.ocrUploadProgress).toBeNull();
+    expect(result.current.ocrResult).toBeNull();
+    expect(result.current.savedImagePath).toBeNull();
+    expect(result.current.selectedFile).toBe(file);
+    expect(history.ocrUploadStatusHistory).toEqual([
+      'compressing',
+      'uploading',
+      'saving',
+      'failed',
+    ]);
   });
 
   it('retries OCR recognition in the same dialog after a failed attempt and succeeds on the second upload', async () => {

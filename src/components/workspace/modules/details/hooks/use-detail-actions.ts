@@ -49,6 +49,7 @@ export function useDetailActions({
   handleShowDirectCreateChange,
   resetDirectForm,
 }: DetailActionDeps) {
+  const USER_PREFERENCE_SOFT_TIMEOUT_MS = 1_500;
   const OCR_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
   const OCR_UPLOAD_HARD_TIMEOUT_MS = 120_000;
   const [uploading, setUploading] = useState(false);
@@ -98,16 +99,73 @@ export function useDetailActions({
     setOcrUploadProgress(typeof event.progress === 'number' ? event.progress : null);
   };
 
-  const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
-    try {
-      const result = await apiCall('settings?view=user-preferences');
-      if (!result?.success || !result.data || typeof result.data !== 'object') {
-        return undefined;
+  const resolveWithSoftTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => new Promise((resolve) => {
+    const timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timeoutId);
+        resolve(fallback);
       }
-      return result.data as Partial<UserImageCompressionPreference>;
-    } catch {
+    );
+  });
+
+  const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
+    const result = await resolveWithSoftTimeout(
+      apiCall('settings?view=user-preferences'),
+      USER_PREFERENCE_SOFT_TIMEOUT_MS,
+      undefined
+    );
+    if (!result?.success || !result.data || typeof result.data !== 'object') {
       return undefined;
     }
+    return result.data as Partial<UserImageCompressionPreference>;
+  };
+
+  const isDetailOcrResult = (value: unknown): value is DetailOcrResult => {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const candidate = value as DetailOcrResult;
+    if (!(candidate.date === null || typeof candidate.date === 'string') || !Array.isArray(candidate.items)) {
+      return false;
+    }
+
+    return candidate.items.every((item) => {
+      if (!item || typeof item !== 'object') {
+        return false;
+      }
+
+      return (item.mark === null || typeof item.mark === 'string')
+        && (item.orderNo === null || typeof item.orderNo === 'string')
+        && typeof item.amount === 'number'
+        && Number.isFinite(item.amount)
+        && (item.matchedReceiptId === undefined || item.matchedReceiptId === null || typeof item.matchedReceiptId === 'string');
+    });
+  };
+
+  const getSuccessfulOcrPayload = (
+    response: {
+      success?: boolean;
+      data?: {
+        ocrResult?: DetailOcrResult | null;
+        image?: { path: string; name: string } | null;
+      };
+    },
+    invalidPayloadMessage: string
+  ) => {
+    if (!response.success || !isDetailOcrResult(response.data?.ocrResult)) {
+      throw new Error(invalidPayloadMessage);
+    }
+
+    return {
+      ocrResult: response.data.ocrResult,
+      image: response.data?.image ?? null,
+    };
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,6 +188,7 @@ export function useDetailActions({
     reader.readAsDataURL(file);
 
     try {
+      const invalidPayloadMessage = tx('AI识别结果无效，请重试', 'AI returned an invalid recognition result. Please retry.');
       const preference = await loadUserCompressionPreference();
       const { response } = await uploadBusinessImage<{
         success?: boolean;
@@ -164,8 +223,9 @@ export function useDetailActions({
         },
       });
 
-      setOcrResult(response.data?.ocrResult || null);
-      setSavedImagePath(response.data?.image || null);
+      const successfulPayload = getSuccessfulOcrPayload(response, invalidPayloadMessage);
+      setOcrResult(successfulPayload.ocrResult);
+      setSavedImagePath(successfulPayload.image);
       applyOcrUploadStage({
         stage: 'success',
         progress: 100,

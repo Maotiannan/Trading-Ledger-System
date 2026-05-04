@@ -153,6 +153,51 @@ describe('business-image-upload', () => {
     expect(toBlob).toHaveBeenCalled();
   });
 
+  it('still normalizes HEIC uploads to jpeg when no candidate satisfies the target byte budget', async () => {
+    const file = new File([new Uint8Array(200_000)], 'receipt.heic', { type: 'image/heic' });
+    const bitmapClose = jest.fn();
+    global.createImageBitmap = jest.fn().mockResolvedValue({
+      width: 3024,
+      height: 4032,
+      close: bitmapClose,
+    });
+
+    const toBlob = jest.fn((callback: BlobCallback, _type?: string, quality?: number) => {
+      const q = Number((quality ?? 0).toFixed(2));
+      const size = q <= 0.3 ? 260_000 : 320_000;
+      callback(new Blob([new Uint8Array(size)], { type: 'image/jpeg' }));
+    });
+
+    document.createElement = jest.fn((tagName: string) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: jest.fn(() => ({ drawImage: jest.fn() })),
+          toBlob,
+        } as unknown as HTMLCanvasElement;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement;
+
+    const result = await compressBusinessImage(file, {
+      targetMaxBytes: 180_000,
+      preference: {
+        imageCompressionEnabled: false,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+
+    expect(result.file).not.toBe(file);
+    expect(result.file.type).toBe('image/jpeg');
+    expect(result.file.name).toBe('receipt.jpg');
+    expect(result.file.size).toBeGreaterThan(180_000);
+    expect(result.compressed).toBe(true);
+    expect(result.qualityUsed).not.toBeNull();
+    expect(bitmapClose).toHaveBeenCalled();
+  });
+
   it('reports business upload stages and reuses the prepared jpeg file', async () => {
     const originalFile = new File(['raw'], 'receipt.png', { type: 'image/png' });
     const preparedFile = new File(['jpeg'], 'receipt.jpg', { type: 'image/jpeg' });
@@ -271,5 +316,41 @@ describe('business-image-upload', () => {
       failureKind: 'server-error',
       error: serverError,
     }));
+  });
+
+  it('emits a failed stage when buildFormData throws synchronously after upload stage begins', async () => {
+    const originalFile = new File(['raw'], 'receipt.png', { type: 'image/png' });
+    const preparedFile = new File(['jpeg'], 'receipt.jpg', { type: 'image/jpeg' });
+    const stageSpy = jest.fn();
+    const syncError = new Error('FormData construction failed');
+
+    await expect(uploadBusinessImage({
+      file: originalFile,
+      endpoint: 'upload-image',
+      buildFormData: () => {
+        throw syncError;
+      },
+      onStageChange: stageSpy,
+      compressFile: async () => ({
+        file: preparedFile,
+        compressed: true,
+        qualityUsed: 0.65,
+        originalSize: originalFile.size,
+        outputSize: preparedFile.size,
+        targetMaxBytes: 1_600 * 1024,
+      }),
+      uploadCall: jest.fn(),
+    })).rejects.toBe(syncError);
+
+    expect(stageSpy.mock.calls.map(([event]) => ({
+      stage: event.stage,
+      compressed: event.compressed,
+      failureKind: event.failureKind ?? null,
+      error: event.error ?? null,
+    }))).toEqual([
+      { stage: 'compressing', compressed: null, failureKind: null, error: null },
+      { stage: 'uploading', compressed: true, failureKind: null, error: null },
+      { stage: 'failed', compressed: true, failureKind: 'upload-error', error: syncError },
+    ]);
   });
 });

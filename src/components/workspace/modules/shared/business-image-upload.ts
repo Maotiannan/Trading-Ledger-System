@@ -128,17 +128,24 @@ async function findBestJpegCandidate(
   targetMaxBytes: number,
   qualityFloor: number,
   initialQuality: number
-): Promise<{ blob: Blob; quality: number } | null> {
+): Promise<{
+  matched: { blob: Blob; quality: number } | null;
+  fallback: { blob: Blob; quality: number } | null;
+}> {
   let low = qualityFloor;
   let high = Math.max(low, Math.min(1, Number(initialQuality.toFixed(2))));
-  let best: { blob: Blob; quality: number } | null = null;
+  let matched: { blob: Blob; quality: number } | null = null;
+  let fallback: { blob: Blob; quality: number } | null = null;
 
   for (let step = 0; step < MAX_QUALITY_SEARCH_STEPS; step += 1) {
     const quality = Number((((low + high) / 2)).toFixed(2));
     const blob = await canvasToBlob(canvas, 'image/jpeg', quality);
-    if (!blob) return best;
+    if (!blob) return { matched, fallback };
+    if (!fallback || blob.size < fallback.blob.size) {
+      fallback = { blob, quality };
+    }
     if (blob.size <= targetMaxBytes) {
-      best = { blob, quality };
+      matched = { blob, quality };
       low = quality;
     } else {
       high = quality;
@@ -146,14 +153,22 @@ async function findBestJpegCandidate(
     if (high - low < 0.02) break;
   }
 
-  if (best) return best;
+  if (matched) return { matched, fallback };
 
   const floorBlob = await canvasToBlob(canvas, 'image/jpeg', qualityFloor);
-  if (floorBlob && floorBlob.size <= targetMaxBytes) {
-    return { blob: floorBlob, quality: qualityFloor };
+  if (floorBlob) {
+    if (!fallback || floorBlob.size < fallback.blob.size) {
+      fallback = { blob: floorBlob, quality: qualityFloor };
+    }
+    if (floorBlob.size <= targetMaxBytes) {
+      return {
+        matched: { blob: floorBlob, quality: qualityFloor },
+        fallback,
+      };
+    }
   }
 
-  return null;
+  return { matched: null, fallback };
 }
 
 function reportStage(
@@ -215,6 +230,7 @@ export async function compressBusinessImage(
     const initialScale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     let width = Math.max(1, Math.round(bitmap.width * initialScale));
     let height = Math.max(1, Math.round(bitmap.height * initialScale));
+    let bestEffortForcedJpeg: { blob: Blob; quality: number } | null = null;
 
     for (let attempt = 0; attempt < MAX_SCALE_ATTEMPTS; attempt += 1) {
       const canvas = createCanvas(width, height);
@@ -230,15 +246,23 @@ export async function compressBusinessImage(
         options.initialQuality ?? DEFAULT_INITIAL_QUALITY,
       );
 
-      if (candidate) {
-        const compressedFile = new File([candidate.blob], replaceExtension(file.name, '.jpg'), {
+      if (
+        shouldForceJpeg
+        && candidate.fallback
+        && (!bestEffortForcedJpeg || candidate.fallback.blob.size < bestEffortForcedJpeg.blob.size)
+      ) {
+        bestEffortForcedJpeg = candidate.fallback;
+      }
+
+      if (candidate.matched) {
+        const compressedFile = new File([candidate.matched.blob], replaceExtension(file.name, '.jpg'), {
           type: 'image/jpeg',
         });
         if (shouldForceJpeg || compressedFile.size < file.size) {
           return {
             file: compressedFile,
             compressed: true,
-            qualityUsed: candidate.quality,
+            qualityUsed: candidate.matched.quality,
             originalSize: file.size,
             outputSize: compressedFile.size,
             targetMaxBytes,
@@ -248,6 +272,20 @@ export async function compressBusinessImage(
 
       width = Math.max(1, Math.round(width * reductionFactor));
       height = Math.max(1, Math.round(height * reductionFactor));
+    }
+
+    if (shouldForceJpeg && bestEffortForcedJpeg) {
+      const normalizedFile = new File([bestEffortForcedJpeg.blob], replaceExtension(file.name, '.jpg'), {
+        type: 'image/jpeg',
+      });
+      return {
+        file: normalizedFile,
+        compressed: true,
+        qualityUsed: bestEffortForcedJpeg.quality,
+        originalSize: file.size,
+        outputSize: normalizedFile.size,
+        targetMaxBytes,
+      };
     }
 
     return {
@@ -308,14 +346,14 @@ export async function uploadBusinessImage<TResponse = unknown>({
     preparedFile: prepared.file,
   });
 
-  const formData = buildFormData ? buildFormData(prepared.file) : new FormData();
-  if (!buildFormData) {
-    formData.append('file', prepared.file);
-  }
-
   let failureReported = false;
 
   try {
+    const formData = buildFormData ? buildFormData(prepared.file) : new FormData();
+    if (!buildFormData) {
+      formData.append('file', prepared.file);
+    }
+
     const response = await uploadCall(endpoint, formData, {
       method,
       idleTimeoutMs,

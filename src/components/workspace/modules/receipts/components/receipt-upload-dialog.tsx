@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Check, Loader2 } from 'lucide-react';
 import type { CustomerCandidate } from '@/components/workspace/shared';
+import type { ReceiptOcrUploadStatus } from '../types';
 
 export type ReceiptUploadDialogProps = {
   open: boolean;
@@ -20,6 +22,9 @@ export type ReceiptUploadDialogProps = {
   ocrCustomerCandidates: CustomerCandidate[];
   ocrInvConflict: boolean;
   ocrInvConflictCount: number;
+  ocrUploadStatus: ReceiptOcrUploadStatus;
+  ocrUploadMessage: string | null;
+  ocrUploadProgress: number | null;
   tx: (zh: string, en: string) => string;
   onOpenChange: (open: boolean) => void;
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -41,6 +46,9 @@ export function ReceiptUploadDialog({
   ocrCustomerCandidates,
   ocrInvConflict,
   ocrInvConflictCount,
+  ocrUploadStatus,
+  ocrUploadMessage,
+  ocrUploadProgress,
   tx,
   onOpenChange,
   onFileSelect,
@@ -66,10 +74,17 @@ export function ReceiptUploadDialog({
             <Input type="file" accept="image/*" onChange={onFileSelect} />
           </div>
 
-          {uploading && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <span className="ml-2">{tx('AI识别中...', 'AI recognizing...')}</span>
+          {ocrUploadStatus !== 'idle' && ocrUploadMessage && (
+            <div className="rounded-lg border px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2 text-sm">
+                {(ocrUploadStatus === 'compressing' || ocrUploadStatus === 'uploading' || ocrUploadStatus === 'saving') && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                <span>{ocrUploadMessage}</span>
+              </div>
+              {(ocrUploadStatus === 'uploading' || ocrUploadStatus === 'saving') && (
+                <Progress value={ocrUploadStatus === 'saving' ? 100 : (ocrUploadProgress ?? 0)} />
+              )}
             </div>
           )}
 
@@ -147,7 +162,7 @@ export function ReceiptUploadDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-          <Button onClick={onConfirm} disabled={!ocrResult || submitting}>
+          <Button onClick={onConfirm} disabled={!ocrResult || submitting || uploading}>
             {submitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

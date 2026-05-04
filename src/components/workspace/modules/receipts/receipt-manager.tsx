@@ -66,6 +66,12 @@ export function ReceiptManager() {
     setSelectedFile,
     savedImagePath,
     setSavedImagePath,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     error,
     setError,
     directForm,
@@ -159,6 +165,9 @@ export function ReceiptManager() {
     setDirectSavedImagePath,
     setDirectUploadedImageName,
     setPendingDirectImageSelection,
+    setOcrUploadStatus,
+    setOcrUploadMessage,
+    setOcrUploadProgress,
     setDirectUploadStatus,
     setDirectUploadMessage,
     setDirectUploadProgress,
@@ -320,6 +329,9 @@ export function ReceiptManager() {
         ocrCustomerCandidates={ocrCustomerCandidates}
         ocrInvConflict={ocrInvConflict}
         ocrInvConflictCount={ocrInvConflictCount}
+        ocrUploadStatus={ocrUploadStatus}
+        ocrUploadMessage={ocrUploadMessage}
+        ocrUploadProgress={ocrUploadProgress}
         tx={tx}
         onOpenChange={handleShowUploadChange}
         onFileSelect={handleFileSelect}

@@ -1,11 +1,21 @@
 import { act, renderHook } from '@testing-library/react';
 import { useReceiptActions } from './use-receipt-actions';
-import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
+import { uploadBusinessImage } from '@/components/workspace/modules/shared/business-image-upload';
 import { compressReceiptDirectImage } from '../utils/image-compression';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
   apiUploadCall: jest.fn(),
+  getApiErrorMessage: jest.fn((error: unknown, fallback: string) => {
+    if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
+      return String((error as Record<string, unknown>).error || fallback);
+    }
+    if (error && typeof error === 'object' && 'message' in (error as Record<string, unknown>)) {
+      return String((error as Record<string, unknown>).message || fallback);
+    }
+    return error instanceof Error ? error.message : fallback;
+  }),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => {
     if (error && typeof error === 'object' && 'error' in (error as Record<string, unknown>)) {
       return String((error as Record<string, unknown>).error || fallback);
@@ -15,6 +25,10 @@ jest.mock('@/components/workspace/shared', () => ({
     }
     return error instanceof Error ? error.message : fallback;
   }),
+}));
+
+jest.mock('@/components/workspace/modules/shared/business-image-upload', () => ({
+  uploadBusinessImage: jest.fn(),
 }));
 
 jest.mock('../utils/image-compression', () => ({
@@ -27,7 +41,9 @@ jest.mock('../utils/image-compression', () => ({
 
 const mockApiCall = apiCall as jest.Mock;
 const mockApiUploadCall = apiUploadCall as jest.Mock;
+const mockGetApiErrorMessage = getApiErrorMessage as jest.Mock;
 const mockGetErrorMessage = getErrorMessage as jest.Mock;
+const mockUploadBusinessImage = uploadBusinessImage as jest.Mock;
 const mockCompressReceiptDirectImage = compressReceiptDirectImage as jest.Mock;
 
 describe('useReceiptActions', () => {
@@ -64,7 +80,9 @@ describe('useReceiptActions', () => {
   beforeEach(() => {
     mockApiCall.mockReset();
     mockApiUploadCall.mockReset();
+    mockGetApiErrorMessage.mockClear();
     mockGetErrorMessage.mockClear();
+    mockUploadBusinessImage.mockReset();
     mockCompressReceiptDirectImage.mockClear();
     mockCompressReceiptDirectImage.mockResolvedValue({
       file: null,
@@ -113,6 +131,9 @@ describe('useReceiptActions', () => {
       setDirectSavedImagePath: jest.fn(),
       setDirectUploadedImageName: jest.fn(),
       setPendingDirectImageSelection,
+      setOcrUploadStatus: jest.fn(),
+      setOcrUploadMessage: jest.fn(),
+      setOcrUploadProgress: jest.fn(),
       setDirectUploadStatus: jest.fn(),
       setDirectUploadMessage: jest.fn(),
       setDirectUploadProgress: jest.fn(),
@@ -172,14 +193,43 @@ describe('useReceiptActions', () => {
 
   it('recognizes uploaded receipt and stores OCR result', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
-    mockFetch.mockResolvedValue({
-      json: async () => ({
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: false,
+        imageCompressionQualityFloor: 0.45,
+        ocrTargetMaxKb: 640,
+      },
+    });
+    mockUploadBusinessImage.mockImplementationOnce(async (options) => {
+      options.onStageChange?.({ stage: 'compressing', progress: null, compressed: null });
+      options.onStageChange?.({ stage: 'uploading', progress: 37, compressed: true, preparedFile: file });
+      options.onStageChange?.({ stage: 'saving', progress: 100, compressed: true, preparedFile: file });
+      const response = {
         success: true,
         data: {
           ocrResult: { receiptNo: 'OCR-1' },
           image: { path: '/uploads/receipt.png', name: 'receipt.png' },
         },
-      }),
+      };
+      options.onStageChange?.({
+        stage: 'success',
+        progress: 100,
+        compressed: true,
+        preparedFile: file,
+        response,
+      });
+      return {
+        prepared: {
+          file,
+          compressed: true,
+          qualityUsed: 0.72,
+          originalSize: file.size,
+          outputSize: file.size,
+          targetMaxBytes: 640 * 1024,
+        },
+        response,
+      };
     });
     const { result } = renderHook(() => useReceiptActions(createDeps()));
 
@@ -191,18 +241,39 @@ describe('useReceiptActions', () => {
 
     expect(setSelectedFile).toHaveBeenCalledWith(file);
     expect(setImagePreview).toHaveBeenCalledWith('data:image/png;base64,mock');
+    expect(mockApiCall).toHaveBeenCalledWith('settings?view=user-preferences');
+    expect(mockUploadBusinessImage).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: 'receipt',
+      compression: expect.objectContaining({
+        preference: {
+          imageCompressionEnabled: false,
+          imageCompressionQualityFloor: 0.45,
+          ocrTargetMaxKb: 640,
+        },
+      }),
+    }));
+    const [{ buildFormData }] = mockUploadBusinessImage.mock.calls[0] as [{ buildFormData: (input: File) => FormData }];
+    const formData = buildFormData(file);
+    expect(formData.get('action')).toBe('recognize');
+    expect(formData.get('file')).toBe(file);
     expect(setOcrResult).toHaveBeenCalledWith({ receiptNo: 'OCR-1' });
     expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/receipt.png', name: 'receipt.png' });
     expect(setOcrCustomerMark).toHaveBeenCalledWith('');
     expect(setOcrCustomerCandidates).toHaveBeenCalledWith([]);
+    expect(result.current.uploading).toBe(false);
   });
 
-  it('surfaces OCR business failure when upload recognition returns success=false', async () => {
+  it('clears OCR upload state and surfaces a retryable error when loading compression preferences fails', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
-    mockFetch.mockResolvedValue({
-      json: async () => ({ success: false, error: 'AI识别失败，请重试' }),
-    });
-    const { result } = renderHook(() => useReceiptActions(createDeps()));
+    const setOcrUploadStatus = jest.fn();
+    const setOcrUploadMessage = jest.fn();
+    const setOcrUploadProgress = jest.fn();
+    mockApiCall.mockRejectedValueOnce(new Error('failed to fetch preferences'));
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      setOcrUploadStatus,
+      setOcrUploadMessage,
+      setOcrUploadProgress,
+    })));
 
     await act(async () => {
       await result.current.handleFileSelect({
@@ -210,14 +281,40 @@ describe('useReceiptActions', () => {
       } as unknown as React.ChangeEvent<HTMLInputElement>);
     });
 
+    expect(mockUploadBusinessImage).not.toHaveBeenCalled();
+    expect(setOcrResult).toHaveBeenCalledWith(null);
     expect(setSavedImagePath).toHaveBeenCalledWith(null);
-    expect(setError).toHaveBeenCalledWith('AI识别失败，请重试');
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('failed');
+    expect(setOcrUploadMessage).toHaveBeenLastCalledWith('failed to fetch preferences');
+    expect(setOcrUploadProgress).toHaveBeenLastCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('failed to fetch preferences');
+    expect(result.current.uploading).toBe(false);
   });
 
-  it('surfaces OCR network failure when upload recognition request throws', async () => {
+  it('clears OCR upload state and surfaces mapped upload errors after OCR upload aborts', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
-    mockFetch.mockRejectedValue(new Error('network down'));
-    const { result } = renderHook(() => useReceiptActions(createDeps()));
+    const setOcrUploadStatus = jest.fn();
+    const setOcrUploadMessage = jest.fn();
+    const setOcrUploadProgress = jest.fn();
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+    mockUploadBusinessImage.mockRejectedValueOnce({
+      code: 'UPLOAD_ABORTED',
+      message: '上传中断，请在更稳定的网络下重试',
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      setOcrUploadStatus,
+      setOcrUploadMessage,
+      setOcrUploadProgress,
+      ocrResult: { receiptNo: 'STALE' },
+      savedImagePath: { path: '/stale.png', name: 'stale.png' },
+    })));
 
     await act(async () => {
       await result.current.handleFileSelect({
@@ -225,8 +322,13 @@ describe('useReceiptActions', () => {
       } as unknown as React.ChangeEvent<HTMLInputElement>);
     });
 
+    expect(setOcrResult).toHaveBeenCalledWith(null);
     expect(setSavedImagePath).toHaveBeenCalledWith(null);
-    expect(setError).toHaveBeenCalledWith('network down');
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('failed');
+    expect(setOcrUploadMessage).toHaveBeenLastCalledWith('上传中断，请在更稳定的网络下重试');
+    expect(setOcrUploadProgress).toHaveBeenLastCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('上传中断，请在更稳定的网络下重试');
+    expect(result.current.uploading).toBe(false);
   });
 
   it('confirms OCR receipt creation and reloads receipts', async () => {

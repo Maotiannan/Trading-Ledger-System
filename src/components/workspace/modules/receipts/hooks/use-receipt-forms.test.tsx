@@ -138,4 +138,30 @@ describe('useReceiptForms', () => {
     expect(result.current.directForm.tel).toBe('620000999');
     expect(result.current.directForm.payer).toBe('Fallback Name');
   });
+
+  it('tracks OCR upload stage state and resets it when the upload dialog closes', async () => {
+    const loadCustomerCandidates = jest.fn();
+    const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));
+
+    await act(async () => {
+      result.current.handleShowUploadChange(true);
+      result.current.setOcrResult({ receiptNo: 'OCR-1' });
+      result.current.setOcrUploadStatus('uploading');
+      result.current.setOcrUploadMessage('正在上传压缩后的图片（42%）...');
+      result.current.setOcrUploadProgress(42);
+    });
+
+    expect(result.current.ocrUploadStatus).toBe('uploading');
+    expect(result.current.ocrUploadMessage).toBe('正在上传压缩后的图片（42%）...');
+    expect(result.current.ocrUploadProgress).toBe(42);
+
+    await act(async () => {
+      result.current.handleShowUploadChange(false);
+    });
+
+    expect(result.current.ocrResult).toBeNull();
+    expect(result.current.ocrUploadStatus).toBe('idle');
+    expect(result.current.ocrUploadMessage).toBeNull();
+    expect(result.current.ocrUploadProgress).toBeNull();
+  });
 });

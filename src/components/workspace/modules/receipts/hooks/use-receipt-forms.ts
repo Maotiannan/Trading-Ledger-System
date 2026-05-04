@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { fetchServerDate, lookupOrderContextByOrderNo, type CustomerCandidate } from '@/components/workspace/shared';
-import { EMPTY_RECEIPT_DIRECT_FORM, type DirectImageUploadStatus, type PendingDirectImageSelection, type ReceiptDirectForm } from '../types';
+import {
+  EMPTY_RECEIPT_DIRECT_FORM,
+  type DirectImageUploadStatus,
+  type PendingDirectImageSelection,
+  type ReceiptDirectForm,
+  type ReceiptOcrUploadStatus,
+} from '../types';
 
 export type LoadReceiptCustomerCandidates = (
   mark: string,
@@ -22,6 +28,9 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+  const [ocrUploadStatus, setOcrUploadStatus] = useState<ReceiptOcrUploadStatus>('idle');
+  const [ocrUploadMessage, setOcrUploadMessage] = useState<string | null>(null);
+  const [ocrUploadProgress, setOcrUploadProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [directForm, setDirectForm] = useState<ReceiptDirectForm>({ ...EMPTY_RECEIPT_DIRECT_FORM });
   const [directCustomerCandidates, setDirectCustomerCandidates] = useState<CustomerCandidate[]>([]);
@@ -122,6 +131,18 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     return () => clearTimeout(timer);
   }, [ocrResult, showUpload, loadCustomerCandidates]);
 
+  const resetOcrUploadState = () => {
+    setOcrUploadStatus('idle');
+    setOcrUploadMessage(null);
+    setOcrUploadProgress(null);
+  };
+
+  const resetDirectUploadState = () => {
+    setDirectUploadStatus('idle');
+    setDirectUploadMessage(null);
+    setDirectUploadProgress(null);
+  };
+
   const handleShowUploadChange = (open: boolean) => {
     setShowUpload(open);
     if (!open) {
@@ -135,6 +156,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setOcrCustomerCandidates([]);
       setOcrInvConflict(false);
       setOcrInvConflictCount(0);
+      resetOcrUploadState();
     }
   };
 
@@ -146,9 +168,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
       setDirectSavedImagePath(null);
       setDirectUploadedImageName('');
       setPendingDirectImageSelection(null);
-      setDirectUploadStatus('idle');
-      setDirectUploadMessage(null);
-      setDirectUploadProgress(null);
+      resetDirectUploadState();
       setDirectInvConflict(false);
       setDirectInvConflictCount(0);
     }
@@ -188,9 +208,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setDirectSavedImagePath(null);
     setDirectUploadedImageName('');
     setPendingDirectImageSelection(null);
-    setDirectUploadStatus('idle');
-    setDirectUploadMessage(null);
-    setDirectUploadProgress(null);
+    resetDirectUploadState();
     setDirectInvConflict(false);
     setDirectInvConflictCount(0);
   };
@@ -214,6 +232,12 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     setSelectedFile,
     savedImagePath,
     setSavedImagePath,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     error,
     setError,
     directForm,

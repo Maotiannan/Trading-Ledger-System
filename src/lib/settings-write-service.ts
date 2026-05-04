@@ -15,6 +15,10 @@ import {
   numericSystemSettingMinimums,
   secretSystemSettingKeys,
 } from '@/lib/system-settings';
+import {
+  updateUserImageCompressionPreference,
+  type UserImageCompressionPreference,
+} from '@/lib/user-preference-service';
 
 const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'all'] as const;
 type PurgeModuleKey = typeof purgeModuleKeys[number];
@@ -164,6 +168,33 @@ export async function testSettingsOcr(currentUser: CurrentUser): Promise<{
   return {
     message: result.message,
     detail: result.detail || '',
+  };
+}
+
+export async function updateCurrentUserImageCompressionPreferences(
+  currentUser: CurrentUser,
+  payload: unknown
+): Promise<{
+  message: string;
+  preferences: UserImageCompressionPreference;
+}> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '用户偏好格式错误',
+      detail: { payload },
+    });
+  }
+
+  const preferences = await updateUserImageCompressionPreference(
+    currentUser,
+    payload as Partial<UserImageCompressionPreference>,
+  );
+
+  return {
+    message: '用户偏好已更新',
+    preferences,
   };
 }
 

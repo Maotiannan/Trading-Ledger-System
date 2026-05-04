@@ -116,10 +116,24 @@ model User {
   receiptGeneratorSessions ReceiptGeneratorSession[] @relation("ReceiptGeneratorSessionCreatedBy")
   uploadedAssets   UploadedAsset[]
   excelApiTokens    ExcelApiToken[]
+  preference       UserPreference?
 
   @@index([parentId])
   @@index([createdById])
   @@index([level])
+}
+
+model UserPreference {
+  userId                        String   @unique
+  imageCompressionEnabled       Boolean  @default(true)
+  imageCompressionQualityFloor  Decimal  @default(0.30) @db.Decimal(3, 2)
+  ocrTargetMaxKb                Int      @default(500)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId])
 }
 
 model ExcelApiToken {

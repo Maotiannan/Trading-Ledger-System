@@ -553,6 +553,62 @@ describe('useReceiptActions', () => {
     ]);
   });
 
+  it('accepts contract-valid partial OCR payloads', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+    mockUploadBusinessImage.mockImplementationOnce(async (options) => {
+      options.onStageChange?.({ stage: 'uploading', progress: 42, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'saving', progress: 100, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'success', progress: 100, compressed: false, preparedFile: file });
+      return {
+        prepared: {
+          file,
+          compressed: false,
+          qualityUsed: null,
+          originalSize: file.size,
+          outputSize: file.size,
+          targetMaxBytes: 500 * 1024,
+        },
+        response: {
+          success: true,
+          data: {
+            ocrResult: { receiptNo: 'OCR-1', usd: null },
+            image: { path: '/uploads/partial-receipt.png', name: 'partial-receipt.png' },
+          },
+        },
+      };
+    });
+
+    const { result, history } = renderStatefulReceiptActions();
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file], value: 'receipt.png' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.ocrUploadStatus).toBe('success');
+    expect(result.current.ocrUploadMessage).toBe('AI识别完成');
+    expect(result.current.ocrUploadProgress).toBe(100);
+    expect(result.current.ocrResult).toEqual({ receiptNo: 'OCR-1', usd: null });
+    expect(result.current.savedImagePath).toEqual({ path: '/uploads/partial-receipt.png', name: 'partial-receipt.png' });
+    expect(history.ocrUploadStatusHistory).toEqual([
+      'compressing',
+      'uploading',
+      'saving',
+      'success',
+      'success',
+    ]);
+  });
+
   it('treats empty OCR objects as retryable failures', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
     mockApiCall.mockResolvedValueOnce({
@@ -581,6 +637,75 @@ describe('useReceiptActions', () => {
           data: {
             ocrResult: {},
             image: { path: '/uploads/empty-receipt.png', name: 'empty-receipt.png' },
+          },
+        },
+      };
+    });
+
+    const { result, history } = renderStatefulReceiptActions({
+      ocrResult: { receiptNo: 'STALE' },
+      savedImagePath: { path: '/stale.png', name: 'stale.png' },
+    });
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file], value: 'receipt.png' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(result.current.error).toBe('AI识别结果无效，请重试');
+    expect(result.current.ocrUploadStatus).toBe('failed');
+    expect(result.current.ocrUploadMessage).toBe('AI识别结果无效，请重试');
+    expect(result.current.ocrUploadProgress).toBeNull();
+    expect(result.current.ocrResult).toBeNull();
+    expect(result.current.savedImagePath).toBeNull();
+    expect(result.current.selectedFile).toBe(file);
+    expect(history.ocrUploadStatusHistory).toEqual([
+      'compressing',
+      'uploading',
+      'saving',
+      'success',
+      'failed',
+    ]);
+  });
+
+  it('treats semantically empty OCR payloads as retryable failures', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+    mockUploadBusinessImage.mockImplementationOnce(async (options) => {
+      options.onStageChange?.({ stage: 'uploading', progress: 42, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'saving', progress: 100, compressed: false, preparedFile: file });
+      options.onStageChange?.({ stage: 'success', progress: 100, compressed: false, preparedFile: file });
+      return {
+        prepared: {
+          file,
+          compressed: false,
+          qualityUsed: null,
+          originalSize: file.size,
+          outputSize: file.size,
+          targetMaxBytes: 500 * 1024,
+        },
+        response: {
+          success: true,
+          data: {
+            ocrResult: {
+              receiptNo: null,
+              date: null,
+              tel: null,
+              usd: null,
+              orderNo: null,
+              invNo: null,
+              payer: null,
+              isDeposit: false,
+            },
+            image: { path: '/uploads/semantically-empty-receipt.png', name: 'semantically-empty-receipt.png' },
           },
         },
       };

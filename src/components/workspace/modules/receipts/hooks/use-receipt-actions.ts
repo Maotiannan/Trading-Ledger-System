@@ -171,21 +171,37 @@ export function useReceiptActions({
     }
 
     const candidate = value as Record<string, unknown>;
-    const recognizedKeys = ['receiptNo', 'date', 'usd', 'orderNo', 'invNo', 'payer', 'isDeposit'] as const;
+    const recognizedKeys = ['receiptNo', 'date', 'tel', 'usd', 'orderNo', 'invNo', 'payer', 'isDeposit'] as const;
     const presentRecognizedKeys = recognizedKeys.filter((key) => candidate[key] !== undefined);
     if (presentRecognizedKeys.length === 0) {
       return false;
     }
 
-    return presentRecognizedKeys.every((key) => {
+    const hasOnlyContractValidFields = presentRecognizedKeys.every((key) => {
+      const field = candidate[key];
+      switch (key) {
+        case 'usd':
+          return field === null || (typeof field === 'number' && Number.isFinite(field));
+        case 'isDeposit':
+          return typeof field === 'boolean';
+        default:
+          return field === null || typeof field === 'string';
+      }
+    });
+
+    if (!hasOnlyContractValidFields) {
+      return false;
+    }
+
+    return presentRecognizedKeys.some((key) => {
       const field = candidate[key];
       switch (key) {
         case 'usd':
           return typeof field === 'number' && Number.isFinite(field);
         case 'isDeposit':
-          return typeof field === 'boolean';
+          return field === true;
         default:
-          return field === null || typeof field === 'string';
+          return typeof field === 'string' && field.trim().length > 0;
       }
     });
   };

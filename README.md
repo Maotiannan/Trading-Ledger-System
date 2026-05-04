@@ -201,6 +201,16 @@ docker compose up -d --build
 - 数据列名没有被改动
 - 客户、订单、金额格式正确
 
+### 弱网上传前
+如果网络较慢，建议先去 `设置` 调整当前账号自己的图片压缩设置。
+
+现在这些入口都会优先走同一套压缩与弱网保护逻辑：
+- `Receipt Management -> Upload Receipt`
+- `Receipt Management -> Create Directly`
+- `Payment Detail -> Upload Payment Detail`
+
+手机端在 `Create Directly` 选图后，会先进入项目内的大图确认页，只有点 `Confirm Upload` 后才会真正开始上传。
+
 ### 修改系统阈值前
 建议先在 `设置 -> 系统配置` 中修改，不要直接改代码。
 

@@ -25,30 +25,38 @@ export function ReceiptDirectImageConfirmDialog({
 }: ReceiptDirectImageConfirmDialogProps) {
   return (
     <Dialog open={!!selection} onOpenChange={onOpenChange}>
-      <DialogContent className="w-screen max-w-none h-[100dvh] rounded-none p-0 sm:h-auto sm:max-h-[90dvh] sm:w-[min(92vw,72rem)] sm:rounded-lg sm:p-0">
+      <DialogContent className="h-[100dvh] w-screen max-w-none overflow-hidden rounded-none p-0 sm:h-auto sm:max-h-[90dvh] sm:w-[min(92vw,72rem)] sm:rounded-lg sm:p-0">
         <DialogTitle className="sr-only">{tx('确认收据图片', 'Confirm receipt image')}</DialogTitle>
         <DialogDescription className="sr-only">
           {tx('确认当前图片后才会开始上传。', 'The selected image will be uploaded only after confirmation.')}
         </DialogDescription>
-        <div className="flex h-full flex-col bg-background">
-          <div className="flex items-center justify-between border-b px-4 py-3">
+        <div className="flex h-full min-h-0 flex-col bg-background">
+          <div
+            data-testid="receipt-direct-image-confirm-header"
+            className="sticky top-0 z-10 grid grid-cols-[auto,minmax(0,1fr),auto] items-center gap-2 border-b bg-background px-4 py-3"
+          >
             <Button type="button" variant="ghost" disabled={uploading} onClick={() => onOpenChange(false)}>
               {tx('返回重选', 'Back')}
             </Button>
-            <div className="min-w-0 flex-1 px-4 text-center text-sm font-medium truncate">
+            <div className="min-w-0 px-2 text-center text-sm font-medium truncate">
               {selection?.name || tx('确认收据图片', 'Confirm receipt image')}
             </div>
             <Button type="button" disabled={!selection || uploading} onClick={onConfirm}>
               {uploading ? tx('上传中...', 'Uploading...') : tx('确认上传', 'Confirm Upload')}
             </Button>
           </div>
-          <div className="flex-1 overflow-auto bg-muted/30 p-4 sm:p-6">
+          <div
+            data-testid="receipt-direct-image-preview-region"
+            className="min-h-0 flex-1 overflow-auto bg-muted/30 p-4 sm:p-6"
+          >
             {selection && (
-              <img
-                src={selection.previewUrl}
-                alt={selection.name}
-                className="mx-auto block max-h-full max-w-full rounded-lg object-contain shadow-sm"
-              />
+              <div className="flex min-h-full items-start justify-center sm:items-center">
+                <img
+                  src={selection.previewUrl}
+                  alt={selection.name}
+                  className="mx-auto block w-full max-w-full max-h-[calc(100dvh-10rem)] rounded-lg object-contain shadow-sm sm:max-h-[calc(90dvh-12rem)]"
+                />
+              </div>
             )}
           </div>
           {(uploadMessage || typeof uploadProgress === 'number') && (

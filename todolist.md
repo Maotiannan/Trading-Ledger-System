@@ -98,6 +98,11 @@
 - 手机签字页进一步收口为真正无滚动的全屏白底签字模式，提示水印直接落在签字背景层，顶部只保留 `Back / Fullscreen / Clear`，底部 `Complete` 固定可见
 - 签名导出前改为按笔迹边界裁切，最终收据里的签名不再因整张透明画布缩放而显得发虚或虚线化
 
+### v1.0.110
+- `Receipt Management` 与 `Payment Detail` 的图片上传统一接入共享弱网上传管线，补齐上传前压缩、进度显示、`15s` 空闲超时、`120s` 总时长兜底与可重试失败提示
+- 新增“当前账号图片压缩设置”，每个账号都能在设置页单独保存自己的压缩开关、质量下限和 OCR 目标大小
+- 修复 `Upload Receipt / Upload Payment Detail / Create Directly` 的移动端上传体验，包括按钮重排、竖屏预览确认页、弱网 `failed to fetch` 恢复，以及 receipt/detail OCR 对 stalled settings fetch 与空/坏 payload 的防御
+
 ### v1.0.98
 - 手机签字页进一步收口为真正的全屏白底签字模式，顶部只保留 `Back / Fullscreen / Clear`，底部固定 `Complete`
 - 手机端未确认返回时会保留当前签字草稿，下次进入可继续签

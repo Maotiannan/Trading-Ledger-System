@@ -9,17 +9,28 @@ import type {
   SettingsAuditExportEntry,
   SettingsAuditFilterState,
   SettingsAuditMeta,
+  UserImageCompressionPreferenceField,
+  UserImageCompressionPreferenceFieldValue,
+  UserImageCompressionPreferenceDraft,
 } from '../types';
+import { defaultUserImageCompressionPreferenceDraft } from '../types';
 import { buildEmptySettingsAuditFilters, defaultSettingsAuditMeta } from '../read-model';
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled user preference field: ${String(value)}`);
+}
 
 export function useSettingsForms() {
   const [loading, setLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [userPreferencesLoading, setUserPreferencesLoading] = useState(false);
+  const [savingUserPreferences, setSavingUserPreferences] = useState(false);
   const [testingConfig, setTestingConfig] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
+  const [userPreferences, setUserPreferences] = useState<UserImageCompressionPreferenceDraft>(defaultUserImageCompressionPreferenceDraft);
   const [canEditConfig, setCanEditConfig] = useState(false);
   const [canViewAudit, setCanViewAudit] = useState(false);
   const [canPurgeBranch, setCanPurgeBranch] = useState(false);
@@ -52,6 +63,33 @@ export function useSettingsForms() {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
+  const updateUserPreferenceField = <K extends UserImageCompressionPreferenceField>(
+    key: K,
+    value: UserImageCompressionPreferenceFieldValue<K>,
+  ) => {
+    setUserPreferences((prev) => {
+      switch (key) {
+        case 'imageCompressionEnabled':
+          return {
+            ...prev,
+            imageCompressionEnabled: value as UserImageCompressionPreferenceDraft['imageCompressionEnabled'],
+          };
+        case 'imageCompressionQualityFloor':
+          return {
+            ...prev,
+            imageCompressionQualityFloor: value as UserImageCompressionPreferenceDraft['imageCompressionQualityFloor'],
+          };
+        case 'ocrTargetMaxKb':
+          return {
+            ...prev,
+            ocrTargetMaxKb: value as UserImageCompressionPreferenceDraft['ocrTargetMaxKb'],
+          };
+        default:
+          return assertNever(key);
+      }
+    });
+  };
+
   const togglePurgeModule = (moduleKey: string, checked: boolean) => {
     setPurgeForm((prev) => {
       if (moduleKey === 'all') {
@@ -72,6 +110,10 @@ export function useSettingsForms() {
     setLoading,
     savingConfig,
     setSavingConfig,
+    userPreferencesLoading,
+    setUserPreferencesLoading,
+    savingUserPreferences,
+    setSavingUserPreferences,
     testingConfig,
     setTestingConfig,
     passwordLoading,
@@ -82,6 +124,8 @@ export function useSettingsForms() {
     setError,
     config,
     setConfig,
+    userPreferences,
+    setUserPreferences,
     canEditConfig,
     setCanEditConfig,
     canViewAudit,
@@ -125,6 +169,7 @@ export function useSettingsForms() {
     pwd,
     setPwd,
     updateConfigField,
+    updateUserPreferenceField,
     togglePurgeModule,
     defaultSettingsAuditMeta,
   };

@@ -12,7 +12,11 @@ export type ReceiptDirectForm = {
   isDeposit: boolean;
 };
 
-export type DirectImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
+export type ReceiptImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
+
+export type ReceiptOcrUploadStatus = ReceiptImageUploadStatus;
+
+export type DirectImageUploadStatus = ReceiptImageUploadStatus;
 
 export type PendingDirectImageSelection = {
   file: File;

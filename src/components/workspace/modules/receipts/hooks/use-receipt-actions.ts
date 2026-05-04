@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { apiCall, apiUploadCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
+import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
+import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
 import { compressReceiptDirectImage } from '../utils/image-compression';
 import type { PendingDirectImageSelection, ReceiptDirectForm } from '../types';
 
@@ -30,6 +32,9 @@ export type ReceiptActionDeps = {
   setDirectSavedImagePath: (value: { path: string; name: string } | null) => void;
   setDirectUploadedImageName: (value: string) => void;
   setPendingDirectImageSelection: (value: PendingDirectImageSelection | null) => void;
+  setOcrUploadStatus: (value: 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed') => void;
+  setOcrUploadMessage: (value: string | null) => void;
+  setOcrUploadProgress: (value: number | null) => void;
   setDirectUploadStatus: (value: 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed') => void;
   setDirectUploadMessage: (value: string | null) => void;
   setDirectUploadProgress: (value: number | null) => void;
@@ -62,6 +67,9 @@ export function useReceiptActions({
   setDirectSavedImagePath,
   setDirectUploadedImageName,
   setPendingDirectImageSelection,
+  setOcrUploadStatus,
+  setOcrUploadMessage,
+  setOcrUploadProgress,
   setDirectUploadStatus,
   setDirectUploadMessage,
   setDirectUploadProgress,
@@ -70,6 +78,9 @@ export function useReceiptActions({
   handleShowDirectCreateChange,
   resetDirectForm,
 }: ReceiptActionDeps) {
+  const USER_PREFERENCE_SOFT_TIMEOUT_MS = 1_500;
+  const OCR_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
+  const OCR_UPLOAD_HARD_TIMEOUT_MS = 120_000;
   const DIRECT_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
   const DIRECT_UPLOAD_HARD_TIMEOUT_MS = 120_000;
   const [uploading, setUploading] = useState(false);
@@ -83,46 +94,215 @@ export function useReceiptActions({
     reader.readAsDataURL(file);
   });
 
+  const resetOcrRecognitionState = () => {
+    setOcrResult(null);
+    setSavedImagePath(null);
+    setOcrCustomerMark('');
+    setOcrCustomerName('');
+    setOcrCustomerId('');
+    setOcrCustomerCandidates([]);
+  };
+
+  const buildOcrUploadMessage = (event: Pick<BusinessImageUploadStageEvent, 'stage' | 'progress' | 'compressed'>) => {
+    switch (event.stage) {
+      case 'compressing':
+        return tx('正在压缩图片...', 'Compressing image...');
+      case 'uploading': {
+        const percent = typeof event.progress === 'number' ? event.progress : 0;
+        return event.compressed
+          ? tx(`正在上传压缩后的图片（${percent}%）...`, `Uploading compressed image (${percent}%)...`)
+          : tx(`正在上传图片（${percent}%）...`, `Uploading image (${percent}%)...`);
+      }
+      case 'saving':
+        return tx('图片已上传，AI正在识别...', 'Image uploaded. AI is recognizing...');
+      case 'success':
+        return tx('AI识别完成', 'AI recognition completed.');
+      case 'failed':
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  const applyOcrUploadStage = (event: Pick<BusinessImageUploadStageEvent, 'stage' | 'progress' | 'compressed'>, failureMessage?: string) => {
+    setOcrUploadStatus(event.stage);
+    if (event.stage === 'failed') {
+      setOcrUploadMessage(failureMessage ?? null);
+      setOcrUploadProgress(null);
+      return;
+    }
+    setOcrUploadMessage(buildOcrUploadMessage(event));
+    if (event.stage === 'saving' || event.stage === 'success') {
+      setOcrUploadProgress(100);
+      return;
+    }
+    setOcrUploadProgress(typeof event.progress === 'number' ? event.progress : null);
+  };
+
+  const resolveWithSoftTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => new Promise((resolve) => {
+    const timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timeoutId);
+        resolve(fallback);
+      }
+    );
+  });
+
+  const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
+    const result = await resolveWithSoftTimeout(
+      apiCall('settings?view=user-preferences'),
+      USER_PREFERENCE_SOFT_TIMEOUT_MS,
+      undefined
+    );
+    if (!result?.success || !result.data || typeof result.data !== 'object') {
+      return undefined;
+    }
+    return result.data as Partial<UserImageCompressionPreference>;
+  };
+
+  const isReceiptOcrResult = (value: unknown): value is Record<string, unknown> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    const recognizedKeys = ['receiptNo', 'date', 'tel', 'usd', 'orderNo', 'invNo', 'payer', 'isDeposit'] as const;
+    const presentRecognizedKeys = recognizedKeys.filter((key) => candidate[key] !== undefined);
+    if (presentRecognizedKeys.length === 0) {
+      return false;
+    }
+
+    const hasOnlyContractValidFields = presentRecognizedKeys.every((key) => {
+      const field = candidate[key];
+      switch (key) {
+        case 'usd':
+          return field === null || (typeof field === 'number' && Number.isFinite(field));
+        case 'isDeposit':
+          return typeof field === 'boolean';
+        default:
+          return field === null || typeof field === 'string';
+      }
+    });
+
+    if (!hasOnlyContractValidFields) {
+      return false;
+    }
+
+    return presentRecognizedKeys.some((key) => {
+      const field = candidate[key];
+      switch (key) {
+        case 'usd':
+          return typeof field === 'number' && Number.isFinite(field);
+        case 'isDeposit':
+          return field === true;
+        default:
+          return typeof field === 'string' && field.trim().length > 0;
+      }
+    });
+  };
+
+  const getSuccessfulOcrPayload = (
+    response: {
+      success?: boolean;
+      data?: {
+        ocrResult?: Record<string, unknown> | null;
+        image?: { path: string; name: string } | null;
+      };
+    },
+    invalidPayloadMessage: string
+  ) => {
+    if (!response.success || !isReceiptOcrResult(response.data?.ocrResult)) {
+      throw new Error(invalidPayloadMessage);
+    }
+
+    return {
+      ocrResult: response.data.ocrResult,
+      image: response.data?.image ?? null,
+    };
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const input = event.target;
 
     setSelectedFile(file);
     setUploading(true);
     setError(null);
+    resetOcrRecognitionState();
+    applyOcrUploadStage({
+      stage: 'compressing',
+      progress: null,
+      compressed: null,
+    });
 
     const reader = new FileReader();
     reader.onload = () => setImagePreview(reader.result as string);
     reader.readAsDataURL(file);
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('action', 'recognize');
-
     try {
-      const result = await fetch('/api/receipt', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      }).then((response) => response.json());
+      const invalidPayloadMessage = tx('AI识别结果无效，请重试', 'AI returned an invalid recognition result. Please retry.');
+      const preference = await loadUserCompressionPreference();
+      const { response } = await uploadBusinessImage<{
+        success?: boolean;
+        data?: {
+          ocrResult?: Record<string, unknown> | null;
+          image?: { path: string; name: string } | null;
+        };
+      }>({
+        file,
+        endpoint: 'receipt',
+        buildFormData: (preparedFile) => {
+          const formData = new FormData();
+          formData.append('file', preparedFile);
+          formData.append('action', 'recognize');
+          return formData;
+        },
+        compression: {
+          preference,
+        },
+        idleTimeoutMs: OCR_UPLOAD_IDLE_TIMEOUT_MS,
+        hardTimeoutMs: OCR_UPLOAD_HARD_TIMEOUT_MS,
+        failureMessage: tx('AI识别失败，请重试', 'AI recognition failed, please retry.'),
+        onStageChange: (stageEvent) => {
+          if (stageEvent.stage === 'failed') {
+            applyOcrUploadStage(stageEvent, getApiErrorMessage(
+              stageEvent.error,
+              tx('AI识别失败，请重试', 'AI recognition failed, please retry.'),
+            ));
+            return;
+          }
+          applyOcrUploadStage(stageEvent);
+        },
+      });
 
-      if (result.success) {
-        setOcrResult(result.data.ocrResult);
-        setOcrCustomerMark('');
-        setOcrCustomerName('');
-        setOcrCustomerId('');
-        setOcrCustomerCandidates([]);
-        setSavedImagePath(result.data.image || null);
-      } else {
-        setSavedImagePath(null);
-        setError(getErrorMessage(result, tx('AI识别失败，请重试', 'AI recognition failed, please retry.')));
-      }
+      const successfulPayload = getSuccessfulOcrPayload(response, invalidPayloadMessage);
+      setOcrResult(successfulPayload.ocrResult);
+      setSavedImagePath(successfulPayload.image);
+      applyOcrUploadStage({
+        stage: 'success',
+        progress: 100,
+        compressed: null,
+      });
     } catch (err) {
-      console.error('OCR error:', err);
+      const message = getApiErrorMessage(err, tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
+      applyOcrUploadStage({
+        stage: 'failed',
+        progress: null,
+        compressed: null,
+      }, message);
+      resetOcrRecognitionState();
       setSavedImagePath(null);
-      setError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
+      setError(message);
+    } finally {
+      input.value = '';
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleConfirm = async () => {

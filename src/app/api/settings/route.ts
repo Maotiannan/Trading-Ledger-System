@@ -6,6 +6,7 @@ import { resolveRequestLocale } from '@/lib/api-response-locale';
 import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import {
+  getCurrentUserImageCompressionPreferences,
   listAllSystemSettingsAuditLogs,
   listSettings,
   listSystemSettingsAuditExportLogs,
@@ -15,6 +16,7 @@ import {
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
+  updateCurrentUserImageCompressionPreferences,
   updateSystemSettings,
 } from '@/lib/settings-write-service';
 function escapeCsvCell(value: unknown): string {
@@ -64,6 +66,11 @@ function buildSettingsAuditCsv(
 export const GET = withAuth(async (_request, currentUser) => {
   try {
     const view = _request.nextUrl.searchParams.get('view');
+    if (view === 'user-preferences') {
+      const data = await getCurrentUserImageCompressionPreferences(currentUser);
+      return createApiSuccessResponse({ data, message: '用户偏好已加载' }, _request);
+    }
+
     if (view === 'audit') {
       const format = (_request.nextUrl.searchParams.get('format') || '').trim().toLowerCase();
       const cursor = _request.nextUrl.searchParams.get('cursor');
@@ -169,6 +176,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     if (action === 'update-config') {
       const result = await updateSystemSettings(currentUser, body?.settings);
       return createApiSuccessResponse({ message: result.message }, request);
+    }
+
+    if (action === 'update-user-preferences') {
+      const result = await updateCurrentUserImageCompressionPreferences(currentUser, body?.preferences);
+      return createApiSuccessResponse({
+        message: result.message,
+        data: result.preferences,
+      }, request);
     }
 
     throw createApiError({

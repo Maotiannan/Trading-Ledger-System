@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchServerDate } from '@/components/workspace/shared';
-import { EMPTY_DETAIL_DIRECT_ITEM, type DetailDirectItemForm, type DetailOcrResult } from '../types';
+import { EMPTY_DETAIL_DIRECT_ITEM, type DetailDirectItemForm, type DetailOcrResult, type DetailOcrUploadStatus } from '../types';
 
 export function useDetailForms() {
   const [showUpload, setShowUpload] = useState(false);
@@ -12,6 +12,9 @@ export function useDetailForms() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+  const [ocrUploadStatus, setOcrUploadStatus] = useState<DetailOcrUploadStatus>('idle');
+  const [ocrUploadMessage, setOcrUploadMessage] = useState<string | null>(null);
+  const [ocrUploadProgress, setOcrUploadProgress] = useState<number | null>(null);
   const [directDate, setDirectDate] = useState('');
   const [directItems, setDirectItems] = useState<DetailDirectItemForm[]>([{ ...EMPTY_DETAIL_DIRECT_ITEM }]);
   const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
@@ -30,6 +33,11 @@ export function useDetailForms() {
       setError(null);
       setOcrResult(null);
       setImagePreview(null);
+      setSelectedFile(null);
+      setSavedImagePath(null);
+      setOcrUploadStatus('idle');
+      setOcrUploadMessage(null);
+      setOcrUploadProgress(null);
     }
   };
 
@@ -67,6 +75,12 @@ export function useDetailForms() {
     setError,
     savedImagePath,
     setSavedImagePath,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     directDate,
     setDirectDate,
     directItems,

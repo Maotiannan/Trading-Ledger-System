@@ -398,6 +398,13 @@ export function isApiErrorCode(input: unknown, ...codes: string[]): boolean {
   return Boolean(code && codes.includes(code));
 }
 
+export function classifyApiUploadError(error: unknown): 'idle-timeout' | 'hard-timeout' | 'aborted' | 'unknown' {
+  if (isApiErrorCode(error, 'UPLOAD_IDLE_TIMEOUT')) return 'idle-timeout';
+  if (isApiErrorCode(error, 'UPLOAD_HARD_TIMEOUT')) return 'hard-timeout';
+  if (isApiErrorCode(error, 'UPLOAD_ABORTED')) return 'aborted';
+  return 'unknown';
+}
+
 export function getApiErrorMessage(
   error: unknown,
   fallback: string,

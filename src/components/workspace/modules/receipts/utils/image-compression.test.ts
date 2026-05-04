@@ -31,11 +31,15 @@ describe('compressReceiptDirectImage', () => {
       close: jest.fn(),
     });
 
-    const toBlob = jest
-      .fn()
-      .mockImplementationOnce((callback: BlobCallback) => callback(new Blob([new Uint8Array(2_100_000)], { type: 'image/jpeg' })))
-      .mockImplementationOnce((callback: BlobCallback) => callback(new Blob([new Uint8Array(1_700_000)], { type: 'image/jpeg' })))
-      .mockImplementationOnce((callback: BlobCallback) => callback(new Blob([new Uint8Array(1_200_000)], { type: 'image/jpeg' })));
+    const toBlob = jest.fn((callback: BlobCallback, _type?: string, quality?: number) => {
+      const q = Number((quality ?? 0).toFixed(2));
+      const size = q >= 0.8
+        ? 2_100_000
+        : q >= 0.65
+          ? 1_550_000
+          : 1_200_000;
+      callback(new Blob([new Uint8Array(size)], { type: 'image/jpeg' }));
+    });
 
     document.createElement = jest.fn((tagName: string) => {
       if (tagName === 'canvas') {
@@ -57,5 +61,6 @@ describe('compressReceiptDirectImage', () => {
     expect(result.file.size).toBeLessThan(file.size);
     expect(result.file.type).toBe('image/jpeg');
     expect(global.createImageBitmap).toHaveBeenCalledWith(file);
+    expect(toBlob.mock.calls.length).toBeGreaterThan(2);
   });
 });

@@ -46,6 +46,12 @@ export function DetailManager() {
     setError,
     savedImagePath,
     setSavedImagePath,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     directDate,
     setDirectDate,
     directItems,
@@ -108,6 +114,9 @@ export function DetailManager() {
     setSelectedFile,
     setError,
     setSavedImagePath,
+    setOcrUploadStatus,
+    setOcrUploadMessage,
+    setOcrUploadProgress,
     handleShowUploadChange,
     handleShowDirectCreateChange,
     resetDirectForm,
@@ -183,6 +192,9 @@ export function DetailManager() {
         error={error}
         imagePreview={imagePreview}
         ocrResult={ocrResult}
+        ocrUploadStatus={ocrUploadStatus}
+        ocrUploadMessage={ocrUploadMessage}
+        ocrUploadProgress={ocrUploadProgress}
         tx={tx}
         onOpenChange={handleShowUploadChange}
         onFileSelect={handleFileSelect}

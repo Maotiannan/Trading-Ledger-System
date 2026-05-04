@@ -66,6 +66,12 @@ export function ReceiptManager() {
     setSelectedFile,
     savedImagePath,
     setSavedImagePath,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     error,
     setError,
     directForm,
@@ -159,6 +165,9 @@ export function ReceiptManager() {
     setDirectSavedImagePath,
     setDirectUploadedImageName,
     setPendingDirectImageSelection,
+    setOcrUploadStatus,
+    setOcrUploadMessage,
+    setOcrUploadProgress,
     setDirectUploadStatus,
     setDirectUploadMessage,
     setDirectUploadProgress,
@@ -210,23 +219,26 @@ export function ReceiptManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold">{tx('收据管理', 'Receipt Management')}</h2>
-        <div className="flex gap-2">
+        <div
+          data-testid="receipt-manager-primary-actions"
+          className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"
+        >
+          <Button onClick={() => handleShowUploadChange(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            {tx('上传收据', 'Upload Receipt')}
+          </Button>
+          <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            {tx('直接创建', 'Create Directly')}
+          </Button>
           {canUseReceiptGenerator && (
             <Button variant="outline" onClick={() => setShowGeneratorLaunch(true)}>
               <PenSquare className="h-4 w-4 mr-2" />
               {tx('生成签名收据', 'Generate Signed Receipt')}
             </Button>
           )}
-          <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            {tx('直接创建', 'Create Directly')}
-          </Button>
-          <Button onClick={() => handleShowUploadChange(true)}>
-            <Upload className="h-4 w-4 mr-2" />
-            {tx('上传收据', 'Upload Receipt')}
-          </Button>
         </div>
       </div>
 
@@ -317,6 +329,9 @@ export function ReceiptManager() {
         ocrCustomerCandidates={ocrCustomerCandidates}
         ocrInvConflict={ocrInvConflict}
         ocrInvConflictCount={ocrInvConflictCount}
+        ocrUploadStatus={ocrUploadStatus}
+        ocrUploadMessage={ocrUploadMessage}
+        ocrUploadProgress={ocrUploadProgress}
         tx={tx}
         onOpenChange={handleShowUploadChange}
         onFileSelect={handleFileSelect}

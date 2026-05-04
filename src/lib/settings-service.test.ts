@@ -7,6 +7,7 @@ import {
   updateSystemSettings,
 } from '@/lib/settings-write-service';
 import {
+  getCurrentUserImageCompressionPreferences,
   listSettings,
   listAllSystemSettingsAuditLogs,
   listSystemSettingsAuditExportLogs,
@@ -24,6 +25,9 @@ jest.mock('@/lib/db', () => ({
   db: {
     user: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
+    userPreference: {
       findUnique: jest.fn(),
     },
     systemSetting: {
@@ -104,6 +108,7 @@ function makeUser(overrides: Partial<{
 
 const mockDb = db as unknown as {
   user: { findMany: jest.Mock; findUnique: jest.Mock };
+  userPreference: { findUnique: jest.Mock };
   systemSetting: { findMany: jest.Mock; upsert: jest.Mock };
   detailItem: { deleteMany: jest.Mock; updateMany: jest.Mock };
   receiptHistory: { deleteMany: jest.Mock };
@@ -200,6 +205,38 @@ describe('settings-service', () => {
         canViewAudit: false,
       }),
     }));
+  });
+
+  it('returns default image compression preferences when the current user has no row', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce(null);
+
+    const result = await getCurrentUserImageCompressionPreferences(makeUser({ id: 'user-without-preference' }));
+
+    expect(mockDb.userPreference.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'user-without-preference' },
+    });
+    expect(result).toEqual({
+      imageCompressionEnabled: true,
+      imageCompressionQualityFloor: 0.3,
+      ocrTargetMaxKb: 500,
+    });
+  });
+
+  it('returns stored image compression preferences for the current user', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce({
+      userId: 'user-with-preference',
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: '0.45',
+      ocrTargetMaxKb: 768,
+    });
+
+    const result = await getCurrentUserImageCompressionPreferences(makeUser({ id: 'user-with-preference' }));
+
+    expect(result).toEqual({
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: 0.45,
+      ocrTargetMaxKb: 768,
+    });
   });
 
   it('lists system setting audit logs with actor and changes', async () => {

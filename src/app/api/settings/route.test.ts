@@ -1,5 +1,4 @@
 import { apiErrorCodes } from '@/lib/api-error';
-import { createApiError } from '@/lib/api-error';
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -9,6 +8,15 @@ jest.mock('next/server', () => ({
         return body;
       },
     }),
+  },
+}));
+
+jest.mock('@/lib/db', () => ({
+  db: {
+    userPreference: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+    },
   },
 }));
 
@@ -35,20 +43,28 @@ jest.mock('@/lib/settings-read-service', () => ({
   getCurrentUserImageCompressionPreferences: jest.fn(),
 }));
 
-jest.mock('@/lib/settings-write-service', () => ({
-  purgeBranchBusinessData: jest.fn(),
-  purgeBusinessData: jest.fn(),
-  testSettingsOcr: jest.fn(),
-  updateSystemSettings: jest.fn(),
-  updateCurrentUserImageCompressionPreferences: jest.fn(),
-}));
+jest.mock('@/lib/settings-write-service', () => {
+  const actual = jest.requireActual('@/lib/settings-write-service');
+  return {
+    ...actual,
+    purgeBranchBusinessData: jest.fn(),
+    purgeBusinessData: jest.fn(),
+    testSettingsOcr: jest.fn(),
+    updateSystemSettings: jest.fn(),
+  };
+});
 
 import { GET, POST } from '@/app/api/settings/route';
+import { db } from '@/lib/db';
 import { getCurrentUserImageCompressionPreferences } from '@/lib/settings-read-service';
-import { updateCurrentUserImageCompressionPreferences } from '@/lib/settings-write-service';
 
+const mockDb = db as unknown as {
+  userPreference: {
+    findUnique: jest.Mock;
+    upsert: jest.Mock;
+  };
+};
 const mockGetCurrentUserImageCompressionPreferences = getCurrentUserImageCompressionPreferences as jest.Mock;
-const mockUpdateCurrentUserImageCompressionPreferences = updateCurrentUserImageCompressionPreferences as jest.Mock;
 
 describe('settings route user preferences branch', () => {
   let consoleErrorSpy: jest.SpyInstance;
@@ -88,13 +104,14 @@ describe('settings route user preferences branch', () => {
   });
 
   it('updates current user preferences for update-user-preferences action', async () => {
-    mockUpdateCurrentUserImageCompressionPreferences.mockResolvedValueOnce({
-      message: '用户偏好已更新',
-      preferences: {
-        imageCompressionEnabled: false,
-        imageCompressionQualityFloor: 0.45,
-        ocrTargetMaxKb: 640,
-      },
+    mockDb.userPreference.findUnique.mockResolvedValueOnce(null);
+    mockDb.userPreference.upsert.mockResolvedValueOnce({
+      userId: 'user-1',
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: '0.45',
+      ocrTargetMaxKb: 640,
+      createdAt: new Date('2026-05-04T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T10:00:00.000Z'),
     });
 
     const response = await POST({
@@ -117,14 +134,20 @@ describe('settings route user preferences branch', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mockUpdateCurrentUserImageCompressionPreferences).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'user-1' }),
-      {
+    expect(mockDb.userPreference.upsert).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+      create: {
+        userId: 'user-1',
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
       },
-    );
+      update: {
+        imageCompressionEnabled: false,
+        imageCompressionQualityFloor: 0.45,
+        ocrTargetMaxKb: 640,
+      },
+    });
     expect(json.success).toBe(true);
     expect(json.data).toEqual({
       imageCompressionEnabled: false,
@@ -133,13 +156,8 @@ describe('settings route user preferences branch', () => {
     });
   });
 
-  it('maps invalid preference payloads to BAD_REQUEST', async () => {
-    mockUpdateCurrentUserImageCompressionPreferences.mockRejectedValueOnce(createApiError({
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: '图片压缩质量下限不能低于 0.30',
-      detail: { imageCompressionQualityFloor: 0.29 },
-    }));
+  it('maps invalid preference payloads to BAD_REQUEST through real validation', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce(null);
 
     const response = await POST({
       headers: {
@@ -152,16 +170,20 @@ describe('settings route user preferences branch', () => {
           action: 'update-user-preferences',
           preferences: {
             imageCompressionEnabled: true,
-            imageCompressionQualityFloor: 0.29,
-            ocrTargetMaxKb: 500,
+            imageCompressionQualityFloor: 0.3,
+            ocrTargetMaxKb: 500.5,
           },
         });
       },
     } as never);
     const json = await response.json();
 
+    expect(mockDb.userPreference.findUnique).toHaveBeenCalledWith({
+      where: { userId: 'user-1' },
+    });
+    expect(mockDb.userPreference.upsert).not.toHaveBeenCalled();
     expect(response.status).toBe(400);
     expect(json.code).toBe(apiErrorCodes.BAD_REQUEST);
-    expect(json.error).toContain('图片压缩质量下限不能低于 0.30');
+    expect(json.error).toContain('OCR 目标大小必须为 50-10000 KB 的整数');
   });
 });

@@ -177,6 +177,7 @@ function mapUploadFailureKind(error: unknown): BusinessImageUploadFailureKind {
   if (kind === 'idle-timeout') return 'upload-idle-timeout';
   if (kind === 'hard-timeout') return 'upload-hard-timeout';
   if (kind === 'aborted') return 'upload-aborted';
+  if (error instanceof WorkspaceApiError) return 'server-error';
   return 'upload-error';
 }
 
@@ -188,9 +189,10 @@ export async function compressBusinessImage(
   const targetMaxBytes = options.targetMaxBytes ?? Math.max(50 * 1024, preference.ocrTargetMaxKb * 1024);
   const skipCompressionBelowBytes = options.skipCompressionBelowBytes ?? DEFAULT_SKIP_COMPRESSION_BELOW_BYTES;
   const shouldForceJpeg = shouldTranscodeToJpeg(file);
+  const compressionDisabled = !preference.imageCompressionEnabled;
 
   if (
-    !preference.imageCompressionEnabled
+    (compressionDisabled && !shouldForceJpeg)
     || typeof window === 'undefined'
     || typeof document === 'undefined'
     || typeof createImageBitmap !== 'function'

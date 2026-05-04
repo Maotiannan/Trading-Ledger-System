@@ -27,6 +27,48 @@ describe('business-image-upload', () => {
     expect(result.qualityUsed).toBeNull();
   });
 
+  it('still normalizes HEIC uploads to jpeg when client-side compression is disabled by preference', async () => {
+    const file = new File([new Uint8Array(200_000)], 'receipt.heic', { type: 'image/heic' });
+    const bitmapClose = jest.fn();
+    global.createImageBitmap = jest.fn().mockResolvedValue({
+      width: 3024,
+      height: 4032,
+      close: bitmapClose,
+    });
+
+    const toBlob = jest.fn((callback: BlobCallback) => {
+      callback(new Blob([new Uint8Array(300_000)], { type: 'image/jpeg' }));
+    });
+
+    document.createElement = jest.fn((tagName: string) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: jest.fn(() => ({ drawImage: jest.fn() })),
+          toBlob,
+        } as unknown as HTMLCanvasElement;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement;
+
+    const result = await compressBusinessImage(file, {
+      preference: {
+        imageCompressionEnabled: false,
+        imageCompressionQualityFloor: 0.45,
+        ocrTargetMaxKb: 640,
+      },
+    });
+
+    expect(global.createImageBitmap).toHaveBeenCalledWith(file);
+    expect(result.file).not.toBe(file);
+    expect(result.file.type).toBe('image/jpeg');
+    expect(result.file.name).toBe('receipt.jpg');
+    expect(result.compressed).toBe(true);
+    expect(result.qualityUsed).not.toBeNull();
+    expect(bitmapClose).toHaveBeenCalled();
+  });
+
   it('searches for a jpeg quality that satisfies the target byte budget', async () => {
     const file = new File([new Uint8Array(4_000_000)], 'receipt.png', { type: 'image/png' });
     const bitmapClose = jest.fn();
@@ -196,6 +238,38 @@ describe('business-image-upload', () => {
       stage: 'failed',
       failureKind: 'upload-idle-timeout',
       error: timeoutError,
+    }));
+  });
+
+  it('maps non-2xx upload api failures into a server-error stage', async () => {
+    const serverError = new WorkspaceApiError('Validation failed', {
+      code: 'BAD_REQUEST',
+      status: 400,
+      detail: { field: 'file' },
+    });
+    const stageSpy = jest.fn();
+
+    await expect(uploadBusinessImage({
+      file: new File(['raw'], 'receipt.png', { type: 'image/png' }),
+      endpoint: 'upload-image',
+      onStageChange: stageSpy,
+      compressFile: async (file) => ({
+        file,
+        compressed: false,
+        qualityUsed: null,
+        originalSize: file.size,
+        outputSize: file.size,
+        targetMaxBytes: 1_600 * 1024,
+      }),
+      uploadCall: async () => {
+        throw serverError;
+      },
+    })).rejects.toBe(serverError);
+
+    expect(stageSpy).toHaveBeenLastCalledWith(expect.objectContaining({
+      stage: 'failed',
+      failureKind: 'server-error',
+      error: serverError,
     }));
   });
 });

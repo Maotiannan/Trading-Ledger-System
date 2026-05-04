@@ -91,11 +91,22 @@ const mockDb = db as unknown as {
 
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockTx = {
+  receipt: {
+    update: jest.fn(),
+  },
+  receiptHistory: {
+    create: jest.fn(),
+  },
+  receiptEditRequest: {
+    update: jest.fn(),
+  },
+};
 
 describe('receipt-edit-request-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) => callback(mockDb));
+    mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
   });
 
@@ -210,11 +221,11 @@ describe('receipt-edit-request-service', () => {
       },
       requester: salesUser,
     });
-    mockDb.receipt.update.mockResolvedValueOnce({
+    mockTx.receipt.update.mockResolvedValueOnce({
       id: 'receipt-1',
       receiptNo: '0001002',
     });
-    mockDb.receiptEditRequest.update.mockResolvedValueOnce({
+    mockTx.receiptEditRequest.update.mockResolvedValueOnce({
       id: 'req-1',
       status: ReceiptEditRequestStatus.APPROVED,
       pendingReceiptId: null,
@@ -227,7 +238,8 @@ describe('receipt-edit-request-service', () => {
       comment: 'looks good',
     });
 
-    expect(mockDb.receiptHistory.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockTx.receiptHistory.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         receiptId: 'receipt-1',
         receiptNo: '0001001',
@@ -235,7 +247,7 @@ describe('receipt-edit-request-service', () => {
         payer: 'ACME',
       }),
     }));
-    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockTx.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'receipt-1' },
       data: expect.objectContaining({
         receiptNo: '0001002',
@@ -246,7 +258,7 @@ describe('receipt-edit-request-service', () => {
         tel: '456',
       }),
     }));
-    expect(mockDb.receiptEditRequest.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockTx.receiptEditRequest.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'req-1' },
       data: expect.objectContaining({
         status: ReceiptEditRequestStatus.APPROVED,
@@ -255,6 +267,8 @@ describe('receipt-edit-request-service', () => {
         pendingReceiptId: null,
       }),
     }));
+    expect(mockDb.receipt.update).not.toHaveBeenCalled();
+    expect(mockDb.receiptEditRequest.update).not.toHaveBeenCalled();
   });
 
   it('rejects a pending request without mutating the receipt', async () => {

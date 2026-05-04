@@ -139,17 +139,15 @@ export function useReceiptActions({
   };
 
   const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
-    const result = await apiCall('settings?view=user-preferences');
-    if (!result?.success) {
-      throw new Error(getApiErrorMessage(
-        result,
-        tx('加载个人图片压缩偏好失败', 'Failed to load personal image compression preferences'),
-      ));
-    }
-    if (!result.data || typeof result.data !== 'object') {
+    try {
+      const result = await apiCall('settings?view=user-preferences');
+      if (!result?.success || !result.data || typeof result.data !== 'object') {
+        return undefined;
+      }
+      return result.data as Partial<UserImageCompressionPreference>;
+    } catch {
       return undefined;
     }
-    return result.data as Partial<UserImageCompressionPreference>;
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {

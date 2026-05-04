@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { useState } from 'react';
 import { useReceiptActions } from './use-receipt-actions';
 import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import { uploadBusinessImage } from '@/components/workspace/modules/shared/business-image-upload';
@@ -166,6 +167,95 @@ describe('useReceiptActions', () => {
     };
   }
 
+  function renderStatefulReceiptActions(overrides: Partial<Parameters<typeof useReceiptActions>[0]> = {}) {
+    const errorHistory: Array<string | null> = [];
+    const ocrUploadStatusHistory: Array<'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed'> = [];
+    const ocrUploadMessageHistory: Array<string | null> = [];
+    const ocrUploadProgressHistory: Array<number | null> = [];
+
+    const hook = renderHook(() => {
+      const [selectedFile, setSelectedFile] = useState<File | null>(null);
+      const [ocrResult, setOcrResult] = useState<Record<string, unknown> | null>(null);
+      const [ocrCustomerMark, setOcrCustomerMark] = useState('');
+      const [ocrCustomerName, setOcrCustomerName] = useState('');
+      const [ocrCustomerId, setOcrCustomerId] = useState('');
+      const [ocrCustomerCandidates, setOcrCustomerCandidates] = useState<Array<{
+        id: string;
+        mark: string;
+        orderName: string;
+        displayName: string;
+        phone: string | null;
+        city: string | null;
+      }>>([]);
+      const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+      const [imagePreview, setImagePreview] = useState<string | null>(null);
+      const [ocrUploadStatus, setOcrUploadStatus] = useState<'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed'>('idle');
+      const [ocrUploadMessage, setOcrUploadMessage] = useState<string | null>(null);
+      const [ocrUploadProgress, setOcrUploadProgress] = useState<number | null>(null);
+      const [error, setErrorState] = useState<string | null>(null);
+
+      const actions = useReceiptActions(createDeps({
+        ...overrides,
+        selectedFile,
+        ocrResult,
+        ocrCustomerMark,
+        ocrCustomerName,
+        ocrCustomerId,
+        savedImagePath,
+        setSelectedFile,
+        setOcrResult,
+        setOcrCustomerMark,
+        setOcrCustomerName,
+        setOcrCustomerId,
+        setOcrCustomerCandidates,
+        setSavedImagePath,
+        setImagePreview,
+        setOcrUploadStatus: (value) => {
+          ocrUploadStatusHistory.push(value);
+          setOcrUploadStatus(value);
+        },
+        setOcrUploadMessage: (value) => {
+          ocrUploadMessageHistory.push(value);
+          setOcrUploadMessage(value);
+        },
+        setOcrUploadProgress: (value) => {
+          ocrUploadProgressHistory.push(value);
+          setOcrUploadProgress(value);
+        },
+        setError: (value) => {
+          errorHistory.push(value);
+          setErrorState(value);
+        },
+      }));
+
+      return {
+        ...actions,
+        selectedFile,
+        ocrResult,
+        ocrCustomerMark,
+        ocrCustomerName,
+        ocrCustomerId,
+        ocrCustomerCandidates,
+        savedImagePath,
+        imagePreview,
+        ocrUploadStatus,
+        ocrUploadMessage,
+        ocrUploadProgress,
+        error,
+      };
+    });
+
+    return {
+      ...hook,
+      history: {
+        errorHistory,
+        ocrUploadStatusHistory,
+        ocrUploadMessageHistory,
+        ocrUploadProgressHistory,
+      },
+    };
+  }
+
   it('blocks direct create when customer mark is empty', async () => {
     const { result } = renderHook(() => useReceiptActions(createDeps({
       directForm: {
@@ -263,12 +353,29 @@ describe('useReceiptActions', () => {
     expect(result.current.uploading).toBe(false);
   });
 
-  it('clears OCR upload state and surfaces a retryable error when loading compression preferences fails', async () => {
+  it('continues OCR upload with default compression behavior when loading preferences fails', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
     const setOcrUploadStatus = jest.fn();
     const setOcrUploadMessage = jest.fn();
     const setOcrUploadProgress = jest.fn();
     mockApiCall.mockRejectedValueOnce(new Error('failed to fetch preferences'));
+    mockUploadBusinessImage.mockResolvedValueOnce({
+      prepared: {
+        file,
+        compressed: false,
+        qualityUsed: null,
+        originalSize: file.size,
+        outputSize: file.size,
+        targetMaxBytes: 500 * 1024,
+      },
+      response: {
+        success: true,
+        data: {
+          ocrResult: { receiptNo: 'OCR-FALLBACK' },
+          image: { path: '/uploads/receipt-fallback.png', name: 'receipt-fallback.png' },
+        },
+      },
+    });
     const { result } = renderHook(() => useReceiptActions(createDeps({
       setOcrUploadStatus,
       setOcrUploadMessage,
@@ -281,13 +388,18 @@ describe('useReceiptActions', () => {
       } as unknown as React.ChangeEvent<HTMLInputElement>);
     });
 
-    expect(mockUploadBusinessImage).not.toHaveBeenCalled();
-    expect(setOcrResult).toHaveBeenCalledWith(null);
-    expect(setSavedImagePath).toHaveBeenCalledWith(null);
-    expect(setOcrUploadStatus).toHaveBeenCalledWith('failed');
-    expect(setOcrUploadMessage).toHaveBeenLastCalledWith('failed to fetch preferences');
-    expect(setOcrUploadProgress).toHaveBeenLastCalledWith(null);
-    expect(setError).toHaveBeenCalledWith('failed to fetch preferences');
+    expect(mockUploadBusinessImage).toHaveBeenCalledTimes(1);
+    expect(mockUploadBusinessImage).toHaveBeenCalledWith(expect.objectContaining({
+      endpoint: 'receipt',
+      compression: expect.objectContaining({
+        preference: undefined,
+      }),
+    }));
+    expect(setOcrResult).toHaveBeenCalledWith({ receiptNo: 'OCR-FALLBACK' });
+    expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/receipt-fallback.png', name: 'receipt-fallback.png' });
+    expect(setOcrUploadStatus).toHaveBeenLastCalledWith('success');
+    expect(setOcrUploadProgress).toHaveBeenLastCalledWith(100);
+    expect(setError).not.toHaveBeenCalledWith('failed to fetch preferences');
     expect(result.current.uploading).toBe(false);
   });
 
@@ -329,6 +441,94 @@ describe('useReceiptActions', () => {
     expect(setOcrUploadProgress).toHaveBeenLastCalledWith(null);
     expect(setError).toHaveBeenCalledWith('上传中断，请在更稳定的网络下重试');
     expect(result.current.uploading).toBe(false);
+  });
+
+  it('retries OCR recognition in the same dialog after a failed attempt and succeeds on the second upload', async () => {
+    const firstFile = new File(['receipt-1'], 'receipt-1.png', { type: 'image/png' });
+    const secondFile = new File(['receipt-2'], 'receipt-2.png', { type: 'image/png' });
+    mockApiCall
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          imageCompressionEnabled: true,
+          imageCompressionQualityFloor: 0.3,
+          ocrTargetMaxKb: 500,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          imageCompressionEnabled: false,
+          imageCompressionQualityFloor: 0.45,
+          ocrTargetMaxKb: 640,
+        },
+      });
+    mockUploadBusinessImage
+      .mockRejectedValueOnce({
+        code: 'UPLOAD_ABORTED',
+        message: '上传中断，请在更稳定的网络下重试',
+      })
+      .mockImplementationOnce(async (options) => {
+        options.onStageChange?.({ stage: 'uploading', progress: 42, compressed: false, preparedFile: secondFile });
+        options.onStageChange?.({ stage: 'saving', progress: 100, compressed: false, preparedFile: secondFile });
+        return {
+          prepared: {
+            file: secondFile,
+            compressed: false,
+            qualityUsed: null,
+            originalSize: secondFile.size,
+            outputSize: secondFile.size,
+            targetMaxBytes: 640 * 1024,
+          },
+          response: {
+            success: true,
+            data: {
+              ocrResult: { receiptNo: 'OCR-RETRY-SUCCESS' },
+              image: { path: '/uploads/retry-success.png', name: 'retry-success.png' },
+            },
+          },
+        };
+      });
+
+    const { result, history } = renderStatefulReceiptActions();
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [firstFile] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(result.current.error).toBe('上传中断，请在更稳定的网络下重试');
+    expect(result.current.ocrUploadStatus).toBe('failed');
+    expect(result.current.ocrUploadMessage).toBe('上传中断，请在更稳定的网络下重试');
+    expect(result.current.ocrUploadProgress).toBeNull();
+    expect(result.current.ocrResult).toBeNull();
+    expect(result.current.savedImagePath).toBeNull();
+    expect(result.current.selectedFile).toBe(firstFile);
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [secondFile] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(mockUploadBusinessImage).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+    expect(result.current.ocrUploadStatus).toBe('success');
+    expect(result.current.ocrUploadMessage).toBe('AI识别完成');
+    expect(result.current.ocrUploadProgress).toBe(100);
+    expect(result.current.ocrResult).toEqual({ receiptNo: 'OCR-RETRY-SUCCESS' });
+    expect(result.current.savedImagePath).toEqual({ path: '/uploads/retry-success.png', name: 'retry-success.png' });
+    expect(result.current.selectedFile).toBe(secondFile);
+    expect(history.errorHistory).toEqual([null, '上传中断，请在更稳定的网络下重试', null]);
+    expect(history.ocrUploadStatusHistory).toEqual([
+      'compressing',
+      'failed',
+      'compressing',
+      'uploading',
+      'saving',
+      'success',
+    ]);
   });
 
   it('confirms OCR receipt creation and reloads receipts', async () => {

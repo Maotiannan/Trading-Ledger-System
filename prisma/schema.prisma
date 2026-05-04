@@ -326,7 +326,8 @@ model ReceiptEditRequest {
   status         ReceiptEditRequestStatus @default(PENDING)
   requestedBy    String
   approvedBy     String?
-  requestedAt    DateTime
+  pendingReceiptId String?                @unique
+  requestedAt    DateTime                 @default(now())
   reviewedAt     DateTime?
   beforeSnapshot Json
   afterSnapshot  Json

@@ -78,6 +78,7 @@ export function useReceiptActions({
   handleShowDirectCreateChange,
   resetDirectForm,
 }: ReceiptActionDeps) {
+  const USER_PREFERENCE_SOFT_TIMEOUT_MS = 1_500;
   const OCR_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
   const OCR_UPLOAD_HARD_TIMEOUT_MS = 120_000;
   const DIRECT_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
@@ -138,16 +139,75 @@ export function useReceiptActions({
     setOcrUploadProgress(typeof event.progress === 'number' ? event.progress : null);
   };
 
-  const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
-    try {
-      const result = await apiCall('settings?view=user-preferences');
-      if (!result?.success || !result.data || typeof result.data !== 'object') {
-        return undefined;
+  const resolveWithSoftTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => new Promise((resolve) => {
+    const timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timeoutId);
+        resolve(fallback);
       }
-      return result.data as Partial<UserImageCompressionPreference>;
-    } catch {
+    );
+  });
+
+  const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
+    const result = await resolveWithSoftTimeout(
+      apiCall('settings?view=user-preferences'),
+      USER_PREFERENCE_SOFT_TIMEOUT_MS,
+      undefined
+    );
+    if (!result?.success || !result.data || typeof result.data !== 'object') {
       return undefined;
     }
+    return result.data as Partial<UserImageCompressionPreference>;
+  };
+
+  const isReceiptOcrResult = (value: unknown): value is Record<string, unknown> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    const recognizedKeys = ['receiptNo', 'date', 'usd', 'orderNo', 'invNo', 'payer', 'isDeposit'] as const;
+    const presentRecognizedKeys = recognizedKeys.filter((key) => candidate[key] !== undefined);
+    if (presentRecognizedKeys.length === 0) {
+      return false;
+    }
+
+    return presentRecognizedKeys.every((key) => {
+      const field = candidate[key];
+      switch (key) {
+        case 'usd':
+          return typeof field === 'number' && Number.isFinite(field);
+        case 'isDeposit':
+          return typeof field === 'boolean';
+        default:
+          return field === null || typeof field === 'string';
+      }
+    });
+  };
+
+  const getSuccessfulOcrPayload = (
+    response: {
+      success?: boolean;
+      data?: {
+        ocrResult?: Record<string, unknown> | null;
+        image?: { path: string; name: string } | null;
+      };
+    },
+    invalidPayloadMessage: string
+  ) => {
+    if (!response.success || !isReceiptOcrResult(response.data?.ocrResult)) {
+      throw new Error(invalidPayloadMessage);
+    }
+
+    return {
+      ocrResult: response.data.ocrResult,
+      image: response.data?.image ?? null,
+    };
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,6 +230,7 @@ export function useReceiptActions({
     reader.readAsDataURL(file);
 
     try {
+      const invalidPayloadMessage = tx('AI识别结果无效，请重试', 'AI returned an invalid recognition result. Please retry.');
       const preference = await loadUserCompressionPreference();
       const { response } = await uploadBusinessImage<{
         success?: boolean;
@@ -204,8 +265,9 @@ export function useReceiptActions({
         },
       });
 
-      setOcrResult(response.data?.ocrResult || null);
-      setSavedImagePath(response.data?.image || null);
+      const successfulPayload = getSuccessfulOcrPayload(response, invalidPayloadMessage);
+      setOcrResult(successfulPayload.ocrResult);
+      setSavedImagePath(successfulPayload.image);
       applyOcrUploadStage({
         stage: 'success',
         progress: 100,

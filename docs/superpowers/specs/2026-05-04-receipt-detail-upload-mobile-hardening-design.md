@@ -158,7 +158,7 @@ Behavior:
 
 ## Architecture
 
-## 1. New user preference storage boundary
+### 1. New user preference storage boundary
 
 Introduce a dedicated per-user preference record instead of overloading system settings.
 
@@ -178,7 +178,7 @@ Rationale:
 - this requirement is explicitly account-scoped;
 - keeping user preferences separate avoids permission confusion and future schema drift.
 
-## 2. Shared business image upload pipeline
+### 2. Shared business image upload pipeline
 
 Introduce a shared front-end pipeline for business image uploads.
 
@@ -200,7 +200,7 @@ This shared pipeline is used by:
 
 Swift OCR can be attached later with minimal incremental work.
 
-## 3. Shared compression policy
+### 3. Shared compression policy
 
 Compression settings are read once from user preference and passed into the shared pipeline.
 
@@ -217,7 +217,7 @@ Rules:
 - if original file is already smaller and acceptable, avoid unnecessary recompression;
 - text readability is prioritized over aggressive size reduction.
 
-## 4. Shared timeout/error behavior
+### 4. Shared timeout/error behavior
 
 Receipt/detail OCR flows adopt the same timeout strategy already agreed for business uploads:
 
@@ -238,7 +238,7 @@ Error mapping must distinguish at least:
 - generic network failure;
 - OCR endpoint application failure.
 
-## 5. OCR state recovery
+### 5. OCR state recovery
 
 Receipt/detail OCR dialogs must recover cleanly after failure.
 
@@ -251,7 +251,7 @@ Requirements:
 
 ## API Design
 
-## 1. User preference endpoints
+### 1. User preference endpoints
 
 Extend settings API with user-preference actions rather than introducing a completely separate page.
 
@@ -266,7 +266,7 @@ Permission model:
 - admin privileges are not required;
 - no user can update another user’s preference through this endpoint.
 
-## 2. OCR endpoints
+### 2. OCR endpoints
 
 Do not change the high-level business endpoints:
 

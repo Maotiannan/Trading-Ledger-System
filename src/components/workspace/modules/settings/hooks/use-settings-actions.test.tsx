@@ -86,8 +86,8 @@ describe('useSettingsActions', () => {
       canPurgeBranch: true,
       userPreferences: {
         imageCompressionEnabled: true,
-        imageCompressionQualityFloor: 0.3,
-        ocrTargetMaxKb: 500,
+        imageCompressionQualityFloor: '0.3',
+        ocrTargetMaxKb: '500',
       },
       config: { DETAIL_RECEIPT_MATCH_TOLERANCE: '5' },
       branchPurgeTargets: [{ id: 'sales-1', email: 'sales@example.com', name: 'Sales', level: 3, role: 'SALES', parentId: 'admin-1' }],
@@ -1031,8 +1031,8 @@ describe('useSettingsActions', () => {
     expect(mockApiCall).toHaveBeenCalledWith('settings?view=user-preferences');
     expect(deps.setUserPreferences).toHaveBeenCalledWith({
       imageCompressionEnabled: false,
-      imageCompressionQualityFloor: 0.45,
-      ocrTargetMaxKb: 640,
+      imageCompressionQualityFloor: '0.45',
+      ocrTargetMaxKb: '640',
     });
   });
 
@@ -1040,8 +1040,8 @@ describe('useSettingsActions', () => {
     const deps = createDeps();
     deps.userPreferences = {
       imageCompressionEnabled: false,
-      imageCompressionQualityFloor: 0.45,
-      ocrTargetMaxKb: 640,
+      imageCompressionQualityFloor: '0.45',
+      ocrTargetMaxKb: '640',
     };
     mockApiCall.mockResolvedValueOnce({ success: true, message: 'saved' });
 
@@ -1065,5 +1065,25 @@ describe('useSettingsActions', () => {
     expect(deps.setSavingUserPreferences).toHaveBeenNthCalledWith(1, true);
     expect(deps.setSavingUserPreferences).toHaveBeenLastCalledWith(false);
     expect(deps.setMessage).toHaveBeenCalledWith('saved');
+  });
+
+  it('blocks saving user preferences when numeric drafts are incomplete or invalid', async () => {
+    const deps = createDeps();
+    deps.userPreferences = {
+      imageCompressionEnabled: true,
+      imageCompressionQualityFloor: '0.',
+      ocrTargetMaxKb: '',
+    };
+
+    const { result } = renderHook(() => useSettingsActions(deps));
+
+    await act(async () => {
+      await result.current.handleSaveUserPreferences();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(deps.setError).toHaveBeenCalledWith('图片压缩质量下限不能低于 0.30');
+    expect(deps.setSavingUserPreferences).toHaveBeenNthCalledWith(1, true);
+    expect(deps.setSavingUserPreferences).toHaveBeenLastCalledWith(false);
   });
 });

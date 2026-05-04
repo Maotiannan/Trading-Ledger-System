@@ -9,11 +9,16 @@ import type {
   SettingsAuditExportEntry,
   SettingsAuditFilterState,
   SettingsAuditMeta,
-  UserImageCompressionPreference,
   UserImageCompressionPreferenceField,
+  UserImageCompressionPreferenceFieldValue,
+  UserImageCompressionPreferenceDraft,
 } from '../types';
-import { defaultUserImageCompressionPreference } from '../types';
+import { defaultUserImageCompressionPreferenceDraft } from '../types';
 import { buildEmptySettingsAuditFilters, defaultSettingsAuditMeta } from '../read-model';
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled user preference field: ${String(value)}`);
+}
 
 export function useSettingsForms() {
   const [loading, setLoading] = useState(false);
@@ -25,7 +30,7 @@ export function useSettingsForms() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
-  const [userPreferences, setUserPreferences] = useState<UserImageCompressionPreference>(defaultUserImageCompressionPreference);
+  const [userPreferences, setUserPreferences] = useState<UserImageCompressionPreferenceDraft>(defaultUserImageCompressionPreferenceDraft);
   const [canEditConfig, setCanEditConfig] = useState(false);
   const [canViewAudit, setCanViewAudit] = useState(false);
   const [canPurgeBranch, setCanPurgeBranch] = useState(false);
@@ -58,31 +63,30 @@ export function useSettingsForms() {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
-  const updateUserPreferenceField = (
-    key: UserImageCompressionPreferenceField,
-    value: boolean | string,
+  const updateUserPreferenceField = <K extends UserImageCompressionPreferenceField>(
+    key: K,
+    value: UserImageCompressionPreferenceFieldValue<K>,
   ) => {
     setUserPreferences((prev) => {
-      if (key === 'imageCompressionEnabled') {
-        return {
-          ...prev,
-          imageCompressionEnabled: Boolean(value),
-        };
+      switch (key) {
+        case 'imageCompressionEnabled':
+          return {
+            ...prev,
+            imageCompressionEnabled: value as UserImageCompressionPreferenceDraft['imageCompressionEnabled'],
+          };
+        case 'imageCompressionQualityFloor':
+          return {
+            ...prev,
+            imageCompressionQualityFloor: value as UserImageCompressionPreferenceDraft['imageCompressionQualityFloor'],
+          };
+        case 'ocrTargetMaxKb':
+          return {
+            ...prev,
+            ocrTargetMaxKb: value as UserImageCompressionPreferenceDraft['ocrTargetMaxKb'],
+          };
+        default:
+          return assertNever(key);
       }
-
-      if (key === 'ocrTargetMaxKb') {
-        const parsed = Number(value);
-        return {
-          ...prev,
-          ocrTargetMaxKb: Number.isFinite(parsed) ? parsed : prev.ocrTargetMaxKb,
-        };
-      }
-
-      const parsed = Number(value);
-      return {
-        ...prev,
-        imageCompressionQualityFloor: Number.isFinite(parsed) ? parsed : prev.imageCompressionQualityFloor,
-      };
     });
   };
 

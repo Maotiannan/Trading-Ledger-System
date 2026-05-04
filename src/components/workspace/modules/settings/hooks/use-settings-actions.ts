@@ -11,8 +11,13 @@ import type {
   SettingsAuditFilterState,
   SettingsAuditMeta,
   UserImageCompressionPreference,
+  UserImageCompressionPreferenceDraft,
 } from '../types';
-import { defaultUserImageCompressionPreference } from '../types';
+import {
+  defaultUserImageCompressionPreference,
+  defaultUserImageCompressionPreferenceDraft,
+  USER_IMAGE_COMPRESSION_LIMITS,
+} from '../types';
 import {
   buildEmptySettingsAuditFilters,
   buildSettingsAuditQuery,
@@ -31,7 +36,7 @@ export type SettingsActionDeps = {
   canPurgeBranch: boolean;
   config: Record<string, string>;
   canViewAudit: boolean;
-  userPreferences: UserImageCompressionPreference;
+  userPreferences: UserImageCompressionPreferenceDraft;
   branchPurgeTargets: BranchPurgeTarget[];
   purgeForm: PurgeFormState;
   pwd: PasswordFormState;
@@ -51,7 +56,7 @@ export type SettingsActionDeps = {
   setMessage: (value: string | null) => void;
   setError: (value: string | null) => void;
   setConfig: (value: Record<string, string>) => void;
-  setUserPreferences: (value: UserImageCompressionPreference) => void;
+  setUserPreferences: (value: UserImageCompressionPreferenceDraft) => void;
   setCanEditConfig: (value: boolean) => void;
   setCanViewAudit: (value: boolean) => void;
   setCanPurgeBranch: (value: boolean) => void;
@@ -118,9 +123,9 @@ export function useSettingsActions({
   setPurgeForm,
   setPwd,
 }: SettingsActionDeps) {
-  const normalizeUserPreferences = useCallback((payload: unknown): UserImageCompressionPreference => {
+  const normalizeUserPreferences = useCallback((payload: unknown): UserImageCompressionPreferenceDraft => {
     if (!payload || typeof payload !== 'object') {
-      return defaultUserImageCompressionPreference;
+      return defaultUserImageCompressionPreferenceDraft;
     }
 
     const source = payload as Partial<UserImageCompressionPreference>;
@@ -129,13 +134,66 @@ export function useSettingsActions({
         ? source.imageCompressionEnabled
         : defaultUserImageCompressionPreference.imageCompressionEnabled,
       imageCompressionQualityFloor: Number.isFinite(source.imageCompressionQualityFloor)
-        ? Number(source.imageCompressionQualityFloor)
-        : defaultUserImageCompressionPreference.imageCompressionQualityFloor,
+        ? String(Number(source.imageCompressionQualityFloor))
+        : defaultUserImageCompressionPreferenceDraft.imageCompressionQualityFloor,
       ocrTargetMaxKb: Number.isFinite(source.ocrTargetMaxKb)
-        ? Number(source.ocrTargetMaxKb)
-        : defaultUserImageCompressionPreference.ocrTargetMaxKb,
+        ? String(Number(source.ocrTargetMaxKb))
+        : defaultUserImageCompressionPreferenceDraft.ocrTargetMaxKb,
     };
   }, []);
+
+  const validateUserPreferences = useCallback((
+    preferences: UserImageCompressionPreferenceDraft,
+  ): { ok: true; value: UserImageCompressionPreference } | { ok: false; error: string } => {
+    const qualityFloorText = preferences.imageCompressionQualityFloor.trim();
+    const qualityFloor = qualityFloorText === '' ? Number.NaN : Number(qualityFloorText);
+    if (
+      !Number.isFinite(qualityFloor)
+      || qualityFloor < USER_IMAGE_COMPRESSION_LIMITS.qualityFloor.min
+    ) {
+      return {
+        ok: false,
+        error: tx(
+          `图片压缩质量下限不能低于 ${USER_IMAGE_COMPRESSION_LIMITS.qualityFloor.min.toFixed(2)}`,
+          `Image compression quality floor must not be lower than ${USER_IMAGE_COMPRESSION_LIMITS.qualityFloor.min.toFixed(2)}`,
+        ),
+      };
+    }
+    if (qualityFloor > USER_IMAGE_COMPRESSION_LIMITS.qualityFloor.max) {
+      return {
+        ok: false,
+        error: tx(
+          `图片压缩质量下限不能高于 ${USER_IMAGE_COMPRESSION_LIMITS.qualityFloor.max.toFixed(2)}`,
+          `Image compression quality floor must not be higher than ${USER_IMAGE_COMPRESSION_LIMITS.qualityFloor.max.toFixed(2)}`,
+        ),
+      };
+    }
+
+    const ocrTargetMaxKbText = preferences.ocrTargetMaxKb.trim();
+    const ocrTargetMaxKb = ocrTargetMaxKbText === '' ? Number.NaN : Number(ocrTargetMaxKbText);
+    if (
+      !Number.isInteger(ocrTargetMaxKb)
+      || ocrTargetMaxKb < USER_IMAGE_COMPRESSION_LIMITS.ocrTargetMaxKb.min
+      || ocrTargetMaxKb > USER_IMAGE_COMPRESSION_LIMITS.ocrTargetMaxKb.max
+    ) {
+      return {
+        ok: false,
+        error: tx(
+          `OCR 目标大小必须为 ${USER_IMAGE_COMPRESSION_LIMITS.ocrTargetMaxKb.min}-${USER_IMAGE_COMPRESSION_LIMITS.ocrTargetMaxKb.max} KB 的整数`,
+          `OCR target max size must be an integer between ${USER_IMAGE_COMPRESSION_LIMITS.ocrTargetMaxKb.min} and ${USER_IMAGE_COMPRESSION_LIMITS.ocrTargetMaxKb.max} KB`,
+        ),
+      };
+    }
+
+    return {
+      ok: true,
+      value: {
+        imageCompressionEnabled: preferences.imageCompressionEnabled,
+        imageCompressionQualityFloor: Number(qualityFloor.toFixed(2)),
+        ocrTargetMaxKb,
+      },
+    };
+  }, [tx]);
 
   const applySettingsBootstrap = useCallback((payload: unknown) => {
     const nextState = normalizeSettingsBootstrap(payload);
@@ -376,16 +434,22 @@ export function useSettingsActions({
     setSavingUserPreferences(true);
     setError(null);
     setMessage(null);
+    const validatedPreferences = validateUserPreferences(userPreferences);
+    if (!validatedPreferences.ok) {
+      setError(validatedPreferences.error);
+      setSavingUserPreferences(false);
+      return;
+    }
     try {
       const result = await apiCall('settings', {
         method: 'POST',
         body: JSON.stringify({
           action: 'update-user-preferences',
-          preferences: userPreferences,
+          preferences: validatedPreferences.value,
         }),
       });
       if (result.success) {
-        setUserPreferences(normalizeUserPreferences(result.data || userPreferences));
+        setUserPreferences(result.data ? normalizeUserPreferences(result.data) : normalizeUserPreferences(validatedPreferences.value));
         setMessage(result.message || tx('个人偏好已保存', 'Personal preferences saved'));
       } else {
         setError(getApiErrorMessage(result, tx('保存个人偏好失败', 'Failed to save personal preferences')));
@@ -395,7 +459,7 @@ export function useSettingsActions({
     } finally {
       setSavingUserPreferences(false);
     }
-  }, [normalizeUserPreferences, setError, setMessage, setSavingUserPreferences, setUserPreferences, tx, userPreferences]);
+  }, [normalizeUserPreferences, setError, setMessage, setSavingUserPreferences, setUserPreferences, tx, userPreferences, validateUserPreferences]);
 
   const handleTestOcrConfig = useCallback(async () => {
     if (!canEditConfig) return;

@@ -7,18 +7,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Loader2, Save } from 'lucide-react';
 import type {
-  UserImageCompressionPreference,
+  UserImageCompressionPreferenceDraft,
   UserImageCompressionPreferenceField,
+  UserImageCompressionPreferenceFieldValue,
 } from '../types';
 
 export type UserImageCompressionCardProps = {
   loading: boolean;
   saving: boolean;
-  preferences: UserImageCompressionPreference;
+  preferences: UserImageCompressionPreferenceDraft;
   tx: (zh: string, en: string) => string;
-  onPreferenceFieldChange: (
-    key: UserImageCompressionPreferenceField,
-    value: boolean | string,
+  onPreferenceFieldChange: <K extends UserImageCompressionPreferenceField>(
+    key: K,
+    value: UserImageCompressionPreferenceFieldValue<K>,
   ) => void;
   onSavePreferences: () => void;
 };
@@ -63,10 +64,8 @@ export function UserImageCompressionCard({
             <Label htmlFor="user-image-compression-quality-floor">{tx('压缩质量下限', 'Compression quality floor')}</Label>
             <Input
               id="user-image-compression-quality-floor"
-              type="number"
-              min="0.3"
-              max="1"
-              step="0.01"
+              type="text"
+              inputMode="decimal"
               value={preferences.imageCompressionQualityFloor}
               disabled={disabled}
               onChange={(event) => onPreferenceFieldChange('imageCompressionQualityFloor', event.target.value)}
@@ -76,10 +75,8 @@ export function UserImageCompressionCard({
             <Label htmlFor="user-ocr-target-max-kb">{tx('OCR 目标大小（KB）', 'OCR target max size (KB)')}</Label>
             <Input
               id="user-ocr-target-max-kb"
-              type="number"
-              min="50"
-              max="10000"
-              step="1"
+              type="text"
+              inputMode="numeric"
               value={preferences.ocrTargetMaxKb}
               disabled={disabled}
               onChange={(event) => onPreferenceFieldChange('ocrTargetMaxKb', event.target.value)}

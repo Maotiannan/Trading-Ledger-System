@@ -4,6 +4,10 @@ export type DetailDirectItemForm = {
   amount: string;
 };
 
+export type DetailImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
+
+export type DetailOcrUploadStatus = DetailImageUploadStatus;
+
 export type DetailOcrResult = {
   date: string | null;
   items: Array<{

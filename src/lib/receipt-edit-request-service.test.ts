@@ -269,6 +269,7 @@ describe('receipt-edit-request-service', () => {
       }),
     }));
     expect(mockDb.receipt.update).not.toHaveBeenCalled();
+    expect(mockDb.receiptHistory.create).not.toHaveBeenCalled();
     expect(mockDb.receiptEditRequest.findUnique).not.toHaveBeenCalled();
     expect(mockDb.receiptEditRequest.update).not.toHaveBeenCalled();
   });
@@ -325,16 +326,24 @@ describe('receipt-edit-request-service', () => {
   });
 
   it('lists receipt edit requests using the store row shape', async () => {
-    const rows: ReceiptEditRequestRow[] = [{
+    const requestedAt = new Date('2026-05-04T00:00:00.000Z');
+    const reviewedAt = new Date('2026-05-05T08:30:00.000Z');
+    const prismaRows = [{
       id: 'req-1',
       receiptId: 'receipt-1',
-      status: 'PENDING',
+      status: ReceiptEditRequestStatus.APPROVED,
       requestedBy: 'sales-1',
-      requestedByName: 'Sales',
-      approvedBy: null,
-      approvedByName: null,
-      requestedAt: '2026-05-04T00:00:00.000Z',
-      reviewedAt: null,
+      requester: {
+        name: 'Sales',
+        email: 'sales@example.com',
+      },
+      approvedBy: 'admin-1',
+      approver: {
+        name: 'Admin',
+        email: 'admin@example.com',
+      },
+      requestedAt,
+      reviewedAt,
       beforeSnapshot: {
         receiptNo: '0001001',
         date: null,
@@ -343,11 +352,36 @@ describe('receipt-edit-request-service', () => {
         payer: 'ACME',
         tel: '123',
       },
-      afterSnapshot: validEditPayload,
-      reviewComment: null,
+      afterSnapshot: {
+        ...validEditPayload,
+      },
+      reviewComment: 'approved',
     }];
-    mockDb.receiptEditRequest.findMany.mockResolvedValueOnce(rows);
+    const expectedRows: ReceiptEditRequestRow[] = [{
+      id: 'req-1',
+      receiptId: 'receipt-1',
+      status: 'APPROVED',
+      requestedBy: 'sales-1',
+      requestedByName: 'Sales',
+      approvedBy: 'admin-1',
+      approvedByName: 'Admin',
+      requestedAt: requestedAt.toISOString(),
+      reviewedAt: reviewedAt.toISOString(),
+      beforeSnapshot: {
+        receiptNo: '0001001',
+        date: null,
+        invNo: 'INV-1',
+        customerMark: 'MAB-1',
+        payer: 'ACME',
+        tel: '123',
+      },
+      afterSnapshot: {
+        ...validEditPayload,
+      },
+      reviewComment: 'approved',
+    }];
+    mockDb.receiptEditRequest.findMany.mockResolvedValueOnce(prismaRows);
 
-    await expect(listReceiptEditRequests(adminUser)).resolves.toEqual(rows);
+    await expect(listReceiptEditRequests(adminUser)).resolves.toEqual(expectedRows);
   });
 });

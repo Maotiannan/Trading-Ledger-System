@@ -198,6 +198,53 @@ describe('business-image-upload', () => {
     expect(bitmapClose).toHaveBeenCalled();
   });
 
+  it('returns the smallest compressed jpeg candidate for standard images when no candidate satisfies the target byte budget', async () => {
+    const file = new File([new Uint8Array(700_000)], 'receipt.png', { type: 'image/png' });
+    const bitmapClose = jest.fn();
+    global.createImageBitmap = jest.fn().mockResolvedValue({
+      width: 3024,
+      height: 4032,
+      close: bitmapClose,
+    });
+
+    const toBlob = jest.fn((callback: BlobCallback, _type?: string, quality?: number) => {
+      const q = Number((quality ?? 0).toFixed(2));
+      const size = q <= 0.3 ? 240_000 : q <= 0.45 ? 280_000 : 360_000;
+      callback(new Blob([new Uint8Array(size)], { type: 'image/jpeg' }));
+    });
+
+    document.createElement = jest.fn((tagName: string) => {
+      if (tagName === 'canvas') {
+        return {
+          width: 0,
+          height: 0,
+          getContext: jest.fn(() => ({ drawImage: jest.fn() })),
+          toBlob,
+        } as unknown as HTMLCanvasElement;
+      }
+      return originalCreateElement(tagName);
+    }) as typeof document.createElement;
+
+    const result = await compressBusinessImage(file, {
+      targetMaxBytes: 180_000,
+      preference: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+
+    expect(result.file).not.toBe(file);
+    expect(result.file.type).toBe('image/jpeg');
+    expect(result.file.name).toBe('receipt.jpg');
+    expect(result.file.size).toBe(240_000);
+    expect(result.file.size).toBeLessThan(file.size);
+    expect(result.file.size).toBeGreaterThan(180_000);
+    expect(result.compressed).toBe(true);
+    expect(result.qualityUsed).toBe(0.3);
+    expect(bitmapClose).toHaveBeenCalled();
+  });
+
   it('reports business upload stages and reuses the prepared jpeg file', async () => {
     const originalFile = new File(['raw'], 'receipt.png', { type: 'image/png' });
     const preparedFile = new File(['jpeg'], 'receipt.jpg', { type: 'image/jpeg' });

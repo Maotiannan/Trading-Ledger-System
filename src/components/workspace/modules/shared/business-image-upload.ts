@@ -230,7 +230,7 @@ export async function compressBusinessImage(
     const initialScale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     let width = Math.max(1, Math.round(bitmap.width * initialScale));
     let height = Math.max(1, Math.round(bitmap.height * initialScale));
-    let bestEffortForcedJpeg: { blob: Blob; quality: number } | null = null;
+    let bestEffortJpeg: { blob: Blob; quality: number } | null = null;
 
     for (let attempt = 0; attempt < MAX_SCALE_ATTEMPTS; attempt += 1) {
       const canvas = createCanvas(width, height);
@@ -247,11 +247,10 @@ export async function compressBusinessImage(
       );
 
       if (
-        shouldForceJpeg
-        && candidate.fallback
-        && (!bestEffortForcedJpeg || candidate.fallback.blob.size < bestEffortForcedJpeg.blob.size)
+        candidate.fallback
+        && (!bestEffortJpeg || candidate.fallback.blob.size < bestEffortJpeg.blob.size)
       ) {
-        bestEffortForcedJpeg = candidate.fallback;
+        bestEffortJpeg = candidate.fallback;
       }
 
       if (candidate.matched) {
@@ -274,14 +273,14 @@ export async function compressBusinessImage(
       height = Math.max(1, Math.round(height * reductionFactor));
     }
 
-    if (shouldForceJpeg && bestEffortForcedJpeg) {
-      const normalizedFile = new File([bestEffortForcedJpeg.blob], replaceExtension(file.name, '.jpg'), {
+    if (bestEffortJpeg && (shouldForceJpeg || bestEffortJpeg.blob.size < file.size)) {
+      const normalizedFile = new File([bestEffortJpeg.blob], replaceExtension(file.name, '.jpg'), {
         type: 'image/jpeg',
       });
       return {
         file: normalizedFile,
         compressed: true,
-        qualityUsed: bestEffortForcedJpeg.quality,
+        qualityUsed: bestEffortJpeg.quality,
         originalSize: file.size,
         outputSize: normalizedFile.size,
         targetMaxBytes,

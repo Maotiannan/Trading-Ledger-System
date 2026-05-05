@@ -188,13 +188,13 @@ describe('ReceiptManager', () => {
     ]);
   });
 
-  it('wires receipt edit affordances for sales-visible receipts', async () => {
+  it('wires receipt edit affordances for sales-visible receipts and normalizes existing ISO dates', async () => {
     mockUseStore.mockReturnValue({
       receipts: [
         {
           id: 'receipt-1',
           receiptNo: 'R-1',
-          date: '2026-05-04',
+          date: '2026-05-04T00:00:00.000Z',
           tel: '123',
           usd: 100,
           invNo: 'INV-1',
@@ -228,5 +228,29 @@ describe('ReceiptManager', () => {
     expect(typeof receiptListProps?.onEditReceipt).toBe('function');
     expect(editDialogProps).toBeDefined();
     expect(editDialogProps?.isAdmin).toBe(false);
+
+    await act(async () => {
+      receiptListProps?.onEditReceipt?.({
+        id: 'receipt-1',
+        receiptNo: 'R-1',
+        date: '2026-05-04T00:00:00.000Z',
+        tel: '123',
+        usd: 100,
+        invNo: 'INV-1',
+        orderNo: 'ORD-1',
+        payer: 'ACME',
+        customerMark: 'MAB',
+        status: 'SR_Received',
+        imageUrl: null,
+        isDeposit: false,
+        isMerged: false,
+        note: null,
+        createdAt: '2026-05-04T00:00:00.000Z',
+        creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      });
+    });
+
+    const openedEditDialogProps = (globalThis as { __receiptEditDialogProps?: ReceiptEditDialogProps }).__receiptEditDialogProps;
+    expect(openedEditDialogProps?.form.date).toBe('2026-05-04');
   });
 });

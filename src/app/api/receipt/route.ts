@@ -55,6 +55,15 @@ function parseReceiptEditablePatch(data: Record<string, unknown>): ReceiptEditab
     return parseJsonWithSchema(data.data, receiptEditablePatchSchema, '收据修改数据格式错误');
   }
 
+  if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+    const nestedResult = receiptEditablePatchSchema.safeParse(data.data);
+    if (!nestedResult.success) {
+      const issue = nestedResult.error.issues[0];
+      throw new InputValidationError(issue?.message || '收据修改数据格式错误');
+    }
+    return nestedResult.data;
+  }
+
   const result = receiptEditablePatchSchema.safeParse(data);
   if (!result.success) {
     const issue = result.error.issues[0];

@@ -106,14 +106,14 @@ describe('receipt route edit-approval actions', () => {
     const response = await POST(buildJsonRequest({
       action: 'request-edit',
       receiptId: 'receipt-1',
-      data: JSON.stringify({
+      data: {
         receiptNo: '0001002',
         date: '2026-05-04',
         invNo: 'INV-2',
         customerMark: 'MAB-2',
         payer: 'BETA',
         tel: '456',
-      }),
+      },
     }));
     const json = await response.json();
 
@@ -218,14 +218,14 @@ describe('receipt route edit-approval actions', () => {
     const response = await POST(buildJsonRequest({
       action: 'request-edit',
       receiptId: 'receipt-1',
-      data: JSON.stringify({
+      data: {
         receiptNo: '0001002',
         date: 20260504,
         invNo: 'INV-2',
         customerMark: 'MAB-2',
         payer: 'BETA',
         tel: '456',
-      }),
+      },
     }));
     const json = await response.json();
 

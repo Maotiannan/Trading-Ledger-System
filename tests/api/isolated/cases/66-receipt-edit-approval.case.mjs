@@ -15,10 +15,6 @@ function editablePatch(suffix, variant) {
   };
 }
 
-function stringifyPatch(patch) {
-  return JSON.stringify(patch);
-}
-
 async function createReceipt(t, params) {
   await t.request('POST', '/api/receipt', {
     json: {
@@ -94,7 +90,7 @@ export default async function run(t) {
     json: {
       action: 'request-edit',
       receiptId: requestReceipt.id,
-      data: stringifyPatch(requestedPatch),
+      data: requestedPatch,
     },
     expectedStatus: 200,
   });
@@ -106,7 +102,7 @@ export default async function run(t) {
     json: {
       action: 'request-edit',
       receiptId: requestReceipt.id,
-      data: stringifyPatch(editablePatch(suffix, 'DUP')),
+      data: editablePatch(suffix, 'DUP'),
     },
     expectedStatus: 409,
   });
@@ -175,7 +171,7 @@ export default async function run(t) {
     json: {
       action: 'update',
       receiptId: adminReceipt.id,
-      data: stringifyPatch(adminPatch),
+      data: adminPatch,
     },
     expectedStatus: 200,
   });

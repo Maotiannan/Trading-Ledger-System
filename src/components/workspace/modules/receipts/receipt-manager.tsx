@@ -241,7 +241,10 @@ export function ReceiptManager() {
   }, [loadReceipts]);
 
   useEffect(() => {
-    void loadReceiptEditRequests();
+    const timer = window.setTimeout(() => {
+      void loadReceiptEditRequests();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadReceiptEditRequests]);
 
   const resetToFirstPage = () => setCurrentPage(1);
@@ -270,11 +273,18 @@ export function ReceiptManager() {
     return <Badge variant={variants[status]}>{status}</Badge>;
   };
 
+  const toEditableDateValue = (value: string | null | undefined) => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    const matched = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+    return matched ? matched[1] : trimmed;
+  };
+
   const openEditDialog = (receipt: Receipt) => {
     setEditingReceiptId(receipt.id);
     setEditForm({
       receiptNo: receipt.receiptNo ?? null,
-      date: receipt.date ?? null,
+      date: toEditableDateValue(receipt.date),
       invNo: receipt.invNo ?? null,
       customerMark: receipt.customerMark ?? null,
       payer: receipt.payer ?? null,

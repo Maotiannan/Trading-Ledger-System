@@ -559,7 +559,7 @@ export function useReceiptActions({
         body: JSON.stringify({
           action: params.isAdmin ? 'update' : 'request-edit',
           receiptId: params.receiptId,
-          data: JSON.stringify(params.data),
+          data: params.data,
         }),
       });
 

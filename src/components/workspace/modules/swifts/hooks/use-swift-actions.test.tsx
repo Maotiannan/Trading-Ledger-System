@@ -113,6 +113,38 @@ describe('useSwiftActions', () => {
     expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/swift.png', name: 'swift.png' });
   });
 
+  it('shows OCR failure returned by the server and clears saved image path', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: false, message: 'ocr failed' }),
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setSavedImagePath).toHaveBeenCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('AI识别失败，请重试');
+  });
+
+  it('shows OCR network errors and clears saved image path', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockFetch.mockRejectedValue(new Error('fetch failed'));
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setSavedImagePath).toHaveBeenCalledWith(null);
+    expect(setError).toHaveBeenCalledWith('fetch failed');
+  });
+
   it('requires a linked detail before confirming OCR swift', async () => {
     const file = new File(['swift'], 'swift.png', { type: 'image/png' });
     const { result } = renderHook(() => useSwiftActions(createDeps({
@@ -152,6 +184,44 @@ describe('useSwiftActions', () => {
     expect(setSelectedFile).toHaveBeenCalledWith(null);
     expect(setSavedImagePath).toHaveBeenCalledWith(null);
     expect(loadSwifts).toHaveBeenCalled();
+  });
+
+  it('shows confirm-create business failures without closing the dialog', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ success: false, message: 'confirm failed' }),
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: 330 },
+      selectedDetailId: 'detail-1',
+      savedImagePath: { path: '/uploads/swift.png', name: 'swift.png' },
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    expect(setError).toHaveBeenCalledWith('创建失败，请重试');
+    expect(handleShowUploadChange).not.toHaveBeenCalled();
+  });
+
+  it('shows confirm-create network errors without closing the dialog', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockFetch.mockRejectedValue(new Error('confirm fetch failed'));
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: 330 },
+      selectedDetailId: 'detail-1',
+      savedImagePath: { path: '/uploads/swift.png', name: 'swift.png' },
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    expect(setError).toHaveBeenCalledWith('confirm fetch failed');
+    expect(handleShowUploadChange).not.toHaveBeenCalled();
   });
 
   it('creates swift directly and refreshes list on success', async () => {
@@ -250,6 +320,20 @@ describe('useSwiftActions', () => {
     expect(loadSwifts).toHaveBeenCalled();
   });
 
+  it('alerts when normal swift deletion request fails', async () => {
+    mockApiCall.mockResolvedValue({ success: false, message: 'delete request failed' });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDeleteSwift({
+        id: 'swift-ok',
+        hasError: false,
+      } as never);
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('申请失败');
+  });
+
   it('does not submit normal deletion request when cancelled', async () => {
     jest.spyOn(window, 'confirm').mockImplementation(() => false);
     const { result } = renderHook(() => useSwiftActions(createDeps()));
@@ -262,5 +346,185 @@ describe('useSwiftActions', () => {
     });
 
     expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
+  it('submits direct swift edits for admins and approval requests for sales', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const loadSwiftEditRequests = jest.fn(async () => undefined);
+    mockApiCall
+      .mockResolvedValueOnce({ success: true, message: '修改已完成' })
+      .mockResolvedValueOnce({ success: true, message: '成功提交，等待管理员同意' });
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      loadSwiftEditRequests,
+    }) as never));
+
+    let adminOutcome: Awaited<ReturnType<typeof result.current.handleSubmitSwiftEdit>> | null = null;
+    await act(async () => {
+      adminOutcome = await result.current.handleSubmitSwiftEdit({
+        swiftId: 'swift-1',
+        data: {
+          date: '2026-05-05',
+          amount: 110,
+          senderName: 'Admin Sender',
+          senderAddress: 'Conakry',
+          receiverName: 'Admin Receiver',
+          receiverAccount: 'ACC-1',
+        },
+        isAdmin: true,
+      });
+    });
+
+    expect(mockApiCall).toHaveBeenNthCalledWith(1, 'swift', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update',
+        swiftId: 'swift-1',
+        data: {
+          date: '2026-05-05',
+          amount: 110,
+          senderName: 'Admin Sender',
+          senderAddress: 'Conakry',
+          receiverName: 'Admin Receiver',
+          receiverAccount: 'ACC-1',
+        },
+      }),
+    }));
+    expect(adminOutcome).toEqual({ success: true, message: '修改已完成' });
+
+    let salesOutcome: Awaited<ReturnType<typeof result.current.handleSubmitSwiftEdit>> | null = null;
+    await act(async () => {
+      salesOutcome = await result.current.handleSubmitSwiftEdit({
+        swiftId: 'swift-1',
+        data: {
+          date: '2026-05-06',
+          amount: 120,
+          senderName: 'Sales Sender',
+          senderAddress: 'Kindia',
+          receiverName: 'Sales Receiver',
+          receiverAccount: 'ACC-2',
+        },
+        isAdmin: false,
+      });
+    });
+
+    expect(mockApiCall).toHaveBeenNthCalledWith(2, 'swift', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'request-edit',
+        swiftId: 'swift-1',
+        data: {
+          date: '2026-05-06',
+          amount: 120,
+          senderName: 'Sales Sender',
+          senderAddress: 'Kindia',
+          receiverName: 'Sales Receiver',
+          receiverAccount: 'ACC-2',
+        },
+      }),
+    }));
+    expect(salesOutcome).toEqual({ success: true, message: '成功提交，等待管理员同意' });
+    expect(loadSwifts).toHaveBeenCalledTimes(2);
+    expect(loadSwiftEditRequests).toHaveBeenCalledTimes(2);
+    expect(alertSpy).toHaveBeenCalledWith('修改已完成');
+    expect(alertSpy).toHaveBeenCalledWith('成功提交，等待管理员同意');
+  });
+
+  it('reviews swift edit requests and reloads views', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const loadSwiftEditRequests = jest.fn(async () => undefined);
+    mockApiCall.mockResolvedValueOnce({ success: true, message: 'SWIFT修改申请已通过' });
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      loadSwiftEditRequests,
+    }) as never));
+
+    let reviewOutcome = false;
+    await act(async () => {
+      reviewOutcome = await result.current.handleReviewSwiftEdit({
+        requestId: 'swift-request-1',
+        decision: 'approve',
+      });
+    });
+
+    expect(reviewOutcome).toBe(true);
+    expect(mockApiCall).toHaveBeenCalledWith('swift', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'review-edit',
+        requestId: 'swift-request-1',
+        decision: 'approve',
+      }),
+    }));
+    expect(alertSpy).toHaveBeenCalledWith('SWIFT修改申请已通过');
+    expect(loadSwifts).toHaveBeenCalled();
+    expect(loadSwiftEditRequests).toHaveBeenCalled();
+  });
+
+  it('surfaces swift edit submission failures and network errors', async () => {
+    mockApiCall
+      .mockResolvedValueOnce({ success: false, message: 'bad request' })
+      .mockRejectedValueOnce(new Error('edit network failed'));
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      const failed = await result.current.handleSubmitSwiftEdit({
+        swiftId: 'swift-1',
+        data: {
+          date: '2026-05-05',
+          amount: 110,
+          senderName: 'Admin Sender',
+          senderAddress: 'Conakry',
+          receiverName: 'Admin Receiver',
+          receiverAccount: 'ACC-1',
+        },
+        isAdmin: true,
+      });
+      expect(failed).toEqual({ success: false, message: '修改失败，请重试' });
+    });
+
+    await act(async () => {
+      const failed = await result.current.handleSubmitSwiftEdit({
+        swiftId: 'swift-1',
+        data: {
+          date: '2026-05-05',
+          amount: 110,
+          senderName: 'Admin Sender',
+          senderAddress: 'Conakry',
+          receiverName: 'Admin Receiver',
+          receiverAccount: 'ACC-1',
+        },
+        isAdmin: false,
+      });
+      expect(failed).toEqual({ success: false, message: 'edit network failed' });
+    });
+
+    expect(setError).toHaveBeenLastCalledWith('edit network failed');
+  });
+
+  it('surfaces swift edit review failures and network errors', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    mockApiCall
+      .mockResolvedValueOnce({ success: false, message: 'review failed' })
+      .mockRejectedValueOnce(new Error('review network failed'));
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      const failed = await result.current.handleReviewSwiftEdit({
+        requestId: 'swift-request-1',
+        decision: 'reject',
+      });
+      expect(failed).toBe(false);
+    });
+
+    await act(async () => {
+      const failed = await result.current.handleReviewSwiftEdit({
+        requestId: 'swift-request-1',
+        decision: 'approve',
+      });
+      expect(failed).toBe(false);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith('审批失败，请重试');
+    expect(alertSpy).toHaveBeenCalledWith('review network failed');
+    expect(setError).toHaveBeenLastCalledWith('review network failed');
   });
 });

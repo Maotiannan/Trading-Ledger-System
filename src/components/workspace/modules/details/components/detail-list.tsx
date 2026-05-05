@@ -5,18 +5,20 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChevronDown, ChevronRight, Eye, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react';
 
 export type DetailListProps = {
   details: Detail[];
   expandedDetails: Set<string>;
+  canEdit: boolean;
   tx: (zh: string, en: string) => string;
   onToggleDetail: (detailId: string) => void;
   onViewImage: (detail: Detail) => void;
+  onEditDetail: (detail: Detail) => void;
   onDeleteDetail: (detailId: string) => void;
 };
 
-export function DetailList({ details, expandedDetails, tx, onToggleDetail, onViewImage, onDeleteDetail }: DetailListProps) {
+export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDetail, onViewImage, onEditDetail, onDeleteDetail }: DetailListProps) {
   if (details.length === 0) {
     return (
       <Card>
@@ -61,6 +63,19 @@ export function DetailList({ details, expandedDetails, tx, onToggleDetail, onVie
                     title={tx('查看图片', 'View image')}
                   >
                     <Eye className="h-4 w-4" />
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditDetail(detail);
+                    }}
+                    title={tx('修改付款明细', 'Edit payment detail')}
+                  >
+                    <Pencil className="h-4 w-4" />
                   </Button>
                 )}
                 <Button

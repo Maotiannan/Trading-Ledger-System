@@ -81,6 +81,18 @@ enum ReceiptEditRequestStatus {
   REJECTED
 }
 
+enum DetailEditRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SwiftEditRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // 删除目标类型枚举
 enum DeletionTargetType {
   RECEIPT
@@ -125,6 +137,10 @@ model User {
   preference       UserPreference?
   requestedReceiptEditRequests ReceiptEditRequest[] @relation("ReceiptEditRequester")
   approvedReceiptEditRequests  ReceiptEditRequest[] @relation("ReceiptEditApprover")
+  requestedDetailEditRequests  DetailEditRequest[]  @relation("DetailEditRequester")
+  approvedDetailEditRequests   DetailEditRequest[]  @relation("DetailEditApprover")
+  requestedSwiftEditRequests   SwiftEditRequest[]   @relation("SwiftEditRequester")
+  approvedSwiftEditRequests    SwiftEditRequest[]   @relation("SwiftEditApprover")
 
   @@index([parentId])
   @@index([createdById])
@@ -361,6 +377,7 @@ model Detail {
   items      DetailItem[]
   histories  DetailHistory[]
   swift      Swift?
+  editRequests DetailEditRequest[]
 
   @@index([status])
   @@index([createdBy])
@@ -428,9 +445,58 @@ model Swift {
   // 关联
   detail  Detail @relation(fields: [detailId], references: [id], onDelete: Cascade)
   creator User   @relation(fields: [createdBy], references: [id])
+  editRequests SwiftEditRequest[]
 
   @@index([detailId])
   @@index([status])
+}
+
+model DetailEditRequest {
+  id              String                  @id @default(cuid())
+  detailId        String
+  status          DetailEditRequestStatus @default(PENDING)
+  requestedBy     String
+  approvedBy      String?
+  pendingDetailId String?                 @unique
+  requestedAt     DateTime                @default(now())
+  reviewedAt      DateTime?
+  beforeSnapshot  Json
+  afterSnapshot   Json
+  reviewComment   String?                 @db.Text
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  detail    Detail @relation(fields: [detailId], references: [id], onDelete: Cascade)
+  requester User   @relation("DetailEditRequester", fields: [requestedBy], references: [id], onDelete: Cascade)
+  approver  User?  @relation("DetailEditApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([detailId, status])
+  @@index([requestedBy, status])
+  @@index([approvedBy])
+}
+
+model SwiftEditRequest {
+  id             String                 @id @default(cuid())
+  swiftId        String
+  status         SwiftEditRequestStatus @default(PENDING)
+  requestedBy    String
+  approvedBy     String?
+  pendingSwiftId String?                @unique
+  requestedAt    DateTime               @default(now())
+  reviewedAt     DateTime?
+  beforeSnapshot Json
+  afterSnapshot  Json
+  reviewComment  String?                @db.Text
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  swift     Swift @relation(fields: [swiftId], references: [id], onDelete: Cascade)
+  requester User  @relation("SwiftEditRequester", fields: [requestedBy], references: [id], onDelete: Cascade)
+  approver  User? @relation("SwiftEditApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+
+  @@index([swiftId, status])
+  @@index([requestedBy, status])
+  @@index([approvedBy])
 }
 
 // ==================== 客户表 ====================

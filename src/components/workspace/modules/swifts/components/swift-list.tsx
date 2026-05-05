@@ -5,17 +5,19 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, Eye, Trash2 } from 'lucide-react';
+import { AlertTriangle, Eye, Pencil, Trash2 } from 'lucide-react';
 
 export type SwiftListProps = {
   swifts: Swift[];
+  canEdit: boolean;
   tx: (zh: string, en: string) => string;
   getSwiftStatus: (swift: Swift) => string;
   onViewImage: (swift: Swift) => void;
+  onEditSwift: (swift: Swift) => void;
   onDeleteSwift: (swift: Swift) => void;
 };
 
-export function SwiftList({ swifts, tx, getSwiftStatus, onViewImage, onDeleteSwift }: SwiftListProps) {
+export function SwiftList({ swifts, canEdit, tx, getSwiftStatus, onViewImage, onEditSwift, onDeleteSwift }: SwiftListProps) {
   if (swifts.length === 0) {
     return (
       <Card>
@@ -50,6 +52,11 @@ export function SwiftList({ swifts, tx, getSwiftStatus, onViewImage, onDeleteSwi
                   {swift.imageUrl && (
                     <Button size="sm" variant="ghost" onClick={() => onViewImage(swift)} title={tx('查看图片', 'View image')}>
                       <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Button size="sm" variant="ghost" onClick={() => onEditSwift(swift)} title={tx('修改SWIFT', 'Edit SWIFT')}>
+                      <Pencil className="h-4 w-4" />
                     </Button>
                   )}
                   <Button

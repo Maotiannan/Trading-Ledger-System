@@ -18,17 +18,36 @@ import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
+import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
+import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 
-function parseDetailPayload(data: Record<string, unknown>) {
-  if (typeof data.data === 'string') {
-    return parseJsonWithSchema(data.data, detailPayloadSchema, '明细数据格式错误');
+function parseDetailPayloadValue(value: unknown) {
+  if (typeof value === 'string') {
+    return parseJsonWithSchema(value, detailPayloadSchema, '明细数据格式错误');
   }
-  const result = detailPayloadSchema.safeParse(data);
+  const result = detailPayloadSchema.safeParse(value);
   if (!result.success) {
     const issue = result.error.issues[0];
     throw new InputValidationError(issue?.message || '明细数据格式错误');
   }
   return result.data;
+}
+
+function parseDetailPayload(data: Record<string, unknown>) {
+  return parseDetailPayloadValue(data);
+}
+
+function parseDetailEditablePatch(value: unknown): DetailEditablePatch {
+  const payload = parseDetailPayloadValue(value);
+  return {
+    date: payload.date,
+    items: payload.items.map((item) => ({
+      mark: item.mark,
+      orderNo: item.orderNo,
+      amount: item.amount,
+      receiptId: item.receiptId ?? item.matchedReceiptId ?? null,
+    })),
+  };
 }
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -166,6 +185,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (action === 'update') {
+      if (currentUser.role !== 'ADMIN') {
+        throw createApiError({
+          code: 'FORBIDDEN',
+          status: 403,
+          message: '只有管理员可以直接修改付款明细',
+          detail: { role: currentUser.role },
+        });
+      }
       if (!detailId) {
         throw createApiError({
           code: 'BAD_REQUEST',
@@ -181,9 +208,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         });
       }
 
-      const payload = typeof requestData.data === 'string'
-        ? parseJsonWithSchema(requestData.data, detailPayloadSchema, '明细数据格式错误')
-        : parseDetailPayload(requestData);
+      const payload = parseDetailPayloadValue(requestData.data);
       const result = await updateDetailRecord({
         currentUser,
         detailId,
@@ -192,6 +217,46 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         imageName: typeof requestData.imageName === 'string' ? requestData.imageName : null,
       });
       return NextResponse.json({ success: true, data: result.data });
+    }
+
+    if (action === 'request-edit') {
+      const result = await requestDetailEdit({
+        currentUser,
+        detailId,
+        data: parseDetailEditablePatch(requestData.data),
+      });
+      return createApiSuccessResponse({
+        data: result.data,
+        message: result.message,
+      }, request);
+    }
+
+    if (action === 'review-edit') {
+      const requestId = typeof requestData.requestId === 'string' ? requestData.requestId : '';
+      const decision = requestData.decision === 'approve' || requestData.decision === 'reject'
+        ? requestData.decision
+        : null;
+      if (!requestId || !decision) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少审批参数',
+          detail: { requestId, decision: requestData.decision },
+        });
+      }
+
+      const result = await reviewDetailEdit({
+        currentUser,
+        requestId,
+        decision,
+        comment: typeof requestData.comment === 'string' ? requestData.comment : null,
+      });
+      return createApiSuccessResponse({ message: result.message }, request);
+    }
+
+    if (action === 'list-edit-requests') {
+      const rows = await listDetailEditRequests(currentUser);
+      return NextResponse.json({ success: true, data: rows });
     }
 
     throw createApiError({

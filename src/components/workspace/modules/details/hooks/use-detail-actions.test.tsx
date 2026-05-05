@@ -689,4 +689,100 @@ describe('useDetailActions', () => {
 
     expect(mockApiCall).not.toHaveBeenCalled();
   });
+
+  it('submits direct detail edits for admins and approval requests for sales', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const loadDetailEditRequests = jest.fn(async () => undefined);
+    mockApiCall
+      .mockResolvedValueOnce({ success: true, message: '修改已完成' })
+      .mockResolvedValueOnce({ success: true, message: '成功提交，等待管理员同意' });
+
+    const { result } = renderHook(() => useDetailActions(createDeps({
+      loadDetailEditRequests,
+    }) as never));
+
+    let adminOutcome: Awaited<ReturnType<typeof result.current.handleSubmitDetailEdit>> | null = null;
+    await act(async () => {
+      adminOutcome = await result.current.handleSubmitDetailEdit({
+        detailId: 'detail-1',
+        data: {
+          date: '2026-05-05',
+          items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' }],
+        },
+        isAdmin: true,
+      });
+    });
+
+    expect(mockApiCall).toHaveBeenNthCalledWith(1, 'detail', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update',
+        detailId: 'detail-1',
+        data: {
+          date: '2026-05-05',
+          items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' }],
+        },
+      }),
+    }));
+    expect(adminOutcome).toEqual({ success: true, message: '修改已完成' });
+
+    let salesOutcome: Awaited<ReturnType<typeof result.current.handleSubmitDetailEdit>> | null = null;
+    await act(async () => {
+      salesOutcome = await result.current.handleSubmitDetailEdit({
+        detailId: 'detail-1',
+        data: {
+          date: '2026-05-06',
+          items: [{ mark: 'MAB-3', orderNo: 'MAB-3-12', amount: 140, receiptId: 'receipt-3' }],
+        },
+        isAdmin: false,
+      });
+    });
+
+    expect(mockApiCall).toHaveBeenNthCalledWith(2, 'detail', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'request-edit',
+        detailId: 'detail-1',
+        data: {
+          date: '2026-05-06',
+          items: [{ mark: 'MAB-3', orderNo: 'MAB-3-12', amount: 140, receiptId: 'receipt-3' }],
+        },
+      }),
+    }));
+    expect(salesOutcome).toEqual({ success: true, message: '成功提交，等待管理员同意' });
+    expect(loadDetails).toHaveBeenCalledTimes(2);
+    expect(loadDetailEditRequests).toHaveBeenCalledTimes(2);
+    expect(alertSpy).toHaveBeenCalledWith('修改已完成');
+    expect(alertSpy).toHaveBeenCalledWith('成功提交，等待管理员同意');
+  });
+
+  it('reviews detail edit requests and reloads views', async () => {
+    const alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const loadDetailEditRequests = jest.fn(async () => undefined);
+    mockApiCall.mockResolvedValueOnce({ success: true, message: '付款明细修改申请已通过' });
+    const { result } = renderHook(() => useDetailActions(createDeps({
+      loadDetailEditRequests,
+    }) as never));
+
+    let reviewOutcome = false;
+    await act(async () => {
+      reviewOutcome = await result.current.handleReviewDetailEdit({
+        requestId: 'detail-request-1',
+        decision: 'approve',
+      });
+    });
+
+    expect(reviewOutcome).toBe(true);
+    expect(mockApiCall).toHaveBeenCalledWith('detail', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'review-edit',
+        requestId: 'detail-request-1',
+        decision: 'approve',
+      }),
+    }));
+    expect(alertSpy).toHaveBeenCalledWith('付款明细修改申请已通过');
+    expect(loadDetails).toHaveBeenCalled();
+    expect(loadDetailEditRequests).toHaveBeenCalled();
+  });
 });

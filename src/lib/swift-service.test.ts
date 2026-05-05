@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { getNumericSystemSetting } from '@/lib/system-settings';
-import { createSwiftRecord, deleteSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, deleteSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -17,6 +17,7 @@ jest.mock('@/lib/db', () => ({
     swift: {
       findUnique: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
       delete: jest.fn(),
     },
     receipt: {
@@ -57,7 +58,7 @@ function makeUser(overrides: Partial<{
 const mockDb = db as unknown as {
   uploadedAsset: { updateMany: jest.Mock };
   detail: { findUnique: jest.Mock; update: jest.Mock };
-  swift: { findUnique: jest.Mock; create: jest.Mock; delete: jest.Mock };
+  swift: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; delete: jest.Mock };
   receipt: { updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
@@ -278,5 +279,179 @@ describe('swift-service', () => {
       where: { id: { in: ['receipt-4a', 'receipt-4b'] } },
       data: { status: ReceiptStatus.Waiting_SWIFT },
     });
+  });
+
+  it('updates swift records and advances linked statuses when validation passes', async () => {
+    mockGetNumericSystemSetting.mockReset();
+    mockGetNumericSystemSetting
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(50);
+    mockDb.swift.findUnique.mockResolvedValueOnce({
+      id: 'swift-update-ok',
+      detailId: 'detail-update-ok',
+      createdBy: 'sales-1',
+      status: SwiftStatus.ERROR,
+      detail: {
+        id: 'detail-update-ok',
+        totalAmount: 100,
+        items: [{ receiptId: 'receipt-1' }, { receiptId: null }],
+      },
+    });
+    mockDb.swift.update.mockResolvedValueOnce({
+      id: 'swift-update-ok',
+      detailId: 'detail-update-ok',
+      status: SwiftStatus.Bank_Transfer,
+      detail: {
+        id: 'detail-update-ok',
+        items: [{ receiptId: 'receipt-1' }, { receiptId: null }],
+      },
+    });
+
+    const result = await updateSwiftRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      swiftId: 'swift-update-ok',
+      payload: {
+        amount: 110,
+        date: '2026-05-05',
+        senderName: 'Sender',
+        senderAddress: 'Conakry',
+        receiverName: 'Receiver',
+        receiverAccount: 'ACC-1',
+      },
+    });
+
+    expect(result.validation.valid).toBe(true);
+    expect(mockDb.swift.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'swift-update-ok' },
+      data: expect.objectContaining({
+        amount: 110,
+        status: SwiftStatus.Bank_Transfer,
+        hasError: true,
+        errorMessage: null,
+      }),
+    }));
+    expect(mockDb.detail.update).toHaveBeenCalledWith({
+      where: { id: 'detail-update-ok' },
+      data: { status: DetailStatus.Bank_Transfer },
+    });
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['receipt-1'] } },
+      data: { status: ReceiptStatus.Bank_Transfer },
+    });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SWIFT_UPDATE',
+      targetId: 'swift-update-ok',
+    }));
+  });
+
+  it('updates swift records and rolls linked statuses back when validation fails', async () => {
+    mockGetNumericSystemSetting.mockReset();
+    mockGetNumericSystemSetting
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(50);
+    mockDb.swift.findUnique.mockResolvedValueOnce({
+      id: 'swift-update-bad',
+      detailId: 'detail-update-bad',
+      createdBy: 'sales-1',
+      status: SwiftStatus.Bank_Transfer,
+      detail: {
+        id: 'detail-update-bad',
+        totalAmount: 100,
+        items: [{ receiptId: 'receipt-2' }],
+      },
+    });
+    mockDb.swift.update.mockResolvedValueOnce({
+      id: 'swift-update-bad',
+      detailId: 'detail-update-bad',
+      status: SwiftStatus.ERROR,
+      detail: {
+        id: 'detail-update-bad',
+        items: [{ receiptId: 'receipt-2' }],
+      },
+    });
+
+    const result = await updateSwiftRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      swiftId: 'swift-update-bad',
+      payload: {
+        amount: 200,
+        date: '2026-05-05',
+        senderName: 'Sender',
+        senderAddress: 'Conakry',
+        receiverName: 'Receiver',
+        receiverAccount: 'ACC-1',
+      },
+      skipAudit: true,
+    });
+
+    expect(result.validation.valid).toBe(false);
+    expect(mockDb.detail.update).toHaveBeenCalledWith({
+      where: { id: 'detail-update-bad' },
+      data: { status: DetailStatus.Waiting_SWIFT },
+    });
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['receipt-2'] } },
+      data: { status: ReceiptStatus.Waiting_SWIFT },
+    });
+    expect(mockRecordAuditEvent).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SWIFT_UPDATE',
+      targetId: 'swift-update-bad',
+    }));
+  });
+
+  it('rejects swift updates for inaccessible records', async () => {
+    mockDb.swift.findUnique.mockResolvedValueOnce({
+      id: 'swift-no-access',
+      detailId: 'detail-5',
+      createdBy: 'other-sales',
+      status: SwiftStatus.ERROR,
+      detail: {
+        id: 'detail-5',
+        totalAmount: 100,
+        items: [],
+      },
+    });
+    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(false);
+
+    await expect(updateSwiftRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      swiftId: 'swift-no-access',
+      payload: {
+        amount: 100,
+        date: '2026-05-05',
+        senderName: 'Sender',
+        senderAddress: null,
+        receiverName: 'Receiver',
+        receiverAccount: null,
+      },
+    })).rejects.toThrow('无权修改该SWIFT记录');
+  });
+
+  it('rejects swift updates for finalized records', async () => {
+    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(true);
+    mockDb.swift.findUnique.mockResolvedValueOnce({
+      id: 'swift-final',
+      detailId: 'detail-6',
+      createdBy: 'sales-1',
+      status: SwiftStatus.RECEIVED,
+      detail: {
+        id: 'detail-6',
+        totalAmount: 100,
+        items: [],
+      },
+    });
+
+    await expect(updateSwiftRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      swiftId: 'swift-final',
+      payload: {
+        amount: 100,
+        date: '2026-05-05',
+        senderName: 'Sender',
+        senderAddress: null,
+        receiverName: 'Receiver',
+        receiverAccount: null,
+      },
+    })).rejects.toThrow('RECEIVED状态下禁止修改SWIFT');
   });
 });

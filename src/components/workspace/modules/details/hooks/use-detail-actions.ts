@@ -5,12 +5,14 @@ import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/works
 import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
 import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
 import type { DetailDirectItemForm, DetailOcrResult, DetailOcrUploadStatus } from '../types';
+import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 
 export type DetailActionText = (zh: string, en: string) => string;
 
 export type DetailActionDeps = {
   tx: DetailActionText;
   loadDetails: () => Promise<void>;
+  loadDetailEditRequests?: () => Promise<void>;
   selectedFile: File | null;
   ocrResult: DetailOcrResult | null;
   savedImagePath: { path: string; name: string } | null;
@@ -32,6 +34,7 @@ export type DetailActionDeps = {
 export function useDetailActions({
   tx,
   loadDetails,
+  loadDetailEditRequests,
   selectedFile,
   ocrResult,
   savedImagePath,
@@ -54,6 +57,13 @@ export function useDetailActions({
   const OCR_UPLOAD_HARD_TIMEOUT_MS = 120_000;
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const reloadDetailViews = async () => {
+    await loadDetails();
+    if (loadDetailEditRequests) {
+      await loadDetailEditRequests();
+    }
+  };
 
   const resetOcrRecognitionState = () => {
     setOcrResult(null);
@@ -338,6 +348,81 @@ export function useDetailActions({
     }
   };
 
+  const handleSubmitDetailEdit = async (params: {
+    detailId: string;
+    data: DetailEditablePatch;
+    isAdmin: boolean;
+  }) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiCall('detail', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: params.isAdmin ? 'update' : 'request-edit',
+          detailId: params.detailId,
+          data: params.data,
+        }),
+      });
+
+      if (!result.success) {
+        const message = getErrorMessage(result, tx('修改失败，请重试', 'Edit failed, please retry.'));
+        setError(message);
+        return { success: false, message };
+      }
+
+      const successMessage = result.message
+        || (params.isAdmin
+          ? tx('修改已完成', 'Update completed.')
+          : tx('成功提交，等待管理员同意', 'Submitted successfully. Waiting for admin approval.'));
+      alert(successMessage);
+      await reloadDetailViews();
+      return { success: true, message: successMessage };
+    } catch (err) {
+      const message = getErrorMessage(err, tx('修改失败，请重试', 'Edit failed, please retry.'));
+      setError(message);
+      return { success: false, message };
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReviewDetailEdit = async (params: {
+    requestId: string;
+    decision: 'approve' | 'reject';
+  }) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiCall('detail', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'review-edit',
+          requestId: params.requestId,
+          decision: params.decision,
+        }),
+      });
+
+      if (!result.success) {
+        const message = getErrorMessage(result, tx('审批失败，请重试', 'Review failed, please retry.'));
+        setError(message);
+        alert(message);
+        return false;
+      }
+
+      alert(result.message || tx('修改已完成', 'Update completed.'));
+      await reloadDetailViews();
+      return true;
+    } catch (err) {
+      const message = getErrorMessage(err, tx('审批失败，请重试', 'Review failed, please retry.'));
+      setError(message);
+      alert(message);
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return {
     uploading,
     submitting,
@@ -345,5 +430,7 @@ export function useDetailActions({
     handleConfirm,
     handleDeleteDetail,
     handleDirectCreate,
+    handleSubmitDetailEdit,
+    handleReviewDetailEdit,
   };
 }

@@ -16,18 +16,23 @@ import { createApiError } from '@/lib/api-error';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
-import { createSwiftRecord, deleteSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, deleteSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
+import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
 
-function parseSwiftPayload(data: Record<string, unknown>) {
-  if (typeof data.data === 'string') {
-    return parseJsonWithSchema(data.data, swiftPayloadSchema, 'SWIFT数据格式错误');
+function parseSwiftPayloadValue(value: unknown) {
+  if (typeof value === 'string') {
+    return parseJsonWithSchema(value, swiftPayloadSchema, 'SWIFT数据格式错误');
   }
-  const result = swiftPayloadSchema.safeParse(data);
+  const result = swiftPayloadSchema.safeParse(value);
   if (!result.success) {
     const issue = result.error.issues[0];
     throw new InputValidationError(issue?.message || 'SWIFT数据格式错误');
   }
   return result.data;
+}
+
+function parseSwiftPayload(data: Record<string, unknown>) {
+  return parseSwiftPayloadValue(data);
 }
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -156,6 +161,79 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         },
         message: result.message,
       }, request);
+    }
+
+    if (action === 'update') {
+      if (currentUser.role !== 'ADMIN') {
+        throw createApiError({
+          code: 'FORBIDDEN',
+          status: 403,
+          message: '只有管理员可以直接修改SWIFT',
+          detail: { role: currentUser.role },
+        });
+      }
+      const swiftId = typeof requestData.swiftId === 'string' ? requestData.swiftId : '';
+      if (!swiftId) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少SWIFT ID',
+        });
+      }
+
+      const result = await updateSwiftRecord({
+        currentUser,
+        swiftId,
+        payload: parseSwiftPayloadValue(requestData.data),
+      });
+      return createApiSuccessResponse({
+        data: {
+          swift: result.data,
+          validation: result.validation,
+        },
+        message: '修改已完成',
+      }, request);
+    }
+
+    if (action === 'request-edit') {
+      const swiftId = typeof requestData.swiftId === 'string' ? requestData.swiftId : '';
+      const result = await requestSwiftEdit({
+        currentUser,
+        swiftId,
+        data: parseSwiftPayloadValue(requestData.data),
+      });
+      return createApiSuccessResponse({
+        data: result.data,
+        message: result.message,
+      }, request);
+    }
+
+    if (action === 'review-edit') {
+      const requestId = typeof requestData.requestId === 'string' ? requestData.requestId : '';
+      const decision = requestData.decision === 'approve' || requestData.decision === 'reject'
+        ? requestData.decision
+        : null;
+      if (!requestId || !decision) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少审批参数',
+          detail: { requestId, decision: requestData.decision },
+        });
+      }
+
+      const result = await reviewSwiftEdit({
+        currentUser,
+        requestId,
+        decision,
+        comment: typeof requestData.comment === 'string' ? requestData.comment : null,
+      });
+      return createApiSuccessResponse({ message: result.message }, request);
+    }
+
+    if (action === 'list-edit-requests') {
+      const rows = await listSwiftEditRequests(currentUser);
+      return NextResponse.json({ success: true, data: rows });
     }
 
     if (action === 'delete') {

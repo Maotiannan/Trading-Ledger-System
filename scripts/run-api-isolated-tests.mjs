@@ -37,6 +37,7 @@ try {
       throw new TypeError(`Case ${file} does not export a default async function`);
     }
     context.setCase(caseName);
+    await context.resetRateLimits();
     await run(context);
   }
   console.log(`\nIsolated API cases completed: ${caseFiles.length}`);

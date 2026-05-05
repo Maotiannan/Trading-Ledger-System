@@ -128,6 +128,15 @@ export class ApiTestContext {
     return response;
   }
 
+  async resetRateLimits() {
+    const response = await this.request('POST', '/api/internal/maintenance/rate-limit', {
+      headers: { 'x-init-token': this.initToken },
+      expectedStatus: 200,
+    });
+    this.step('reset rate limits');
+    return response;
+  }
+
   async login(email = this.adminEmail, password = this.adminPassword) {
     const response = await this.request('POST', '/api/auth', {
       json: { action: 'login', email, password },

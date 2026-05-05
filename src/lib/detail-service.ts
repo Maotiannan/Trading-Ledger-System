@@ -193,6 +193,89 @@ async function setReceiptsWaitingSwift(tx: DbTransactionClient, receiptIds: stri
   });
 }
 
+async function applyDetailUpdate(params: {
+  tx: DbTransactionClient | typeof db;
+  currentUser: CurrentUser;
+  detailId: string;
+  payload: DetailPayload;
+  imagePath?: string | null;
+  imageName?: string | null;
+  historyNote: string;
+}) {
+  const { tx, currentUser, detailId, payload, imagePath, imageName, historyNote } = params;
+
+  const existingDetail = await tx.detail.findUnique({
+    where: { id: detailId },
+    include: { items: true },
+  });
+  if (!existingDetail) {
+    throw createApiError({
+      code: 'RESOURCE_NOT_FOUND',
+      status: 400,
+      message: '明细不存在',
+      detail: { detailId },
+    });
+  }
+  if (!(await canAccessOwnedResourceAsync(existingDetail.createdBy, currentUser))) {
+    throw forbidden('无权修改该明细', {
+      detailId,
+      createdBy: existingDetail.createdBy,
+    });
+  }
+  if (existingDetail.status === DetailStatus.RECEIVED) {
+    throw badRequest('RECEIVED状态下禁止修改', { detailId, status: existingDetail.status });
+  }
+  if (existingDetail.status === DetailStatus.Bank_Transfer) {
+    throw badRequest('Bank_Transfer状态下禁止修改', { detailId, status: existingDetail.status });
+  }
+
+  const processedItems = await processDetailItems({
+    items: normalizeItems(payload),
+    currentUser,
+    imagePath: imagePath || existingDetail.imageUrl || null,
+    imageName: imageName || existingDetail.imageName || null,
+    autoCreateNote: '由付款明细自动创建',
+    tx,
+  });
+  await tx.detailHistory.create({
+    data: {
+      detailId,
+      date: existingDetail.date,
+      items: JSON.stringify(existingDetail.items),
+      imageUrl: existingDetail.imageUrl,
+      imageName: existingDetail.imageName,
+      status: existingDetail.status,
+      note: historyNote,
+      createdBy: currentUser.id,
+    },
+  });
+
+  await tx.detailItem.deleteMany({ where: { detailId } });
+
+  const nextDetail = await tx.detail.update({
+    where: { id: detailId },
+    data: {
+      date: payload.date ? new Date(payload.date) : null,
+      imageUrl: imagePath || existingDetail.imageUrl,
+      imageName: imageName || existingDetail.imageName,
+      totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),
+      items: {
+        create: processedItems.items,
+      },
+    },
+    include: {
+      items: { include: { receipt: true } },
+    },
+  });
+
+  const receiptIds = nextDetail.items
+    .map((item) => item.receiptId)
+    .filter((receiptId): receiptId is string => Boolean(receiptId));
+  await setReceiptsWaitingSwift(tx as DbTransactionClient, receiptIds);
+
+  return { detail: nextDetail, touchedOrderIds: processedItems.touchedOrderIds };
+}
+
 export async function createDetailRecord(params: {
   currentUser: CurrentUser;
   payload: DetailPayload;
@@ -278,95 +361,53 @@ export async function updateDetailRecord(params: {
   payload: DetailPayload;
   imagePath?: string | null;
   imageName?: string | null;
+  txClient?: DbTransactionClient | typeof db;
+  skipAudit?: boolean;
+  historyNote?: string;
 }) {
-  const { currentUser, detailId, payload, imagePath, imageName } = params;
+  const { currentUser, detailId, payload, imagePath, imageName, txClient, skipAudit = false, historyNote = '重新识别前保存' } = params;
   if (!detailId) {
     throw badRequest('缺少明细ID');
   }
 
-  const existingDetail = await db.detail.findUnique({
-    where: { id: detailId },
-    include: { items: true },
-  });
-  if (!existingDetail) {
-    throw createApiError({
-      code: 'RESOURCE_NOT_FOUND',
-      status: 400,
-      message: '明细不存在',
-      detail: { detailId },
-    });
-  }
-  if (!(await canAccessOwnedResourceAsync(existingDetail.createdBy, currentUser))) {
-    throw forbidden('无权修改该明细', {
-      detailId,
-      createdBy: existingDetail.createdBy,
-    });
-  }
-  if (existingDetail.status === DetailStatus.RECEIVED) {
-    throw badRequest('RECEIVED状态下禁止修改', { detailId, status: existingDetail.status });
-  }
-  if (existingDetail.status === DetailStatus.Bank_Transfer) {
-    throw badRequest('Bank_Transfer状态下禁止修改', { detailId, status: existingDetail.status });
-  }
-
-  const result = await runInTransaction(async (tx) => {
-    const processedItems = await processDetailItems({
-      items: normalizeItems(payload),
-      currentUser,
-      imagePath: imagePath || existingDetail.imageUrl || null,
-      imageName: imageName || existingDetail.imageName || null,
-      autoCreateNote: '由付款明细自动创建',
-      tx,
-    });
-    await tx.detailHistory.create({
-      data: {
+  const result = txClient
+    ? await applyDetailUpdate({
+        tx: txClient,
+        currentUser,
         detailId,
-        date: existingDetail.date,
-        items: JSON.stringify(existingDetail.items),
-        imageUrl: existingDetail.imageUrl,
-        imageName: existingDetail.imageName,
-        status: existingDetail.status,
-        note: '重新识别前保存',
-        createdBy: currentUser.id,
-      },
-    });
+        payload,
+        imagePath,
+        imageName,
+        historyNote,
+      })
+    : await runInTransaction(async (tx) => applyDetailUpdate({
+        tx,
+        currentUser,
+        detailId,
+        payload,
+        imagePath,
+        imageName,
+        historyNote,
+      }));
 
-    await tx.detailItem.deleteMany({ where: { detailId } });
-
-    const nextDetail = await tx.detail.update({
-      where: { id: detailId },
-      data: {
-        date: payload.date ? new Date(payload.date) : null,
-        imageUrl: imagePath || existingDetail.imageUrl,
-        imageName: imageName || existingDetail.imageName,
-        totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),
-        items: {
-          create: processedItems.items,
-        },
-      },
-      include: {
-        items: { include: { receipt: true } },
-      },
-    });
-
-    const receiptIds = nextDetail.items
-      .map((item) => item.receiptId)
-      .filter((receiptId): receiptId is string => Boolean(receiptId));
-    await setReceiptsWaitingSwift(tx, receiptIds);
-
-    return { detail: nextDetail, touchedOrderIds: processedItems.touchedOrderIds };
-  });
-
-  for (const orderId of result.touchedOrderIds) {
-    await updateOrderBalance(orderId);
+  if (txClient) {
+    for (const orderId of result.touchedOrderIds) {
+      await updateOrderBalance(orderId, txClient as never);
+    }
+  } else {
+    for (const orderId of result.touchedOrderIds) {
+      await updateOrderBalance(orderId);
+    }
   }
 
-  await recordAuditEvent({
-    action: auditActions.DETAIL_UPDATE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.DETAIL,
-    targetId: detailId,
-  });
+  if (!skipAudit) {
+    await recordAuditEvent({
+      action: auditActions.DETAIL_UPDATE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.DETAIL,
+      targetId: detailId,
+    });
+  }
 
-  return { data: result.detail };
+  return { data: result.detail, touchedOrderIds: result.touchedOrderIds };
 }

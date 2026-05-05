@@ -10,7 +10,7 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
-import { runInTransaction } from '@/lib/transaction';
+import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { getNumericSystemSetting } from '@/lib/system-settings';
 import { validateAmountTolerance } from '@/lib/matching';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -24,6 +24,121 @@ function createForbiddenError(message: string, detail?: unknown) {
     message,
     detail,
   });
+}
+
+function createBadRequestError(message: string, detail?: unknown) {
+  return createApiError({
+    code: 'BAD_REQUEST',
+    status: 400,
+    message,
+    detail,
+  });
+}
+
+function assertEditableSwiftStatus(status: SwiftStatus, detail?: unknown) {
+  if (status === SwiftStatus.RECEIVED) {
+    throw createBadRequestError('RECEIVED状态下禁止修改SWIFT', detail);
+  }
+}
+
+async function applySwiftUpdate(params: {
+  tx: DbTransactionClient | typeof db;
+  currentUser: CurrentUser;
+  swiftId: string;
+  payload: SwiftPayload;
+}) {
+  const { tx, currentUser, swiftId, payload } = params;
+
+  const existingSwift = await tx.swift.findUnique({
+    where: { id: swiftId },
+    include: {
+      detail: {
+        include: {
+          items: true,
+        },
+      },
+    },
+  });
+  if (!existingSwift) {
+    throw createApiError({
+      code: 'RESOURCE_NOT_FOUND',
+      status: 400,
+      message: 'SWIFT不存在',
+      detail: { swiftId },
+    });
+  }
+  if (!(await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser))) {
+    throw createForbiddenError('无权修改该SWIFT记录', {
+      swiftId,
+      swiftCreatedBy: existingSwift.createdBy,
+    });
+  }
+
+  assertEditableSwiftStatus(existingSwift.status, { swiftId, status: existingSwift.status });
+
+  const [warningTolerance, rejectTolerance] = await Promise.all([
+    getNumericSystemSetting('SWIFT_WARNING_TOLERANCE', 5, { min: 0 }),
+    getNumericSystemSetting('SWIFT_REJECT_TOLERANCE', 50, { min: 0 }),
+  ]);
+
+  const validation = validateAmountTolerance(Number(existingSwift.detail.totalAmount), payload.amount, {
+    warningTolerance,
+    rejectTolerance,
+  });
+
+  const nextSwift = await tx.swift.update({
+    where: { id: swiftId },
+    data: {
+      amount: payload.amount,
+      date: payload.date ? new Date(payload.date) : null,
+      senderName: payload.senderName,
+      senderAddress: payload.senderAddress,
+      receiverName: payload.receiverName,
+      receiverAccount: payload.receiverAccount,
+      status: validation.valid ? SwiftStatus.Bank_Transfer : SwiftStatus.ERROR,
+      hasError: validation.hasWarning || !validation.valid,
+      errorMessage: validation.valid ? null : validation.message,
+    },
+    include: {
+      detail: {
+        include: {
+          items: true,
+        },
+      },
+    },
+  });
+
+  const receiptIds = existingSwift.detail.items
+    .map((item) => item.receiptId)
+    .filter((receiptId): receiptId is string => Boolean(receiptId));
+
+  if (validation.valid) {
+    await tx.detail.update({
+      where: { id: existingSwift.detailId },
+      data: { status: DetailStatus.Bank_Transfer },
+    });
+
+    if (receiptIds.length > 0) {
+      await tx.receipt.updateMany({
+        where: { id: { in: receiptIds } },
+        data: { status: ReceiptStatus.Bank_Transfer },
+      });
+    }
+  } else {
+    await tx.detail.update({
+      where: { id: existingSwift.detailId },
+      data: { status: DetailStatus.Waiting_SWIFT },
+    });
+
+    if (receiptIds.length > 0) {
+      await tx.receipt.updateMany({
+        where: { id: { in: receiptIds } },
+        data: { status: ReceiptStatus.Waiting_SWIFT },
+      });
+    }
+  }
+
+  return { swift: nextSwift, validation };
 }
 
 export async function createSwiftRecord(params: {
@@ -186,6 +301,47 @@ export async function createSwiftRecord(params: {
     }
     throw error;
   }
+}
+
+export async function updateSwiftRecord(params: {
+  currentUser: CurrentUser;
+  swiftId: string;
+  payload: SwiftPayload;
+  txClient?: DbTransactionClient | typeof db;
+  skipAudit?: boolean;
+}) {
+  const { currentUser, swiftId, payload, txClient, skipAudit = false } = params;
+  if (!swiftId) {
+    throw createBadRequestError('缺少SWIFT ID');
+  }
+
+  const updated = txClient
+    ? await applySwiftUpdate({
+        tx: txClient,
+        currentUser,
+        swiftId,
+        payload,
+      })
+    : await runInTransaction(async (tx) => applySwiftUpdate({
+        tx,
+        currentUser,
+        swiftId,
+        payload,
+      }));
+
+  if (!skipAudit) {
+    await recordAuditEvent({
+      action: auditActions.SWIFT_UPDATE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.SWIFT,
+      targetId: swiftId,
+      metadata: {
+        validation: updated.validation,
+      },
+    });
+  }
+
+  return { data: updated.swift, validation: updated.validation };
 }
 
 export async function deleteSwiftRecord(params: {

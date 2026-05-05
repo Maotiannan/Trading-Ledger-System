@@ -18,6 +18,16 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/receipt', 'list-edit-requests')?.method).toBe('POST');
   });
 
+  it('should expose detail and swift edit approval actions', () => {
+    expect(findAction('/api/detail', 'request-edit')?.method).toBe('POST');
+    expect(findAction('/api/detail', 'review-edit')?.method).toBe('POST');
+    expect(findAction('/api/detail', 'list-edit-requests')?.method).toBe('POST');
+    expect(findAction('/api/swift', 'update')?.method).toBe('POST');
+    expect(findAction('/api/swift', 'request-edit')?.method).toBe('POST');
+    expect(findAction('/api/swift', 'review-edit')?.method).toBe('POST');
+    expect(findAction('/api/swift', 'list-edit-requests')?.method).toBe('POST');
+  });
+
   it('should expose direct-create for receipt/detail/swift', () => {
     expect(findAction('/api/receipt', 'direct-create')?.method).toBe('POST');
     expect(findAction('/api/detail', 'direct-create')?.method).toBe('POST');

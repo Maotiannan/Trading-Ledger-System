@@ -133,7 +133,7 @@ function sameMembers(values: unknown[], expectedValues: string[]): boolean {
 
 function omitLogicalKeys(node: WhereClause): WhereClause {
   return Object.fromEntries(
-    Object.entries(node).filter(([key]) => key !== 'AND' && key !== 'OR'),
+    Object.entries(node).filter(([key]) => key !== 'AND' && key !== 'OR' && key !== 'NOT'),
   );
 }
 
@@ -165,9 +165,13 @@ function getWhereBranches(value: unknown): WhereClause[][] {
   return branches;
 }
 
-function hasWhereNode(value: unknown, predicate: (node: WhereClause) => boolean): boolean {
+function hasWhereNode(
+  value: unknown,
+  predicate: (node: WhereClause) => boolean,
+  options: { includeNot?: boolean } = {},
+): boolean {
   if (Array.isArray(value)) {
-    return value.some((entry) => hasWhereNode(entry, predicate));
+    return value.some((entry) => hasWhereNode(entry, predicate, options));
   }
   if (!isWhereClause(value)) {
     return false;
@@ -175,7 +179,27 @@ function hasWhereNode(value: unknown, predicate: (node: WhereClause) => boolean)
   if (predicate(value)) {
     return true;
   }
-  return Object.values(value).some((entry) => hasWhereNode(entry, predicate));
+  return Object.entries(value).some(([key, entry]) => {
+    if (!options.includeNot && key === 'NOT') {
+      return false;
+    }
+    return hasWhereNode(entry, predicate, options);
+  });
+}
+
+function hasNegatedWhereNode(value: unknown, predicate: (node: WhereClause) => boolean): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasNegatedWhereNode(entry, predicate));
+  }
+  if (!isWhereClause(value)) {
+    return false;
+  }
+
+  if ('NOT' in value && hasWhereNode(value.NOT, predicate, { includeNot: true })) {
+    return true;
+  }
+
+  return Object.entries(value).some(([, entry]) => hasNegatedWhereNode(entry, predicate));
 }
 
 function getListWhereClause(): WhereClause {
@@ -251,6 +275,21 @@ function getStatusValues(value: unknown): string[] {
 
 function branchAllowsPending(branch: WhereClause[]): boolean {
   const statuses = branch.flatMap((node) => getStatusValues(node));
+  const hasNegatedPending = branch.some((node) => hasNegatedWhereNode(node, (candidate) => {
+    const status = candidate.status;
+    if (typeof status === 'string') {
+      return status === ReceiptEditRequestStatus.PENDING;
+    }
+    if (!isWhereClause(status)) {
+      return false;
+    }
+    const inScope = status.in;
+    return Array.isArray(inScope) && inScope.includes(ReceiptEditRequestStatus.PENDING);
+  }));
+
+  if (hasNegatedPending) {
+    return statuses.includes(ReceiptEditRequestStatus.PENDING);
+  }
   if (statuses.length === 0) {
     return true;
   }

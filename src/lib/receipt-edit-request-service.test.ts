@@ -1,8 +1,8 @@
 import { ReceiptEditRequestStatus, ReceiptStatus, UserRole } from '@prisma/client';
-import { auditActions } from '@/lib/audit-catalog';
+import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-edit-types';
+import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-edit-contract-types';
 import { recordAuditEvent } from '@/lib/audit';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
@@ -170,6 +170,7 @@ describe('receipt-edit-request-service', () => {
       action: auditActions.RECEIPT_EDIT_REQUEST_CREATE,
       actorId: 'sales-1',
       targetId: 'req-1',
+      targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
     }));
   });
 
@@ -306,7 +307,7 @@ describe('receipt-edit-request-service', () => {
   });
 
   it('rejects a pending request without mutating the receipt', async () => {
-    mockDb.receiptEditRequest.findUnique.mockResolvedValueOnce({
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
       id: 'req-2',
       receiptId: 'receipt-1',
       status: ReceiptEditRequestStatus.PENDING,
@@ -325,7 +326,7 @@ describe('receipt-edit-request-service', () => {
       },
       requester: salesUser,
     });
-    mockDb.receiptEditRequest.update.mockResolvedValueOnce({
+    mockTx.receiptEditRequest.update.mockResolvedValueOnce({
       id: 'req-2',
       status: ReceiptEditRequestStatus.REJECTED,
       pendingReceiptId: null,
@@ -338,9 +339,15 @@ describe('receipt-edit-request-service', () => {
       comment: 'insufficient evidence',
     });
 
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
     expect(mockDb.receipt.update).not.toHaveBeenCalled();
     expect(mockDb.receiptHistory.create).not.toHaveBeenCalled();
-    expect(mockDb.receiptEditRequest.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockTx.receipt.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'req-2' },
+    }));
+    expect(mockTx.receiptEditRequest.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'req-2' },
       data: expect.objectContaining({
         status: ReceiptEditRequestStatus.REJECTED,
@@ -353,7 +360,10 @@ describe('receipt-edit-request-service', () => {
       action: auditActions.RECEIPT_EDIT_REQUEST_REJECT,
       actorId: 'admin-1',
       targetId: 'req-2',
+      targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
     }));
+    expect(mockDb.receiptEditRequest.findUnique).not.toHaveBeenCalled();
+    expect(mockDb.receiptEditRequest.update).not.toHaveBeenCalled();
   });
 
   it('lists receipt edit requests using the store row shape', async () => {

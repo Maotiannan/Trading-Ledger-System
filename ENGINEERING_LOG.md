@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.109
-> 最后更新：2026-04-30
+> 当前版本：v1.0.111
+> 最后更新：2026-05-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 收据修改审批流落地：新增 `ReceiptEditRequest` 持久化与 `PENDING / APPROVED / REJECTED` 状态、`pendingReceiptId` 唯一约束防重复待审批、`receipt-edit-request-service` 事务化申请/审批/列表逻辑；`/api/receipt` 新增 `request-edit / review-edit / list-edit-requests`，收据页新增编辑弹窗、待审批列表和管理员审批动作；`SALES` 走审批流、`ADMIN` 直接修改，字段白名单限定为 `receiptNo / date / invNo / customerMark / payer / tel`；补齐 route/service/hook/UI/unit/isolated API 回归并修复 reviewer 指出的 ISO 日期编辑和 nested payload 契约问题 ✅ 2026-05-05
 
 - [x] 上传资产清理闭环落地：新增 `UploadedAsset` 生命周期台账（`STAGED -> ATTACHED -> DELETED`），把 `Create Receipt Directly`、收据/明细/SWIFT OCR、签名收据 finalize 的图片写入统一纳管；新增内部维护路由 `/api/internal/maintenance/uploaded-assets` 和 Docker maintenance 服务定时调用，24h 清理孤儿 staged 文件、72h 取消 stale `SIGNING_PENDING` 签名会话并删除其占位收据；本阶段明确“不回填历史文件”，只管理新注册进台账的上传资产，并补齐 unit + isolated API 覆盖 ✅ 2026-04-30
 - [x] `Create Receipt Directly` 选图确认页落地：新增前端待确认图片状态与 `receipt-direct-image-confirm-dialog`，移动端 `拍照 / 从相册选择` 返回后先进入项目内大图确认页，用户点击“确认上传”才触发既有压缩 + `apiUploadCall` 进度/超时链路；补齐 `use-receipt-actions / receipt-direct-image-confirm-dialog` 自动化并重新跑通 `build + test:ci` ✅ 2026-04-30

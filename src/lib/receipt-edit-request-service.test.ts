@@ -131,6 +131,40 @@ function sameMembers(values: unknown[], expectedValues: string[]): boolean {
     && expectedValues.every((value) => values.includes(value));
 }
 
+function omitLogicalKeys(node: WhereClause): WhereClause {
+  return Object.fromEntries(
+    Object.entries(node).filter(([key]) => key !== 'AND' && key !== 'OR'),
+  );
+}
+
+function combineBranches(left: WhereClause[][], right: WhereClause[][]): WhereClause[][] {
+  return left.flatMap((leftBranch) => right.map((rightBranch) => [...leftBranch, ...rightBranch]));
+}
+
+function getWhereBranches(value: unknown): WhereClause[][] {
+  if (!isWhereClause(value)) {
+    return [[]];
+  }
+
+  const ownNode = omitLogicalKeys(value);
+  let branches: WhereClause[][] = [Object.keys(ownNode).length > 0 ? [ownNode] : []];
+
+  const andValue = value.AND;
+  if (Array.isArray(andValue)) {
+    for (const entry of andValue) {
+      branches = combineBranches(branches, getWhereBranches(entry));
+    }
+  }
+
+  const orValue = value.OR;
+  if (Array.isArray(orValue) && orValue.length > 0) {
+    const orBranches = orValue.flatMap((entry) => getWhereBranches(entry));
+    branches = combineBranches(branches, orBranches);
+  }
+
+  return branches;
+}
+
 function hasWhereNode(value: unknown, predicate: (node: WhereClause) => boolean): boolean {
   if (Array.isArray(value)) {
     return value.some((entry) => hasWhereNode(entry, predicate));
@@ -151,8 +185,8 @@ function getListWhereClause(): WhereClause {
   return args.where as WhereClause;
 }
 
-function hasRequestedByScope(where: WhereClause, expectedIds: string[]): boolean {
-  return hasWhereNode(where, (node) => {
+function hasRequestedByScope(value: unknown, expectedIds: string[]): boolean {
+  return hasWhereNode(value, (node) => {
     const requestedBy = node.requestedBy;
     if (typeof requestedBy === 'string') {
       return expectedIds.length === 1 && requestedBy === expectedIds[0];
@@ -165,8 +199,8 @@ function hasRequestedByScope(where: WhereClause, expectedIds: string[]): boolean
   });
 }
 
-function hasReceiptVisibilityConstraint(where: WhereClause, expectedOwnerIds: string[]): boolean {
-  return hasWhereNode(where, (node) => {
+function hasReceiptVisibilityConstraint(value: unknown, expectedOwnerIds: string[]): boolean {
+  return hasWhereNode(value, (node) => {
     const receipt = node.receipt;
     if (!isWhereClause(receipt)) {
       return false;
@@ -190,6 +224,65 @@ function hasReceiptVisibilityConstraint(where: WhereClause, expectedOwnerIds: st
       return false;
     });
   });
+}
+
+function getStatusValues(value: unknown): string[] {
+  const values = new Set<string>();
+
+  hasWhereNode(value, (node) => {
+    const status = node.status;
+    if (typeof status === 'string') {
+      values.add(status);
+    } else if (isWhereClause(status)) {
+      const inScope = status.in;
+      if (Array.isArray(inScope)) {
+        for (const entry of inScope) {
+          if (typeof entry === 'string') {
+            values.add(entry);
+          }
+        }
+      }
+    }
+    return false;
+  });
+
+  return Array.from(values);
+}
+
+function branchAllowsPending(branch: WhereClause[]): boolean {
+  const statuses = branch.flatMap((node) => getStatusValues(node));
+  if (statuses.length === 0) {
+    return true;
+  }
+  return statuses.includes(ReceiptEditRequestStatus.PENDING);
+}
+
+function expectEveryBranchToIncludeIntersection(
+  where: WhereClause,
+  expectedRequesterIds: string[],
+  expectedOwnerIds: string[],
+): void {
+  const branches = getWhereBranches(where);
+  expect(branches.length).toBeGreaterThan(0);
+  expect(branches.every((branch) => (
+    hasRequestedByScope(branch, expectedRequesterIds)
+      && hasReceiptVisibilityConstraint(branch, expectedOwnerIds)
+  ))).toBe(true);
+}
+
+function expectPendingBranchesToIncludeIntersection(
+  where: WhereClause,
+  expectedRequesterIds: string[],
+  expectedOwnerIds: string[],
+): void {
+  const branches = getWhereBranches(where);
+  const pendingBranches = branches.filter(branchAllowsPending);
+
+  expect(pendingBranches.length).toBeGreaterThan(0);
+  expect(pendingBranches.every((branch) => (
+    hasRequestedByScope(branch, expectedRequesterIds)
+      && hasReceiptVisibilityConstraint(branch, expectedOwnerIds)
+  ))).toBe(true);
 }
 
 describe('receipt-edit-request-service', () => {
@@ -519,7 +612,7 @@ describe('receipt-edit-request-service', () => {
       afterSnapshot: validEditPayload,
       receipt: {
         id: 'receipt-1',
-        createdBy: adminUser.id,
+        createdBy: 'sales-owner',
         status: ReceiptStatus.SR_Received,
         receiptNo: '0001001',
         date: null,
@@ -771,8 +864,7 @@ describe('receipt-edit-request-service', () => {
     expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.any(Object),
     }));
-    expect(hasRequestedByScope(where, ['sales-1'])).toBe(true);
-    expect(hasReceiptVisibilityConstraint(where, ['sales-1'])).toBe(true);
+    expectEveryBranchToIncludeIntersection(where, ['sales-1'], ['sales-1']);
   });
 
   it('lists manager-visible requests with descendant-bounded review scope', async () => {
@@ -854,7 +946,6 @@ describe('receipt-edit-request-service', () => {
     expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.any(Object),
     }));
-    expect(hasRequestedByScope(where, ['sales-1', 'sales-2'])).toBe(true);
-    expect(hasReceiptVisibilityConstraint(where, ['manager-1', 'sales-1', 'sales-2'])).toBe(true);
+    expectPendingBranchesToIncludeIntersection(where, ['sales-1', 'sales-2'], ['manager-1', 'sales-1', 'sales-2']);
   });
 });

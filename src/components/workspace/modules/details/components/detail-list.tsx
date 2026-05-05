@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChevronDown, ChevronRight, Eye, Pencil, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Download, Eye, Pencil, Trash2 } from 'lucide-react';
 
 export type DetailListProps = {
   details: Detail[];
@@ -15,10 +15,11 @@ export type DetailListProps = {
   onToggleDetail: (detailId: string) => void;
   onViewImage: (detail: Detail) => void;
   onEditDetail: (detail: Detail) => void;
+  onExportDetailPic: (detailId: string) => void;
   onDeleteDetail: (detailId: string) => void;
 };
 
-export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDetail, onViewImage, onEditDetail, onDeleteDetail }: DetailListProps) {
+export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDetail, onViewImage, onEditDetail, onExportDetailPic, onDeleteDetail }: DetailListProps) {
   if (details.length === 0) {
     return (
       <Card>
@@ -76,6 +77,19 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                     title={tx('修改付款明细', 'Edit payment detail')}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                {detail.sourceMode === 'DIRECT' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onExportDetailPic(detail.id);
+                    }}
+                    title={tx('导出图片', 'Export Pic')}
+                  >
+                    <Download className="h-4 w-4" />
                   </Button>
                 )}
                 <Button

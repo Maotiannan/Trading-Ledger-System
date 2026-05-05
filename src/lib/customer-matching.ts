@@ -1,4 +1,6 @@
 import { db } from '@/lib/db';
+import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
+import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
 export type CustomerResolveInput = {
   customerMark: string;
@@ -25,7 +27,7 @@ function normalize(value: string | null | undefined): string {
 }
 
 export function normalizeOrderNameForMatch(value: string | null | undefined): string {
-  return (value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return normalizeOrderIdentifier(value);
 }
 
 export function extractOrderNameFromOrderNo(value: string | null | undefined): string | null {
@@ -50,20 +52,36 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
     ? await db.customer.findMany({
         where: {
           ...baseWhere,
-          mark: {
-            equals: customerMark,
+          normalizedMark: {
+            equals: normalizeOrderIdentifier(customerMark),
           },
         },
-        select: { id: true, mark: true, orderName: true, phone: true, city: true },
+        select: {
+          id: true,
+          mark: true,
+          orderName: true,
+          phone: true,
+          city: true,
+          orderNames: {
+            select: {
+              orderName: true,
+              normalizedOrderName: true,
+            },
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          },
+        },
       })
     : [];
 
   if (markCandidates.length === 1) {
     const customer = markCandidates[0];
+    const normalizedRequestedOrderName = normalizeOrderIdentifier(customerOrderNameInput);
+    const matchedOrderName = customer.orderNames.find((row) => row.normalizedOrderName === normalizedRequestedOrderName)?.orderName
+      || customer.orderName;
     return {
       customerId: customer.id,
       customerMark: customer.mark,
-      customerName: customer.orderName,
+      customerName: matchedOrderName,
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -89,24 +107,19 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
   }
 
   if (customerOrderNameInput) {
-    const nameCandidates = await db.customer.findMany({
-      where: {
-        ...baseWhere,
-        orderName: {
-          equals: customerOrderNameInput,
-        },
-      },
-      select: { id: true, mark: true, orderName: true, phone: true, city: true },
-    });
+    const nameCandidates = await findCustomerOrderNameMatches(
+      Array.isArray(input.ownerIds) && input.ownerIds.length > 0 ? input.ownerIds : null,
+      customerOrderNameInput,
+    );
 
     if (nameCandidates.length === 1) {
-      const customer = nameCandidates[0];
+      const matchedAlias = nameCandidates[0];
       return {
-        customerId: customer.id,
-        customerMark: customer.mark,
-        customerName: customer.orderName,
-        customerPhone: customer.phone,
-        customerCity: customer.city,
+        customerId: matchedAlias.customer.id,
+        customerMark: matchedAlias.customer.mark,
+        customerName: matchedAlias.orderName,
+        customerPhone: matchedAlias.customer.phone,
+        customerCity: matchedAlias.customer.city,
         needsCustomerFix: false,
         matchedBy: 'name',
         candidateCount: markCandidates.length,

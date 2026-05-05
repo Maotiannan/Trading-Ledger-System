@@ -70,6 +70,7 @@ export interface Receipt {
   isDeposit: boolean;
   isMerged: boolean;
   note: string | null;
+  balanceAfter?: number | null;
   createdAt: string;
   creator: { id: string; name: string | null; email: string };
   order?: Order | null;
@@ -88,6 +89,7 @@ export interface Detail {
   id: string;
   date: string | null;
   status: DetailStatus;
+  sourceMode?: 'OCR' | 'DIRECT';
   imageUrl: string | null;
   imageName?: string | null;
   totalAmount: number;

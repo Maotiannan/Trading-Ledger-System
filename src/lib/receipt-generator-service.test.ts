@@ -141,6 +141,7 @@ describe('receipt-generator-service', () => {
     const result = await createReceiptGeneratorSession(makeUser(), {
       orderNo: 'Big Alpha-07',
       usdAmount: 2500,
+      paymentMode: 'Transfer',
     });
 
     expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -153,6 +154,13 @@ describe('receipt-generator-service', () => {
       }),
     }));
     expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalled();
+    expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        layoutSnapshot: expect.objectContaining({
+          paymentMode: 'Transfer',
+        }),
+      }),
+    }));
     expect(result.data.signingPath).toBe('/receipt-generator/session-1');
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });

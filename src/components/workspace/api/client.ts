@@ -1,6 +1,7 @@
 'use client';
 
 import { translateApiErrorCode, translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
+import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
 const DECIMAL_KEYS = new Set([
   'amount',
@@ -599,7 +600,7 @@ export async function fetchCustomerCandidatesByMark(mark: string): Promise<{ suc
   const normalized = mark.trim();
   if (!normalized) return { success: true, data: [] };
 
-  const key = normalized.toLowerCase();
+  const key = normalizeOrderIdentifier(normalized);
   const now = Date.now();
   const cached = customerMarkCache.get(key);
   if (cached && now - cached.timestamp <= CUSTOMER_MARK_CACHE_TTL_MS) {

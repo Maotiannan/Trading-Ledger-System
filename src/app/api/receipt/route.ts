@@ -16,6 +16,7 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
+import { buildReceiptBalanceAfterMap } from '@/lib/receipt-balance';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import {
   createReceiptRecord,
@@ -123,7 +124,47 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, data: filterRowsBySearch(receipts, search) });
+    const orderIds = Array.from(new Set(
+      receipts
+        .map((receipt) => receipt.orderId)
+        .filter((value): value is string => typeof value === 'string' && value.length > 0),
+    ));
+    const balanceMap = new Map<string, number | null>();
+    if (orderIds.length > 0) {
+      const orderAmounts = new Map<string, number>();
+      for (const receipt of receipts) {
+        if (!receipt.orderId || !receipt.order) continue;
+        orderAmounts.set(receipt.orderId, Number(receipt.order.amount));
+      }
+      const orderReceipts = await db.receipt.findMany({
+        where: {
+          orderId: { in: orderIds },
+          ...buildReceiptVisibilityWhere(ownerIds),
+        },
+        select: {
+          id: true,
+          orderId: true,
+          usd: true,
+          createdAt: true,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+      const computed = buildReceiptBalanceAfterMap(
+        orderReceipts.map((row) => ({
+          ...row,
+          usd: Number(row.usd),
+        })),
+        orderAmounts,
+      );
+      for (const [receiptId, value] of computed.entries()) balanceMap.set(receiptId, value);
+    }
+
+    const enrichedReceipts = receipts.map((receipt) => ({
+      ...receipt,
+      balanceAfter: balanceMap.get(receipt.id) ?? null,
+    }));
+
+    return NextResponse.json({ success: true, data: filterRowsBySearch(enrichedReceipts, search) });
   } catch (error) {
     console.error('Get receipts error:', error);
     return toApiErrorResponse(error, {

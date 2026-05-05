@@ -45,6 +45,48 @@ export function CustomerFormDialog({
         <div className="space-y-3">
           <Input placeholder="MARK*" value={form.mark} onChange={(e) => onFormChange((prev) => ({ ...prev, mark: e.target.value }))} />
           <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => onFormChange((prev) => ({ ...prev, orderName: e.target.value }))} />
+          {editing && (
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">{tx('附加 ORDER_NAME', 'Additional ORDER_NAME')}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onFormChange((prev) => ({ ...prev, orderNames: [...prev.orderNames, ''] }))}
+                >
+                  {tx('新增', 'Add')}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {form.orderNames.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{tx('当前没有附加 ORDER_NAME', 'No additional ORDER_NAME yet.')}</p>
+                ) : form.orderNames.map((value, index) => (
+                  <div key={`alias-${index}`} className="flex items-center gap-2">
+                    <Input
+                      placeholder={tx('附加 ORDER_NAME', 'Additional ORDER_NAME')}
+                      value={value}
+                      onChange={(e) => onFormChange((prev) => ({
+                        ...prev,
+                        orderNames: prev.orderNames.map((item, itemIndex) => (itemIndex === index ? e.target.value : item)),
+                      }))}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onFormChange((prev) => ({
+                        ...prev,
+                        orderNames: prev.orderNames.filter((_, itemIndex) => itemIndex !== index),
+                      }))}
+                    >
+                      {tx('删除', 'Remove')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <Input placeholder="NAME*" value={form.name} onChange={(e) => onFormChange((prev) => ({ ...prev, name: e.target.value }))} />
           <div className="space-y-1">
             <Input

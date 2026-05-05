@@ -24,6 +24,7 @@ export type ReceiptGeneratorLaunchDialogProps = {
   open: boolean;
   orderNo: string;
   usdAmount: string;
+  paymentMode: 'Cash' | 'Transfer';
   loadingContext: boolean;
   creatingSession: boolean;
   error: string | null;
@@ -32,6 +33,7 @@ export type ReceiptGeneratorLaunchDialogProps = {
   onOpenChange: (open: boolean) => void;
   onOrderNoChange: (value: string) => void;
   onUsdAmountChange: (value: string) => void;
+  onPaymentModeChange: (value: 'Cash' | 'Transfer') => void;
   onSubmit: () => void;
 };
 
@@ -44,6 +46,7 @@ export function ReceiptGeneratorLaunchDialog({
   open,
   orderNo,
   usdAmount,
+  paymentMode,
   loadingContext,
   creatingSession,
   error,
@@ -52,6 +55,7 @@ export function ReceiptGeneratorLaunchDialog({
   onOpenChange,
   onOrderNoChange,
   onUsdAmountChange,
+  onPaymentModeChange,
   onSubmit,
 }: ReceiptGeneratorLaunchDialogProps) {
   return (
@@ -86,6 +90,19 @@ export function ReceiptGeneratorLaunchDialog({
               onChange={(event) => onUsdAmountChange(event.target.value)}
               placeholder="2500"
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="receipt-generator-payment-mode">{tx('支付方式', 'Mode de paiement')}</Label>
+            <select
+              id="receipt-generator-payment-mode"
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={paymentMode}
+              onChange={(event) => onPaymentModeChange(event.target.value === 'Transfer' ? 'Transfer' : 'Cash')}
+            >
+              <option value="Cash">Cash</option>
+              <option value="Transfer">Transfer</option>
+            </select>
           </div>
 
           <div className="rounded-lg border p-4 text-sm space-y-2">

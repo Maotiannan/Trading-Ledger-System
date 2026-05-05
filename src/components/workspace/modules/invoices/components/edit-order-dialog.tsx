@@ -57,6 +57,13 @@ export function EditOrderDialog({
             />
           </div>
           <div className="space-y-2">
+            <Label>{tx('账单号 (INV NO)', 'Invoice No. (INV NO)')}</Label>
+            <Input
+              value={order?.invNo || ''}
+              onChange={(e) => order && onOrderChange({ ...order, invNo: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
             <Label>{tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}</Label>
             <Input
               type="number"

@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.113
+> 当前版本：v1.0.114
 > 最后更新：2026-05-05
 
 ## 当前状态
@@ -45,6 +45,12 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.114
+- 客户匹配内核统一收口：新增全局 `ORDER_NAME` 规范化匹配层，所有依赖 `ORDER_NAME` 的入口现在都会忽略空格并共用同一套匹配规则；客户主数据新增可维护的多 `ORDER_NAME` 别名，`SUPER DT 2 / SUPERDT2 / S U P E R D T 2` 这类输入会命中同一客户并回填规范 `MARK` 等主数据字段。
+- `Invoice -> Bulk Import Invoices`、账单创建/改单/rematch、收据 OCR/直建、签名收据订单上下文等入口已全部提升到同一匹配水平；`Invoice` 订单编辑同时支持修改 `INV NO`，订单会事务化迁移到目标发票组并同步关联收据的 `INV NO`。
+- `Receipts` 列表新增 `Balance` 列，显示对应订单在本笔收据入账后的剩余余额；`Upload Receipt` 在 OCR 识别出 `ORDER NO` 后会优先使用数据库命中的订单/客户信息整套回填，只有命不中时才退回 OCR 原始字段。
+- `Payment Detail` 手工直建记录新增 `Export Pic`，可导出规范的明细图片；`Generate Signed Receipt` 新增 `Mode de paiement` 下拉与收据显示，支持 `Cash / Transfer`。
 
 ### v1.0.112
 - 付款明细与 SWIFT 新增“修改审批”能力：`SALES` 及以上权限账号可以对自己可见范围内的记录发起修改；`SALES` 提交后进入待审批状态，`ADMIN` 对自己可见范围内的记录可直接修改。

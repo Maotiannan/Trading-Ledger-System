@@ -20,6 +20,10 @@ jest.mock('@/lib/db', () => ({
       create: jest.fn(),
       update: jest.fn(),
     },
+    customerOrderName: {
+      deleteMany: jest.fn(),
+      createMany: jest.fn(),
+    },
     order: {
       findUnique: jest.fn(),
       update: jest.fn(),
@@ -69,6 +73,7 @@ function makeUser(overrides: Partial<{
 
 const mockDb = db as unknown as {
   customer: { create: jest.Mock; update: jest.Mock };
+  customerOrderName: { deleteMany: jest.Mock; createMany: jest.Mock };
   order: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findMany: jest.Mock };
   receipt: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findMany: jest.Mock };
   $transaction: jest.Mock;
@@ -85,6 +90,8 @@ describe('customer-fix-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
+    mockDb.customerOrderName.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.customerOrderName.createMany.mockResolvedValue({ count: 1 });
     mockGetSystemSettings.mockResolvedValue({ SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS: 'true' });
     mockResolveCustomerOwnerId.mockResolvedValue('sales-1');
     mockResolveCustomerUpsertTargetId.mockResolvedValue(null);

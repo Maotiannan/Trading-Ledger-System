@@ -27,6 +27,7 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
   const [form, setForm] = useState<CustomerFormState>({
     mark: '',
     orderName: '',
+    orderNames: [],
     name: '',
     phone: '',
     city: '',
@@ -41,6 +42,7 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
     setForm({
       mark: '',
       orderName: '',
+      orderNames: [],
       name: '',
       phone: '',
       city: '',
@@ -53,10 +55,16 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
   }, [defaultOwnerId, importOwnerId, isAdmin]);
 
   const openEdit = useCallback((row: Record<string, unknown>) => {
+    const rawOrderNames = Array.isArray(row.orderNames) ? row.orderNames : [];
+    const additionalOrderNames = rawOrderNames
+      .filter((item) => item && typeof item === 'object' && !(item as Record<string, unknown>).isPrimary)
+      .map((item) => String((item as Record<string, unknown>).orderName || ''))
+      .filter(Boolean);
     setEditing(row);
     setForm({
       mark: String(row.mark || ''),
       orderName: String(row.orderName || ''),
+      orderNames: additionalOrderNames,
       name: String(row.name || ''),
       phone: String(row.phone || ''),
       city: String(row.city || ''),
@@ -74,6 +82,7 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
     setForm({
       mark: String(row.customerMark || ''),
       orderName: String(row.customerName || ''),
+      orderNames: [],
       name: '',
       phone: String(row.customerPhone || ''),
       city: String(row.customerCity || ''),

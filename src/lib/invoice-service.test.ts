@@ -30,6 +30,9 @@ jest.mock('@/lib/db', () => ({
     customer: {
       findMany: jest.fn(),
     },
+    customerOrderName: {
+      findMany: jest.fn(),
+    },
     invoice: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -110,6 +113,9 @@ function makeUser(overrides: Partial<{
 
 const mockDb = db as unknown as {
   customer: {
+    findMany: jest.Mock;
+  };
+  customerOrderName: {
     findMany: jest.Mock;
   };
   invoice: {
@@ -300,8 +306,12 @@ describe('invoice-service', () => {
 
   it('imports invoice rows by auto-inferring customer mark from customer order name', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([]);
-    mockDb.customer.findMany.mockResolvedValueOnce([
-      { id: 'customer-1', mark: 'BIG ALPHA', orderName: 'BIG ALPHA' },
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      {
+        orderName: 'BIG ALPHA',
+        normalizedOrderName: 'bigalpha',
+        customer: { id: 'customer-1', mark: 'BIG ALPHA', orderName: 'BIG ALPHA' },
+      },
     ]);
     mockFindOrderIdByNoOrAlias
       .mockResolvedValueOnce(null)
@@ -353,11 +363,55 @@ describe('invoice-service', () => {
     }));
   });
 
+  it('imports invoice rows by matching ORDER_NAME aliases while ignoring spaces', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      {
+        orderName: 'SUPER DT 2',
+        normalizedOrderName: 'superdt2',
+        customer: { id: 'customer-sdt2', mark: 'SDT 2', orderName: 'SUPER DT 2' },
+      },
+    ]);
+    mockFindOrderIdByNoOrAlias
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockSaveInvoiceWithOrders.mockResolvedValueOnce({
+      ok: true,
+      data: { id: 'inv-sdt2' },
+      message: '账单已保存',
+    });
+
+    const result = await processInvoiceImportRows([
+      {
+        rowNo: 4,
+        invNo: 'INV-SDT2-1',
+        shipDateRaw: '',
+        releaseDateRaw: '',
+        orderNo: 'SUPERDT2-09',
+        amountRaw: '800',
+        customerMark: '',
+        customerName: '',
+        customerId: '',
+      },
+    ], makeUser());
+
+    expect(result.success).toBe(true);
+    expect(result.rowResults).toEqual([
+      expect.objectContaining({
+        orderNo: 'SUPERDT2-09',
+        customerMark: 'SDT 2',
+        customerName: 'SUPER DT 2',
+        customerId: 'customer-sdt2',
+        status: 'SUCCESS',
+      }),
+    ]);
+  });
+
   it('returns issue rows when composite invoice orders map to different customer marks', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([]);
-    mockDb.customer.findMany.mockResolvedValueOnce([
-      { id: 'customer-ib', mark: 'IB', orderName: 'IB' },
-      { id: 'customer-ab', mark: 'AB', orderName: 'AB' },
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      { orderName: 'IB', normalizedOrderName: 'ib', customer: { id: 'customer-ib', mark: 'IB', orderName: 'IB' } },
+      { orderName: 'AB', normalizedOrderName: 'ab', customer: { id: 'customer-ab', mark: 'AB', orderName: 'AB' } },
     ]);
     mockFindOrderIdByNoOrAlias
       .mockResolvedValueOnce(null)
@@ -397,7 +451,7 @@ describe('invoice-service', () => {
 
   it('rejects invoice import when no usable rows remain', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([]);
-    mockDb.customer.findMany.mockResolvedValueOnce([]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
 
     const result = await processInvoiceImportRows([
       {
@@ -708,6 +762,75 @@ describe('invoice-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'ORDER_UPDATE',
       targetId: 'order-1',
+    }));
+  });
+
+  it('moves an order into a different INV group and syncs linked receipt invNo', async () => {
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'IB',
+      customerPhone: '+224620000000',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      matchedBy: 'mark',
+      candidateCount: 1,
+    });
+    mockDb.order.findFirst
+      .mockResolvedValueOnce({
+        id: 'order-1',
+        invoiceId: 'inv-old',
+        orderNo: 'IB-01',
+        amount: 100,
+        customerId: 'customer-1',
+        customerMark: 'IB',
+        customerName: 'IB',
+        customerPhone: '+224620000000',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+      });
+    mockDb.invoice.findFirst
+      .mockResolvedValueOnce({ id: 'inv-old', invNo: 'INV-OLD' })
+      .mockResolvedValueOnce({ id: 'inv-new', invNo: 'INV-NEW' });
+    mockDb.order.findFirst.mockResolvedValueOnce(null);
+    mockDb.order.update.mockResolvedValueOnce({
+      id: 'order-1',
+      invoiceId: 'inv-new',
+      orderNo: 'IB-01',
+      amount: 100,
+    });
+    mockDb.order.count.mockResolvedValueOnce(0);
+
+    const result = await updateInvoiceOrder(makeUser(), {
+      orderId: 'order-1',
+      invNo: 'INV-NEW',
+      orderNo: 'IB-01',
+      amount: 100,
+      customerMark: 'IB',
+      customerName: 'IB',
+      customerId: 'customer-1',
+    });
+
+    expect(result.message).toBe('订单已更新');
+    expect(mockDb.order.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        invoiceId: 'inv-new',
+      }),
+    }));
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { orderId: 'order-1' },
+      data: expect.objectContaining({
+        invNo: 'INV-NEW',
+      }),
+    });
+    expect(mockDb.invoice.delete).toHaveBeenCalledWith({ where: { id: 'inv-old' } });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_UPDATE',
+      metadata: expect.objectContaining({
+        before: expect.objectContaining({ invNo: 'INV-OLD' }),
+        after: expect.objectContaining({ invNo: 'INV-NEW' }),
+      }),
     }));
   });
 

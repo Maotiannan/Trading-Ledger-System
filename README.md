@@ -34,9 +34,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.113`
-- 本次更新：修复了手机端 `Upload Payment Detail` 在 AI 识别成功后点击 `Confirm Create` 报 `Invalid input: expected array, received undefined` 的问题。付款明细 OCR 确认创建现在同时兼容顶层 payload 和前端当前使用的嵌套 `data` payload，不会再因为解析错层导致确认失败。
-- 上一批更新：付款明细与 SWIFT 现在也接入了和收据一致的“修改审批”能力。`SALES` 对可见记录发起修改时，会提示“成功提交，等待管理员同意”；`ADMIN` 在可见范围内直接修改会提示“修改已完成”。
+- 当前版本：`1.0.114`
+- 本次更新：客户匹配内核现在全局统一支持“忽略空格 + 多 `ORDER_NAME` 别名”。同一客户可在客户管理编辑时维护多个独立 `ORDER_NAME`，账单批量导入、账单创建/改单/rematch、收据 OCR/直建、签名收据订单上下文等入口会共用同一套匹配规则，并始终回填客户主数据中的规范 `MARK / payer / phone` 等字段。
+- 同批更新：`Invoice` 订单编辑新增可改 `INV NO`，改完后订单会事务化迁移到目标发票分组；`Receipts` 列表新增 `Balance` 列；`Upload Receipt` 在 AI 已识别出 `ORDER NO` 时会优先用数据库订单回填整套信息，只有命不中才回退 OCR 内容。
+- 同批更新：`Payment Detail` 手工直建记录新增 `Export Pic`，可导出一张规范明细图片；`Generate Signed Receipt` 新增 `Mode de paiement` 选项，支持 `Cash / Transfer` 并显示在 `RESTE A PAYER` 同行右侧。
 - `Detail` 仅允许在 `Waiting_SWIFT / ERROR` 状态下修改 `date` 与每行的 `mark / orderNo / amount / receiptId`；`Swift` 仅允许在 `ERROR / Bank_Transfer` 状态下修改 `date / amount / senderName / senderAddress / receiverName / receiverAccount`。已完成链路的记录不会开放修改。
 - 同一条收据、付款明细或 SWIFT 在待审批期间都不能重复提交新的修改申请；审批通过后才会正式写回数据。
 - 上一批更新已完成收据管理移动端体验优化：顶部操作按钮在窄屏下会自动换行/纵向堆叠；直接上传图片确认页改为固定返回/确认头部，超长图片会在预览区内按可视高度缩放并独立滚动，避免确认按钮被挤出屏幕。

@@ -221,10 +221,11 @@ export function useInvoiceOrderForms(loadCustomerCandidates: LoadCustomerCandida
     setAddError('');
   };
 
-  const openEditOrder = (invoiceId: string, order: Order) => {
+  const openEditOrder = (invoiceId: string, invoiceInvNo: string, order: Order) => {
     setEditingOrder({
       id: order.id,
       orderNo: order.orderNo,
+      invNo: invoiceInvNo,
       amount: order.amount,
       invoiceId,
       customerMark: order.customerMark || '',

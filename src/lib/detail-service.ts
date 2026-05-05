@@ -1,4 +1,4 @@
-import { DetailStatus, ReceiptStatus, UploadedAssetAttachmentType } from '@prisma/client';
+import { DetailSourceMode, DetailStatus, ReceiptStatus, UploadedAssetAttachmentType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
@@ -308,6 +308,7 @@ export async function createDetailRecord(params: {
       data: {
         date: effectiveDate,
         status: DetailStatus.Waiting_SWIFT,
+        sourceMode: mode === 'direct-create' ? DetailSourceMode.DIRECT : DetailSourceMode.OCR,
         imageUrl: mode === 'direct-create' ? null : (imagePath || null),
         imageName: mode === 'direct-create' ? null : (imageName || null),
         totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),

@@ -218,6 +218,13 @@ export function DetailManager() {
     }
   };
 
+  const handleExportDetailPic = (detailId: string) => {
+    const anchor = document.createElement('a');
+    anchor.href = `/api/detail?action=export-pic&detailId=${encodeURIComponent(detailId)}`;
+    anchor.rel = 'noopener';
+    anchor.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -286,6 +293,7 @@ export function DetailManager() {
           });
         }}
         onEditDetail={openEditDialog}
+        onExportDetailPic={handleExportDetailPic}
         onDeleteDetail={handleDeleteDetail}
       />
 

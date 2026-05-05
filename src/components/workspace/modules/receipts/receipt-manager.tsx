@@ -223,6 +223,8 @@ export function ReceiptManager() {
     setGeneratorOrderNo,
     generatorUsdAmount,
     setGeneratorUsdAmount,
+    generatorPaymentMode,
+    setGeneratorPaymentMode,
     generatorContext,
     generatorContextLoading,
     generatorCreating,
@@ -481,6 +483,7 @@ export function ReceiptManager() {
         open={showGeneratorLaunch}
         orderNo={generatorOrderNo}
         usdAmount={generatorUsdAmount}
+        paymentMode={generatorPaymentMode}
         loadingContext={generatorContextLoading}
         creatingSession={generatorCreating}
         error={generatorError}
@@ -492,6 +495,7 @@ export function ReceiptManager() {
         }}
         onOrderNoChange={setGeneratorOrderNo}
         onUsdAmountChange={setGeneratorUsdAmount}
+        onPaymentModeChange={setGeneratorPaymentMode}
         onSubmit={createGeneratorSession}
       />
 

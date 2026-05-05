@@ -36,6 +36,7 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
     clientTel: session.clientTel,
     usdAmount: Number(session.usd),
     balanceBefore: session.balanceBefore === null ? null : Number(session.balanceBefore),
+    paymentMode: snapshot?.paymentMode === 'Transfer' ? 'Transfer' : 'Cash',
     generatedAt: session.createdAt,
   });
 

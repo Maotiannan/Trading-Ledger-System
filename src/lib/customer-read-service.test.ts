@@ -220,6 +220,42 @@ describe('customer-read-service', () => {
     ]);
   });
 
+  it('filters mark lookups while ignoring spaces', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'SDT 2',
+        orderName: 'SUPER DT 2',
+        orderNames: [{ orderName: 'SUPER DT 2', normalizedOrderName: 'superdt2', isPrimary: true }],
+        name: 'Super DT',
+        phone: '622443103',
+        city: 'Conakry',
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+      {
+        id: 'customer-2',
+        mark: 'MAB 1',
+        orderName: 'MAB-1',
+        orderNames: [{ orderName: 'MAB-1', normalizedOrderName: 'mab-1', isPrimary: true }],
+        name: 'MAB',
+        phone: '620000000',
+        city: 'Conakry',
+        owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser(), { mark: 'S D T2' });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: 'customer-1',
+        mark: 'SDT 2',
+      }),
+    ]);
+  });
+
   it('rejects non-manager customer list reads', async () => {
     await expect(listCustomers(makeUser({
       id: 'user-1',
@@ -352,6 +388,40 @@ describe('customer-read-service', () => {
       expect.objectContaining({
         id: 'customer-3',
         phoneConflict: false,
+      }),
+    ]);
+  });
+
+  it('returns customer order-name aliases for customer management edits', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'MAB',
+        orderName: 'MAB-1',
+        name: 'Mamadou Aliou Barry',
+        phone: '+224 620 07 11 76',
+        city: 'Conakry',
+        companyName: 'MAB Co',
+        companyAddress: 'Address',
+        credit: 0,
+        ownerId: 'admin-1',
+        orderNames: [
+          { orderName: 'MAB-1', normalizedOrderName: 'mab-1', isPrimary: true },
+          { orderName: 'MARY', normalizedOrderName: 'mary', isPrimary: false },
+        ],
+        owner: { id: 'admin-1', email: 'admin@example.com', name: 'Admin', role: UserRole.ADMIN, level: 1 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser(), { search: 'MAB' });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        orderNames: [
+          expect.objectContaining({ orderName: 'MAB-1', isPrimary: true }),
+          expect.objectContaining({ orderName: 'MARY', isPrimary: false }),
+        ],
       }),
     ]);
   });

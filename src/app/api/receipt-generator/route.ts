@@ -69,6 +69,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         const result = await createReceiptGeneratorSession(currentUser, {
           orderNo: typeof body.orderNo === 'string' ? body.orderNo : '',
           usdAmount: Number(body.usdAmount),
+          paymentMode: typeof body.paymentMode === 'string' ? body.paymentMode : null,
         });
         return createApiSuccessResponse(result, request);
       }

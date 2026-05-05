@@ -1,5 +1,6 @@
 import { Prisma, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
+import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import type { CurrentUser } from '@/lib/request-auth';
 
 type CustomerScopeDbClient = Pick<typeof db, 'user' | 'customer'>;
@@ -27,6 +28,7 @@ type CustomerCollision = {
   orderName: string;
   phone: string;
   companyName: string | null;
+  normalizedOrderNames: string[];
 };
 
 export function normalizeCompanyName(value: string | null | undefined): string | null {
@@ -96,29 +98,46 @@ async function findScopeCollisions(
   options?: { includePhone?: boolean },
   client: CustomerScopeDbClient = db,
 ): Promise<CustomerCollision[]> {
-  const conditions: Prisma.CustomerWhereInput[] = [
-    { orderName: { equals: input.orderName } },
-  ];
-  if (options?.includePhone !== false) {
-    conditions.push({ phone: { equals: input.phone } });
-  }
-  if (input.companyName) {
-    conditions.push({ companyName: { equals: input.companyName } });
-  }
-
-  return client.customer.findMany({
+  const normalizedOrderName = normalizeOrderIdentifier(input.orderName);
+  const rows = await client.customer.findMany({
     where: {
       ownerId,
       ...(excludeId ? { id: { not: excludeId } } : {}),
-      OR: conditions,
     },
     select: {
       id: true,
       orderName: true,
       phone: true,
       companyName: true,
+      orderNames: {
+        select: {
+          normalizedOrderName: true,
+        },
+      },
     },
   });
+
+  return rows
+    .map((row) => ({
+      id: row.id,
+      orderName: row.orderName,
+      phone: row.phone,
+      companyName: row.companyName,
+      normalizedOrderNames: Array.from(new Set(
+        (row.orderNames || []).map((alias) => alias.normalizedOrderName).filter(Boolean),
+      )),
+    }))
+    .filter((row) => {
+      const orderMatched = normalizedOrderName
+        ? row.normalizedOrderNames.includes(normalizedOrderName)
+        : false;
+      const companyMatched = input.companyName ? row.companyName === input.companyName : false;
+      if (options?.includePhone === false) {
+        return orderMatched || companyMatched;
+      }
+      const phoneMatched = !!input.phone && row.phone === input.phone;
+      return orderMatched || companyMatched || phoneMatched;
+    });
 }
 
 export async function assertNoCustomerScopeConflict(
@@ -132,8 +151,9 @@ export async function assertNoCustomerScopeConflict(
   if (collisions.length === 0) return;
 
   const duplicatedFields = new Set<string>();
+  const normalizedOrderName = normalizeOrderIdentifier(input.orderName);
   for (const row of collisions) {
-    if (row.orderName === input.orderName) duplicatedFields.add('ORDER_NAME');
+    if (normalizedOrderName && row.normalizedOrderNames.includes(normalizedOrderName)) duplicatedFields.add('ORDER_NAME');
     if (companyName && row.companyName === companyName) duplicatedFields.add('COMPANY_NAME');
   }
 
@@ -159,7 +179,10 @@ export async function resolveCustomerUpsertTargetId(
     return collisions[0].id;
   }
 
-  const orderNameHits = collisions.filter((row) => row.orderName === input.orderName).map((row) => row.id);
+  const normalizedOrderName = normalizeOrderIdentifier(input.orderName);
+  const orderNameHits = collisions
+    .filter((row) => normalizedOrderName && row.normalizedOrderNames.includes(normalizedOrderName))
+    .map((row) => row.id);
   const companyHits = companyName
     ? collisions.filter((row) => row.companyName === companyName).map((row) => row.id)
     : [];

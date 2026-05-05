@@ -9,6 +9,7 @@ export type CustomerOwnerOption = {
 export type CustomerFormState = {
   mark: string;
   orderName: string;
+  orderNames: string[];
   name: string;
   phone: string;
   city: string;

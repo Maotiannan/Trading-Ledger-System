@@ -12,11 +12,13 @@ import {
   mapPrismaWriteError,
   resolveCustomerOwnerId,
 } from '@/lib/customer-scope';
+import { syncCustomerOrderNames } from '@/lib/customer-order-name-service';
 import { runInTransaction } from '@/lib/transaction';
 
 export type CustomerPayload = {
   mark?: string;
   orderName?: string;
+  orderNames?: string[];
   name?: string;
   phone?: string;
   city?: string;
@@ -164,6 +166,9 @@ function validateRequired(payload: CustomerPayload): string | null {
   if (!payload.city) return 'CITY不能为空';
   if ((payload.mark?.length || 0) > 191) return 'MARK长度不能超过191';
   if ((payload.orderName?.length || 0) > 191) return 'ORDER_NAME长度不能超过191';
+  if (Array.isArray(payload.orderNames) && payload.orderNames.some((item) => trimStr(item).length > 191)) {
+    return '附加ORDER_NAME长度不能超过191';
+  }
   if ((payload.phone?.length || 0) > 191) return 'PHONE长度不能超过191';
   if ((payload.city?.length || 0) > 191) return 'CITY长度不能超过191';
   if (payload.credit !== null && payload.credit !== undefined) {
@@ -236,6 +241,7 @@ export async function createCustomerRecord(
       created = await tx.customer.create({
         data: {
           mark: payload.mark!,
+          normalizedMark: normalizeMarkForMatch(payload.mark!),
           orderName: payload.orderName!,
           name: payload.name!,
           phone: payload.phone!,
@@ -248,6 +254,7 @@ export async function createCustomerRecord(
           ownerId,
         },
       });
+      await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName!, payload.orderNames || []);
 
       const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, created.id, tx);
       phoneConflict = phoneConflicts.length > 0;
@@ -333,6 +340,7 @@ export async function updateCustomerRecord(
         where: { id },
         data: {
           mark: payload.mark!,
+          normalizedMark: normalizeMarkForMatch(payload.mark!),
           orderName: payload.orderName!,
           name: payload.name!,
           phone: payload.phone!,
@@ -348,6 +356,7 @@ export async function updateCustomerRecord(
             : {}),
         },
       });
+      await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], id, payload.orderName!, payload.orderNames || []);
 
       const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, id, tx);
       phoneConflict = phoneConflicts.length > 0;
@@ -513,6 +522,7 @@ export async function processCustomerImportRows(
         created = await tx.customer.create({
           data: {
             mark: payload.mark!,
+            normalizedMark: normalizeMarkForMatch(payload.mark!),
             orderName: payload.orderName!,
             name: payload.name!,
             phone: payload.phone!,
@@ -525,6 +535,7 @@ export async function processCustomerImportRows(
             ownerId: effectiveOwnerId,
           },
         });
+        await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName!, payload.orderNames || []);
       });
 
       await recordAuditEvent({

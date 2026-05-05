@@ -9,6 +9,7 @@ import { deriveOrderGroupKey } from '@/lib/order-group';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
+import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 
 function rankInvoice(invNo: string) {
   if (invNo === 'DEPOSIT_POOL') return 0;
@@ -239,25 +240,17 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
   } = null;
 
   if (derivedOrderName) {
-    const matchedCustomers = await db.customer.findMany({
-      where: {
-        ownerId: { in: ownerIds },
-        orderName: { equals: derivedOrderName },
-      },
-      select: {
-        id: true,
-        mark: true,
-        orderName: true,
-        companyName: true,
-        name: true,
-        phone: true,
-        city: true,
-      },
-      orderBy: [{ createdAt: 'desc' }],
-    });
+    const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, derivedOrderName);
 
     if (matchedCustomers.length === 1) {
-      inferredCustomer = matchedCustomers[0];
+      inferredCustomer = {
+        id: matchedCustomers[0].customer.id,
+        mark: matchedCustomers[0].customer.mark,
+        orderName: matchedCustomers[0].orderName,
+        name: matchedCustomers[0].customer.orderName,
+        phone: matchedCustomers[0].customer.phone,
+        city: matchedCustomers[0].customer.city,
+      };
     }
   }
 

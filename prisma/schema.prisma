@@ -68,6 +68,11 @@ enum DetailStatus {
   ERROR          // 金额不一致错误
 }
 
+enum DetailSourceMode {
+  OCR
+  DIRECT
+}
+
 // 删除申请状态枚举
 enum DeletionStatus {
   PENDING   // 待审批
@@ -365,6 +370,7 @@ model Detail {
   id           String        @id @default(cuid())
   date         DateTime?     // 明细创建时间
   status       DetailStatus  @default(Waiting_SWIFT)
+  sourceMode   DetailSourceMode @default(OCR)
   imageUrl     String?       @db.LongText // 图片路径
   imageName    String?       @db.Text // 图片原始名称
   totalAmount  Decimal       @default(0) @db.Decimal(18, 2) // 总金额
@@ -503,6 +509,7 @@ model SwiftEditRequest {
 model Customer {
   id             String   @id @default(cuid())
   mark           String
+  normalizedMark String   @map("normalized_mark")
   orderName      String   @map("order_name")
   name           String   @db.Text
   phone          String
@@ -518,12 +525,30 @@ model Customer {
 
   creator User @relation("CustomerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
   owner   User @relation("CustomerOwner", fields: [ownerId], references: [id])
+  orderNames CustomerOrderName[]
   orders  Order[]
   receipts Receipt[]
 
   @@index([mark])
+  @@index([normalizedMark])
   @@index([orderName])
   @@index([ownerId])
+}
+
+model CustomerOrderName {
+  id                  String   @id @default(cuid())
+  customerId          String
+  orderName           String   @map("order_name")
+  normalizedOrderName String   @map("normalized_order_name")
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, normalizedOrderName])
+  @@index([normalizedOrderName])
+  @@index([customerId, isPrimary])
 }
 
 // ==================== 删除申请表 ====================

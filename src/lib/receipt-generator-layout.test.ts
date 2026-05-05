@@ -17,6 +17,7 @@ describe('receipt-generator-layout', () => {
       clientTel: '628 38 63 63',
       usdAmount: 2500,
       balanceBefore: 34660,
+      paymentMode: 'Transfer',
       generatedAt: new Date('2026-04-27T01:02:03.000Z'),
     });
 
@@ -24,6 +25,7 @@ describe('receipt-generator-layout', () => {
     expect(layout.motif).toBe('Payment for L25MH060523 Big Alpha-07');
     expect(layout.balanceAfter).toBe(32160);
     expect(layout.resteAPayer).toBe('$34660.00 - $2500.00 = $32160.00');
+    expect(layout.paymentMode).toBe('Transfer');
     expect(layout.receivedBy).toBe('Mamadou Dian Diallo');
   });
 
@@ -42,5 +44,21 @@ describe('receipt-generator-layout', () => {
     });
 
     expect(layout.clientName).toBe('Alpha Oumar Diallo "Big Alpha"');
+  });
+
+  it('defaults payment mode to Cash', () => {
+    const layout = buildReceiptGeneratorLayout({
+      receiptNo: '0001002',
+      orderNo: 'MARY-01',
+      invNo: 'L25MH060525',
+      customerMark: 'MARY',
+      customerCompanyName: null,
+      customerName: 'Mamadou Aliou Barry',
+      clientTel: '+224 620 07 11 76',
+      usdAmount: 20,
+      balanceBefore: 100,
+    });
+
+    expect(layout.paymentMode).toBe('Cash');
   });
 });

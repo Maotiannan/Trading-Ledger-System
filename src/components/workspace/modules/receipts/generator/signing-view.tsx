@@ -38,6 +38,7 @@ type SessionPayload = {
     balanceBefore: number | null;
     balanceAfter: number | null;
     resteAPayer: string;
+    paymentMode?: 'Cash' | 'Transfer';
     receivedBy: string;
   };
 };

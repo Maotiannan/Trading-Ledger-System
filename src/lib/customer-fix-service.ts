@@ -12,6 +12,7 @@ import {
   resolveCustomerOwnerId,
   resolveCustomerUpsertTargetId,
 } from '@/lib/customer-scope';
+import { syncCustomerOrderNames } from '@/lib/customer-order-name-service';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 
 export type FixCustomerPayload = {
@@ -28,6 +29,10 @@ export type FixCustomerPayload = {
 
 function trimStr(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeMarkForMatch(value: string | null | undefined): string {
+  return trimStr(value).replace(/\s+/g, ' ').toLowerCase();
 }
 
 export function parseFixCustomerPayload(body: Record<string, unknown>): FixCustomerPayload | { error: string } {
@@ -84,10 +89,11 @@ async function upsertCustomer(
       targetId,
       tx,
     );
-    return tx.customer.update({
+    const updated = await tx.customer.update({
       where: { id: targetId },
       data: {
         mark: payload.mark,
+        normalizedMark: normalizeMarkForMatch(payload.mark),
         orderName: payload.orderName,
         name: payload.name,
         phone: payload.phone,
@@ -103,6 +109,8 @@ async function upsertCustomer(
           : {}),
       },
     });
+    await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], updated.id, payload.orderName);
+    return updated;
   }
 
   await assertNoCustomerScopeConflict(ownerId, {
@@ -110,9 +118,10 @@ async function upsertCustomer(
     phone: payload.phone,
     companyName: scopedCompanyName,
   }, undefined, tx);
-  return tx.customer.create({
+  const created = await tx.customer.create({
     data: {
       mark: payload.mark,
+      normalizedMark: normalizeMarkForMatch(payload.mark),
       orderName: payload.orderName,
       name: payload.name,
       phone: payload.phone,
@@ -125,6 +134,8 @@ async function upsertCustomer(
       ownerId,
     },
   });
+  await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName);
+  return created;
 }
 
 async function syncSameGroupCustomer(

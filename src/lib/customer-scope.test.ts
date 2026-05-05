@@ -27,6 +27,7 @@ describe('customer-scope', () => {
         id: 'customer-1',
         mark: 'IB',
         orderName: 'IB',
+        orderNames: [{ normalizedOrderName: 'ib' }],
         name: 'Ibrahima',
         phone: '622443103',
         ownerId: 'sales-1',
@@ -49,6 +50,7 @@ describe('customer-scope', () => {
         id: 'customer-1',
         mark: 'IB',
         orderName: 'IB',
+        orderNames: [{ normalizedOrderName: 'ib' }],
         name: 'Ibrahima',
         phone: '622443103',
         ownerId: 'sales-1',
@@ -84,8 +86,32 @@ describe('customer-scope', () => {
     expect(mockDb.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: {
         ownerId: 'sales-1',
-        OR: [{ orderName: { equals: 'TARGET' } }],
       },
     }));
+  });
+
+  it('matches existing customer aliases while ignoring spaces for upsert resolution', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'SDT 2',
+        orderName: 'SUPER DT 2',
+        orderNames: [
+          { normalizedOrderName: 'superdt2' },
+          { normalizedOrderName: 'mab-1' },
+        ],
+        name: 'Super DT',
+        phone: '622443103',
+        companyName: null,
+      },
+    ]);
+
+    const result = await resolveCustomerUpsertTargetId('sales-1', {
+      orderName: 'S U P E R D T2',
+      phone: '622443103',
+      companyName: null,
+    });
+
+    expect(result).toBe('customer-1');
   });
 });

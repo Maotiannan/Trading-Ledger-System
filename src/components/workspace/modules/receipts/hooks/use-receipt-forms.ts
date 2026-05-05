@@ -121,6 +121,12 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
         }
 
         const matched = context.matchedCustomer;
+        if (context.phoneSuggestion) {
+          setOcrResult((prev) => prev ? ({ ...prev, tel: context.phoneSuggestion || prev.tel }) : prev);
+        }
+        if (context.payerSuggestion) {
+          setOcrResult((prev) => prev ? ({ ...prev, payer: context.payerSuggestion || prev.payer }) : prev);
+        }
         if (!matched) return;
         setOcrCustomerMark(matched.mark);
         setOcrCustomerName(matched.name);

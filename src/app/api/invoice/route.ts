@@ -325,6 +325,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
     if (action === 'updateOrder') {
       const result = await updateInvoiceOrder(currentUser, {
         orderId: typeof body.orderId === 'string' ? body.orderId : '',
+        invNo: typeof body.invNo === 'string' ? body.invNo : undefined,
         orderNo: typeof body.orderNo === 'string' ? body.orderNo : undefined,
         amount: body.amount !== undefined ? Number(body.amount) : undefined,
         customerMark: typeof body.customerMark === 'string' ? body.customerMark : undefined,

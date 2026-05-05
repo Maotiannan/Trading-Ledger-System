@@ -59,12 +59,14 @@ export function ReceiptUploadDialog({
 }: ReceiptUploadDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{tx('上传收据', 'Upload Receipt')}</DialogTitle>
-          <DialogDescription>{tx('上传收据图片，AI将自动识别内容', 'Upload a receipt image and let AI recognize fields automatically')}</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 py-4">
+      <DialogContent className="max-w-2xl p-0 overflow-hidden max-h-[90vh]">
+        <div className="flex max-h-[90vh] flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <DialogTitle>{tx('上传收据', 'Upload Receipt')}</DialogTitle>
+            <DialogDescription>{tx('上传收据图片，AI将自动识别内容', 'Upload a receipt image and let AI recognize fields automatically')}</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="space-y-4">
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -97,7 +99,7 @@ export function ReceiptUploadDialog({
           {ocrResult && (
             <div className="space-y-3 border rounded-lg p-4">
               <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label className="text-sm text-gray-500">{tx('收据号', 'Receipt No.')}</Label>
                   <Input value={(ocrResult.receiptNo as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, receiptNo: e.target.value })} />
@@ -159,22 +161,24 @@ export function ReceiptUploadDialog({
               </div>
             </div>
           )}
+            </div>
+          </div>
+          <DialogFooter className="shrink-0 border-t px-6 py-4">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
+            <Button onClick={onConfirm} disabled={!ocrResult || submitting || uploading}>
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {tx('处理中...', 'Processing...')}
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-          <Button onClick={onConfirm} disabled={!ocrResult || submitting || uploading}>
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                {tx('处理中...', 'Processing...')}
-              </>
-            ) : (
-              <>
-                <Check className="h-4 w-4 mr-2" /> {tx('确认创建', 'Confirm Create')}
-              </>
-            )}
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

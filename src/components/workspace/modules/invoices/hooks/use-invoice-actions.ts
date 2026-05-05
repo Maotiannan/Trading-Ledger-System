@@ -20,6 +20,7 @@ export type InvoiceActionDeps = {
   editingOrder: {
     id: string;
     orderNo: string;
+    invNo: string;
     amount: number;
     customerMark: string;
     customerName: string;
@@ -143,6 +144,10 @@ export function useInvoiceActions({
       setOrderFormError(tx('请输入客户单号', 'Please enter order number.'));
       return;
     }
+    if (!editingOrder.invNo.trim()) {
+      setOrderFormError(tx('请输入账单号', 'Please enter invoice number.'));
+      return;
+    }
     if (!Number.isFinite(editingOrder.amount) || editingOrder.amount < 0) {
       setOrderFormError(tx('请输入有效金额(>=0)', 'Please enter a valid amount (>=0).'));
       return;
@@ -156,6 +161,7 @@ export function useInvoiceActions({
           action: 'updateOrder',
           orderId: editingOrder.id,
           orderNo: editingOrder.orderNo,
+          invNo: editingOrder.invNo,
           amount: editingOrder.amount,
           customerMark: editingOrder.customerMark,
           customerName: editingOrder.customerName || null,

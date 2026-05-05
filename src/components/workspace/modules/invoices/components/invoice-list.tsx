@@ -51,7 +51,7 @@ export type InvoiceListProps = {
   onCancelAddOrder: () => void;
   onOpenOrderHistory: (orderId: string, orderNo: string) => void;
   onOpenTransfer: (order: TransferFromOrder) => void;
-  onOpenEditOrder: (invoiceId: string, order: Order) => void;
+  onOpenEditOrder: (invoiceId: string, invoiceInvNo: string, order: Order) => void;
   onDeleteOrder: (orderId: string) => void;
 };
 
@@ -284,7 +284,7 @@ export function InvoiceList({
                               <ArrowRight className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => onOpenEditOrder(invoice.id, order)}>
+                          <Button size="sm" variant="ghost" onClick={() => onOpenEditOrder(invoice.id, invoice.invNo, order)}>
                             <Pencil className="h-4 w-4" />
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => onDeleteOrder(order.id)}>

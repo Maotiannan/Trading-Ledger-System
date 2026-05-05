@@ -60,9 +60,13 @@ function localizeCustomerResponseData<T>(value: T, request: NextRequest): T {
 }
 
 function parsePayload(body: Record<string, unknown>): CustomerPayload {
+  const orderNames = Array.isArray(body.orderNames)
+    ? body.orderNames.map((value) => trimStr(value)).filter(Boolean)
+    : [];
   return {
     mark: trimStr(body.mark),
     orderName: trimStr(body.orderName),
+    orderNames,
     name: trimStr(body.name),
     phone: trimStr(body.phone),
     city: trimStr(body.city),

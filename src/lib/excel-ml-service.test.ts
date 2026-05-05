@@ -13,7 +13,7 @@ jest.mock('@/lib/db', () => ({
     order: {
       findMany: jest.fn(),
     },
-    customer: {
+    customerOrderName: {
       findMany: jest.fn(),
     },
   },
@@ -29,7 +29,7 @@ jest.mock('@/lib/user-hierarchy', () => ({
 
 const mockDb = db as unknown as {
   order: { findMany: jest.Mock };
-  customer: { findMany: jest.Mock };
+  customerOrderName: { findMany: jest.Mock };
 };
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
@@ -78,7 +78,7 @@ describe('excel-ml-service', () => {
     jest.clearAllMocks();
     mockGetHierarchyScope.mockResolvedValue({ ownerVisibleIds: new Set(['sales-1']) });
     mockDb.order.findMany.mockResolvedValue([]);
-    mockDb.customer.findMany.mockResolvedValue([]);
+    mockDb.customerOrderName.findMany.mockResolvedValue([]);
   });
 
   it('publishes the approved field catalog', () => {
@@ -98,7 +98,7 @@ describe('excel-ml-service', () => {
   });
 
   it('returns ORDER_NAME for field 1 after deriving it from order number', async () => {
-    mockDb.customer.findMany.mockResolvedValueOnce([makeCustomer()]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([{ orderName: 'GANDO', customer: makeCustomer() }]);
 
     const result = await resolveExcelMlValue(salesUser, { orderNo: 'GANDO-10', field: 1 });
 
@@ -111,17 +111,16 @@ describe('excel-ml-service', () => {
       matchedBy: 'derived-order-name',
       customerId: 'customer-1',
     }));
-    expect(mockDb.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        ownerId: { in: ['sales-1'] },
-        orderName: { equals: 'GANDO' },
-      },
+    expect(mockDb.customerOrderName.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        normalizedOrderName: 'gando',
+      }),
     }));
   });
 
   it('returns company name with customer name fallback for field 2', async () => {
-    mockDb.customer.findMany.mockResolvedValueOnce([
-      makeCustomer({ companyName: '', name: 'Gando Customer' }),
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      { orderName: 'GANDO', customer: makeCustomer({ companyName: '', name: 'Gando Customer' }) },
     ]);
 
     const result = await resolveExcelMlValue(salesUser, { orderNo: 'GANDO-10', field: 2 });
@@ -131,8 +130,8 @@ describe('excel-ml-service', () => {
   });
 
   it('returns MARK for field 3', async () => {
-    mockDb.customer.findMany.mockResolvedValueOnce([
-      makeCustomer({ mark: 'MK-88' }),
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      { orderName: 'GANDO', customer: makeCustomer({ mark: 'MK-88' }) },
     ]);
 
     const result = await resolveExcelMlValue(salesUser, { orderNo: 'GANDO-10', field: 3 });
@@ -148,7 +147,7 @@ describe('excel-ml-service', () => {
 
     expect(result.value).toBe('Gando LLC');
     expect(result.matchedBy).toBe('linked-order');
-    expect(mockDb.customer.findMany).not.toHaveBeenCalled();
+    expect(mockDb.customerOrderName.findMany).not.toHaveBeenCalled();
   });
 
   it('rejects ambiguous linked order customers instead of guessing', async () => {
@@ -164,9 +163,9 @@ describe('excel-ml-service', () => {
   });
 
   it('rejects ambiguous derived customer matches', async () => {
-    mockDb.customer.findMany.mockResolvedValueOnce([
-      makeCustomer({ id: 'customer-1' }),
-      makeCustomer({ id: 'customer-2' }),
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      { orderName: 'GANDO', customer: makeCustomer({ id: 'customer-1' }) },
+      { orderName: 'GANDO', customer: makeCustomer({ id: 'customer-2' }) },
     ]);
 
     await expect(resolveExcelMlValue(salesUser, { orderNo: 'GANDO-10', field: 2 })).rejects.toMatchObject({
@@ -188,9 +187,9 @@ describe('excel-ml-service', () => {
   });
 
   it('returns per-row results for batch lookups', async () => {
-    mockDb.customer.findMany
-      .mockResolvedValueOnce([makeCustomer()])
-      .mockResolvedValueOnce([makeCustomer({ companyName: '', name: 'Gando Customer' })])
+    mockDb.customerOrderName.findMany
+      .mockResolvedValueOnce([{ orderName: 'GANDO', customer: makeCustomer() }])
+      .mockResolvedValueOnce([{ orderName: 'GANDO', customer: makeCustomer({ companyName: '', name: 'Gando Customer' }) }])
       .mockResolvedValueOnce([]);
 
     const result = await resolveExcelMlBatch(salesUser, [

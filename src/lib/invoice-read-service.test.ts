@@ -14,6 +14,9 @@ jest.mock('@/lib/db', () => ({
     customer: {
       findMany: jest.fn(),
     },
+    customerOrderName: {
+      findMany: jest.fn(),
+    },
     order: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -42,6 +45,7 @@ jest.mock('@/lib/order-alias-db', () => ({
 
 const mockDb = db as unknown as {
   customer: { findMany: jest.Mock };
+  customerOrderName: { findMany: jest.Mock };
   order: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
   receipt: { findMany: jest.Mock };
   invoice: { findMany: jest.Mock };
@@ -213,14 +217,17 @@ describe('invoice-read-service', () => {
         customer: null,
       },
     ]);
-    mockDb.customer.findMany.mockResolvedValueOnce([
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
       {
-        id: 'customer-1',
-        mark: 'KIGNA TEXTILE',
         orderName: 'GANDO',
-        name: 'Mamdaou Gando Diallo',
-        phone: '622443103',
-        city: 'Conakry',
+        normalizedOrderName: 'gando',
+        customer: {
+          id: 'customer-1',
+          mark: 'KIGNA TEXTILE',
+          orderName: 'GANDO',
+          phone: '622443103',
+          city: 'Conakry',
+        },
       },
     ]);
 
@@ -277,7 +284,7 @@ describe('invoice-read-service', () => {
         },
       },
     ]);
-    mockDb.customer.findMany.mockResolvedValueOnce([]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
 
     const result = await lookupInvoiceOrderContext(makeUser() as never, 'TEST-2-01');
 
@@ -296,7 +303,7 @@ describe('invoice-read-service', () => {
       derivedOrderName: null,
     });
     expect(mockDb.order.findMany).not.toHaveBeenCalled();
-    expect(mockDb.customer.findMany).not.toHaveBeenCalled();
+    expect(mockDb.customerOrderName.findMany).not.toHaveBeenCalled();
   });
 
   it('skips customer inference when ORDER cannot derive a left-side order name', async () => {
@@ -307,27 +314,33 @@ describe('invoice-read-service', () => {
     expect(result.data.exactMatches).toEqual([]);
     expect(result.data.inferredCustomer).toBeNull();
     expect(result.data.derivedOrderName).toBeNull();
-    expect(mockDb.customer.findMany).not.toHaveBeenCalled();
+    expect(mockDb.customerOrderName.findMany).not.toHaveBeenCalled();
   });
 
   it('does not infer a customer when ORDER-derived name matches multiple customers', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([]);
-    mockDb.customer.findMany.mockResolvedValueOnce([
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
       {
-        id: 'customer-1',
-        mark: 'MARK-1',
         orderName: 'GANDO',
-        name: 'Customer 1',
-        phone: '620000001',
-        city: 'Conakry',
+        normalizedOrderName: 'gando',
+        customer: {
+          id: 'customer-1',
+          mark: 'MARK-1',
+          orderName: 'GANDO',
+          phone: '620000001',
+          city: 'Conakry',
+        },
       },
       {
-        id: 'customer-2',
-        mark: 'MARK-2',
         orderName: 'GANDO',
-        name: 'Customer 2',
-        phone: '620000002',
-        city: 'Conakry',
+        normalizedOrderName: 'gando',
+        customer: {
+          id: 'customer-2',
+          mark: 'MARK-2',
+          orderName: 'GANDO',
+          phone: '620000002',
+          city: 'Conakry',
+        },
       },
     ]);
 
@@ -336,6 +349,33 @@ describe('invoice-read-service', () => {
     expect(result.data.exactMatches).toEqual([]);
     expect(result.data.inferredCustomer).toBeNull();
     expect(result.data.derivedOrderName).toBe('GANDO');
+  });
+
+  it('infers a customer by ORDER_NAME while ignoring spaces', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      {
+        orderName: 'SUPER DT 2',
+        normalizedOrderName: 'superdt2',
+        customer: {
+          id: 'customer-3',
+          mark: 'SDT 2',
+          orderName: 'SUPER DT 2',
+          phone: '620000003',
+          city: 'Conakry',
+        },
+      },
+    ]);
+
+    const result = await lookupInvoiceOrderContext(makeUser() as never, 'S U P E R D T 2 -09');
+
+    expect(result.data.inferredCustomer).toEqual(expect.objectContaining({
+      id: 'customer-3',
+      mark: 'SDT 2',
+      orderName: 'SUPER DT 2',
+      phone: '620000003',
+    }));
+    expect(result.data.derivedOrderName).toBe('S U P E R D T 2');
   });
 
   it('returns accessible order receipts and records count', async () => {

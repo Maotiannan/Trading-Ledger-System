@@ -93,6 +93,7 @@ export function useCustomerActions({
         ...(editing ? { action: 'update', id: editing.id } : { action: 'create' }),
         mark: form.mark,
         orderName: form.orderName,
+        orderNames: editing ? form.orderNames : [],
         name: form.name,
         phone: form.phone,
         city: form.city,

@@ -1,13 +1,27 @@
-jest.mock('next/server', () => ({
-  NextResponse: {
-    json: (body: unknown, init?: ResponseInit) => ({
-      status: init?.status ?? 200,
-      async json() {
-        return body;
-      },
-    }),
-  },
-}));
+jest.mock('next/server', () => {
+  const NextResponse: any = class MockNextResponse {
+    status: number;
+    headers: Headers;
+    body: unknown;
+
+    constructor(body?: unknown, init?: ResponseInit) {
+      this.status = init?.status ?? 200;
+      this.headers = new Headers(init?.headers);
+      this.body = body;
+    }
+
+    static json(body: unknown, init?: ResponseInit) {
+      return {
+        status: init?.status ?? 200,
+        async json() {
+          return body;
+        },
+      };
+    }
+  };
+
+  return { NextResponse };
+});
 
 type MockCurrentUser = {
   id: string;
@@ -35,6 +49,22 @@ jest.mock('@/lib/route-auth', () => ({
   },
 }));
 
+jest.mock('@/lib/db', () => ({
+  db: {
+    detail: {
+      findFirst: jest.fn(),
+    },
+  },
+}));
+
+jest.mock('@/lib/user-hierarchy', () => ({
+  getHierarchyScope: jest.fn(),
+}));
+
+jest.mock('@/lib/detail-export-image', () => ({
+  renderDetailExportPng: jest.fn(),
+}));
+
 jest.mock('@/lib/detail-service', () => ({
   createDetailRecord: jest.fn(),
   updateDetailRecord: jest.fn(),
@@ -46,10 +76,20 @@ jest.mock('@/lib/detail-edit-request-service', () => ({
   listDetailEditRequests: jest.fn(),
 }));
 
-import { POST } from '@/app/api/detail/route';
+import { db } from '@/lib/db';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { renderDetailExportPng } from '@/lib/detail-export-image';
+import { GET, POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 
+const mockDb = db as unknown as {
+  detail: {
+    findFirst: jest.Mock;
+  };
+};
+const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
+const mockRenderDetailExportPng = renderDetailExportPng as jest.Mock;
 const mockCreateDetailRecord = createDetailRecord as jest.Mock;
 const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
 const mockReviewDetailEdit = reviewDetailEdit as jest.Mock;
@@ -69,6 +109,10 @@ function buildJsonRequest(payload: Record<string, unknown>) {
   } as never;
 }
 
+function buildGetRequest(url: string) {
+  return { url } as never;
+}
+
 describe('detail route edit-approval actions', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
@@ -84,6 +128,9 @@ describe('detail route edit-approval actions', () => {
       parentId: null,
       createdById: null,
     };
+    mockGetHierarchyScope.mockResolvedValue({
+      ownerVisibleIds: new Set(['admin-1', 'sales-1']),
+    });
   });
 
   afterEach(() => {
@@ -222,5 +269,26 @@ describe('detail route edit-approval actions', () => {
     }));
     expect(json.success).toBe(true);
     expect(json.data).toHaveLength(1);
+  });
+
+  it('exports direct-created payment detail pictures through the export-pic action', async () => {
+    mockDb.detail.findFirst.mockResolvedValueOnce({
+      id: 'detail-1',
+      sourceMode: 'DIRECT',
+      date: '2026-05-05T00:00:00.000Z',
+      items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120 }],
+      creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
+    });
+    const png = Buffer.from([137, 80, 78, 71]);
+    mockRenderDetailExportPng.mockResolvedValueOnce(png);
+
+    const response = await GET(buildGetRequest('https://example.com/api/detail?action=export-pic&detailId=detail-1'));
+
+    expect(response.status).toBe(200);
+    expect(mockDb.detail.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'detail-1' }),
+    }));
+    expect(mockRenderDetailExportPng).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
+    expect(response.headers.get('content-type')).toBe('image/png');
   });
 });

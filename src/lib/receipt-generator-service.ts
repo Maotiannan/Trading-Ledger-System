@@ -109,6 +109,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
       clientTel: customer.phone || null,
       usdAmount,
       balanceBefore,
+      paymentMode: 'Cash',
   });
 
   return {
@@ -128,6 +129,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
 export async function createReceiptGeneratorSession(currentUser: CurrentUser, input: {
   orderNo: string;
   usdAmount: number;
+  paymentMode?: string | null;
 }) {
   requireGeneratorRole(currentUser);
   const orderNo = trimString(input.orderNo);
@@ -135,6 +137,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
     throw badRequest('ORDER NO 不能为空');
   }
   const usdAmount = sanitizePositiveAmount(input.usdAmount);
+  const paymentMode = input.paymentMode === 'Transfer' ? 'Transfer' : 'Cash';
   const creationContext = await buildCreationContext(currentUser, orderNo, usdAmount);
 
   const result = await runInTransaction(async (tx) => {
@@ -148,7 +151,8 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
         customerName: creationContext.customerName,
         clientTel: creationContext.customerPhone,
         usdAmount,
-      balanceBefore: creationContext.balanceBefore,
+        balanceBefore: creationContext.balanceBefore,
+        paymentMode,
     });
 
     const receipt = await tx.receipt.create({

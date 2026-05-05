@@ -15,6 +15,7 @@ describe('CustomerFormDialog', () => {
         form={{
           mark: 'IB',
           orderName: 'IB',
+          orderNames: [],
           name: 'Ibrahima',
           phone: '622443103',
           city: 'Conakry',
@@ -49,6 +50,7 @@ describe('CustomerFormDialog', () => {
         form={{
           mark: 'IB',
           orderName: 'IB',
+          orderNames: [],
           name: 'Ibrahima',
           phone: '622443103',
           city: 'Conakry',

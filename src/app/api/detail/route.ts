@@ -16,6 +16,7 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
+import { renderDetailExportPng } from '@/lib/detail-export-image';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
@@ -57,12 +58,64 @@ function parseDetailEditablePatch(value: unknown): DetailEditablePatch {
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action') || '';
     const status = searchParams.get('status') as DetailStatus | null;
     const search = searchParams.get('search') || '';
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
     const minAmount = searchParams.get('minAmount');
     const maxAmount = searchParams.get('maxAmount');
+
+    if (action === 'export-pic') {
+      const detailId = searchParams.get('detailId') || '';
+      if (!detailId) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少明细ID',
+        });
+      }
+
+      const scope = await getHierarchyScope(currentUser);
+      const detail = await db.detail.findFirst({
+        where: {
+          id: detailId,
+          ...buildDetailVisibilityWhere(Array.from(scope.ownerVisibleIds)),
+        },
+        include: {
+          creator: { select: { id: true, name: true, email: true } },
+          items: true,
+        },
+      });
+
+      if (!detail) {
+        throw createApiError({
+          code: 'RESOURCE_NOT_FOUND',
+          status: 404,
+          message: '付款明细不存在或无权访问',
+          detail: { detailId },
+        });
+      }
+      if (detail.sourceMode !== 'DIRECT') {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '只有直接创建的付款明细支持导出图片',
+          detail: { detailId, sourceMode: detail.sourceMode },
+        });
+      }
+
+      const buffer = await renderDetailExportPng(detail);
+      const fileDate = detail.date ? new Date(detail.date).toISOString().slice(0, 10) : 'undated';
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Disposition': `attachment; filename=\"payment-detail-${fileDate}-${detail.id}.png\"`,
+          'Cache-Control': 'no-store',
+        },
+      });
+    }
 
     const scope = await getHierarchyScope(currentUser);
     const ownerIds = Array.from(scope.ownerVisibleIds);

@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError, isApiError } from '@/lib/api-error';
+import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import type { CurrentUser } from '@/lib/request-auth';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
@@ -226,25 +227,7 @@ async function findCustomerForOrder(
     assertOrderMatched(rawOrderNo, { reason: 'order-name-not-derived' });
   }
 
-  const matchedCustomers = await db.customer.findMany({
-    where: {
-      ownerId: { in: ownerIds },
-      orderName: { equals: derivedOrderName },
-    },
-    select: {
-      id: true,
-      mark: true,
-      orderName: true,
-      name: true,
-      phone: true,
-      city: true,
-      consignee: true,
-      companyName: true,
-      companyAddress: true,
-      credit: true,
-    },
-    orderBy: [{ createdAt: 'desc' }],
-  });
+  const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, derivedOrderName);
 
   if (matchedCustomers.length === 0) {
     assertOrderMatched(rawOrderNo, { derivedOrderName });
@@ -254,12 +237,15 @@ async function findCustomerForOrder(
     assertOrderConflict(rawOrderNo, {
       mode: 'derived-order-name',
       derivedOrderName,
-      customerIds: matchedCustomers.map((customer) => customer.id),
+      customerIds: matchedCustomers.map((customer) => customer.customer.id),
     });
   }
 
   return {
-    customer: matchedCustomers[0],
+    customer: {
+      ...matchedCustomers[0].customer,
+      orderName: matchedCustomers[0].orderName,
+    },
     matchedBy: 'derived-order-name',
     derivedOrderName,
   };

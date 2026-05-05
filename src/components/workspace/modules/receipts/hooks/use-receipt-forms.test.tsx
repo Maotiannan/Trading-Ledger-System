@@ -100,6 +100,8 @@ describe('useReceiptForms', () => {
     expect(result.current.ocrResult).toEqual(expect.objectContaining({
       orderNo: 'TEST-1-05',
       invNo: 'INV-DB',
+      tel: '622 49 12 86',
+      payer: 'MAB SARL',
     }));
     expect(result.current.ocrInvConflict).toBe(false);
     expect(result.current.ocrCustomerMark).toBe('ASD-DSA');

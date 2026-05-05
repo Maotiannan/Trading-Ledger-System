@@ -12,6 +12,7 @@ export type InvoiceDraftOrder = {
 export type EditingInvoiceOrder = {
   id: string;
   orderNo: string;
+  invNo: string;
   amount: number;
   invoiceId: string;
   customerMark: string;

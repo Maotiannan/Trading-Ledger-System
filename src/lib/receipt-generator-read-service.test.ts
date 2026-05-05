@@ -125,7 +125,7 @@ describe('receipt-generator-read-service', () => {
       orderNo: 'Big Alpha-07',
       invNo: 'L25MH060523',
       customerMark: 'Big Alpha',
-      layoutSnapshot: { customerCompanyName: 'Alpha Trading SARL' },
+      layoutSnapshot: { customerCompanyName: 'Alpha Trading SARL', paymentMode: 'Transfer' },
       customerName: 'Alpha Oumar Diallo',
       clientTel: '628 38 63 63',
       usd: 2500,
@@ -153,6 +153,7 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.canFinalize).toBe(true);
     expect(result.data.receiptStatus).toBe('SIGNING_PENDING');
     expect(result.data.layout.clientName).toBe('Alpha Trading SARL "Big Alpha"');
+    expect(result.data.layout.paymentMode).toBe('Transfer');
   });
 
   it('resolves a pending generator session by receiptId', async () => {

@@ -5,6 +5,7 @@ import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 import { customerAccessWhere, splitPhoneCandidates } from '@/lib/customer-scope';
+import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { filterRowsBySearch } from '@/lib/text-search';
 import { canSalesEditExtendedCustomerFields } from '@/lib/customer-service';
 
@@ -109,6 +110,14 @@ export async function listCustomers(
   const rows = await db.customer.findMany({
     where,
     include: {
+      orderNames: {
+        select: {
+          orderName: true,
+          normalizedOrderName: true,
+          isPrimary: true,
+        },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      },
       owner: {
         select: {
           id: true,
@@ -124,7 +133,10 @@ export async function listCustomers(
 
   const showExtended = currentUser.role === UserRole.ADMIN || await canSalesEditExtendedCustomerFields();
   const conflictAnnotatedRows = annotatePhoneConflicts(rows as Array<Record<string, unknown>>);
-  const markedRows = mark ? conflictAnnotatedRows.filter((row) => trimStr(row.mark) === mark) : conflictAnnotatedRows;
+  const normalizedMark = mark ? normalizeOrderIdentifier(mark) : '';
+  const markedRows = normalizedMark
+    ? conflictAnnotatedRows.filter((row) => normalizeOrderIdentifier(trimStr(row.mark)) === normalizedMark)
+    : conflictAnnotatedRows;
   const data = currentUser.role === UserRole.ADMIN
     ? filterRowsBySearch(markedRows, search)
     : filterRowsBySearch(markedRows.map((row) => toSalesView(row as Record<string, unknown>, showExtended)), search);

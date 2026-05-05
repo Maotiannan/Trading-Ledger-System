@@ -23,6 +23,10 @@ jest.mock('@/lib/db', () => ({
       delete: jest.fn(),
       findUnique: jest.fn(),
     },
+    customerOrderName: {
+      createMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     user: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -72,6 +76,10 @@ const mockDb = db as unknown as {
     delete: jest.Mock;
     findUnique: jest.Mock;
   };
+  customerOrderName: {
+    createMany: jest.Mock;
+    deleteMany: jest.Mock;
+  };
   user: {
     findUnique: jest.Mock;
     findMany: jest.Mock;
@@ -116,6 +124,16 @@ describe('customer-service', () => {
     }, 'sales-1');
 
     expect(mockDb.customer.create).toHaveBeenCalled();
+    expect(mockDb.customerOrderName.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          customerId: 'customer-1',
+          orderName: 'IB',
+          normalizedOrderName: 'ib',
+          isPrimary: true,
+        },
+      ],
+    });
     expect(result.message).toBe('客户已创建');
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'CUSTOMER_CREATE',
@@ -171,12 +189,29 @@ describe('customer-service', () => {
     const result = await updateCustomerRecord(makeUser(), 'customer-1', {
       mark: 'IB-NEW',
       orderName: 'IB-NEW',
+      orderNames: ['IB NEW ALT', 'I B - N E W'],
       name: 'Ibrahima',
       phone: '622443103',
       city: 'Conakry',
     }, 'sales-1');
 
     expect(result.message).toBe('客户已更新');
+    expect(mockDb.customerOrderName.createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          customerId: 'customer-1',
+          orderName: 'IB-NEW',
+          normalizedOrderName: 'ib-new',
+          isPrimary: true,
+        },
+        {
+          customerId: 'customer-1',
+          orderName: 'IB NEW ALT',
+          normalizedOrderName: 'ibnewalt',
+          isPrimary: false,
+        },
+      ],
+    });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'CUSTOMER_UPDATE',
       targetId: 'customer-1',

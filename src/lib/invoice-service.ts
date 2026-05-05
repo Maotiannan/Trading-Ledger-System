@@ -12,6 +12,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 import { customerAccessWhere } from '@/lib/customer-scope';
+import { extractOrderNamePrefix, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildInvoiceVisibilityWhere as buildInvoiceVisibilityWhereShared,
@@ -168,18 +169,26 @@ export async function processInvoiceImportRows(
     },
   });
   const orderById = new Map(visibleOrders.map((row) => [row.id, row]));
-  const visibleCustomers = await db.customer.findMany({
-    where: customerVisibilityWhere,
-    select: { id: true, mark: true, orderName: true },
+  const visibleCustomerOrderNames = await db.customerOrderName.findMany({
+    where: { customer: customerVisibilityWhere },
+    select: {
+      orderName: true,
+      normalizedOrderName: true,
+      customer: {
+        select: { id: true, mark: true, orderName: true },
+      },
+    },
   });
-  const normalizeOrderNameForMatch = (value: string | null | undefined): string =>
-    String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
   const customerByOrderNameMap = new Map<string, Array<{ id: string; mark: string; orderName: string }>>();
-  for (const customer of visibleCustomers) {
-    const key = normalizeOrderNameForMatch(customer.orderName);
+  for (const aliasRow of visibleCustomerOrderNames) {
+    const key = aliasRow.normalizedOrderName || normalizeOrderIdentifier(aliasRow.orderName);
     if (!key) continue;
     if (!customerByOrderNameMap.has(key)) customerByOrderNameMap.set(key, []);
-    customerByOrderNameMap.get(key)!.push(customer);
+    customerByOrderNameMap.get(key)!.push({
+      id: aliasRow.customer.id,
+      mark: aliasRow.customer.mark,
+      orderName: aliasRow.orderName,
+    });
   }
   const inferCache = new Map<string, { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string }>();
   const importedOrderNos = new Set<string>();
@@ -195,16 +204,8 @@ export async function processInvoiceImportRows(
   const rowResults: InvoiceImportRowResult[] = [];
   const successMessages: string[] = [];
 
-  const extractOrderNameFromOrderNo = (singleOrderNo: string): string | null => {
-    const normalized = String(singleOrderNo || '').trim();
-    const lastDashIndex = normalized.lastIndexOf('-');
-    if (lastDashIndex <= 0 || lastDashIndex >= normalized.length - 1) return null;
-    const left = normalized.slice(0, lastDashIndex).trim().replace(/\s+/g, ' ');
-    return left || null;
-  };
-
   const inferCustomerBySingleOrderNo = async (singleOrderNo: string) => {
-    const cacheKey = singleOrderNo.toLowerCase();
+    const cacheKey = normalizeOrderIdentifier(singleOrderNo);
     if (!inferCache.has(cacheKey)) {
       const inferResult: { matched: boolean; customerMark?: string; customerName?: string; customerId?: string; reason?: string } = { matched: false };
       const matchedOrderId = await findOrderIdByNoOrAlias(singleOrderNo, orderVisibilityWhere);
@@ -219,11 +220,11 @@ export async function processInvoiceImportRows(
       }
 
       if (!inferResult.matched) {
-        const orderName = extractOrderNameFromOrderNo(singleOrderNo);
+        const orderName = extractOrderNamePrefix(singleOrderNo);
         if (!orderName) {
           inferResult.reason = '应该含‘-’的ORDER格式';
         } else {
-          const key = normalizeOrderNameForMatch(orderName);
+          const key = normalizeOrderIdentifier(orderName);
           const matchedCustomers = customerByOrderNameMap.get(key) || [];
           if (matchedCustomers.length === 1) {
             const selected = matchedCustomers[0];
@@ -1047,6 +1048,7 @@ export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
 
 export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
   orderId: string;
+  invNo?: string;
   orderNo?: string;
   amount?: number;
   customerMark?: string;
@@ -1075,6 +1077,7 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
   const incomingOrderNoRaw = typeof payload.orderNo === 'string' ? payload.orderNo.trim() : order.orderNo;
   const incomingOrderNo = canonicalizeOrderNo(incomingOrderNoRaw);
   const incomingAmount = payload.amount !== undefined ? Number(payload.amount) : Number(order.amount);
+  const requestedInvNo = typeof payload.invNo === 'string' ? payload.invNo.trim() : undefined;
   if (!incomingOrderNo) {
     throw badRequest('客户单号不能为空');
   }
@@ -1124,10 +1127,58 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
     };
   }
 
+  const currentInvoice = requestedInvNo !== undefined && order.invoiceId
+    ? await db.invoice.findFirst({
+        where: {
+          id: order.invoiceId,
+          ...buildInvoiceVisibilityWhere(ownerIds),
+        },
+        select: { id: true, invNo: true },
+      })
+    : null;
+
   const updated = await runInTransaction(async (tx) => {
+    let nextInvoiceId = order.invoiceId;
+    let nextInvNo: string | null = null;
+    if (requestedInvNo !== undefined) {
+      if (!requestedInvNo) {
+        throw badRequest('账单号不能为空');
+      }
+      let targetInvoice = await tx.invoice.findFirst({
+        where: { invNo: requestedInvNo },
+        select: { id: true, invNo: true },
+      });
+      if (!targetInvoice) {
+        targetInvoice = await tx.invoice.create({
+          data: {
+            invNo: requestedInvNo,
+            createdBy: currentUser.id,
+          },
+          select: { id: true, invNo: true },
+        });
+      }
+      const conflictingOrder = await tx.order.findFirst({
+        where: {
+          invoiceId: targetInvoice.id,
+          id: { not: orderId },
+          OR: [
+            { orderNo: { equals: incomingOrderNo } },
+            { aliases: { some: { aliasNo: normalizeOrderNo(incomingOrderNo) } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (conflictingOrder) {
+        throw badRequest('目标账单已存在相同ORDER');
+      }
+      nextInvoiceId = targetInvoice.id;
+      nextInvNo = targetInvoice.invNo;
+    }
+
     const updatedOrder = await tx.order.update({
       where: { id: orderId },
       data: {
+        ...(nextInvoiceId ? { invoiceId: nextInvoiceId } : {}),
         orderNo: incomingOrderNo,
         tokens: serializeOrderTokens(incomingOrderNo),
         amount: incomingAmount,
@@ -1144,6 +1195,7 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
       where: { orderId },
       data: {
         orderNo: incomingOrderNo,
+        ...(nextInvNo !== null ? { invNo: nextInvNo } : {}),
         customerId: customerData.customerId,
         customerMark: customerData.customerMark,
         customerName: customerData.customerName,
@@ -1152,6 +1204,14 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
         needsCustomerFix: customerData.needsCustomerFix,
       },
     });
+    if (nextInvoiceId && order.invoiceId && nextInvoiceId !== order.invoiceId) {
+      const remainingOrders = await tx.order.count({
+        where: { invoiceId: order.invoiceId },
+      });
+      if (remainingOrders === 0) {
+        await tx.invoice.delete({ where: { id: order.invoiceId } });
+      }
+    }
     return updatedOrder;
   });
 
@@ -1167,10 +1227,12 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
     targetId: orderId,
     metadata: {
       before: {
+        invNo: currentInvoice?.invNo || null,
         orderNo: order.orderNo,
         amount: Number(order.amount),
       },
       after: {
+        invNo: requestedInvNo !== undefined ? requestedInvNo : currentInvoice?.invNo || null,
         orderNo: incomingOrderNo,
         amount: incomingAmount,
       },

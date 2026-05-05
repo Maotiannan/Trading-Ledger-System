@@ -20,6 +20,7 @@ type ReceiptGeneratorContext = {
 } | null;
 
 type ReceiptGeneratorText = (zh: string, en: string) => string;
+type ReceiptPaymentMode = 'Cash' | 'Transfer';
 
 function isMobileBrowser(): boolean {
   if (typeof window === 'undefined') return false;
@@ -52,6 +53,7 @@ export function useReceiptGenerator(params: {
   const [showGeneratorLaunch, setShowGeneratorLaunch] = useState(false);
   const [generatorOrderNo, setGeneratorOrderNo] = useState('');
   const [generatorUsdAmount, setGeneratorUsdAmount] = useState('');
+  const [generatorPaymentMode, setGeneratorPaymentMode] = useState<ReceiptPaymentMode>('Cash');
   const [generatorContext, setGeneratorContext] = useState<ReceiptGeneratorContext>(null);
   const [generatorContextLoading, setGeneratorContextLoading] = useState(false);
   const [generatorCreating, setGeneratorCreating] = useState(false);
@@ -129,6 +131,7 @@ export function useReceiptGenerator(params: {
     setShowGeneratorLaunch(false);
     setGeneratorOrderNo('');
     setGeneratorUsdAmount('');
+    setGeneratorPaymentMode('Cash');
     setGeneratorContext(null);
     setGeneratorContextLoading(false);
     setGeneratorCreating(false);
@@ -155,6 +158,7 @@ export function useReceiptGenerator(params: {
           action: 'create-session',
           orderNo: generatorOrderNo.trim(),
           usdAmount: Number(generatorUsdAmount),
+          paymentMode: generatorPaymentMode,
         }),
       });
       const signingPath = result.data?.signingPath;
@@ -176,7 +180,7 @@ export function useReceiptGenerator(params: {
     } finally {
       setGeneratorCreating(false);
     }
-  }, [generatorOrderNo, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
+  }, [generatorOrderNo, generatorPaymentMode, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
 
   const resumeGeneratorSession = useCallback(async (receiptId: string) => {
     try {
@@ -205,6 +209,8 @@ export function useReceiptGenerator(params: {
     setGeneratorOrderNo,
     generatorUsdAmount,
     setGeneratorUsdAmount,
+    generatorPaymentMode,
+    setGeneratorPaymentMode,
     generatorContext,
     generatorContextLoading,
     generatorCreating,

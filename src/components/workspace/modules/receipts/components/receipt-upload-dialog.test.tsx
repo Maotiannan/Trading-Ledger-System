@@ -81,4 +81,18 @@ describe('ReceiptUploadDialog', () => {
 
     expect(screen.getByRole('button', { name: '确认创建' })).toBeEnabled();
   });
+
+  it('uses a scrollable mobile-safe dialog shell with sticky actions', () => {
+    render(
+      <ReceiptUploadDialog
+        {...defaultProps}
+        ocrResult={{ receiptNo: 'OCR-1', orderNo: 'TEST-1-05' }}
+        ocrCustomerMark="ASD-DSA"
+      />
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).toContain('max-h-[90vh]');
+    expect(screen.getByRole('button', { name: '确认创建' })).toBeInTheDocument();
+  });
 });

@@ -10,6 +10,7 @@ type ReceiptGeneratorLayoutInput = {
   clientTel: string | null;
   usdAmount: number;
   balanceBefore: number | null;
+  paymentMode?: 'Cash' | 'Transfer' | null;
   generatedAt?: Date;
 };
 
@@ -29,6 +30,7 @@ export type ReceiptGeneratorLayoutData = {
   balanceBefore: number | null;
   balanceAfter: number | null;
   resteAPayer: string;
+  paymentMode?: 'Cash' | 'Transfer';
   receivedBy: string;
 };
 
@@ -132,6 +134,7 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
     resteAPayer: balanceBefore === null || balanceAfter === null
       ? '-'
       : `${formatMoney(balanceBefore)} - ${formatMoney(Number(input.usdAmount))} = ${formatMoney(balanceAfter)}`,
+    paymentMode: input.paymentMode === 'Transfer' ? 'Transfer' : 'Cash',
     receivedBy: RECEIPT_GENERATOR_RECEIVED_BY,
   };
 }

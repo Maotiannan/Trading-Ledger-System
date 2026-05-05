@@ -278,6 +278,7 @@ describe('useInvoiceActions', () => {
       editingOrder: {
         id: 'order-1',
         orderNo: 'MAB-1-02',
+        invNo: 'INV-001',
         amount: 500,
         customerMark: 'MAB-1',
         customerName: 'MAB',
@@ -305,6 +306,7 @@ describe('useInvoiceActions', () => {
         action: 'updateOrder',
         orderId: 'order-1',
         orderNo: 'MAB-1-02',
+        invNo: 'INV-001',
         amount: 500,
         customerMark: 'MAB-1',
         customerName: 'MAB',
@@ -365,6 +367,7 @@ describe('useInvoiceActions', () => {
       editingOrder: {
         id: 'order-1',
         orderNo: '   ',
+        invNo: 'INV-001',
         amount: 500,
         customerMark: 'MAB-1',
         customerName: 'MAB',
@@ -390,6 +393,47 @@ describe('useInvoiceActions', () => {
     expect(mockApiCall).not.toHaveBeenCalled();
   });
 
+  it('blocks order update when invoice number is empty', async () => {
+    const { result } = renderHook(() => useInvoiceActions({
+      tx,
+      invoiceImportInputRef: inputRef,
+      loadInvoices,
+      invNo: 'INV-001',
+      shipDate: '',
+      releaseDate: '',
+      orders: [],
+      setFormError,
+      handleCreateDialogOpenChange,
+      resetCreateInvoiceDialog,
+      editingOrder: {
+        id: 'order-1',
+        orderNo: 'MAB-1-02',
+        invNo: '   ',
+        amount: 500,
+        customerMark: 'MAB-1',
+        customerName: 'MAB',
+        customerId: 'cust-1',
+      },
+      setOrderFormError,
+      handleOrderDialogOpenChange,
+      addingOrderToInvoice: null,
+      setAddError,
+      newOrderNo: '',
+      newOrderAmount: '',
+      newOrderCustomerMark: '',
+      newOrderCustomerName: '',
+      newOrderCustomerId: '',
+      resetAddOrderForm: jest.fn(),
+    }));
+
+    await act(async () => {
+      await result.current.handleUpdateOrder();
+    });
+
+    expect(setOrderFormError).toHaveBeenCalledWith('请输入账单号');
+    expect(mockApiCall).not.toHaveBeenCalled();
+  });
+
   it('surfaces order update backend failures', async () => {
     mockApiCall.mockResolvedValueOnce({ success: false, error: '修改失败' });
 
@@ -407,6 +451,7 @@ describe('useInvoiceActions', () => {
       editingOrder: {
         id: 'order-1',
         orderNo: 'MAB-1-02',
+        invNo: 'INV-001',
         amount: 500,
         customerMark: 'MAB-1',
         customerName: 'MAB',
@@ -451,6 +496,7 @@ describe('useInvoiceActions', () => {
       editingOrder: {
         id: 'order-1',
         orderNo: 'MAB-1-02',
+        invNo: 'INV-001',
         amount: 500,
         customerMark: 'MAB-1',
         customerName: 'MAB',
@@ -491,6 +537,7 @@ describe('useInvoiceActions', () => {
       editingOrder: {
         id: 'order-1',
         orderNo: 'MAB-1-02',
+        invNo: 'INV-001',
         amount: -1,
         customerMark: 'MAB-1',
         customerName: 'MAB',

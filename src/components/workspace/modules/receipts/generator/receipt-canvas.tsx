@@ -364,7 +364,14 @@ async function drawReceiptCanvas(
     wrapText(ctx, layout.clientName, measureFieldValueWidth('Reçu de M./Mme. :')).length,
     wrapText(ctx, layout.amountInWords, measureFieldValueWidth('La somme de :')).length,
     wrapText(ctx, layout.motif, measureFieldValueWidth('Motif :', { rightLabel: 'Frais :', rightValue: TEMPLATE_FRAIS_LABEL })).length,
-    wrapText(ctx, layout.resteAPayer, measureFieldValueWidth('Reste à payer :')).length,
+    wrapText(
+      ctx,
+      layout.resteAPayer,
+      measureFieldValueWidth('Reste à payer :', {
+        rightLabel: 'Mode de paiement :',
+        rightValue: layout.paymentMode || 'Cash',
+      }),
+    ).length,
   ];
   let measuredY = detailY + detailPaddingY + 16;
   fieldLineCounts.forEach((lineCount) => {
@@ -546,7 +553,10 @@ async function drawReceiptCanvas(
   drawField('Reçu de M./Mme. :', layout.clientName);
   drawField('La somme de :', layout.amountInWords);
   drawField('Motif :', layout.motif, { rightLabel: 'Frais :', rightValue: TEMPLATE_FRAIS_LABEL });
-  drawField('Reste à payer :', layout.resteAPayer);
+  drawField('Reste à payer :', layout.resteAPayer, {
+    rightLabel: 'Mode de paiement :',
+    rightValue: layout.paymentMode || 'Cash',
+  });
 
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';

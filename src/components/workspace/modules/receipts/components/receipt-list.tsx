@@ -53,6 +53,7 @@ export function ReceiptList({
               <TableHead>{tx('客户单号', 'Order No.')}</TableHead>
               <TableHead>MARK</TableHead>
               <TableHead>{tx('付款金额', 'Amount')}</TableHead>
+              <TableHead>{tx('余额', 'Balance')}</TableHead>
               <TableHead>{tx('付款人', 'Payer')}</TableHead>
               <TableHead>{tx('状态', 'Status')}</TableHead>
               <TableHead>{tx('创建时间', 'Created At')}</TableHead>
@@ -69,6 +70,9 @@ export function ReceiptList({
                 </TableCell>
                 <TableCell>{receipt.customerMark || '-'}</TableCell>
                 <TableCell className="font-medium">${receipt.usd.toFixed(2)}</TableCell>
+                <TableCell className="font-medium">
+                  {typeof receipt.balanceAfter === 'number' ? `$${receipt.balanceAfter.toFixed(2)}` : '-'}
+                </TableCell>
                 <TableCell>{receipt.payer || '-'}</TableCell>
                 <TableCell>{getStatusBadge(receipt.status)}</TableCell>
                 <TableCell>{new Date(receipt.createdAt).toLocaleDateString()}</TableCell>
@@ -117,7 +121,7 @@ export function ReceiptList({
             ))}
             {receipts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                   {tx('暂无收据', 'No receipts')}
                 </TableCell>
               </TableRow>

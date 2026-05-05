@@ -63,6 +63,7 @@ describe('useCustomerActions', () => {
     formState = {
       mark: 'MAB-1',
       orderName: 'MAB-1',
+      orderNames: [],
       name: 'Customer',
       phone: '620000001',
       city: 'Conakry',
@@ -216,6 +217,7 @@ describe('useCustomerActions', () => {
         action: 'create',
         mark: 'MAB-1',
         orderName: 'MAB-1',
+        orderNames: [],
         name: 'Customer',
         phone: '620000001',
         city: 'Conakry',
@@ -451,6 +453,7 @@ describe('useCustomerActions', () => {
         id: 'cust-1',
         mark: 'MAB-1',
         orderName: 'MAB-1',
+        orderNames: [],
         name: 'Customer',
         phone: '620000001',
         city: 'Conakry',

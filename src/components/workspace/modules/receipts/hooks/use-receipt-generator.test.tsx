@@ -73,6 +73,7 @@ describe('useReceiptGenerator', () => {
       result.current.setShowGeneratorLaunch(true);
       result.current.setGeneratorOrderNo('MOBILE-01');
       result.current.setGeneratorUsdAmount('1234');
+      result.current.setGeneratorPaymentMode('Transfer');
     });
 
     await act(async () => {
@@ -80,6 +81,15 @@ describe('useReceiptGenerator', () => {
     });
 
     expect(openSigningTargetImpl).toHaveBeenCalledWith('/receipt-generator/session-mobile');
+    expect(mockApiCall).toHaveBeenCalledWith('receipt-generator', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'create-session',
+        orderNo: 'MOBILE-01',
+        usdAmount: 1234,
+        paymentMode: 'Transfer',
+      }),
+    }));
     expect(loadReceipts).not.toHaveBeenCalled();
     expect(result.current.showGeneratorLaunch).toBe(true);
     expect(result.current.generatorOrderNo).toBe('MOBILE-01');

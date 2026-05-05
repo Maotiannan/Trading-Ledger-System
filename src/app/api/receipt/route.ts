@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { UploadedAssetCategory } from '@prisma/client';
 import { ReceiptStatus } from '@prisma/client';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { recognizeReceipt } from '@/lib/ocr';
 import { withAuth } from '@/lib/route-auth';
@@ -21,6 +22,21 @@ import {
   markReceiptReceived,
   updateReceiptRecord,
 } from '@/lib/receipt-service';
+import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
+import {
+  listReceiptEditRequests,
+  requestReceiptEdit,
+  reviewReceiptEdit,
+} from '@/lib/receipt-edit-request-service';
+
+const receiptEditablePatchSchema = z.object({
+  receiptNo: z.string().nullable(),
+  date: z.string().nullable(),
+  invNo: z.string().nullable(),
+  customerMark: z.string().nullable(),
+  payer: z.string().nullable(),
+  tel: z.string().nullable(),
+});
 
 function parseReceiptPayload(data: Record<string, unknown>) {
   if (typeof data.data === 'string') {
@@ -30,6 +46,19 @@ function parseReceiptPayload(data: Record<string, unknown>) {
   if (!result.success) {
     const issue = result.error.issues[0];
     throw new InputValidationError(issue?.message || '收据数据格式错误');
+  }
+  return result.data;
+}
+
+function parseReceiptEditablePatch(data: Record<string, unknown>): ReceiptEditablePatch {
+  if (typeof data.data === 'string') {
+    return parseJsonWithSchema(data.data, receiptEditablePatchSchema, '收据修改数据格式错误');
+  }
+
+  const result = receiptEditablePatchSchema.safeParse(data);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    throw new InputValidationError(issue?.message || '收据修改数据格式错误');
   }
   return result.data;
 }
@@ -155,6 +184,63 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       return createApiSuccessResponse({
         data: result.data,
         message: result.message,
+      }, request);
+    }
+
+    if (action === 'request-edit') {
+      if (!receiptId) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少收据ID',
+        });
+      }
+      const result = await requestReceiptEdit({
+        currentUser,
+        receiptId,
+        data: parseReceiptEditablePatch(data),
+      });
+      return createApiSuccessResponse({
+        data: result.data,
+        message: result.message,
+      }, request);
+    }
+
+    if (action === 'review-edit') {
+      const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+      const decision = data.decision === 'approve' || data.decision === 'reject'
+        ? data.decision
+        : null;
+      if (!requestId) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少申请ID',
+        });
+      }
+      if (!decision) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少审批动作',
+        });
+      }
+
+      const result = await reviewReceiptEdit({
+        currentUser,
+        requestId,
+        decision,
+        comment: typeof data.comment === 'string' ? data.comment : null,
+      });
+      return createApiSuccessResponse({
+        message: result.message,
+      }, request);
+    }
+
+    if (action === 'list-edit-requests') {
+      const rows = await listReceiptEditRequests(currentUser);
+      return createApiSuccessResponse({
+        data: rows,
       }, request);
     }
 

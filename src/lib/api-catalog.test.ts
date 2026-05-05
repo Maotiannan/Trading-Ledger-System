@@ -12,6 +12,12 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/detail', 'update')?.method).toBe('POST');
   });
 
+  it('should expose receipt edit approval actions', () => {
+    expect(findAction('/api/receipt', 'request-edit')?.method).toBe('POST');
+    expect(findAction('/api/receipt', 'review-edit')?.method).toBe('POST');
+    expect(findAction('/api/receipt', 'list-edit-requests')?.method).toBe('POST');
+  });
+
   it('should expose direct-create for receipt/detail/swift', () => {
     expect(findAction('/api/receipt', 'direct-create')?.method).toBe('POST');
     expect(findAction('/api/detail', 'direct-create')?.method).toBe('POST');

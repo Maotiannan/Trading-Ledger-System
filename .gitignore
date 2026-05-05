@@ -68,3 +68,5 @@ server.log
 *.db
 /db/
 /migration/*.json
+
+.worktrees/

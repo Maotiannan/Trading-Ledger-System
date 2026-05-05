@@ -3,8 +3,36 @@ import { Prisma } from '@prisma/client';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { buildOrderNoWithAliases, canonicalizeOrderNo, isCompositeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
+import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
 
 type DbExecutor = Prisma.TransactionClient | typeof db;
+
+async function findFirstOrderMatch(
+  executor: DbExecutor,
+  args: NonNullable<Parameters<typeof db.order.findFirst>[0]>
+): Promise<{ id: string } | null> {
+  const orderDelegate = (executor as DbExecutor & {
+    order?: {
+      findFirst?: typeof db.order.findFirst;
+      findMany?: typeof db.order.findMany;
+    };
+  }).order;
+
+  if (orderDelegate?.findFirst) {
+    return orderDelegate.findFirst(args);
+  }
+
+  if (orderDelegate?.findMany) {
+    const rows = await orderDelegate.findMany({
+      where: args.where,
+      select: args.select,
+      take: 1,
+    } as Parameters<typeof db.order.findMany>[0]);
+    return rows[0] ?? null;
+  }
+
+  return null;
+}
 
 export async function findOrderIdByNoOrAliasWithExecutor(
   executor: DbExecutor,
@@ -13,34 +41,62 @@ export async function findOrderIdByNoOrAliasWithExecutor(
 ): Promise<string | null> {
   const raw = (orderNo || '').trim();
   if (!raw) return null;
-  const normalized = normalizeOrderNo(raw);
-  const canonical = canonicalizeOrderNo(raw);
+  const candidates = buildCompositeOrderLookupCandidates(raw);
 
-  const aliasMatch = await executor.orderAlias.findFirst({
-    where: {
-      aliasNo: normalized,
-      ...(orderWhere ? { order: orderWhere } : {}),
-    },
-    select: { orderId: true },
-  });
+  const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findFirst?: typeof db.orderAlias.findFirst; findMany?: typeof db.orderAlias.findMany } }).orderAlias;
+
+  const aliasMatch = candidates.normalizedOrderNos.length > 0 && aliasDelegate?.findFirst
+    ? await aliasDelegate.findFirst({
+        where: {
+          aliasNo: candidates.normalizedOrderNos.length === 1
+            ? candidates.normalizedOrderNos[0]
+            : { in: candidates.normalizedOrderNos },
+          ...(orderWhere ? { order: orderWhere } : {}),
+        },
+        select: { orderId: true },
+      })
+    : null;
   if (aliasMatch) return aliasMatch.orderId;
 
-  const orderMatch = await executor.order.findFirst({
+  const orderMatch = candidates.exactOrderNos.length > 0
+    ? await findFirstOrderMatch(executor, {
+        where: {
+          AND: [
+            ...(orderWhere ? [orderWhere] : []),
+            {
+              orderNo: candidates.exactOrderNos.length === 1
+                ? { equals: candidates.exactOrderNos[0] }
+                : { in: candidates.exactOrderNos },
+            },
+          ],
+        },
+        select: { id: true },
+      })
+    : null;
+  if (orderMatch?.id) return orderMatch.id;
+
+  if (candidates.exactOrderNos.length === 0) return null;
+
+  const compositeFallback = await executor.order.findMany({
     where: {
       AND: [
         ...(orderWhere ? [orderWhere] : []),
         {
-          OR: [
-            { orderNo: { equals: raw } },
-            { orderNo: { equals: canonical } },
-          ],
+          OR: candidates.exactOrderNos.map((row) => ({ orderNo: { contains: row } })),
         },
       ],
     },
-    select: { id: true },
+    select: { id: true, orderNo: true },
   });
 
-  return orderMatch?.id || null;
+  for (const row of compositeFallback) {
+    const rowSegments = splitCompositeOrderNo(row.orderNo).map((part) => normalizeOrderNo(part));
+    if (rowSegments.some((segment) => candidates.normalizedOrderNos.includes(segment))) {
+      return row.id;
+    }
+  }
+
+  return null;
 }
 
 export async function findOrderIdByNoOrAlias(
@@ -59,15 +115,18 @@ export async function mapOrderIdsByOrderNosWithExecutor(
   const mapped = new Map<string, string>();
   if (normalizedOrderNos.length === 0) return mapped;
 
-  const aliasRows = await executor.orderAlias.findMany({
-    where: {
-      aliasNo: { in: normalizedOrderNos },
-      ...(orderWhere ? { order: orderWhere } : {}),
-    },
-    select: { aliasNo: true, orderId: true },
-  });
-  for (const row of aliasRows) {
-    mapped.set(row.aliasNo, row.orderId);
+  const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findMany?: typeof db.orderAlias.findMany } }).orderAlias;
+  if (aliasDelegate?.findMany) {
+    const aliasRows = await aliasDelegate.findMany({
+      where: {
+        aliasNo: { in: normalizedOrderNos },
+        ...(orderWhere ? { order: orderWhere } : {}),
+      },
+      select: { aliasNo: true, orderId: true },
+    });
+    for (const row of aliasRows) {
+      mapped.set(row.aliasNo, row.orderId);
+    }
   }
 
   const unresolved = normalizedOrderNos.filter((row) => !mapped.has(row));

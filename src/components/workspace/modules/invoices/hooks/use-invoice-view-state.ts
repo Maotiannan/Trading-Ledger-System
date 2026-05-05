@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { apiCall, peekPrefetchedApiResult, rememberPrefetchedApiResult } from '@/components/workspace/shared';
+import { apiCall, peekPrefetchedApiResult, rememberPrefetchedApiResult, useLatestRequestGuard } from '@/components/workspace/shared';
 import type { Invoice } from '@/lib/store';
 
 export function useInvoiceViewState({
@@ -14,8 +14,10 @@ export function useInvoiceViewState({
   const [search, setSearch] = useState('');
   const [expandedInvoices, setExpandedInvoices] = useState<Set<string>>(new Set());
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
+  const requestGuard = useLatestRequestGuard();
 
   const loadInvoices = useCallback(async () => {
+    const requestToken = requestGuard.nextToken();
     const params = new URLSearchParams();
     const trimmedSearch = search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
@@ -23,14 +25,17 @@ export function useInvoiceViewState({
     const cachedResult = trimmedSearch ? null : peekPrefetchedApiResult<{ success?: boolean; data?: Invoice[] }>(endpoint);
 
     if (cachedResult?.success && Array.isArray(cachedResult.data)) {
-      setInvoices(cachedResult.data);
-      setLoading(false);
+      if (requestGuard.isLatest(requestToken)) {
+        setInvoices(cachedResult.data);
+        setLoading(false);
+      }
     } else {
       setLoading(true);
     }
 
     try {
       const result = await apiCall(endpoint);
+      if (!requestGuard.isLatest(requestToken)) return;
       if (result.success) {
         setInvoices(result.data);
         if (!trimmedSearch) {
@@ -38,9 +43,11 @@ export function useInvoiceViewState({
         }
       }
     } finally {
-      setLoading(false);
+      if (requestGuard.isLatest(requestToken)) {
+        setLoading(false);
+      }
     }
-  }, [search, setInvoices, setLoading]);
+  }, [requestGuard, search, setInvoices, setLoading]);
 
   const toggleInvoice = useCallback((invoiceId: string) => {
     setExpandedInvoices((prev) => {

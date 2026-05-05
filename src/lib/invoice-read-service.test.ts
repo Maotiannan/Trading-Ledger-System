@@ -306,15 +306,16 @@ describe('invoice-read-service', () => {
     expect(mockDb.customerOrderName.findMany).not.toHaveBeenCalled();
   });
 
-  it('skips customer inference when ORDER cannot derive a left-side order name', async () => {
+  it('returns no inferred customer when raw ORDER candidates also miss', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
 
     const result = await lookupInvoiceOrderContext(makeUser() as never, 'GANDO');
 
     expect(result.data.exactMatches).toEqual([]);
     expect(result.data.inferredCustomer).toBeNull();
     expect(result.data.derivedOrderName).toBeNull();
-    expect(mockDb.customerOrderName.findMany).not.toHaveBeenCalled();
+    expect(mockDb.customerOrderName.findMany).toHaveBeenCalled();
   });
 
   it('does not infer a customer when ORDER-derived name matches multiple customers', async () => {
@@ -376,6 +377,78 @@ describe('invoice-read-service', () => {
       phone: '620000003',
     }));
     expect(result.data.derivedOrderName).toBe('S U P E R D T 2');
+  });
+
+  it('infers a customer from any slash-delimited ORDER segment when exact rows are absent', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      {
+        orderName: 'PIKIN-23',
+        normalizedOrderName: 'pikin-23',
+        customer: {
+          id: 'customer-9',
+          mark: 'PIKIN',
+          orderName: 'PIKIN-23',
+          phone: '620000009',
+          city: 'Conakry',
+        },
+      },
+    ]);
+
+    const result = await lookupInvoiceOrderContext(makeUser() as never, 'PIKIN-23/PIKIN-19C');
+
+    expect(result.data.inferredCustomer).toEqual(expect.objectContaining({
+      id: 'customer-9',
+      mark: 'PIKIN',
+      orderName: 'PIKIN-23',
+      phone: '620000009',
+    }));
+    expect(result.data.derivedOrderName).toBe('PIKIN');
+  });
+
+  it('falls back to exact composite order lookup when alias rows are stale', async () => {
+    mockDb.order.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'order-composite',
+          orderNo: 'PIKIN-23/PIKIN-19C',
+          customerId: 'customer-10',
+          customerMark: 'PIKIN',
+          customerName: 'PIKIN-23',
+          customerPhone: '620000010',
+          customerCity: 'Conakry',
+          needsCustomerFix: false,
+          createdAt: new Date('2026-05-05T00:00:00Z'),
+          invoice: {
+            id: 'inv-composite',
+            invNo: 'INV-PIKIN',
+            createdAt: new Date('2026-05-05T00:00:00Z'),
+          },
+          customer: {
+            id: 'customer-10',
+            orderName: 'PIKIN-23',
+            companyName: 'Pikin SARL',
+            mark: 'PIKIN',
+            name: 'Pikin Customer',
+            phone: '620000010',
+            city: 'Conakry',
+          },
+        },
+      ]);
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('order-composite');
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
+
+    const result = await lookupInvoiceOrderContext(makeUser() as never, 'PIKIN-23');
+
+    expect(mockFindOrderIdByNoOrAlias).toHaveBeenCalledWith('PIKIN-23', expect.any(Object));
+    expect(result.data.exactMatches).toHaveLength(1);
+    expect(result.data.exactMatches[0]).toEqual(expect.objectContaining({
+      id: 'order-composite',
+      orderNo: 'PIKIN-23/PIKIN-19C',
+      customerPayer: 'Pikin SARL',
+      invoice: expect.objectContaining({ invNo: 'INV-PIKIN' }),
+    }));
   });
 
   it('returns accessible order receipts and records count', async () => {

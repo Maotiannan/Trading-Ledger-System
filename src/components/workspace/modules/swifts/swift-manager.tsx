@@ -13,12 +13,13 @@ import {
   getDisplayImageUrl,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
+  useLatestRequestGuard,
   useUiText,
 } from '@/components/workspace/shared';
 import { SwiftDirectCreateDialog, SwiftEditDialog, SwiftImagePreviewDialog, SwiftList, SwiftUploadDialog } from './components';
 import { useSwiftActions, useSwiftForms } from './hooks';
-import type { SwiftEditablePatch, SwiftEditRequestRow } from '@/lib/swift-edit-types';
-import { Check, Loader2, Plus, Upload, X } from 'lucide-react';
+import type { SwiftEditablePatch } from '@/lib/swift-edit-types';
+import { Plus, Upload } from 'lucide-react';
 
 export function SwiftManager() {
   const tx = useUiText();
@@ -30,8 +31,6 @@ export function SwiftManager() {
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [hasErrorFilter, setHasErrorFilter] = useState('');
-  const [editRequests, setEditRequests] = useState<SwiftEditRequestRow[]>([]);
-  const [editRequestsLoading, setEditRequestsLoading] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingSwiftId, setEditingSwiftId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<SwiftEditablePatch>({
@@ -65,8 +64,10 @@ export function SwiftManager() {
     handleShowDirectCreateChange,
     resetDirectForm,
   } = useSwiftForms();
+  const swiftRequestGuard = useLatestRequestGuard();
 
   const loadSwifts = useCallback(async () => {
+    const requestToken = swiftRequestGuard.nextToken();
     const params = new URLSearchParams();
     const trimmedSearch = search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
@@ -79,49 +80,22 @@ export function SwiftManager() {
     const endpoint = `swift${query ? `?${query}` : ''}`;
     const canUsePrefetch = !trimmedSearch && !dateFrom && !dateTo && !minAmount && !maxAmount && !hasErrorFilter;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof swifts }>(endpoint) : null;
-    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+    if (cachedResult?.success && Array.isArray(cachedResult.data) && swiftRequestGuard.isLatest(requestToken)) {
       setSwifts(cachedResult.data);
     }
     const result = await apiCall(endpoint);
+    if (!swiftRequestGuard.isLatest(requestToken)) return;
     if (result.success) {
       setSwifts(result.data);
       if (canUsePrefetch) {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [setSwifts, search, dateFrom, dateTo, minAmount, maxAmount, hasErrorFilter]);
-
-  const loadSwiftEditRequests = useCallback(async () => {
-    if (user?.role !== 'ADMIN' && user?.role !== 'SALES') {
-      setEditRequests([]);
-      return;
-    }
-
-    setEditRequestsLoading(true);
-    const result = await apiCall('swift', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'list-edit-requests' }),
-    });
-
-    if (result.success && Array.isArray(result.data)) {
-      setEditRequests(result.data as SwiftEditRequestRow[]);
-    } else {
-      setEditRequests([]);
-      setError(result.error || tx('加载SWIFT修改申请失败', 'Failed to load SWIFT edit requests.'));
-    }
-    setEditRequestsLoading(false);
-  }, [user?.role, setError, tx]);
+  }, [dateFrom, dateTo, hasErrorFilter, maxAmount, minAmount, search, setSwifts, swiftRequestGuard, swifts]);
 
   useEffect(() => {
     loadSwifts();
   }, [loadSwifts]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadSwiftEditRequests();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadSwiftEditRequests]);
 
   const {
     uploading,
@@ -131,11 +105,10 @@ export function SwiftManager() {
     handleDeleteSwift,
     handleDirectCreate,
     handleSubmitSwiftEdit,
-    handleReviewSwiftEdit,
   } = useSwiftActions({
     tx,
     loadSwifts,
-    loadSwiftEditRequests,
+    loadSwiftEditRequests: useCallback(async () => {}, []),
     selectedFile,
     ocrResult,
     selectedDetailId,
@@ -154,17 +127,6 @@ export function SwiftManager() {
   const waitingDetails = details.filter(d => d.status === 'Waiting_SWIFT');
   const isAdmin = user?.role === 'ADMIN';
   const canEditSwifts = user?.role === 'ADMIN' || user?.role === 'SALES';
-  const canApproveSwiftEdits = user?.role === 'ADMIN';
-
-  const getEditRequestStatusBadge = (status: SwiftEditRequestRow['status']) => {
-    const variants: Record<SwiftEditRequestRow['status'], 'outline' | 'default' | 'destructive'> = {
-      PENDING: 'outline',
-      APPROVED: 'default',
-      REJECTED: 'destructive',
-    };
-    return <Badge variant={variants[status]}>{status}</Badge>;
-  };
-
   const toEditableDateValue = (value: string | null | undefined) => {
     if (!value) return null;
     const trimmed = value.trim();
@@ -280,81 +242,6 @@ export function SwiftManager() {
         onEditSwift={openEditDialog}
         onDeleteSwift={handleDeleteSwift}
       />
-
-      {canEditSwifts && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="border-b px-6 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold">{tx('SWIFT修改申请', 'SWIFT Edit Requests')}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {tx('销售提交后等待管理员审批；管理员可直接审批可见范围内的申请。', 'Sales submissions wait for admin approval; admins can review visible requests directly.')}
-                  </p>
-                </div>
-                {editRequestsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="px-4 py-3">{tx('SWIFT', 'SWIFT')}</th>
-                    <th className="px-4 py-3">{tx('申请人', 'Requester')}</th>
-                    <th className="px-4 py-3">{tx('修改后', 'Requested Values')}</th>
-                    <th className="px-4 py-3">{tx('状态', 'Status')}</th>
-                    <th className="px-4 py-3">{tx('申请时间', 'Requested At')}</th>
-                    <th className="px-4 py-3">{tx('操作', 'Actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editRequests.map((request) => (
-                    <tr key={request.id} className="border-b align-top">
-                      <td className="px-4 py-3">{request.afterSnapshot.date || request.beforeSnapshot.date || '-'}</td>
-                      <td className="px-4 py-3">{request.requestedByName || '-'}</td>
-                      <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
-                        <div>{`Date: ${request.afterSnapshot.date ?? '-'}`}</div>
-                        <div>{`Amount: $${request.afterSnapshot.amount.toFixed(2)}`}</div>
-                        <div>{`Sender: ${request.afterSnapshot.senderName ?? '-'}`}</div>
-                        <div>{`Sender Address: ${request.afterSnapshot.senderAddress ?? '-'}`}</div>
-                        <div>{`Receiver: ${request.afterSnapshot.receiverName ?? '-'}`}</div>
-                        <div>{`Receiver Account: ${request.afterSnapshot.receiverAccount ?? '-'}`}</div>
-                      </td>
-                      <td className="px-4 py-3">{getEditRequestStatusBadge(request.status)}</td>
-                      <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">
-                        {request.status === 'PENDING' && canApproveSwiftEdits ? (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="default" onClick={() => void handleReviewSwiftEdit({ requestId: request.id, decision: 'approve' })} disabled={submitting}>
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => void handleReviewSwiftEdit({ requestId: request.id, decision: 'reject' })} disabled={submitting}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            {request.status === 'PENDING'
-                              ? tx('等待审批', 'Pending review')
-                              : request.approvedByName || '-'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {editRequests.length === 0 && !editRequestsLoading && (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                        {tx('暂无SWIFT修改申请', 'No SWIFT edit requests')}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <SwiftUploadDialog
         open={showUpload}

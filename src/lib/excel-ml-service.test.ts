@@ -113,7 +113,7 @@ describe('excel-ml-service', () => {
     }));
     expect(mockDb.customerOrderName.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
-        normalizedOrderName: 'gando',
+        normalizedOrderName: { in: ['gando-10', 'gando'] },
       }),
     }));
   });

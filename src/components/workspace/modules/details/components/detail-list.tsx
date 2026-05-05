@@ -79,7 +79,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                     <Pencil className="h-4 w-4" />
                   </Button>
                 )}
-                {detail.sourceMode === 'DIRECT' && (
+                {
                   <Button
                     size="sm"
                     variant="ghost"
@@ -91,7 +91,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                   >
                     <Download className="h-4 w-4" />
                   </Button>
-                )}
+                }
                 <Button
                   size="sm"
                   variant="ghost"

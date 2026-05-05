@@ -1,40 +1,125 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useUiText } from '@/components/workspace/shared';
-import { Check, X } from 'lucide-react';
-import { useDeletionActions } from '@/components/workspace/modules/deletions/hooks';
+import { apiCall, useUiText } from '@/components/workspace/shared';
+import type { ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
+import type { DetailEditRequestRow } from '@/lib/detail-edit-types';
+import type { SwiftEditRequestRow } from '@/lib/swift-edit-types';
+import { Check, Loader2, X } from 'lucide-react';
 
 export function DeletionManager() {
   const tx = useUiText();
   const { deletionRequests, setDeletionRequests, user } = useStore();
   const canApprove = user?.role === 'ADMIN';
-  const { loadRequests, handleApprove, handleReject } = useDeletionActions({ setDeletionRequests });
+  const [loading, setLoading] = useState(false);
+  const [receiptEditRequests, setReceiptEditRequests] = useState<ReceiptEditRequestRow[]>([]);
+  const [detailEditRequests, setDetailEditRequests] = useState<DetailEditRequestRow[]>([]);
+  const [swiftEditRequests, setSwiftEditRequests] = useState<SwiftEditRequestRow[]>([]);
+
+  const loadApprovalData = useCallback(async () => {
+    setLoading(true);
+    const [deletionResult, receiptResult, detailResult, swiftResult] = await Promise.all([
+      apiCall('deletion'),
+      apiCall('receipt', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
+      apiCall('detail', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
+      apiCall('swift', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
+    ]);
+
+    if (deletionResult.success && Array.isArray(deletionResult.data)) {
+      setDeletionRequests(deletionResult.data);
+    } else {
+      setDeletionRequests([]);
+    }
+
+    setReceiptEditRequests(receiptResult.success && Array.isArray(receiptResult.data) ? receiptResult.data as ReceiptEditRequestRow[] : []);
+    setDetailEditRequests(detailResult.success && Array.isArray(detailResult.data) ? detailResult.data as DetailEditRequestRow[] : []);
+    setSwiftEditRequests(swiftResult.success && Array.isArray(swiftResult.data) ? swiftResult.data as SwiftEditRequestRow[] : []);
+    setLoading(false);
+  }, [setDeletionRequests]);
 
   useEffect(() => {
-    loadRequests();
-  }, [loadRequests]);
+    const timeoutId = window.setTimeout(() => {
+      void loadApprovalData();
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadApprovalData]);
+
+  const handleDeletionDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
+    const result = await apiCall('deletion', {
+      method: 'POST',
+      body: JSON.stringify({ action: decision, requestId }),
+    });
+    if (result.success) {
+      await loadApprovalData();
+    }
+  }, [loadApprovalData]);
+
+  const handleReceiptDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
+    const result = await apiCall('receipt', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'review-edit', requestId, decision }),
+    });
+    if (result.success) await loadApprovalData();
+  }, [loadApprovalData]);
+
+  const handleDetailDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
+    const result = await apiCall('detail', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'review-edit', requestId, decision }),
+    });
+    if (result.success) await loadApprovalData();
+  }, [loadApprovalData]);
+
+  const handleSwiftDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
+    const result = await apiCall('swift', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'review-edit', requestId, decision }),
+    });
+    if (result.success) await loadApprovalData();
+  }, [loadApprovalData]);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-      'PENDING': 'outline',
-      'APPROVED': 'default',
-      'REJECTED': 'destructive'
+      PENDING: 'outline',
+      APPROVED: 'default',
+      REJECTED: 'destructive',
     };
     return <Badge variant={variants[status] || 'default'}>{status}</Badge>;
   };
 
+  const renderPendingActions = (requestId: string, onDecision: (requestId: string, decision: 'approve' | 'reject') => Promise<void>) => {
+    if (!canApprove) {
+      return <span className="text-xs text-muted-foreground">{tx('等待审批', 'Pending review')}</span>;
+    }
+    return (
+      <div className="flex gap-2">
+        <Button size="sm" variant="default" onClick={() => void onDecision(requestId, 'approve')} disabled={loading}>
+          <Check className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="destructive" onClick={() => void onDecision(requestId, 'reject')} disabled={loading}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">{tx('删除审批', 'Deletion Approval')}</h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold">{tx('审批', 'Approval')}</h2>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      </div>
 
       <Card>
         <CardContent className="p-0">
+          <div className="border-b px-6 py-4">
+            <h3 className="text-lg font-semibold">{tx('删除申请', 'Deletion Requests')}</h3>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -55,28 +140,167 @@ export function DeletionManager() {
                   <TableCell>{getStatusBadge(request.status)}</TableCell>
                   <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    {request.status === 'PENDING' && canApprove && (
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="default" onClick={() => handleApprove(request.id)}>
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleReject(request.id)}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
+                    {request.status === 'PENDING'
+                      ? renderPendingActions(request.id, handleDeletionDecision)
+                      : <span className="text-xs text-muted-foreground">{request.approver?.name || request.approver?.email || '-'}</span>}
                   </TableCell>
                 </TableRow>
               ))}
               {deletionRequests.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    {tx('暂无删除申请', 'No deletion requests')}
-                  </TableCell>
+                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">{tx('暂无删除申请', 'No deletion requests')}</TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="border-b px-6 py-4">
+            <h3 className="text-lg font-semibold">{tx('收据修改申请', 'Receipt Edit Requests')}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="px-4 py-3">{tx('收据号', 'Receipt No.')}</th>
+                  <th className="px-4 py-3">{tx('申请人', 'Requester')}</th>
+                  <th className="px-4 py-3">{tx('修改后', 'Requested Values')}</th>
+                  <th className="px-4 py-3">{tx('状态', 'Status')}</th>
+                  <th className="px-4 py-3">{tx('申请时间', 'Requested At')}</th>
+                  <th className="px-4 py-3">{tx('操作', 'Actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {receiptEditRequests.map((request) => (
+                  <tr key={request.id} className="border-b align-top">
+                    <td className="px-4 py-3">{request.afterSnapshot.receiptNo || request.beforeSnapshot.receiptNo || '-'}</td>
+                    <td className="px-4 py-3">{request.requestedByName || '-'}</td>
+                    <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
+                      <div>{`Receipt No: ${request.afterSnapshot.receiptNo ?? '-'}`}</div>
+                      <div>{`Payment Date: ${request.afterSnapshot.date ?? '-'}`}</div>
+                      <div>{`INV No: ${request.afterSnapshot.invNo ?? '-'}`}</div>
+                      <div>{`MARK: ${request.afterSnapshot.customerMark ?? '-'}`}</div>
+                      <div>{`Payer: ${request.afterSnapshot.payer ?? '-'}`}</div>
+                      <div>{`Phone: ${request.afterSnapshot.tel ?? '-'}`}</div>
+                    </td>
+                    <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
+                    <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      {request.status === 'PENDING'
+                        ? renderPendingActions(request.id, handleReceiptDecision)
+                        : <span className="text-xs text-muted-foreground">{request.approvedByName || '-'}</span>}
+                    </td>
+                  </tr>
+                ))}
+                {receiptEditRequests.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">{tx('暂无收据修改申请', 'No receipt edit requests')}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="border-b px-6 py-4">
+            <h3 className="text-lg font-semibold">{tx('付款明细修改申请', 'Payment Detail Edit Requests')}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="px-4 py-3">{tx('付款明细', 'Payment Detail')}</th>
+                  <th className="px-4 py-3">{tx('申请人', 'Requester')}</th>
+                  <th className="px-4 py-3">{tx('修改后', 'Requested Values')}</th>
+                  <th className="px-4 py-3">{tx('状态', 'Status')}</th>
+                  <th className="px-4 py-3">{tx('申请时间', 'Requested At')}</th>
+                  <th className="px-4 py-3">{tx('操作', 'Actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detailEditRequests.map((request) => (
+                  <tr key={request.id} className="border-b align-top">
+                    <td className="px-4 py-3">{request.afterSnapshot.date || request.beforeSnapshot.date || '-'}</td>
+                    <td className="px-4 py-3">{request.requestedByName || '-'}</td>
+                    <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
+                      <div>{`Date: ${request.afterSnapshot.date ?? '-'}`}</div>
+                      {request.afterSnapshot.items.map((item, index) => (
+                        <div key={`${request.id}-${index}`}>{`${index + 1}. ${item.mark ?? '-'} | ${item.orderNo ?? '-'} | $${item.amount.toFixed(2)} | ${item.receiptId ?? '-'}`}</div>
+                      ))}
+                    </td>
+                    <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
+                    <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      {request.status === 'PENDING'
+                        ? renderPendingActions(request.id, handleDetailDecision)
+                        : <span className="text-xs text-muted-foreground">{request.approvedByName || '-'}</span>}
+                    </td>
+                  </tr>
+                ))}
+                {detailEditRequests.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">{tx('暂无付款明细修改申请', 'No payment detail edit requests')}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="border-b px-6 py-4">
+            <h3 className="text-lg font-semibold">{tx('SWIFT修改申请', 'SWIFT Edit Requests')}</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="px-4 py-3">{tx('SWIFT', 'SWIFT')}</th>
+                  <th className="px-4 py-3">{tx('申请人', 'Requester')}</th>
+                  <th className="px-4 py-3">{tx('修改后', 'Requested Values')}</th>
+                  <th className="px-4 py-3">{tx('状态', 'Status')}</th>
+                  <th className="px-4 py-3">{tx('申请时间', 'Requested At')}</th>
+                  <th className="px-4 py-3">{tx('操作', 'Actions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {swiftEditRequests.map((request) => (
+                  <tr key={request.id} className="border-b align-top">
+                    <td className="px-4 py-3">{request.afterSnapshot.date || request.beforeSnapshot.date || '-'}</td>
+                    <td className="px-4 py-3">{request.requestedByName || '-'}</td>
+                    <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
+                      <div>{`Date: ${request.afterSnapshot.date ?? '-'}`}</div>
+                      <div>{`Amount: $${request.afterSnapshot.amount.toFixed(2)}`}</div>
+                      <div>{`Sender: ${request.afterSnapshot.senderName ?? '-'}`}</div>
+                      <div>{`Sender Address: ${request.afterSnapshot.senderAddress ?? '-'}`}</div>
+                      <div>{`Receiver: ${request.afterSnapshot.receiverName ?? '-'}`}</div>
+                      <div>{`Receiver Account: ${request.afterSnapshot.receiverAccount ?? '-'}`}</div>
+                    </td>
+                    <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
+                    <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">
+                      {request.status === 'PENDING'
+                        ? renderPendingActions(request.id, handleSwiftDecision)
+                        : <span className="text-xs text-muted-foreground">{request.approvedByName || '-'}</span>}
+                    </td>
+                  </tr>
+                ))}
+                {swiftEditRequests.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">{tx('暂无SWIFT修改申请', 'No SWIFT edit requests')}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -108,4 +108,40 @@ describe('customer-order-name-service', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.customer.mark).toBe('SDT 2');
   });
+
+  it('matches any slash-delimited ORDER segment and returns the owning customer alias row', async () => {
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([
+      {
+        id: 'alias-3',
+        isPrimary: true,
+        createdAt: new Date('2026-05-05T00:00:00.000Z'),
+        orderName: 'PIKIN-23',
+        normalizedOrderName: 'pikin-23',
+        customer: {
+          id: 'customer-3',
+          mark: 'PIKIN',
+          orderName: 'PIKIN-23',
+          name: 'Pikin Customer',
+          phone: '620000003',
+          city: 'Conakry',
+          consignee: null,
+          companyName: null,
+          companyAddress: null,
+          credit: null,
+        },
+      },
+    ]);
+
+    const rows = await findCustomerOrderNameMatches(['sales-1'], 'PIKIN-23/PIKIN-19C');
+
+    expect(mockDb.customerOrderName.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        normalizedOrderName: {
+          in: ['pikin-23', 'pikin', 'pikin-19c'],
+        },
+      }),
+    }));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.customer.id).toBe('customer-3');
+  });
 });

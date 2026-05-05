@@ -5,9 +5,10 @@ import { apiErrorCodes, createApiError, isApiError } from '@/lib/api-error';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import type { CurrentUser } from '@/lib/request-auth';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
-import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
 import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
+import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 
 export const EXCEL_ML_FIELDS = [
   { index: 1, key: 'ORDER_NAME', label: 'ORDER NAME' },
@@ -158,19 +159,33 @@ async function findCustomerForOrder(
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
   const visibilityWhere = buildOrderVisibilityWhere(ownerIds);
-  const normalizedOrderNo = normalizeOrderNo(rawOrderNo);
-  const canonicalOrderNo = canonicalizeOrderNo(rawOrderNo);
-  const derivedOrderName = extractOrderNameFromOrderNo(rawOrderNo);
+  const candidates = buildCompositeOrderLookupCandidates(rawOrderNo);
+  const derivedOrderName = extractOrderNameFromOrderNo(rawOrderNo) || candidates.derivedOrderNames[0] || null;
 
-  const exactOrders = await db.order.findMany({
+  let exactOrders = await db.order.findMany({
     where: {
       AND: [
         visibilityWhere,
         {
           OR: [
-            { orderNo: { equals: rawOrderNo } },
-            { orderNo: { equals: canonicalOrderNo } },
-            { aliases: { some: { aliasNo: normalizedOrderNo } } },
+            ...(candidates.exactOrderNos.length > 0
+              ? [{
+                  orderNo: candidates.exactOrderNos.length === 1
+                    ? { equals: candidates.exactOrderNos[0] }
+                    : { in: candidates.exactOrderNos },
+                }]
+              : []),
+            ...(candidates.normalizedOrderNos.length > 0
+              ? [{
+                  aliases: {
+                    some: {
+                      aliasNo: candidates.normalizedOrderNos.length === 1
+                        ? candidates.normalizedOrderNos[0]
+                        : { in: candidates.normalizedOrderNos },
+                    },
+                  },
+                }]
+              : []),
           ],
         },
       ],
@@ -204,6 +219,47 @@ async function findCustomerForOrder(
     orderBy: [{ createdAt: 'desc' }],
   });
 
+  if (exactOrders.length === 0) {
+    const matchedOrderId = await findOrderIdByNoOrAlias(rawOrderNo, visibilityWhere);
+    if (matchedOrderId) {
+      exactOrders = await db.order.findMany({
+        where: {
+          AND: [
+            visibilityWhere,
+            { id: matchedOrderId },
+          ],
+        },
+        select: {
+          id: true,
+          orderNo: true,
+          createdAt: true,
+          customer: {
+            select: {
+              id: true,
+              mark: true,
+              orderName: true,
+              name: true,
+              phone: true,
+              city: true,
+              consignee: true,
+              companyName: true,
+              companyAddress: true,
+              credit: true,
+            },
+          },
+          invoice: {
+            select: {
+              id: true,
+              invNo: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+      });
+    }
+  }
+
   const linkedCustomersById = new Map<string, ExcelCustomer>();
   for (const order of sortExactOrders(exactOrders)) {
     if (order.customer?.id && !linkedCustomersById.has(order.customer.id)) {
@@ -227,7 +283,7 @@ async function findCustomerForOrder(
     assertOrderMatched(rawOrderNo, { reason: 'order-name-not-derived' });
   }
 
-  const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, derivedOrderName);
+  const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, rawOrderNo);
 
   if (matchedCustomers.length === 0) {
     assertOrderMatched(rawOrderNo, { derivedOrderName });

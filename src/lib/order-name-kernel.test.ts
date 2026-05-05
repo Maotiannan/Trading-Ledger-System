@@ -1,5 +1,7 @@
 import {
+  buildCompositeOrderLookupCandidates,
   dedupeOrderNameAliases,
+  expandCompositeOrderSegments,
   extractOrderNamePrefix,
   normalizeOrderIdentifier,
 } from '@/lib/order-name-kernel';
@@ -24,5 +26,27 @@ describe('order-name-kernel', () => {
       { orderName: 'MAB-1', normalizedOrderName: 'mab-1' },
       { orderName: 'MARY', normalizedOrderName: 'mary' },
     ]);
+  });
+
+  it('expands composite ORDER values into normalized slash segments', () => {
+    expect(expandCompositeOrderSegments('PIKIN-23 / PIKIN-19C / PIKIN-23')).toEqual([
+      'PIKIN-23',
+      'PIKIN-19C',
+      'PIKIN-23 / PIKIN-19C / PIKIN-23',
+      'PIKIN-19C/PIKIN-23',
+    ]);
+  });
+
+  it('builds exact-order and ORDER_NAME candidates from slash segments', () => {
+    expect(buildCompositeOrderLookupCandidates('PIKIN-23/PIKIN-19C')).toEqual({
+      exactOrderNos: ['PIKIN-23', 'PIKIN-19C', 'PIKIN-23/PIKIN-19C', 'PIKIN-19C/PIKIN-23'],
+      normalizedOrderNos: ['pikin-23', 'pikin-19c', 'pikin-23/pikin-19c', 'pikin-19c/pikin-23'],
+      orderNameCandidates: [
+        { orderName: 'PIKIN-23', normalizedOrderName: 'pikin-23' },
+        { orderName: 'PIKIN', normalizedOrderName: 'pikin' },
+        { orderName: 'PIKIN-19C', normalizedOrderName: 'pikin-19c' },
+      ],
+      derivedOrderNames: ['PIKIN'],
+    });
   });
 });

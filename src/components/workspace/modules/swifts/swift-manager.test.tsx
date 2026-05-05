@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react';
 import { SwiftManager } from './swift-manager';
-import { apiCall, useUiText } from '@/components/workspace/shared';
+import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
 import { useLocale } from 'next-intl';
 import { useSwiftActions, useSwiftForms } from './hooks';
@@ -12,6 +12,7 @@ jest.mock('@/components/workspace/shared', () => ({
   getDisplayImageUrl: jest.fn((value: string) => value),
   peekPrefetchedApiResult: jest.fn(() => null),
   rememberPrefetchedApiResult: jest.fn(),
+  useLatestRequestGuard: jest.fn(),
   useUiText: jest.fn(),
 }));
 
@@ -43,6 +44,7 @@ jest.mock('./components', () => ({
 }));
 
 const mockApiCall = apiCall as jest.Mock;
+const mockUseLatestRequestGuard = useLatestRequestGuard as jest.Mock;
 const mockUseUiText = useUiText as jest.Mock;
 const mockUseStore = useStore as unknown as jest.Mock;
 const mockUseLocale = useLocale as jest.Mock;
@@ -54,6 +56,7 @@ describe('SwiftManager', () => {
     delete (globalThis as { __swiftListProps?: SwiftListProps }).__swiftListProps;
     delete (globalThis as { __swiftEditDialogProps?: SwiftEditDialogProps }).__swiftEditDialogProps;
     mockApiCall.mockClear();
+    mockUseLatestRequestGuard.mockReturnValue({ nextToken: jest.fn(() => 1), isLatest: jest.fn(() => true) });
     mockUseUiText.mockReturnValue((zh: string) => zh);
     mockUseStore.mockReturnValue({
       swifts: [],
@@ -101,7 +104,6 @@ describe('SwiftManager', () => {
       handleDeleteSwift: jest.fn(),
       handleDirectCreate: jest.fn(),
       handleSubmitSwiftEdit: jest.fn(),
-      handleReviewSwiftEdit: jest.fn(),
     });
   });
 

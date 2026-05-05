@@ -13,6 +13,7 @@ import {
   getDisplayImageUrl,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
+  useLatestRequestGuard,
   useUiText,
 } from '@/components/workspace/shared';
 import {
@@ -23,8 +24,8 @@ import {
   DetailUploadDialog,
 } from './components';
 import { useDetailActions, useDetailForms } from './hooks';
-import type { DetailEditablePatch, DetailEditRequestRow } from '@/lib/detail-edit-types';
-import { Check, Loader2, Plus, Upload, X } from 'lucide-react';
+import type { DetailEditablePatch } from '@/lib/detail-edit-types';
+import { Plus, Upload } from 'lucide-react';
 
 export function DetailManager() {
   const tx = useUiText();
@@ -36,8 +37,6 @@ export function DetailManager() {
   const [dateTo, setDateTo] = useState('');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
-  const [editRequests, setEditRequests] = useState<DetailEditRequestRow[]>([]);
-  const [editRequestsLoading, setEditRequestsLoading] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<DetailEditablePatch>({
@@ -76,8 +75,10 @@ export function DetailManager() {
     toggleDetail,
     resetDirectForm,
   } = useDetailForms();
+  const detailRequestGuard = useLatestRequestGuard();
 
   const loadDetails = useCallback(async () => {
+    const requestToken = detailRequestGuard.nextToken();
     const params = new URLSearchParams();
     const trimmedSearch = search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
@@ -90,49 +91,22 @@ export function DetailManager() {
     const endpoint = `detail${query ? `?${query}` : ''}`;
     const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !minAmount && !maxAmount;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof details }>(endpoint) : null;
-    if (cachedResult?.success && Array.isArray(cachedResult.data)) {
+    if (cachedResult?.success && Array.isArray(cachedResult.data) && detailRequestGuard.isLatest(requestToken)) {
       setDetails(cachedResult.data);
     }
     const result = await apiCall(endpoint);
+    if (!detailRequestGuard.isLatest(requestToken)) return;
     if (result.success) {
       setDetails(result.data);
       if (canUsePrefetch) {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [setDetails, search, statusFilter, dateFrom, dateTo, minAmount, maxAmount]);
-
-  const loadDetailEditRequests = useCallback(async () => {
-    if (user?.role !== 'ADMIN' && user?.role !== 'SALES') {
-      setEditRequests([]);
-      return;
-    }
-
-    setEditRequestsLoading(true);
-    const result = await apiCall('detail', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'list-edit-requests' }),
-    });
-
-    if (result.success && Array.isArray(result.data)) {
-      setEditRequests(result.data as DetailEditRequestRow[]);
-    } else {
-      setEditRequests([]);
-      setError(result.error || tx('加载付款明细修改申请失败', 'Failed to load payment detail edit requests.'));
-    }
-    setEditRequestsLoading(false);
-  }, [user?.role, setError, tx]);
+  }, [dateFrom, dateTo, detailRequestGuard, details, maxAmount, minAmount, search, setDetails, statusFilter]);
 
   useEffect(() => {
     loadDetails();
   }, [loadDetails]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void loadDetailEditRequests();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadDetailEditRequests]);
 
   const {
     uploading,
@@ -142,11 +116,10 @@ export function DetailManager() {
     handleDeleteDetail,
     handleDirectCreate,
     handleSubmitDetailEdit,
-    handleReviewDetailEdit,
   } = useDetailActions({
     tx,
     loadDetails,
-    loadDetailEditRequests,
+    loadDetailEditRequests: useCallback(async () => {}, []),
     selectedFile,
     ocrResult,
     savedImagePath,
@@ -167,17 +140,6 @@ export function DetailManager() {
 
   const isAdmin = user?.role === 'ADMIN';
   const canEditDetails = user?.role === 'ADMIN' || user?.role === 'SALES';
-  const canApproveDetailEdits = user?.role === 'ADMIN';
-
-  const getEditRequestStatusBadge = (status: DetailEditRequestRow['status']) => {
-    const variants: Record<DetailEditRequestRow['status'], 'outline' | 'default' | 'destructive'> = {
-      PENDING: 'outline',
-      APPROVED: 'default',
-      REJECTED: 'destructive',
-    };
-    return <Badge variant={variants[status]}>{status}</Badge>;
-  };
-
   const toEditableDateValue = (value: string | null | undefined) => {
     if (!value) return null;
     const trimmed = value.trim();
@@ -296,79 +258,6 @@ export function DetailManager() {
         onExportDetailPic={handleExportDetailPic}
         onDeleteDetail={handleDeleteDetail}
       />
-
-      {canEditDetails && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="border-b px-6 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold">{tx('付款明细修改申请', 'Payment Detail Edit Requests')}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {tx('销售提交后等待管理员审批；管理员可直接审批可见范围内的申请。', 'Sales submissions wait for admin approval; admins can review visible requests directly.')}
-                  </p>
-                </div>
-                {editRequestsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="px-4 py-3">{tx('付款明细', 'Payment Detail')}</th>
-                    <th className="px-4 py-3">{tx('申请人', 'Requester')}</th>
-                    <th className="px-4 py-3">{tx('修改后', 'Requested Values')}</th>
-                    <th className="px-4 py-3">{tx('状态', 'Status')}</th>
-                    <th className="px-4 py-3">{tx('申请时间', 'Requested At')}</th>
-                    <th className="px-4 py-3">{tx('操作', 'Actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editRequests.map((request) => (
-                    <tr key={request.id} className="border-b align-top">
-                      <td className="px-4 py-3">{request.afterSnapshot.date || request.beforeSnapshot.date || '-'}</td>
-                      <td className="px-4 py-3">{request.requestedByName || '-'}</td>
-                      <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
-                        <div>{`Date: ${request.afterSnapshot.date ?? '-'}`}</div>
-                        {request.afterSnapshot.items.map((item, index) => (
-                          <div key={`${request.id}-${index}`}>{`${index + 1}. ${item.mark ?? '-'} | ${item.orderNo ?? '-'} | $${item.amount.toFixed(2)} | ${item.receiptId ?? '-'}`}</div>
-                        ))}
-                      </td>
-                      <td className="px-4 py-3">{getEditRequestStatusBadge(request.status)}</td>
-                      <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-3">
-                        {request.status === 'PENDING' && canApproveDetailEdits ? (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="default" onClick={() => void handleReviewDetailEdit({ requestId: request.id, decision: 'approve' })} disabled={submitting}>
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={() => void handleReviewDetailEdit({ requestId: request.id, decision: 'reject' })} disabled={submitting}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            {request.status === 'PENDING'
-                              ? tx('等待审批', 'Pending review')
-                              : request.approvedByName || '-'}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {editRequests.length === 0 && !editRequestsLoading && (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                        {tx('暂无付款明细修改申请', 'No payment detail edit requests')}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <DetailUploadDialog
         open={showUpload}

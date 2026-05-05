@@ -96,15 +96,6 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           detail: { detailId },
         });
       }
-      if (detail.sourceMode !== 'DIRECT') {
-        throw createApiError({
-          code: 'BAD_REQUEST',
-          status: 400,
-          message: '只有直接创建的付款明细支持导出图片',
-          detail: { detailId, sourceMode: detail.sourceMode },
-        });
-      }
-
       const buffer = await renderDetailExportPng(detail);
       const fileDate = detail.date ? new Date(detail.date).toISOString().slice(0, 10) : 'undated';
       return new NextResponse(new Uint8Array(buffer), {

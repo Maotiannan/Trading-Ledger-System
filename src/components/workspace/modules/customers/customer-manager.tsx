@@ -7,6 +7,7 @@ import {
   apiCall,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
+  useLatestRequestGuard,
   useUiText,
 } from '@/components/workspace/shared';
 import { ImportResultDialog } from '@/components/workspace/components/import-result-dialog';
@@ -43,6 +44,7 @@ export function CustomerManager() {
   const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
   const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
   const [search, setSearch] = useState('');
+  const customerRequestGuard = useLatestRequestGuard();
   const {
     customerImportInputRef,
     showCreate,
@@ -75,18 +77,22 @@ export function CustomerManager() {
   const customerImportColumns = useCustomerImportColumns(updateCustomerImportIssue);
 
   const loadCustomers = useCallback(async () => {
+    const requestToken = customerRequestGuard.nextToken();
     const trimmedSearch = search.trim();
     const endpoint = `customer${trimmedSearch ? `?search=${encodeURIComponent(trimmedSearch)}` : ''}`;
     const cachedResult = trimmedSearch ? null : peekPrefetchedApiResult<{ success?: boolean; data?: Array<Record<string, unknown>> }>(endpoint);
     if (cachedResult?.success && Array.isArray(cachedResult.data)) {
-      setCustomers(cachedResult.data);
+      if (customerRequestGuard.isLatest(requestToken)) {
+        setCustomers(cachedResult.data);
+      }
     }
     const result = await apiCall(endpoint);
+    if (!customerRequestGuard.isLatest(requestToken)) return;
     if (result.success) setCustomers(Array.isArray(result.data) ? result.data : []);
     if (result.success && !trimmedSearch) {
       rememberPrefetchedApiResult(endpoint, result);
     }
-  }, [search]);
+  }, [customerRequestGuard, search]);
 
   const loadFixes = useCallback(async () => {
     const endpoint = 'customer/fixes';

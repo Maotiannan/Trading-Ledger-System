@@ -1,12 +1,16 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.114
+> 当前版本：v1.0.115
 > 最后更新：2026-05-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 审批聚合与搜索稳定性收口：原 `Deletion Approval` 页面重构为统一 `Approval` 页，集中展示删除审批、收据修改审批、付款明细修改审批和 SWIFT 修改审批，并移除各业务页底部重复待审批表；新增 `useLatestRequestGuard` 并在 customer/invoice/receipt/detail/swift 列表加载中统一接入“只采用最新请求结果”的保护，修复搜索框输入结束后被过期请求覆盖的错误结果，以及因此引发的 `ReceiptManager` 无限更新回归；补齐 `use-invoice-view-state` 与相关页面测试并重新跑通 `build + test:ci` ✅ 2026-05-05
+- [x] 复合订单 `/` 匹配规则落地：`order-name-kernel` 新增复合订单候选扩展，`customer-order-name-service / customer-matching / invoice-read-service / excel-ml-service / order-alias-db` 统一支持“复合订单任一分段命中整条记录”，同时保持 ignore-space 与客户主数据规范回填；补齐 `order-name-kernel / customer-order-name-service / order-alias-db / invoice-read-service / excel-ml-service` 单测 ✅ 2026-05-05
+- [x] `Payment Detail` 导出图片能力泛化：移除 API 与前端对 `sourceMode === DIRECT` 的限制，所有可见明细均可调用 `export-pic` 渲染规范导出图 ✅ 2026-05-05
 
 - [x] 全局匹配内核与收据/明细后续能力收口：新增 `order-name-kernel` 统一处理忽略空格规范化、`ORDER NO -> ORDER_NAME` 前缀提取与 alias 去重；`Customer` 新增 `normalizedMark`，并引入 `CustomerOrderName` 子表支持一客户维护多个独立 `ORDER_NAME`；`customer-matching / invoice-read-service / invoice-service / excel-ml-service / customer-scope` 统一改为走 alias + ignore-space 规则，批量导入、创建、改单、rematch、收据 OCR/直建、签名收据订单上下文全部共用同一套匹配核；同时支持 `Invoice` 订单编辑修改 `INV NO` 并事务化迁移订单分组、同步关联收据 `invNo`；`Receipts` 列表新增 `Balance` 列；`Upload Receipt` OCR 在识别出 `ORDER NO` 后优先用数据库订单/客户信息整套回填；`Payment Detail` 手工直建记录新增 `Export Pic` PNG 导出；`Generate Signed Receipt` 新增 `Mode de paiement(Cash/Transfer)` 并渲染到 `RESTE A PAYER` 同行右侧；补齐 `order-name-kernel / customer-order-name-service / customer-matching / invoice-read-service / invoice-service / receipt-balance / detail-export-image / receipt-generator-*` 单测与全量 `test:ci` 验证 ✅ 2026-05-05
 

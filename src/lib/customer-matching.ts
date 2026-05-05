@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
-import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
 export type CustomerResolveInput = {
   customerMark: string;
@@ -31,11 +31,9 @@ export function normalizeOrderNameForMatch(value: string | null | undefined): st
 }
 
 export function extractOrderNameFromOrderNo(value: string | null | undefined): string | null {
-  const normalized = String(value || '').trim();
-  const lastDashIndex = normalized.lastIndexOf('-');
-  if (lastDashIndex <= 0 || lastDashIndex >= normalized.length - 1) return null;
-  const left = normalized.slice(0, lastDashIndex).trim().replace(/\s+/g, ' ');
-  return left || null;
+  const candidates = buildCompositeOrderLookupCandidates(value).derivedOrderNames;
+  const first = candidates[0] || null;
+  return first ? first.replace(/\s+/g, ' ') : null;
 }
 
 export async function resolveCustomer(input: CustomerResolveInput): Promise<CustomerResolveResult> {

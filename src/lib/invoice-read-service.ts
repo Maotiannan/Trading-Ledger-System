@@ -7,9 +7,9 @@ import { buildInvoiceVisibilityWhere, buildOrderVisibilityWhere, buildReceiptVis
 import { filterRowsBySearch } from '@/lib/text-search';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
-import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
+import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
 
 function rankInvoice(invNo: string) {
   if (invNo === 'DEPOSIT_POOL') return 0;
@@ -149,9 +149,8 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
   const ownerIds = Array.from(scope.ownerVisibleIds);
   const visibilityWhere = buildOrderVisibilityWhere(ownerIds);
   const rawOrderNo = String(orderNo || '').trim();
-  const normalizedOrderNo = normalizeOrderNo(rawOrderNo);
-  const canonicalOrderNo = canonicalizeOrderNo(rawOrderNo);
-  const derivedOrderName = extractOrderNameFromOrderNo(rawOrderNo);
+  const candidates = buildCompositeOrderLookupCandidates(rawOrderNo);
+  const derivedOrderName = extractOrderNameFromOrderNo(rawOrderNo) || candidates.derivedOrderNames[0] || null;
 
   if (!rawOrderNo) {
     await recordAuditEvent({
@@ -170,15 +169,30 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     };
   }
 
-  const exactMatches = await db.order.findMany({
+  let exactMatches = await db.order.findMany({
     where: {
       AND: [
         visibilityWhere,
         {
           OR: [
-            { orderNo: { equals: rawOrderNo } },
-            { orderNo: { equals: canonicalOrderNo } },
-            { aliases: { some: { aliasNo: normalizedOrderNo } } },
+            ...(candidates.exactOrderNos.length > 0
+              ? [{
+                  orderNo: candidates.exactOrderNos.length === 1
+                    ? { equals: candidates.exactOrderNos[0] }
+                    : { in: candidates.exactOrderNos },
+                }]
+              : []),
+            ...(candidates.normalizedOrderNos.length > 0
+              ? [{
+                  aliases: {
+                    some: {
+                      aliasNo: candidates.normalizedOrderNos.length === 1
+                        ? candidates.normalizedOrderNos[0]
+                        : { in: candidates.normalizedOrderNos },
+                    },
+                  },
+                }]
+              : []),
           ],
         },
       ],
@@ -216,6 +230,51 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     orderBy: [{ createdAt: 'desc' }],
   });
 
+  if (exactMatches.length === 0) {
+    const matchedOrderId = await findOrderIdByNoOrAlias(rawOrderNo, visibilityWhere);
+    if (matchedOrderId) {
+      exactMatches = await db.order.findMany({
+        where: {
+          AND: [
+            visibilityWhere,
+            { id: matchedOrderId },
+          ],
+        },
+        select: {
+          id: true,
+          orderNo: true,
+          orderBalance: true,
+          customerId: true,
+          customerMark: true,
+          customerName: true,
+          customerPhone: true,
+          customerCity: true,
+          needsCustomerFix: true,
+          createdAt: true,
+          customer: {
+            select: {
+              id: true,
+              orderName: true,
+              companyName: true,
+              mark: true,
+              name: true,
+              phone: true,
+              city: true,
+            },
+          },
+          invoice: {
+            select: {
+              id: true,
+              invNo: true,
+              createdAt: true,
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'desc' }],
+      });
+    }
+  }
+
   exactMatches.sort((left, right) => {
     const invoiceDiff = new Date(right.invoice.createdAt).getTime() - new Date(left.invoice.createdAt).getTime();
     if (invoiceDiff !== 0) return invoiceDiff;
@@ -239,8 +298,8 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     city: string | null;
   } = null;
 
-  if (derivedOrderName) {
-    const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, derivedOrderName);
+  if (rawOrderNo) {
+    const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, rawOrderNo);
 
     if (matchedCustomers.length === 1) {
       inferredCustomer = {

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { dedupeOrderNameAliases, extractOrderNamePrefix, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { buildCompositeOrderLookupCandidates, dedupeOrderNameAliases, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
 export type CustomerOrderNameWrite = {
   customerId: string;
@@ -40,12 +40,9 @@ export async function syncCustomerOrderNames(
 }
 
 export async function findCustomerOrderNameMatches(ownerIds: string[] | null | undefined, orderInput: string | null | undefined) {
-  const rawNormalized = normalizeOrderIdentifier(orderInput);
-  const derivedOrderName = extractOrderNamePrefix(orderInput);
-  const derivedNormalized = normalizeOrderIdentifier(derivedOrderName);
-  const normalizedCandidates = Array.from(
-    new Set([rawNormalized, derivedNormalized].filter(Boolean)),
-  );
+  const normalizedCandidates = buildCompositeOrderLookupCandidates(orderInput).orderNameCandidates
+    .map((row) => row.normalizedOrderName)
+    .filter(Boolean);
   if (normalizedCandidates.length === 0) return [];
 
   const rows = await db.customerOrderName.findMany({

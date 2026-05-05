@@ -1,7 +1,8 @@
 import { ReceiptEditRequestStatus, ReceiptStatus, UserRole } from '@prisma/client';
-import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/store';
+import { auditActions } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
+import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { recordAuditEvent } from '@/lib/audit';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
@@ -165,7 +166,7 @@ describe('receipt-edit-request-service', () => {
       }),
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'RECEIPT_EDIT_REQUEST_CREATE',
+      action: auditActions.RECEIPT_EDIT_REQUEST_CREATE,
       actorId: 'sales-1',
       targetId: 'req-1',
     }));
@@ -319,7 +320,7 @@ describe('receipt-edit-request-service', () => {
       }),
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'RECEIPT_EDIT_REQUEST_REJECT',
+      action: auditActions.RECEIPT_EDIT_REQUEST_REJECT,
       actorId: 'admin-1',
       targetId: 'req-2',
     }));
@@ -328,58 +329,121 @@ describe('receipt-edit-request-service', () => {
   it('lists receipt edit requests using the store row shape', async () => {
     const requestedAt = new Date('2026-05-04T00:00:00.000Z');
     const reviewedAt = new Date('2026-05-05T08:30:00.000Z');
-    const prismaRows = [{
-      id: 'req-1',
-      receiptId: 'receipt-1',
-      status: ReceiptEditRequestStatus.APPROVED,
-      requestedBy: 'sales-1',
-      requester: {
-        name: 'Sales',
-        email: 'sales@example.com',
+    const prismaRows = [
+      {
+        id: 'req-1',
+        receiptId: 'receipt-1',
+        status: ReceiptEditRequestStatus.APPROVED,
+        requestedBy: 'sales-1',
+        requester: {
+          name: 'Sales',
+          email: 'sales@example.com',
+        },
+        approvedBy: 'admin-1',
+        approver: {
+          name: 'Admin',
+          email: 'admin@example.com',
+        },
+        requestedAt,
+        reviewedAt,
+        beforeSnapshot: {
+          receiptNo: '0001001',
+          date: null,
+          invNo: 'INV-1',
+          customerMark: 'MAB-1',
+          payer: 'ACME',
+          tel: '123',
+        },
+        afterSnapshot: {
+          ...validEditPayload,
+        },
+        reviewComment: 'approved',
       },
-      approvedBy: 'admin-1',
-      approver: {
-        name: 'Admin',
-        email: 'admin@example.com',
+      {
+        id: 'req-2',
+        receiptId: 'receipt-2',
+        status: ReceiptEditRequestStatus.PENDING,
+        requestedBy: 'sales-2',
+        requester: {
+          name: null,
+          email: 'pending@example.com',
+        },
+        approvedBy: null,
+        approver: null,
+        requestedAt,
+        reviewedAt: null,
+        beforeSnapshot: {
+          receiptNo: '0001003',
+          date: '2026-05-01',
+          invNo: 'INV-3',
+          customerMark: null,
+          payer: 'GAMMA',
+          tel: null,
+        },
+        afterSnapshot: {
+          receiptNo: '0001004',
+          date: '2026-05-02',
+          invNo: 'INV-4',
+          customerMark: 'MAB-4',
+          payer: 'DELTA',
+          tel: '789',
+        },
+        reviewComment: null,
       },
-      requestedAt,
-      reviewedAt,
-      beforeSnapshot: {
-        receiptNo: '0001001',
-        date: null,
-        invNo: 'INV-1',
-        customerMark: 'MAB-1',
-        payer: 'ACME',
-        tel: '123',
+    ];
+    const expectedRows: ReceiptEditRequestRow[] = [
+      {
+        id: 'req-1',
+        receiptId: 'receipt-1',
+        status: 'APPROVED',
+        requestedBy: 'sales-1',
+        requestedByName: 'Sales',
+        approvedBy: 'admin-1',
+        approvedByName: 'Admin',
+        requestedAt: requestedAt.toISOString(),
+        reviewedAt: reviewedAt.toISOString(),
+        beforeSnapshot: {
+          receiptNo: '0001001',
+          date: null,
+          invNo: 'INV-1',
+          customerMark: 'MAB-1',
+          payer: 'ACME',
+          tel: '123',
+        },
+        afterSnapshot: {
+          ...validEditPayload,
+        },
+        reviewComment: 'approved',
       },
-      afterSnapshot: {
-        ...validEditPayload,
+      {
+        id: 'req-2',
+        receiptId: 'receipt-2',
+        status: 'PENDING',
+        requestedBy: 'sales-2',
+        requestedByName: 'pending@example.com',
+        approvedBy: null,
+        approvedByName: null,
+        requestedAt: requestedAt.toISOString(),
+        reviewedAt: null,
+        beforeSnapshot: {
+          receiptNo: '0001003',
+          date: '2026-05-01',
+          invNo: 'INV-3',
+          customerMark: null,
+          payer: 'GAMMA',
+          tel: null,
+        },
+        afterSnapshot: {
+          receiptNo: '0001004',
+          date: '2026-05-02',
+          invNo: 'INV-4',
+          customerMark: 'MAB-4',
+          payer: 'DELTA',
+          tel: '789',
+        },
+        reviewComment: null,
       },
-      reviewComment: 'approved',
-    }];
-    const expectedRows: ReceiptEditRequestRow[] = [{
-      id: 'req-1',
-      receiptId: 'receipt-1',
-      status: 'APPROVED',
-      requestedBy: 'sales-1',
-      requestedByName: 'Sales',
-      approvedBy: 'admin-1',
-      approvedByName: 'Admin',
-      requestedAt: requestedAt.toISOString(),
-      reviewedAt: reviewedAt.toISOString(),
-      beforeSnapshot: {
-        receiptNo: '0001001',
-        date: null,
-        invNo: 'INV-1',
-        customerMark: 'MAB-1',
-        payer: 'ACME',
-        tel: '123',
-      },
-      afterSnapshot: {
-        ...validEditPayload,
-      },
-      reviewComment: 'approved',
-    }];
+    ];
     mockDb.receiptEditRequest.findMany.mockResolvedValueOnce(prismaRows);
 
     await expect(listReceiptEditRequests(adminUser)).resolves.toEqual(expectedRows);

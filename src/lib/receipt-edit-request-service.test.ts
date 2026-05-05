@@ -5,6 +5,7 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-edit-contract-types';
 import { recordAuditEvent } from '@/lib/audit';
 import type { CurrentUser } from '@/lib/request-auth';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 import {
   listReceiptEditRequests,
   requestReceiptEdit,
@@ -35,6 +36,10 @@ jest.mock('@/lib/ownership', () => ({
   canAccessOwnedResourceAsync: jest.fn(),
 }));
 
+jest.mock('@/lib/user-hierarchy', () => ({
+  getHierarchyScope: jest.fn(),
+}));
+
 jest.mock('@/lib/audit', () => ({
   recordAuditEvent: jest.fn(),
 }));
@@ -61,6 +66,15 @@ const adminUser = makeUser({
   level: 1,
   parentId: null,
   createdById: null,
+});
+const branchManagerUser = makeUser({
+  id: 'manager-1',
+  email: 'manager@example.com',
+  name: 'Manager',
+  role: UserRole.ADMIN,
+  level: 2,
+  parentId: 'admin-1',
+  createdById: 'admin-1',
 });
 
 const validEditPayload: ReceiptEditablePatch = {
@@ -91,6 +105,7 @@ const mockDb = db as unknown as {
 };
 
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
+const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockTx = {
   receipt: {
@@ -110,6 +125,13 @@ describe('receipt-edit-request-service', () => {
     jest.clearAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
+    mockGetHierarchyScope.mockResolvedValue({
+      selfId: adminUser.id,
+      ancestorIds: new Set<string>(),
+      descendantIds: new Set<string>(['sales-1']),
+      visibleIds: new Set<string>(['admin-1', 'sales-1']),
+      ownerVisibleIds: new Set<string>(['admin-1', 'sales-1']),
+    });
   });
 
   it('creates a pending receipt edit request for SALES on a visible receipt', async () => {
@@ -304,6 +326,12 @@ describe('receipt-edit-request-service', () => {
     expect(mockDb.receiptHistory.create).not.toHaveBeenCalled();
     expect(mockDb.receiptEditRequest.findUnique).not.toHaveBeenCalled();
     expect(mockDb.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: auditActions.RECEIPT_EDIT_REQUEST_APPROVE,
+      actorId: 'admin-1',
+      targetId: 'req-1',
+      targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
+    }));
   });
 
   it('rejects a pending request without mutating the receipt', async () => {
@@ -364,6 +392,50 @@ describe('receipt-edit-request-service', () => {
     }));
     expect(mockDb.receiptEditRequest.findUnique).not.toHaveBeenCalled();
     expect(mockDb.receiptEditRequest.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects review when the reviewer cannot access the requester hierarchy', async () => {
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-foreign',
+      receiptId: 'receipt-9',
+      status: ReceiptEditRequestStatus.PENDING,
+      requestedBy: 'sales-foreign',
+      afterSnapshot: validEditPayload,
+      receipt: {
+        id: 'receipt-9',
+        createdBy: 'sales-foreign',
+        status: ReceiptStatus.SR_Received,
+        receiptNo: '0001009',
+        date: null,
+        invNo: 'INV-9',
+        customerMark: 'MAB-9',
+        payer: 'FOREIGN',
+        tel: '999',
+      },
+      requester: makeUser({
+        id: 'sales-foreign',
+        email: 'foreign@example.com',
+        parentId: 'admin-9',
+        createdById: 'admin-9',
+      }),
+    });
+    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(false);
+
+    await expect(reviewReceiptEdit({
+      currentUser: adminUser,
+      requestId: 'req-foreign',
+      decision: 'approve',
+      comment: 'out of scope',
+    })).rejects.toMatchObject({
+      code: 'RECEIPT_EDIT_REQUEST_FORBIDDEN',
+      status: 403,
+    });
+
+    expect(mockCanAccessOwnedResourceAsync).toHaveBeenCalledWith('sales-foreign', adminUser);
+    expect(mockTx.receipt.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
   it('lists receipt edit requests using the store row shape', async () => {
@@ -487,5 +559,158 @@ describe('receipt-edit-request-service', () => {
     mockDb.receiptEditRequest.findMany.mockResolvedValueOnce(prismaRows);
 
     await expect(listReceiptEditRequests(adminUser)).resolves.toEqual(expectedRows);
+  });
+
+  it('lists only own submitted visible requests for SALES', async () => {
+    const requestedAt = new Date('2026-05-04T00:00:00.000Z');
+    mockGetHierarchyScope.mockResolvedValueOnce({
+      selfId: salesUser.id,
+      ancestorIds: new Set<string>(['admin-1']),
+      descendantIds: new Set<string>(),
+      visibleIds: new Set<string>(['sales-1', 'admin-1']),
+      ownerVisibleIds: new Set<string>(['sales-1']),
+    });
+    mockDb.receiptEditRequest.findMany.mockResolvedValueOnce([
+      {
+        id: 'req-own',
+        receiptId: 'receipt-own',
+        status: ReceiptEditRequestStatus.PENDING,
+        requestedBy: 'sales-1',
+        requester: {
+          name: 'Sales',
+          email: 'sales@example.com',
+        },
+        approvedBy: null,
+        approver: null,
+        requestedAt,
+        reviewedAt: null,
+        beforeSnapshot: {
+          receiptNo: '0001010',
+          date: null,
+          invNo: 'INV-10',
+          customerMark: 'MAB-10',
+          payer: 'ALPHA',
+          tel: '111',
+        },
+        afterSnapshot: validEditPayload,
+        reviewComment: null,
+      },
+    ]);
+
+    await expect(listReceiptEditRequests(salesUser)).resolves.toEqual([
+      {
+        id: 'req-own',
+        receiptId: 'receipt-own',
+        status: 'PENDING',
+        requestedBy: 'sales-1',
+        requestedByName: 'Sales',
+        approvedBy: null,
+        approvedByName: null,
+        requestedAt: requestedAt.toISOString(),
+        reviewedAt: null,
+        beforeSnapshot: {
+          receiptNo: '0001010',
+          date: null,
+          invNo: 'INV-10',
+          customerMark: 'MAB-10',
+          payer: 'ALPHA',
+          tel: '111',
+        },
+        afterSnapshot: validEditPayload,
+        reviewComment: null,
+      },
+    ]);
+
+    expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        requestedBy: 'sales-1',
+      }),
+    }));
+  });
+
+  it('lists manager-visible requests with broader visibility than self-submitted rows', async () => {
+    const requestedAt = new Date('2026-05-05T01:00:00.000Z');
+    mockGetHierarchyScope.mockResolvedValueOnce({
+      selfId: branchManagerUser.id,
+      ancestorIds: new Set<string>(['admin-1']),
+      descendantIds: new Set<string>(['sales-1', 'sales-2']),
+      visibleIds: new Set<string>(['manager-1', 'admin-1', 'sales-1', 'sales-2']),
+      ownerVisibleIds: new Set<string>(['manager-1', 'sales-1', 'sales-2']),
+    });
+    mockDb.receiptEditRequest.findMany.mockResolvedValueOnce([
+      {
+        id: 'req-approvable',
+        receiptId: 'receipt-branch',
+        status: ReceiptEditRequestStatus.PENDING,
+        requestedBy: 'sales-2',
+        requester: {
+          name: 'Sales 2',
+          email: 'sales2@example.com',
+        },
+        approvedBy: null,
+        approver: null,
+        requestedAt,
+        reviewedAt: null,
+        beforeSnapshot: {
+          receiptNo: '0001011',
+          date: '2026-05-01',
+          invNo: 'INV-11',
+          customerMark: null,
+          payer: 'BRANCH',
+          tel: null,
+        },
+        afterSnapshot: {
+          receiptNo: '0001012',
+          date: '2026-05-02',
+          invNo: 'INV-12',
+          customerMark: 'MAB-12',
+          payer: 'BRANCH-NEW',
+          tel: '222',
+        },
+        reviewComment: null,
+      },
+    ]);
+
+    await expect(listReceiptEditRequests(branchManagerUser)).resolves.toEqual([
+      {
+        id: 'req-approvable',
+        receiptId: 'receipt-branch',
+        status: 'PENDING',
+        requestedBy: 'sales-2',
+        requestedByName: 'Sales 2',
+        approvedBy: null,
+        approvedByName: null,
+        requestedAt: requestedAt.toISOString(),
+        reviewedAt: null,
+        beforeSnapshot: {
+          receiptNo: '0001011',
+          date: '2026-05-01',
+          invNo: 'INV-11',
+          customerMark: null,
+          payer: 'BRANCH',
+          tel: null,
+        },
+        afterSnapshot: {
+          receiptNo: '0001012',
+          date: '2026-05-02',
+          invNo: 'INV-12',
+          customerMark: 'MAB-12',
+          payer: 'BRANCH-NEW',
+          tel: '222',
+        },
+        reviewComment: null,
+      },
+    ]);
+
+    expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.not.objectContaining({
+        requestedBy: 'manager-1',
+      }),
+    }));
+    expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        receipt: expect.any(Object),
+      }),
+    }));
   });
 });

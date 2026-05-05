@@ -5,6 +5,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { createReceiptRecord, markReceiptReceived, updateReceiptRecord } from '@/lib/receipt-service';
 import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -59,6 +60,10 @@ jest.mock('@/lib/customer-matching', () => ({
   resolveCustomer: jest.fn(),
 }));
 
+jest.mock('@/lib/user-hierarchy', () => ({
+  getHierarchyScope: jest.fn(),
+}));
+
 jest.mock('@/lib/order-alias-db', () => ({
   syncOrderAliases: jest.fn(),
 }));
@@ -92,12 +97,20 @@ const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockFindMatchingOrder = findMatchingOrder as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
+const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 
 describe('receipt-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
+    mockGetHierarchyScope.mockResolvedValue({
+      selfId: 'admin-1',
+      ancestorIds: new Set<string>(),
+      descendantIds: new Set<string>(['sales-1']),
+      visibleIds: new Set<string>(['admin-1', 'sales-1']),
+      ownerVisibleIds: new Set<string>(['admin-1', 'sales-1']),
+    });
     mockResolveCustomer.mockResolvedValue({
       customerId: 'customer-1',
       customerMark: 'IB',
@@ -263,6 +276,7 @@ describe('receipt-service', () => {
       needsCustomerFix: false,
       orderId: 'order-old',
     });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
     mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-old' });
 
     const result = await updateReceiptRecord({
@@ -301,6 +315,56 @@ describe('receipt-service', () => {
     expect(mockResolveCustomer).not.toHaveBeenCalled();
     expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
     expect(result.data.id).toBe('receipt-1');
+  });
+
+  it('rejects direct admin update when the receipt is outside receipt visibility scope', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-foreign',
+      createdBy: 'other-sales',
+      status: ReceiptStatus.SR_Received,
+      receiptNo: 'R-OLD',
+      date: null,
+      tel: null,
+      usd: 100,
+      invNo: null,
+      orderNo: 'IB-1',
+      payer: null,
+      imageUrl: null,
+      imageName: null,
+      isDeposit: false,
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'Ibrahima',
+      customerPhone: '+224',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      orderId: 'order-old',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+
+    await expect(updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-foreign',
+      payload: {
+        receiptNo: 'R-NEW',
+        date: null,
+        tel: null,
+        usd: 120,
+        invNo: null,
+        orderNo: 'IB-2',
+        payer: null,
+        customerMark: 'IB',
+        customerName: null,
+        customerPhone: null,
+        customerCity: null,
+        customerId: null,
+        isDeposit: false,
+      },
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+
+    expect(mockDb.receipt.update).not.toHaveBeenCalled();
   });
 
   it('rejects malformed editable dates before direct admin update', async () => {

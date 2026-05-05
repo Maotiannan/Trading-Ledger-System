@@ -4,11 +4,13 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
+import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { createOrder, ensureDepositPoolInvoice, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { CurrentUser } from '@/lib/request-auth';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 
@@ -34,6 +36,11 @@ function parseEditableDateValue(date: string | null | undefined): Date | null {
   }
 
   return parsed;
+}
+
+async function getReceiptOwnerVisibleIds(currentUser: CurrentUser): Promise<string[]> {
+  const scope = await getHierarchyScope(currentUser);
+  return Array.from(scope.ownerVisibleIds);
 }
 
 async function createDepositOrder(tx: DbTransactionClient, params: {
@@ -251,10 +258,20 @@ export async function updateReceiptRecord(params: {
       detail: { receiptId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(existingReceipt.createdBy, currentUser))) {
+  const ownerVisibleIds = await getReceiptOwnerVisibleIds(currentUser);
+  const visibleReceipt = await db.receipt.findFirst({
+    where: {
+      AND: [
+        { id: receiptId },
+        buildReceiptVisibilityWhere(ownerVisibleIds),
+      ],
+    },
+    select: { id: true },
+  });
+  if (!visibleReceipt) {
     throw forbidden('无权修改该收据', {
       receiptId,
-      createdBy: existingReceipt.createdBy,
+      ownerVisibleIds,
     });
   }
   if (existingReceipt.status === ReceiptStatus.RECEIVED) {

@@ -1,4 +1,4 @@
-import { ReceiptEditRequestStatus, ReceiptStatus, UserRole } from '@prisma/client';
+import { ReceiptStatus, UserRole } from '@prisma/client';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
@@ -11,6 +11,12 @@ import {
   requestReceiptEdit,
   reviewReceiptEdit,
 } from '@/lib/receipt-edit-request-service';
+
+const ReceiptEditRequestStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const;
 
 jest.mock('@/lib/db', () => ({
   db: {

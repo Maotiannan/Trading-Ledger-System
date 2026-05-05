@@ -267,7 +267,7 @@ describe('receipt-service', () => {
     mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-new' });
 
     const result = await updateReceiptRecord({
-      currentUser: makeUser(),
+      currentUser: makeUser({ role: UserRole.ADMIN }),
       receiptId: 'receipt-1',
       payload: {
         receiptNo: 'R-NEW',

@@ -211,6 +211,12 @@ export async function updateReceiptRecord(params: {
 }) {
   const { currentUser, receiptId, payload, imagePath, imageName } = params;
 
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('只有管理员可以直接修改收据', {
+      role: currentUser.role,
+      receiptId,
+    });
+  }
   if (!receiptId) {
     throw badRequest('缺少收据ID');
   }

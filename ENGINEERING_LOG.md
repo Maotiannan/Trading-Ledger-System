@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.115
+> 当前版本：v1.0.116
 > 最后更新：2026-05-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] workspace 移动端观看性与列表交互收口：`Dashboard / Invoice / Receipt / Payment Detail / SWIFT / Customer / Approval / Settings` 的头部操作区、筛选区、表格溢出和按钮折行统一改成更稳的窄屏布局；设置页新增通用 `CollapsibleSettingsSection`，把密码、Excel Token、图片压缩、用户管理、分支清库、系统配置、设置审计全部收成折叠面板；收据页新增多状态筛选与 `30/50/100/200` 分页大小，并把 `/api/receipt` 扩展为支持多 `status` 查询参数；账单列表默认排序改为“未完成在前、已完成在后、空 shipDate 置顶、其余按 shipDate 从早到晚”；补齐 `receipt route / receipt manager / settings manager / invoice ordering / settings workspace e2e` 回归并重新跑通 `build + test:ci` ✅ 2026-05-06
 
 - [x] 审批聚合与搜索稳定性收口：原 `Deletion Approval` 页面重构为统一 `Approval` 页，集中展示删除审批、收据修改审批、付款明细修改审批和 SWIFT 修改审批，并移除各业务页底部重复待审批表；新增 `useLatestRequestGuard` 并在 customer/invoice/receipt/detail/swift 列表加载中统一接入“只采用最新请求结果”的保护，修复搜索框输入结束后被过期请求覆盖的错误结果，以及因此引发的 `ReceiptManager` 无限更新回归；补齐 `use-invoice-view-state` 与相关页面测试并重新跑通 `build + test:ci` ✅ 2026-05-05
 - [x] 复合订单 `/` 匹配规则落地：`order-name-kernel` 新增复合订单候选扩展，`customer-order-name-service / customer-matching / invoice-read-service / excel-ml-service / order-alias-db` 统一支持“复合订单任一分段命中整条记录”，同时保持 ignore-space 与客户主数据规范回填；补齐 `order-name-kernel / customer-order-name-service / order-alias-db / invoice-read-service / excel-ml-service` 单测 ✅ 2026-05-05

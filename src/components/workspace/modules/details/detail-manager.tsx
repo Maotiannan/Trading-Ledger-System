@@ -189,9 +189,9 @@ export function DetailManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold">{tx('付款明细管理', 'Payment Detail Management')}</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
           <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
             <Plus className="h-4 w-4 mr-2" />
             {tx('直接创建', 'Create Directly')}
@@ -210,7 +210,7 @@ export function DetailManager() {
       )}
 
       <Card>
-        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <CardContent className="pt-6 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <Input placeholder={tx('搜索唛头/单号', 'Search mark/order no.')} value={search} onChange={(e) => setSearch(e.target.value)} />
           <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">{tx('全部状态', 'All statuses')}</option>

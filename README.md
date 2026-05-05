@@ -34,11 +34,11 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.115`
-- 本次更新：订单匹配内核继续统一，`/` 复合订单号现在可按任一分段命中整条记录；匹配仍会忽略空格，但命中后始终回填客户主数据里的规范 `MARK / payer / phone` 等字段。`Create Receipt Directly` 输入 `PIKIN-23` 这类值时，现在可以正确命中像 `PIKIN-23/PIKIN-19C` 这样的复合订单。
-- 同批更新：`Approval` 页面已统一收口所有审批事项，不再把 `Receipt / Payment Detail / SWIFT` 的修改审批散落在各自页面底部；删除审批、收据修改审批、付款明细修改审批、SWIFT 修改审批现在集中在同一页分栏目处理。
-- 同批更新：`Payment Detail` 的 `Export Pic` 现在对所有已有明细开放，不再只限手工直建记录；`Generate Signed Receipt` 仍支持 `Mode de paiement = Cash / Transfer` 并显示在 `RESTE A PAYER` 同行右侧。
-- 同批更新：客户、账单、收据等页面的搜索框重做了“只采用最新请求结果”的保护，不再出现输入过程中感受正常、停下后却被过期请求覆盖成错误结果的问题。
+- 当前版本：`1.0.116`
+- 本次更新：手机浏览器观看性继续优化，`Dashboard / Invoice / Receipt / Payment Detail / SWIFT / Customer / Approval / Settings` 八个业务页的头部操作区、筛选区和表格溢出都已收口到窄屏可读布局，不再要求横向拖动画面才能完成主要操作。
+- 同批更新：`Settings` 页面改成折叠式设置面板，`修改密码 / Excel Token / 图片压缩 / 用户管理 / 分支清库 / 系统配置 / 设置审计` 默认按模块折叠展开，避免长页堆满所有配置项。
+- 同批更新：`Receipt Management` 现在支持状态多选筛选，默认只看未完成收据（不默认勾选 `RECEIVED`）；列表每页默认 `30` 条，并可切换到 `50 / 100 / 200`。
+- 同批更新：`Invoice Management` 列表默认排序调整为“未完成发票在前、已完成发票在后”，且每个分组内 `shipDate` 为空的发票置顶，其余发票按 `shipDate` 从早到晚排序。
 - `Detail` 仅允许在 `Waiting_SWIFT / ERROR` 状态下修改 `date` 与每行的 `mark / orderNo / amount / receiptId`；`Swift` 仅允许在 `ERROR / Bank_Transfer` 状态下修改 `date / amount / senderName / senderAddress / receiverName / receiverAccount`。已完成链路的记录不会开放修改。
 - 同一条收据、付款明细或 SWIFT 在待审批期间都不能重复提交新的修改申请；审批通过后才会正式写回数据。
 - 上一批更新已完成收据管理移动端体验优化：顶部操作按钮在窄屏下会自动换行/纵向堆叠；直接上传图片确认页改为固定返回/确认头部，超长图片会在预览区内按可视高度缩放并独立滚动，避免确认按钮被挤出屏幕。

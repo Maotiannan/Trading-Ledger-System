@@ -35,8 +35,8 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
       {details.map((detail) => (
         <Card key={detail.id} className={detail.status === 'ERROR' ? 'border-red-500' : ''}>
           <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => onToggleDetail(detail.id)}>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
                 {expandedDetails.has(detail.id) ? (
                   <ChevronDown className="h-5 w-5 text-gray-500" />
                 ) : (
@@ -51,7 +51,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                 <Badge variant={detail.status === 'ERROR' ? 'destructive' : 'default'}>{detail.status}</Badge>
                 {detail.imageUrl && (
                   <Button
@@ -109,6 +109,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
 
           {expandedDetails.has(detail.id) && (
             <CardContent className="border-t pt-4">
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -131,6 +132,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           )}
         </Card>

@@ -8,10 +8,17 @@ test('settings page renders password, user management, and system config section
   await page.goto('/settings');
   await expect(page.getByText(/当前版本|Current Version/i)).toBeVisible();
   await expect(page.getByText(/v\d+\.\d+\.\d+/i)).toHaveCount(1);
-  await expect(page.getByText(/修改密码|Change Password/i)).toBeVisible();
-  await expect(page.getByText(/用户管理|User Management/i).first()).toBeVisible();
-  await expect(page.getByText(/系统配置|System Configuration/i).first()).toBeVisible();
-  await expect(page.getByText(/配置变更审计|Configuration Audit/i).first()).toBeVisible();
+  const passwordSection = page.getByRole('button', { name: /修改密码|Change Password/i });
+  const userSection = page.getByRole('button', { name: /用户管理|User Management/i });
+  const systemConfigSection = page.getByRole('button', { name: /系统配置|System Configuration/i });
+  const auditSection = page.getByRole('button', { name: /设置审计|Settings Audit|配置变更审计|Configuration Audit/i });
+
+  await expect(passwordSection).toBeVisible();
+  await expect(userSection).toBeVisible();
+  await expect(systemConfigSection).toBeVisible();
+  await expect(auditSection).toBeVisible();
+
+  await auditSection.click();
   await expect(async () => {
     const emptyStateVisible = await page.getByText(/暂无配置审计记录|No configuration audit logs yet/i).isVisible().catch(() => false);
     const refreshAuditVisible = await page.getByRole('button', { name: /刷新审计|Refresh Audit/i }).isVisible().catch(() => false);
@@ -55,6 +62,8 @@ test('settings audit supports filtering, export history, and load-more paginatio
   }
 
   await page.goto('/settings');
+
+  await page.getByRole('button', { name: /设置审计|Settings Audit|配置变更审计|Configuration Audit/i }).click();
 
   const auditCard = page.getByTestId('settings-audit-card');
   await expect(auditCard).toBeVisible();

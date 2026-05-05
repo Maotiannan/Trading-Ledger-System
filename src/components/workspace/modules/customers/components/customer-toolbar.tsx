@@ -37,9 +37,9 @@ export function CustomerToolbar({
   onOpenCreate,
 }: CustomerToolbarProps) {
   return (
-    <div className="flex justify-between items-center">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <h2 className="text-2xl font-bold">{tx('客户管理', 'Customer Management')}</h2>
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
         <input
           ref={inputRef}
           type="file"
@@ -54,7 +54,7 @@ export function CustomerToolbar({
           placeholder={tx('搜索 mark/order_name/name/phone/city', 'Search mark/order_name/name/phone/city')}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-72"
+          className="w-full sm:w-72"
         />
         {isAdmin && (
           <select

@@ -76,7 +76,8 @@ function parseReceiptEditablePatch(data: Record<string, unknown>): ReceiptEditab
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') as ReceiptStatus | null;
+    const statuses = searchParams.getAll('status').map((value) => value.trim()).filter(Boolean) as ReceiptStatus[];
+    const singleStatus = searchParams.get('status') as ReceiptStatus | null;
     const search = searchParams.get('search') || '';
     const orderId = searchParams.get('orderId');
     const dateFrom = searchParams.get('dateFrom');
@@ -90,7 +91,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       buildReceiptVisibilityWhere(ownerIds),
     ];
 
-    if (status) filters.push({ status });
+    if (statuses.length > 0) {
+      filters.push({ status: { in: statuses } });
+    } else if (singleStatus) {
+      filters.push({ status: singleStatus });
+    }
     if (search) assertSearchLength(search);
     if (orderId) filters.push({ orderId });
     if (dateFrom || dateTo) {

@@ -110,7 +110,7 @@ export function DeletionManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold">{tx('审批', 'Approval')}</h2>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
@@ -120,6 +120,7 @@ export function DeletionManager() {
           <div className="border-b px-6 py-4">
             <h3 className="text-lg font-semibold">{tx('删除申请', 'Deletion Requests')}</h3>
           </div>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -153,6 +154,7 @@ export function DeletionManager() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 

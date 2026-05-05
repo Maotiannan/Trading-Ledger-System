@@ -47,12 +47,39 @@ jest.mock('@/lib/receipt-edit-request-service', () => ({
   listReceiptEditRequests: jest.fn(),
 }));
 
-import { POST } from '@/app/api/receipt/route';
+jest.mock('@/lib/db', () => ({
+  db: {
+    receipt: {
+      findMany: jest.fn(),
+    },
+  },
+}));
+
+jest.mock('@/lib/user-hierarchy', () => ({
+  getHierarchyScope: jest.fn(async () => ({ ownerVisibleIds: new Set(['admin-1']) })),
+}));
+
+jest.mock('@/lib/resource-visibility', () => ({
+  buildReceiptVisibilityWhere: jest.fn(() => ({ createdById: { in: ['admin-1'] } })),
+}));
+
+jest.mock('@/lib/text-search', () => ({
+  filterRowsBySearch: jest.fn((rows) => rows),
+}));
+
+jest.mock('@/lib/receipt-balance', () => ({
+  buildReceiptBalanceAfterMap: jest.fn(() => new Map()),
+}));
+
+import type { NextRequest } from 'next/server';
+import { GET, POST } from '@/app/api/receipt/route';
 import { listReceiptEditRequests, requestReceiptEdit, reviewReceiptEdit } from '@/lib/receipt-edit-request-service';
+import { db } from '@/lib/db';
 
 const mockRequestReceiptEdit = requestReceiptEdit as jest.Mock;
 const mockReviewReceiptEdit = reviewReceiptEdit as jest.Mock;
 const mockListReceiptEditRequests = listReceiptEditRequests as jest.Mock;
+const mockDbReceiptFindMany = (db.receipt.findMany as jest.Mock);
 
 function buildJsonRequest(payload: Record<string, unknown>) {
   return {
@@ -232,5 +259,23 @@ describe('receipt route edit-approval actions', () => {
     expect(response.status).toBe(400);
     expect(mockRequestReceiptEdit).not.toHaveBeenCalled();
     expect(json.success).toBe(false);
+  });
+
+  it('applies multiple status filters in receipt list queries', async () => {
+    mockDbReceiptFindMany.mockResolvedValueOnce([]);
+
+    const response = await GET({ url: 'http://localhost/api/receipt?status=SR_Received&status=Waiting_SWIFT' } as unknown as NextRequest);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockDbReceiptFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        AND: expect.arrayContaining([
+          { createdById: { in: ['admin-1'] } },
+          { status: { in: ['SR_Received', 'Waiting_SWIFT'] } },
+        ]),
+      }),
+    }));
+    expect(json.success).toBe(true);
   });
 });

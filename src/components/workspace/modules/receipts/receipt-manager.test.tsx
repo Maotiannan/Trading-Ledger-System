@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ReceiptManager } from './receipt-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -162,6 +162,8 @@ describe('ReceiptManager', () => {
       setGeneratorOrderNo: jest.fn(),
       generatorUsdAmount: '',
       setGeneratorUsdAmount: jest.fn(),
+      generatorPaymentMode: 'Cash',
+      setGeneratorPaymentMode: jest.fn(),
       generatorContext: null,
       generatorContextLoading: false,
       generatorCreating: false,
@@ -188,6 +190,60 @@ describe('ReceiptManager', () => {
       '直接创建',
       '生成签名收据',
     ]);
+  });
+
+  it('defaults receipt status filters to unfinished statuses and excludes RECEIVED', async () => {
+    await act(async () => {
+      render(<ReceiptManager />);
+    });
+
+    expect(screen.getByLabelText('SIGNING_PENDING')).toBeChecked();
+    expect(screen.getByLabelText('SR_Received')).toBeChecked();
+    expect(screen.getByLabelText('Waiting_SWIFT')).toBeChecked();
+    expect(screen.getByLabelText('Bank_Transfer')).toBeChecked();
+    expect(screen.getByLabelText('RECEIVED')).not.toBeChecked();
+  });
+
+  it('resets to page 1 when the page size changes', async () => {
+    mockUseStore.mockReturnValue({
+      receipts: Array.from({ length: 61 }, (_, index) => ({
+        id: `receipt-${index}`,
+        receiptNo: `R-${index}`,
+        date: '2026-05-04',
+        tel: '123',
+        usd: 100,
+        invNo: 'INV-1',
+        orderNo: `ORD-${index}`,
+        payer: 'ACME',
+        customerMark: 'MAB',
+        status: 'SR_Received',
+        imageUrl: null,
+        isDeposit: false,
+        isMerged: false,
+        note: null,
+        createdAt: '2026-05-04T00:00:00.000Z',
+        creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
+      })),
+      setReceipts: jest.fn(),
+      loading: false,
+      setLoading: jest.fn(),
+      user: { role: 'ADMIN' },
+    });
+
+    await act(async () => {
+      render(<ReceiptManager />);
+    });
+
+    const receiptListProps = (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps;
+    await act(async () => {
+      receiptListProps?.onNextPage();
+    });
+
+    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.currentPage).toBe(2);
+
+    fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '100' } });
+
+    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.currentPage).toBe(1);
   });
 
   it('wires receipt edit affordances for sales-visible receipts and normalizes existing ISO dates', async () => {

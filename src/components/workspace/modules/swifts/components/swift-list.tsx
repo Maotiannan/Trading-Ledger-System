@@ -35,7 +35,7 @@ export function SwiftList({ swifts, canEdit, tx, getSwiftStatus, onViewImage, on
         return (
           <Card key={swift.id} className={swift.hasError ? 'border-red-500' : ''}>
             <CardHeader>
-              <div className="flex justify-between items-start">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <CardTitle className="text-lg">
                     SWIFT - {swift.date ? new Date(swift.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
@@ -44,7 +44,7 @@ export function SwiftList({ swifts, canEdit, tx, getSwiftStatus, onViewImage, on
                     {tx(`汇款金额: $${swift.amount.toFixed(2)} | 汇款人: ${swift.senderName || '-'}`, `Amount: $${swift.amount.toFixed(2)} | Sender: ${swift.senderName || '-'}`)}
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                   <Badge variant={status === 'RECEIVED' ? 'default' : status === 'ERROR' ? 'destructive' : 'outline'}>
                     {status}
                   </Badge>
@@ -76,7 +76,7 @@ export function SwiftList({ swifts, canEdit, tx, getSwiftStatus, onViewImage, on
                   <AlertDescription>{swift.errorMessage}</AlertDescription>
                 </Alert>
               )}
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                 <div><span className="text-gray-500">{tx('汇款人:', 'Sender:')}</span> {swift.senderName}</div>
                 <div><span className="text-gray-500">{tx('汇款人地址:', 'Sender Address:')}</span> {swift.senderAddress || '-'}</div>
                 <div><span className="text-gray-500">{tx('收款人:', 'Receiver:')}</span> {swift.receiverName || '-'}</div>

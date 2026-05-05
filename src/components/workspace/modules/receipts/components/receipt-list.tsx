@@ -46,6 +46,7 @@ export function ReceiptList({
   return (
     <Card>
       <CardContent className="p-0">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -128,6 +129,7 @@ export function ReceiptList({
             )}
           </TableBody>
         </Table>
+        </div>
 
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-2 py-4 border-t">

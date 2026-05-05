@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { apiCall, peekPrefetchedApiResult, rememberPrefetchedApiResult, useLatestRequestGuard } from '@/components/workspace/shared';
 import type { Invoice } from '@/lib/store';
+import { orderInvoicesForDisplay } from './use-invoice-ordering';
 
 export function useInvoiceViewState({
   setInvoices,
@@ -26,7 +27,7 @@ export function useInvoiceViewState({
 
     if (cachedResult?.success && Array.isArray(cachedResult.data)) {
       if (requestGuard.isLatest(requestToken)) {
-        setInvoices(cachedResult.data);
+        setInvoices(orderInvoicesForDisplay(cachedResult.data));
         setLoading(false);
       }
     } else {
@@ -37,9 +38,12 @@ export function useInvoiceViewState({
       const result = await apiCall(endpoint);
       if (!requestGuard.isLatest(requestToken)) return;
       if (result.success) {
-        setInvoices(result.data);
+        setInvoices(orderInvoicesForDisplay(result.data));
         if (!trimmedSearch) {
-          rememberPrefetchedApiResult(endpoint, result);
+          rememberPrefetchedApiResult(endpoint, {
+            ...result,
+            data: orderInvoicesForDisplay(result.data),
+          });
         }
       }
     } finally {

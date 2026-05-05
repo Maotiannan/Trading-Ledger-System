@@ -30,12 +30,16 @@ import { useReceiptCustomerLookup, useReceiptForms, useReceiptActions, useReceip
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { Plus, Upload, PenSquare } from 'lucide-react';
 
+const receiptStatusOptions = ['SIGNING_PENDING', 'SR_Received', 'Waiting_SWIFT', 'Bank_Transfer', 'RECEIVED'] as const;
+const defaultReceiptStatuses = receiptStatusOptions.filter((status) => status !== 'RECEIVED');
+const receiptPageSizeOptions = [30, 50, 100, 200] as const;
+
 export function ReceiptManager() {
   const tx = useUiText();
   const locale = useLocale();
   const { receipts, setReceipts, loading, setLoading, user } = useStore();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>(defaultReceiptStatuses);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [minUsd, setMinUsd] = useState('');
@@ -53,8 +57,8 @@ export function ReceiptManager() {
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 30;
-  const totalPages = Math.ceil(receipts.length / pageSize);
+  const [pageSize, setPageSize] = useState<number>(30);
+  const totalPages = Math.max(1, Math.ceil(receipts.length / pageSize));
   const paginatedReceipts = receipts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const receiptRequestGuard = useLatestRequestGuard();
 
@@ -121,14 +125,21 @@ export function ReceiptManager() {
     const params = new URLSearchParams();
     const trimmedSearch = search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
-    if (statusFilter) params.set('status', statusFilter);
+    for (const status of statusFilter) params.append('status', status);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
     if (minUsd) params.set('minUsd', minUsd);
     if (maxUsd) params.set('maxUsd', maxUsd);
     const query = params.toString();
     const endpoint = `receipt${query ? `?${query}` : ''}`;
-    const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !minUsd && !maxUsd;
+    const canUsePrefetch =
+      !trimmedSearch &&
+      statusFilter.length === defaultReceiptStatuses.length &&
+      statusFilter.every((status) => defaultReceiptStatuses.includes(status as typeof defaultReceiptStatuses[number])) &&
+      !dateFrom &&
+      !dateTo &&
+      !minUsd &&
+      !maxUsd;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof receipts }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && receiptRequestGuard.isLatest(requestToken)) {
       setReceipts(cachedResult.data);
@@ -222,6 +233,18 @@ export function ReceiptManager() {
 
   const resetToFirstPage = () => setCurrentPage(1);
 
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter((prev) => (
+      prev.includes(status) ? prev.filter((item) => item !== status) : [...prev, status]
+    ));
+    resetToFirstPage();
+  };
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setCurrentPage(1);
+  };
+
   const getStatusBadge = (status: string) => {
     const colors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
       'SIGNING_PENDING': 'destructive',
@@ -306,26 +329,48 @@ export function ReceiptManager() {
       )}
 
       <Card>
-        <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <CardContent className="pt-6 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <Input placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')} value={search} onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }} />
-          <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); resetToFirstPage(); }}>
-            <option value="">{tx('全部状态', 'All statuses')}</option>
-            <option value="SIGNING_PENDING">SIGNING_PENDING</option>
-            <option value="SR_Received">SR_Received</option>
-            <option value="Waiting_SWIFT">Waiting_SWIFT</option>
-            <option value="Bank_Transfer">Bank_Transfer</option>
-            <option value="RECEIVED">RECEIVED</option>
-          </select>
+          <div className="rounded-md border px-3 py-2 md:col-span-2 lg:col-span-2">
+            <div className="mb-2 text-sm font-medium">{tx('状态筛选', 'Status Filter')}</div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {receiptStatusOptions.map((status) => (
+                <Label key={status} className="flex items-center gap-2 text-sm font-normal">
+                  <input
+                    type="checkbox"
+                    aria-label={status}
+                    checked={statusFilter.includes(status)}
+                    onChange={() => toggleStatusFilter(status)}
+                  />
+                  <span>{status}</span>
+                </Label>
+              ))}
+            </div>
+          </div>
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => { setMinUsd(e.target.value); resetToFirstPage(); }} />
           <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => { setMaxUsd(e.target.value); resetToFirstPage(); }} />
+          <div className="flex items-center gap-2">
+            <Label htmlFor="receipt-page-size">{tx('每页条数', 'Rows per page')}</Label>
+            <select
+              id="receipt-page-size"
+              aria-label={tx('每页条数', 'Rows per page')}
+              className="border rounded-md px-3 py-2 text-sm"
+              value={String(pageSize)}
+              onChange={(event) => handlePageSizeChange(Number(event.target.value))}
+            >
+              {receiptPageSizeOptions.map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </div>
           <div className="md:col-span-3 lg:col-span-6 flex justify-end">
             <Button
               variant="outline"
               onClick={() => {
                 setSearch('');
-                setStatusFilter('');
+                setStatusFilter(defaultReceiptStatuses);
                 setDateFrom('');
                 setDateTo('');
                 setMinUsd('');

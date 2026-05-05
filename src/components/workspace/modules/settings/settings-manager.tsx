@@ -3,11 +3,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUiText } from '@/components/workspace/shared';
 import { APP_VERSION } from '@/lib/app-version';
 import {
   BranchPurgeCard,
+  CollapsibleSettingsSection,
   ExcelTokenCard,
   PasswordSettingsCard,
   SettingsAuditCard,
@@ -216,91 +216,100 @@ export function SettingsManager() {
         </Alert>
       )}
 
-      <PasswordSettingsCard
-        userEmail={user?.email}
-        passwordLoading={passwordLoading}
-        pwd={pwd}
-        tx={tx}
-        onPwdChange={setPwd}
-        onSubmit={handleChangePassword}
-      />
+      <CollapsibleSettingsSection title={tx('修改密码', 'Change Password')} defaultOpen>
+        <PasswordSettingsCard
+          userEmail={user?.email}
+          passwordLoading={passwordLoading}
+          pwd={pwd}
+          tx={tx}
+          onPwdChange={setPwd}
+          onSubmit={handleChangePassword}
+        />
+      </CollapsibleSettingsSection>
 
-      <ExcelTokenCard
-        tokens={excelTokenSettings.excelTokens}
-        oneTimeToken={excelTokenSettings.oneTimeExcelToken}
-        loading={excelTokenSettings.excelTokenLoading}
-        saving={excelTokenSettings.excelTokenSaving}
-        message={excelTokenSettings.excelTokenMessage}
-        error={excelTokenSettings.excelTokenError}
-        tx={tx}
-        onRefresh={() => { void excelTokenSettings.loadExcelTokens(); }}
-        onGenerate={() => { void excelTokenSettings.generateExcelToken(); }}
-        onRevoke={(tokenId) => { void excelTokenSettings.revokeExcelToken(tokenId); }}
-      />
+      <CollapsibleSettingsSection title={tx('Excel令牌', 'Excel Token')}>
+        <ExcelTokenCard
+          tokens={excelTokenSettings.excelTokens}
+          oneTimeToken={excelTokenSettings.oneTimeExcelToken}
+          loading={excelTokenSettings.excelTokenLoading}
+          saving={excelTokenSettings.excelTokenSaving}
+          message={excelTokenSettings.excelTokenMessage}
+          error={excelTokenSettings.excelTokenError}
+          tx={tx}
+          onRefresh={() => { void excelTokenSettings.loadExcelTokens(); }}
+          onGenerate={() => { void excelTokenSettings.generateExcelToken(); }}
+          onRevoke={(tokenId) => { void excelTokenSettings.revokeExcelToken(tokenId); }}
+        />
+      </CollapsibleSettingsSection>
 
-      <UserImageCompressionCard
-        loading={userPreferencesLoading}
-        saving={savingUserPreferences}
-        preferences={userPreferences}
-        tx={tx}
-        onPreferenceFieldChange={updateUserPreferenceField}
-        onSavePreferences={handleSaveUserPreferences}
-      />
+      <CollapsibleSettingsSection title={tx('图片压缩设置', 'Image Compression')}>
+        <UserImageCompressionCard
+          loading={userPreferencesLoading}
+          saving={savingUserPreferences}
+          preferences={userPreferences}
+          tx={tx}
+          onPreferenceFieldChange={updateUserPreferenceField}
+          onSavePreferences={handleSaveUserPreferences}
+        />
+      </CollapsibleSettingsSection>
 
       {settingsPageView.canManageUsers && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{tx('用户管理', 'User Management')}</CardTitle>
-            <CardDescription>{tx('用户管理已并入设置模块。', 'User management has been moved into Settings.')}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UserManager />
-          </CardContent>
-        </Card>
+        <CollapsibleSettingsSection
+          title={tx('用户管理', 'User Management')}
+          description={tx('用户管理已并入设置模块。', 'User management has been moved into Settings.')}
+        >
+          <UserManager />
+        </CollapsibleSettingsSection>
       )}
 
-      <BranchPurgeCard
-        canPurgeBranch={canPurgeBranch}
-        branchPurgeTargets={branchPurgeTargets}
-        purgeModuleKeys={purgeModuleKeys}
-        purgingBranch={purgingBranch}
-        purgeForm={purgeForm}
-        tx={tx}
-        onPurgeFormChange={setPurgeForm}
-        onTogglePurgeModule={togglePurgeModule}
-        onSubmit={handlePurgeBranch}
-      />
+      <CollapsibleSettingsSection title={tx('分支清理', 'Branch Purge')}>
+        <BranchPurgeCard
+          canPurgeBranch={canPurgeBranch}
+          branchPurgeTargets={branchPurgeTargets}
+          purgeModuleKeys={purgeModuleKeys}
+          purgingBranch={purgingBranch}
+          purgeForm={purgeForm}
+          tx={tx}
+          onPurgeFormChange={setPurgeForm}
+          onTogglePurgeModule={togglePurgeModule}
+          onSubmit={handlePurgeBranch}
+        />
+      </CollapsibleSettingsSection>
 
-      <SystemConfigCard
-        loading={loading}
-        savingConfig={savingConfig}
-        testingConfig={testingConfig}
-        canEditConfig={canEditConfig}
-        config={config}
-        tx={tx}
-        onConfigFieldChange={updateConfigField}
-        onTestOcrConfig={handleTestOcrConfig}
-        onSaveConfig={handleSaveConfig}
-      />
+      <CollapsibleSettingsSection title={tx('系统配置', 'System Configuration')}>
+        <SystemConfigCard
+          loading={loading}
+          savingConfig={savingConfig}
+          testingConfig={testingConfig}
+          canEditConfig={canEditConfig}
+          config={config}
+          tx={tx}
+          onConfigFieldChange={updateConfigField}
+          onTestOcrConfig={handleTestOcrConfig}
+          onSaveConfig={handleSaveConfig}
+        />
+      </CollapsibleSettingsSection>
 
-      <SettingsAuditCard
-        tx={tx}
-        canViewAudit={canViewAudit}
-        loading={auditLoading}
-        loadingMore={auditLoadingMore}
-        exporting={auditExporting}
-        exportHistoryLoading={settingsAuditExportHistoryLoading}
-        exportHistoryLoadingMore={settingsAuditExportHistoryLoadingMore}
-        viewModel={settingsPageView.auditView}
-        onFilterChange={setSettingsAuditFilters}
-        onApplyFilters={() => { void applyAuditFilters(); }}
-        onResetFilters={() => { void resetAuditFilters(); }}
-        onRefresh={() => { void loadSettingsAudit({ filters: settingsAuditFilters }); }}
-        onLoadMore={() => { void loadSettingsAudit({ append: true, filters: settingsAuditFilters }); }}
-        onExport={() => { void exportSettingsAudit(); }}
-        onRefreshExportHistory={() => { void loadSettingsAuditExportHistory({ filters: settingsAuditFilters }); }}
-        onLoadMoreExportHistory={() => { void loadSettingsAuditExportHistory({ append: true, filters: settingsAuditFilters }); }}
-      />
+      <CollapsibleSettingsSection title={tx('设置审计', 'Settings Audit')}>
+        <SettingsAuditCard
+          tx={tx}
+          canViewAudit={canViewAudit}
+          loading={auditLoading}
+          loadingMore={auditLoadingMore}
+          exporting={auditExporting}
+          exportHistoryLoading={settingsAuditExportHistoryLoading}
+          exportHistoryLoadingMore={settingsAuditExportHistoryLoadingMore}
+          viewModel={settingsPageView.auditView}
+          onFilterChange={setSettingsAuditFilters}
+          onApplyFilters={() => { void applyAuditFilters(); }}
+          onResetFilters={() => { void resetAuditFilters(); }}
+          onRefresh={() => { void loadSettingsAudit({ filters: settingsAuditFilters }); }}
+          onLoadMore={() => { void loadSettingsAudit({ append: true, filters: settingsAuditFilters }); }}
+          onExport={() => { void exportSettingsAudit(); }}
+          onRefreshExportHistory={() => { void loadSettingsAuditExportHistory({ filters: settingsAuditFilters }); }}
+          onLoadMoreExportHistory={() => { void loadSettingsAuditExportHistory({ append: true, filters: settingsAuditFilters }); }}
+        />
+      </CollapsibleSettingsSection>
     </div>
   );
 }

@@ -29,9 +29,9 @@ export function InvoiceToolbar({
   onOpenCreate,
 }: InvoiceToolbarProps) {
   return (
-    <div className="flex justify-between items-center">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <h2 className="text-2xl font-bold">{tx('账单管理', 'Invoice Management')}</h2>
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
         {isManager && (
           <>
             <input

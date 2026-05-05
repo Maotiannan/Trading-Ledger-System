@@ -113,8 +113,8 @@ export function InvoiceList({
       {invoices.map((invoice) => (
         <Card key={invoice.id}>
           <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => onToggleInvoice(invoice.id)}>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
                 {expandedInvoices.has(invoice.id) ? (
                   <ChevronDown className="h-5 w-5 text-gray-500" />
                 ) : (
@@ -176,7 +176,7 @@ export function InvoiceList({
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-6 text-sm">
+              <div className="flex flex-wrap items-center gap-4 text-sm sm:justify-end">
                 <div className="text-right">
                   <div className="text-gray-500">{tx('总金额', 'Total Amount')}</div>
                   <div className="font-semibold">${invoice.invAmount.toFixed(2)}</div>
@@ -193,9 +193,9 @@ export function InvoiceList({
 
           {expandedInvoices.has(invoice.id) && (
             <CardContent className="border-t pt-4">
-              <div className="flex justify-between items-center mb-4">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h4 className="font-medium">{tx('订单明细', 'Order Details')}</h4>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
                   {isAdmin && (
                     branchAdminOptions.length > 0 ? (
                       <>
@@ -240,6 +240,7 @@ export function InvoiceList({
                 </div>
               </div>
 
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -303,6 +304,7 @@ export function InvoiceList({
                   )}
                 </TableBody>
               </Table>
+              </div>
 
               {addingOrderToInvoice === invoice.id && (
                 <div className="mt-4 p-4 bg-gray-50 rounded-lg">
@@ -312,7 +314,7 @@ export function InvoiceList({
                       <AlertDescription>{addError}</AlertDescription>
                     </Alert>
                   )}
-                  <div className="flex gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                     <Input
                       placeholder={tx('客户单号', 'Order number')}
                       value={newOrderNo}
@@ -324,13 +326,13 @@ export function InvoiceList({
                       type="number"
                       value={newOrderAmount}
                       onChange={(e) => onNewOrderAmountChange(e.target.value)}
-                      className="w-32"
+                      className="w-full sm:w-32"
                     />
                     <Input
                       placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
                       value={newOrderCustomerMark}
                       onChange={(e) => onNewOrderCustomerMarkChange(e.target.value)}
-                      className="w-44"
+                      className="w-full sm:w-44"
                     />
                     {newOrderCustomerCandidates.length > 1 && (
                       <select

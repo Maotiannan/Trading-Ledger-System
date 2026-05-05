@@ -1,33 +1,15 @@
-import type { Prisma } from '@prisma/client';
-import { UserRole } from '@prisma/client';
+import { Prisma, ReceiptEditRequestStatus, UserRole } from '@prisma/client';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
-import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { ReceiptEditablePatch, ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
-const editableFields = [
-  'receiptNo',
-  'date',
-  'invNo',
-  'customerMark',
-  'payer',
-  'tel',
-] as const;
-
-type EditableField = (typeof editableFields)[number];
-const receiptEditRequestStatuses = {
-  PENDING: 'PENDING',
-  APPROVED: 'APPROVED',
-  REJECTED: 'REJECTED',
-} as const;
-
-type EditableSnapshotSource = Partial<Record<EditableField, unknown>> | null | undefined;
+type EditableSnapshotSource = Partial<Record<keyof ReceiptEditablePatch, unknown>> | null | undefined;
 
 function apiError(code: string, status: number, message: string, detail?: unknown) {
   return createApiError({
@@ -46,6 +28,33 @@ function forbidden(code: string, message: string, detail?: unknown) {
   return apiError(code, 403, message, detail);
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    ? error.code === 'P2002'
+    : Boolean(
+      error
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: string }).code === 'P2002'
+    );
+}
+
+function parseEditableDateValue(date: string | null | undefined): Date | null {
+  if (date == null) {
+    return null;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw badRequest('收据日期格式无效', { date });
+  }
+
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw badRequest('收据日期格式无效', { date });
+  }
+
+  return parsed;
+}
+
 function normalizeEditableSnapshot(input: EditableSnapshotSource): ReceiptEditablePatch {
   return {
     receiptNo: typeof input?.receiptNo === 'string' ? input.receiptNo : null,
@@ -57,61 +66,100 @@ function normalizeEditableSnapshot(input: EditableSnapshotSource): ReceiptEditab
   };
 }
 
+function validateEditablePatch(input: ReceiptEditablePatch): ReceiptEditablePatch {
+  const normalized = normalizeEditableSnapshot(input);
+  parseEditableDateValue(normalized.date);
+  return normalized;
+}
+
+function buildScopedReceiptWhere(receiptId: string, ownerIds: string[]): Prisma.ReceiptWhereInput {
+  return {
+    AND: [
+      { id: receiptId },
+      buildReceiptVisibilityWhere(ownerIds),
+    ],
+  };
+}
+
 function toReviewDecisionMessage(decision: 'approve' | 'reject'): string {
   return decision === 'approve' ? '收据修改申请已通过' : '收据修改申请已拒绝';
 }
 
-function buildReceiptEditRequestWhere(currentUser: CurrentUser): Promise<Prisma.ReceiptEditRequestWhereInput> {
-  return getHierarchyScope(currentUser).then((scope) => {
-    const ownerIds = Array.from(scope.ownerVisibleIds);
-    const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
+function mapReceiptEditRequestRow(row: {
+  id: string;
+  receiptId: string;
+  status: ReceiptEditRequestStatus;
+  requestedBy: string;
+  approvedBy: string | null;
+  requestedAt: Date;
+  reviewedAt: Date | null;
+  beforeSnapshot: Prisma.JsonValue;
+  afterSnapshot: Prisma.JsonValue;
+  reviewComment: string | null;
+  requester: { name: string | null; email: string | null };
+  approver: { name: string | null; email: string | null } | null;
+}): ReceiptEditRequestRow {
+  return {
+    id: row.id,
+    receiptId: row.receiptId,
+    status: row.status,
+    requestedBy: row.requestedBy,
+    requestedByName: row.requester.name || row.requester.email || row.requestedBy,
+    approvedBy: row.approvedBy,
+    approvedByName: row.approver
+      ? (row.approver.name || row.approver.email || row.approvedBy)
+      : null,
+    requestedAt: row.requestedAt.toISOString(),
+    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+    beforeSnapshot: normalizeEditableSnapshot(row.beforeSnapshot as EditableSnapshotSource),
+    afterSnapshot: normalizeEditableSnapshot(row.afterSnapshot as EditableSnapshotSource),
+    reviewComment: row.reviewComment,
+  };
+}
 
-    if (currentUser.role === UserRole.SALES) {
-      return {
-        AND: [
-          { requestedBy: currentUser.id },
-          { receipt: receiptVisibilityWhere },
-        ],
-      };
-    }
+async function buildReceiptEditRequestWhere(currentUser: CurrentUser): Promise<Prisma.ReceiptEditRequestWhereInput> {
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
+  const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
 
-    const descendantIds = Array.from(scope.descendantIds);
-    const visibleRequesterIds = Array.from(scope.visibleIds);
-    const branches: Prisma.ReceiptEditRequestWhereInput[] = [];
+  if (currentUser.role === UserRole.SALES) {
+    return {
+      AND: [
+        { requestedBy: currentUser.id },
+        { receipt: receiptVisibilityWhere },
+      ],
+    };
+  }
 
-    if (descendantIds.length > 0) {
-      branches.push({
-        AND: [
-          { status: receiptEditRequestStatuses.PENDING },
-          { requestedBy: { in: descendantIds } },
-          { receipt: receiptVisibilityWhere },
-        ],
-      });
-    }
+  const descendantIds = Array.from(scope.descendantIds);
+  const visibleRequesterIds = Array.from(scope.visibleIds);
+  const branches: Prisma.ReceiptEditRequestWhereInput[] = [];
 
-    if (visibleRequesterIds.length > 0) {
-      branches.push({
-        AND: [
-          {
-            status: {
-              in: [
-                receiptEditRequestStatuses.APPROVED,
-                receiptEditRequestStatuses.REJECTED,
-              ],
-            },
-          },
-          { requestedBy: { in: visibleRequesterIds } },
-          { receipt: receiptVisibilityWhere },
-        ],
-      });
-    }
+  if (descendantIds.length > 0) {
+    branches.push({
+      AND: [
+        { status: ReceiptEditRequestStatus.PENDING },
+        { requestedBy: { in: descendantIds } },
+        { receipt: receiptVisibilityWhere },
+      ],
+    });
+  }
 
-    if (branches.length === 1) {
-      return branches[0];
-    }
+  if (visibleRequesterIds.length > 0) {
+    branches.push({
+      AND: [
+        { status: { in: [ReceiptEditRequestStatus.APPROVED, ReceiptEditRequestStatus.REJECTED] } },
+        { requestedBy: { in: visibleRequesterIds } },
+        { receipt: receiptVisibilityWhere },
+      ],
+    });
+  }
 
-    return { OR: branches };
-  });
+  if (branches.length === 1) {
+    return branches[0];
+  }
+
+  return { OR: branches };
 }
 
 export async function requestReceiptEdit(params: {
@@ -119,7 +167,8 @@ export async function requestReceiptEdit(params: {
   receiptId: string;
   data: ReceiptEditablePatch;
 }) {
-  const { currentUser, receiptId, data } = params;
+  const { currentUser, receiptId } = params;
+  const afterSnapshot = validateEditablePatch(params.data);
 
   if (currentUser.role !== UserRole.SALES) {
     throw forbidden('RECEIPT_EDIT_REQUEST_FORBIDDEN', '只有销售可以提交收据修改申请', {
@@ -131,83 +180,91 @@ export async function requestReceiptEdit(params: {
     throw badRequest('缺少收据ID');
   }
 
-  const receipt = await db.receipt.findUnique({
-    where: { id: receiptId },
-    select: {
-      id: true,
-      createdBy: true,
-      status: true,
-      receiptNo: true,
-      date: true,
-      invNo: true,
-      customerMark: true,
-      payer: true,
-      tel: true,
-    },
-  });
-  if (!receipt) {
-    throw apiError('RESOURCE_NOT_FOUND', 400, '收据不存在', { receiptId });
-  }
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
 
-  if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
-    throw forbidden('RECEIPT_EDIT_REQUEST_FORBIDDEN', '无权申请修改该收据', {
-      receiptId,
-      createdBy: receipt.createdBy,
+  try {
+    const request = await runInTransaction(async (tx) => {
+      const receipt = await tx.receipt.findFirst({
+        where: buildScopedReceiptWhere(receiptId, ownerIds),
+        select: {
+          id: true,
+          status: true,
+          receiptNo: true,
+          date: true,
+          invNo: true,
+          customerMark: true,
+          payer: true,
+          tel: true,
+        },
+      });
+
+      if (!receipt) {
+        throw forbidden('RECEIPT_EDIT_REQUEST_FORBIDDEN', '无权申请修改该收据', {
+          receiptId,
+          ownerIds,
+        });
+      }
+
+      const existingPending = await tx.receiptEditRequest.findFirst({
+        where: {
+          pendingReceiptId: receiptId,
+          status: ReceiptEditRequestStatus.PENDING,
+        },
+        select: { id: true },
+      });
+      if (existingPending) {
+        throw apiError('RECEIPT_EDIT_REQUEST_EXISTS', 409, '该收据已有待审批的修改申请', {
+          receiptId,
+          requestId: existingPending.id,
+        });
+      }
+
+      const beforeSnapshot = normalizeEditableSnapshot({
+        receiptNo: receipt.receiptNo,
+        date: receipt.date instanceof Date ? receipt.date.toISOString().slice(0, 10) : null,
+        invNo: receipt.invNo,
+        customerMark: receipt.customerMark,
+        payer: receipt.payer,
+        tel: receipt.tel,
+      });
+
+      return tx.receiptEditRequest.create({
+        data: {
+          receiptId,
+          requestedBy: currentUser.id,
+          pendingReceiptId: receiptId,
+          status: ReceiptEditRequestStatus.PENDING,
+          beforeSnapshot,
+          afterSnapshot,
+        },
+      });
     });
-  }
 
-  const existingPending = await db.receiptEditRequest.findFirst({
-    where: {
-      pendingReceiptId: receiptId,
-      status: receiptEditRequestStatuses.PENDING,
-    },
-    select: { id: true },
-  });
-  if (existingPending) {
-    throw apiError('RECEIPT_EDIT_REQUEST_EXISTS', 409, '该收据已有待审批的修改申请', {
-      receiptId,
-      requestId: existingPending.id,
+    await recordAuditEvent({
+      action: auditActions.RECEIPT_EDIT_REQUEST_CREATE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
+      targetId: request.id,
+      metadata: {
+        receiptId,
+        pendingReceiptId: receiptId,
+        afterSnapshot,
+      },
     });
+
+    return {
+      data: request,
+      message: '收据修改申请已提交，等待管理员同意',
+    };
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw apiError('RECEIPT_EDIT_REQUEST_EXISTS', 409, '该收据已有待审批的修改申请', {
+        receiptId,
+      });
+    }
+    throw error;
   }
-
-  const beforeSnapshot = normalizeEditableSnapshot({
-    receiptNo: receipt.receiptNo,
-    date: receipt.date instanceof Date ? receipt.date.toISOString().slice(0, 10) : receipt.date,
-    invNo: receipt.invNo,
-    customerMark: receipt.customerMark,
-    payer: receipt.payer,
-    tel: receipt.tel,
-  });
-  const afterSnapshot = normalizeEditableSnapshot(data);
-
-  const request = await db.receiptEditRequest.create({
-    data: {
-      receiptId,
-      requestedBy: currentUser.id,
-      pendingReceiptId: receiptId,
-      status: receiptEditRequestStatuses.PENDING,
-      beforeSnapshot,
-      afterSnapshot,
-    },
-  });
-
-  await recordAuditEvent({
-    action: auditActions.RECEIPT_EDIT_REQUEST_CREATE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
-    targetId: request.id,
-    metadata: {
-      receiptId,
-      pendingReceiptId: receiptId,
-      beforeSnapshot,
-      afterSnapshot,
-    },
-  });
-
-  return {
-    data: request,
-    message: '收据修改申请已提交，等待管理员同意',
-  };
 }
 
 export async function reviewReceiptEdit(params: {
@@ -228,6 +285,10 @@ export async function reviewReceiptEdit(params: {
     throw badRequest('缺少申请ID');
   }
 
+  const scope = await getHierarchyScope(currentUser);
+  const descendantIds = scope.descendantIds;
+  const ownerIds = Array.from(scope.ownerVisibleIds);
+
   await runInTransaction(async (tx) => {
     const request = await tx.receiptEditRequest.findUnique({
       where: { id: requestId },
@@ -240,7 +301,7 @@ export async function reviewReceiptEdit(params: {
     if (!request) {
       throw apiError('RESOURCE_NOT_FOUND', 400, '申请不存在', { requestId });
     }
-    if (request.status !== receiptEditRequestStatuses.PENDING) {
+    if (request.status !== ReceiptEditRequestStatus.PENDING) {
       throw apiError('RECEIPT_EDIT_REQUEST_ALREADY_PROCESSED', 400, '该申请已处理', {
         requestId,
         status: request.status,
@@ -252,16 +313,47 @@ export async function reviewReceiptEdit(params: {
         requestedBy: request.requestedBy,
       });
     }
-    if (!(await canAccessOwnedResourceAsync(request.requestedBy, currentUser))) {
+    if (!descendantIds.has(request.requestedBy)) {
       throw forbidden('RECEIPT_EDIT_REVIEW_FORBIDDEN', '无权审批该收据修改申请', {
         requestId,
         requestedBy: request.requestedBy,
       });
     }
 
-    if (decision === 'approve') {
-      const nextSnapshot = normalizeEditableSnapshot(request.afterSnapshot as EditableSnapshotSource);
+    const visibleReceipt = await tx.receipt.findFirst({
+      where: buildScopedReceiptWhere(request.receiptId, ownerIds),
+      select: { id: true },
+    });
+    if (!visibleReceipt) {
+      throw forbidden('RECEIPT_EDIT_REVIEW_FORBIDDEN', '无权审批该收据修改申请', {
+        requestId,
+        receiptId: request.receiptId,
+      });
+    }
 
+    const nextSnapshot = validateEditablePatch(request.afterSnapshot as EditableSnapshotSource as ReceiptEditablePatch);
+    const reviewedAt = new Date();
+    const claimResult = await tx.receiptEditRequest.updateMany({
+      where: {
+        id: requestId,
+        status: ReceiptEditRequestStatus.PENDING,
+        pendingReceiptId: request.receiptId,
+      },
+      data: {
+        status: decision === 'approve' ? ReceiptEditRequestStatus.APPROVED : ReceiptEditRequestStatus.REJECTED,
+        approvedBy: currentUser.id,
+        reviewComment: comment ?? null,
+        reviewedAt,
+        pendingReceiptId: null,
+      },
+    });
+    if (claimResult.count !== 1) {
+      throw apiError('RECEIPT_EDIT_REQUEST_ALREADY_PROCESSED', 400, '该申请已处理', {
+        requestId,
+      });
+    }
+
+    if (decision === 'approve') {
       await tx.receiptHistory.create({
         data: {
           receiptId: request.receiptId,
@@ -284,7 +376,7 @@ export async function reviewReceiptEdit(params: {
         where: { id: request.receiptId },
         data: {
           receiptNo: nextSnapshot.receiptNo,
-          date: nextSnapshot.date ? new Date(nextSnapshot.date) : null,
+          date: parseEditableDateValue(nextSnapshot.date),
           invNo: nextSnapshot.invNo,
           customerMark: nextSnapshot.customerMark,
           payer: nextSnapshot.payer,
@@ -292,19 +384,6 @@ export async function reviewReceiptEdit(params: {
         },
       });
     }
-
-    await tx.receiptEditRequest.update({
-      where: { id: requestId },
-      data: {
-        status: decision === 'approve'
-          ? receiptEditRequestStatuses.APPROVED
-          : receiptEditRequestStatuses.REJECTED,
-        approvedBy: currentUser.id,
-        reviewComment: comment ?? null,
-        reviewedAt: new Date(),
-        pendingReceiptId: null,
-      },
-    });
   });
 
   await recordAuditEvent({
@@ -347,20 +426,5 @@ export async function listReceiptEditRequests(currentUser: CurrentUser): Promise
     ],
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    receiptId: row.receiptId,
-    status: row.status,
-    requestedBy: row.requestedBy,
-    requestedByName: row.requester.name || row.requester.email || row.requestedBy,
-    approvedBy: row.approvedBy,
-    approvedByName: row.approver
-      ? (row.approver.name || row.approver.email || row.approvedBy)
-      : null,
-    requestedAt: row.requestedAt.toISOString(),
-    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
-    beforeSnapshot: normalizeEditableSnapshot(row.beforeSnapshot as EditableSnapshotSource),
-    afterSnapshot: normalizeEditableSnapshot(row.afterSnapshot as EditableSnapshotSource),
-    reviewComment: row.reviewComment,
-  }));
+  return rows.map(mapReceiptEditRequestRow);
 }

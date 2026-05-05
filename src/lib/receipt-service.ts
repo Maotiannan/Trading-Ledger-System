@@ -20,6 +20,22 @@ function forbidden(message: string, detail?: unknown) {
   return createApiError({ code: 'FORBIDDEN', status: 403, message, detail });
 }
 
+function parseEditableDateValue(date: string | null | undefined): Date | null {
+  if (date == null) {
+    return null;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw badRequest('收据日期格式无效', { date });
+  }
+
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw badRequest('收据日期格式无效', { date });
+  }
+
+  return parsed;
+}
+
 async function createDepositOrder(tx: DbTransactionClient, params: {
   orderNo: string;
   usd: number;
@@ -210,6 +226,8 @@ export async function updateReceiptRecord(params: {
   imageName?: string | null;
 }) {
   const { currentUser, receiptId, payload, imagePath, imageName } = params;
+  void imagePath;
+  void imageName;
 
   if (currentUser.role !== UserRole.ADMIN) {
     throw forbidden('只有管理员可以直接修改收据', {
@@ -220,6 +238,7 @@ export async function updateReceiptRecord(params: {
   if (!receiptId) {
     throw badRequest('缺少收据ID');
   }
+  const nextDate = parseEditableDateValue(payload.date);
 
   const existingReceipt = await db.receipt.findUnique({
     where: { id: receiptId },
@@ -248,15 +267,6 @@ export async function updateReceiptRecord(params: {
     throw badRequest('Bank_Transfer状态下禁止修改', { receiptId, status: existingReceipt.status });
   }
 
-  const matchedOrder = await findMatchingOrder(payload.orderNo);
-  const customerResolution = payload.customerMark
-    ? await resolveCustomer({
-        customerMark: payload.customerMark,
-        customerName: payload.customerName || null,
-        customerId: payload.customerId || null,
-      })
-    : null;
-
   const updated = await runInTransaction(async (tx) => {
     await tx.receiptHistory.create({
       data: {
@@ -280,32 +290,14 @@ export async function updateReceiptRecord(params: {
       where: { id: receiptId },
       data: {
         receiptNo: payload.receiptNo || null,
-        date: payload.date ? new Date(payload.date) : null,
+        date: nextDate,
         tel: payload.tel || null,
-        usd: payload.usd,
         invNo: payload.invNo || null,
-        orderNo: payload.orderNo,
+        customerMark: payload.customerMark || null,
         payer: payload.payer || null,
-        isDeposit: payload.isDeposit || false,
-        customerId: customerResolution?.customerId ?? existingReceipt.customerId,
-        customerMark: customerResolution?.customerMark ?? existingReceipt.customerMark,
-        customerName: customerResolution?.customerName ?? existingReceipt.customerName,
-        customerPhone: customerResolution?.customerPhone ?? existingReceipt.customerPhone,
-        customerCity: customerResolution?.customerCity ?? existingReceipt.customerCity,
-        needsCustomerFix: customerResolution?.needsCustomerFix ?? existingReceipt.needsCustomerFix,
-        imageUrl: imagePath || existingReceipt.imageUrl,
-        imageName: imageName || existingReceipt.imageName,
-        orderId: matchedOrder?.orderId || existingReceipt.orderId,
       },
     });
   });
-
-  if (existingReceipt.orderId) {
-    await updateOrderBalance(existingReceipt.orderId);
-  }
-  if (matchedOrder && matchedOrder.orderId !== existingReceipt.orderId) {
-    await updateOrderBalance(matchedOrder.orderId);
-  }
 
   await recordAuditEvent({
     action: auditActions.RECEIPT_UPDATE,

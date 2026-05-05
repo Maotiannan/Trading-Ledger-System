@@ -263,8 +263,7 @@ describe('receipt-service', () => {
       needsCustomerFix: false,
       orderId: 'order-old',
     });
-    mockFindMatchingOrder.mockResolvedValueOnce({ orderId: 'order-new' });
-    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-new' });
+    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-old' });
 
     const result = await updateReceiptRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
@@ -287,9 +286,48 @@ describe('receipt-service', () => {
     });
 
     expect(mockDb.receiptHistory.create).toHaveBeenCalled();
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
+    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'receipt-1' },
+      data: {
+        receiptNo: 'R-NEW',
+        date: null,
+        tel: null,
+        invNo: null,
+        customerMark: 'IB',
+        payer: null,
+      },
+    }));
+    expect(mockFindMatchingOrder).not.toHaveBeenCalled();
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
     expect(result.data.id).toBe('receipt-1');
+  });
+
+  it('rejects malformed editable dates before direct admin update', async () => {
+    await expect(updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-1',
+      payload: {
+        receiptNo: 'R-NEW',
+        date: '2026-02-31',
+        tel: null,
+        usd: 120,
+        invNo: null,
+        orderNo: 'IB-2',
+        payer: null,
+        customerMark: 'IB',
+        customerName: null,
+        customerPhone: null,
+        customerCity: null,
+        customerId: null,
+        isDeposit: false,
+      },
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+
+    expect(mockDb.receipt.findUnique).not.toHaveBeenCalled();
+    expect(mockDb.receipt.update).not.toHaveBeenCalled();
   });
 
   it('marks receipt received and advances linked detail/swift when all receipts are received', async () => {

@@ -1,4 +1,4 @@
-import { ReceiptStatus, UserRole } from '@prisma/client';
+import { ReceiptEditRequestStatus, ReceiptStatus, UserRole } from '@prisma/client';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
@@ -12,15 +12,10 @@ import {
   reviewReceiptEdit,
 } from '@/lib/receipt-edit-request-service';
 
-const ReceiptEditRequestStatus = {
-  PENDING: 'PENDING',
-  APPROVED: 'APPROVED',
-  REJECTED: 'REJECTED',
-} as const;
-
 jest.mock('@/lib/db', () => ({
   db: {
     receipt: {
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
     },
@@ -94,6 +89,7 @@ const validEditPayload: ReceiptEditablePatch = {
 
 const mockDb = db as unknown as {
   receipt: {
+    findFirst: jest.Mock;
     findUnique: jest.Mock;
     update: jest.Mock;
   };
@@ -115,14 +111,17 @@ const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockTx = {
   receipt: {
+    findFirst: jest.fn(),
     update: jest.fn(),
   },
   receiptHistory: {
     create: jest.fn(),
   },
   receiptEditRequest: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
     findUnique: jest.fn(),
-    update: jest.fn(),
+    updateMany: jest.fn(),
   },
 };
 
@@ -213,6 +212,13 @@ function getListWhereClause(): WhereClause {
   const [args] = mockDb.receiptEditRequest.findMany.mock.calls[0] as [{ where?: WhereClause }];
   expect(args?.where).toBeDefined();
   return args.where as WhereClause;
+}
+
+function expectReceiptLookupById(mockFn: jest.Mock, expectedReceiptId: string): void {
+  expect(mockFn).toHaveBeenCalledTimes(1);
+  const [args] = mockFn.mock.calls[0] as [{ where?: WhereClause }];
+  expect(args?.where).toBeDefined();
+  expect(hasWhereNode(args?.where, (node) => node.id === expectedReceiptId)).toBe(true);
 }
 
 function hasRequestedByScope(value: unknown, expectedIds: string[]): boolean {
@@ -345,9 +351,9 @@ describe('receipt-edit-request-service', () => {
   });
 
   it('creates a pending receipt edit request for SALES on a visible receipt', async () => {
-    mockDb.receipt.findUnique.mockResolvedValueOnce({
+    mockTx.receipt.findFirst.mockResolvedValueOnce({
       id: 'receipt-1',
-      createdBy: 'sales-owner',
+      createdBy: 'sales-owner-foreign',
       status: ReceiptStatus.SR_Received,
       receiptNo: '0001001',
       date: null,
@@ -356,8 +362,8 @@ describe('receipt-edit-request-service', () => {
       payer: 'ACME',
       tel: '123',
     });
-    mockDb.receiptEditRequest.findFirst.mockResolvedValueOnce(null);
-    mockDb.receiptEditRequest.create.mockResolvedValueOnce({
+    mockTx.receiptEditRequest.findFirst.mockResolvedValueOnce(null);
+    mockTx.receiptEditRequest.create.mockResolvedValueOnce({
       id: 'req-1',
       receiptId: 'receipt-1',
       status: ReceiptEditRequestStatus.PENDING,
@@ -380,8 +386,9 @@ describe('receipt-edit-request-service', () => {
     });
 
     expect(result.message).toMatch(/等待管理员同意/);
-    expect(mockCanAccessOwnedResourceAsync).toHaveBeenCalledWith('sales-owner', salesUser);
-    expect(mockDb.receiptEditRequest.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockCanAccessOwnedResourceAsync).not.toHaveBeenCalled();
+    expectReceiptLookupById(mockTx.receipt.findFirst, 'receipt-1');
+    expect(mockTx.receiptEditRequest.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         receiptId: 'receipt-1',
         requestedBy: 'sales-1',
@@ -407,7 +414,7 @@ describe('receipt-edit-request-service', () => {
   });
 
   it('rejects a second pending request for the same receipt', async () => {
-    mockDb.receipt.findUnique.mockResolvedValueOnce({
+    mockTx.receipt.findFirst.mockResolvedValueOnce({
       id: 'receipt-1',
       createdBy: 'sales-owner',
       status: ReceiptStatus.SR_Received,
@@ -418,7 +425,7 @@ describe('receipt-edit-request-service', () => {
       payer: 'ACME',
       tel: '123',
     });
-    mockDb.receiptEditRequest.findFirst.mockResolvedValueOnce({
+    mockTx.receiptEditRequest.findFirst.mockResolvedValueOnce({
       id: 'req-existing',
       status: ReceiptEditRequestStatus.PENDING,
     });
@@ -430,11 +437,28 @@ describe('receipt-edit-request-service', () => {
     })).rejects.toMatchObject({
       code: 'RECEIPT_EDIT_REQUEST_EXISTS',
     });
-    expect(mockCanAccessOwnedResourceAsync).toHaveBeenCalledWith('sales-owner', salesUser);
+    expect(mockCanAccessOwnedResourceAsync).not.toHaveBeenCalled();
   });
 
   it('rejects receipt edit request when the receipt is not visible to the requester', async () => {
-    mockDb.receipt.findUnique.mockResolvedValueOnce({
+    mockTx.receipt.findFirst.mockResolvedValueOnce(null);
+
+    await expect(requestReceiptEdit({
+      currentUser: salesUser,
+      receiptId: 'receipt-1',
+      data: validEditPayload,
+    })).rejects.toMatchObject({
+      code: 'RECEIPT_EDIT_REQUEST_FORBIDDEN',
+    });
+
+    expect(mockCanAccessOwnedResourceAsync).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.findFirst).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.create).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('maps a pending request unique conflict to RECEIPT_EDIT_REQUEST_EXISTS', async () => {
+    mockTx.receipt.findFirst.mockResolvedValueOnce({
       id: 'receipt-1',
       createdBy: 'sales-owner',
       status: ReceiptStatus.SR_Received,
@@ -445,20 +469,32 @@ describe('receipt-edit-request-service', () => {
       payer: 'ACME',
       tel: '123',
     });
-    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(false);
+    mockTx.receiptEditRequest.findFirst.mockResolvedValueOnce(null);
+    mockTx.receiptEditRequest.create.mockRejectedValueOnce({ code: 'P2002' });
 
     await expect(requestReceiptEdit({
       currentUser: salesUser,
       receiptId: 'receipt-1',
       data: validEditPayload,
     })).rejects.toMatchObject({
-      code: 'RECEIPT_EDIT_REQUEST_FORBIDDEN',
+      code: 'RECEIPT_EDIT_REQUEST_EXISTS',
+    });
+  });
+
+  it('rejects malformed editable dates before creating the request', async () => {
+    await expect(requestReceiptEdit({
+      currentUser: salesUser,
+      receiptId: 'receipt-1',
+      data: {
+        ...validEditPayload,
+        date: '2026-02-31',
+      },
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
     });
 
-    expect(mockCanAccessOwnedResourceAsync).toHaveBeenCalledWith('sales-owner', salesUser);
-    expect(mockDb.receiptEditRequest.findFirst).not.toHaveBeenCalled();
-    expect(mockDb.receiptEditRequest.create).not.toHaveBeenCalled();
-    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+    expect(mockTx.receipt.findFirst).not.toHaveBeenCalled();
   });
 
   it('approves a pending request and updates the receipt in one transaction', async () => {
@@ -486,14 +522,13 @@ describe('receipt-edit-request-service', () => {
       },
       requester: salesUser,
     });
+    mockTx.receipt.findFirst.mockResolvedValueOnce({
+      id: 'receipt-1',
+    });
+    mockTx.receiptEditRequest.updateMany.mockResolvedValueOnce({ count: 1 });
     mockTx.receipt.update.mockResolvedValueOnce({
       id: 'receipt-1',
       receiptNo: '0001002',
-    });
-    mockTx.receiptEditRequest.update.mockResolvedValueOnce({
-      id: 'req-1',
-      status: ReceiptEditRequestStatus.APPROVED,
-      pendingReceiptId: null,
     });
 
     await reviewReceiptEdit({
@@ -523,8 +558,12 @@ describe('receipt-edit-request-service', () => {
         tel: '456',
       }),
     }));
-    expect(mockTx.receiptEditRequest.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'req-1' },
+    expectReceiptLookupById(mockTx.receipt.findFirst, 'receipt-1');
+    expect(mockTx.receiptEditRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: 'req-1',
+        status: ReceiptEditRequestStatus.PENDING,
+      }),
       data: expect.objectContaining({
         status: ReceiptEditRequestStatus.APPROVED,
         approvedBy: 'admin-1',
@@ -564,11 +603,10 @@ describe('receipt-edit-request-service', () => {
       },
       requester: salesUser,
     });
-    mockTx.receiptEditRequest.update.mockResolvedValueOnce({
-      id: 'req-2',
-      status: ReceiptEditRequestStatus.REJECTED,
-      pendingReceiptId: null,
+    mockTx.receipt.findFirst.mockResolvedValueOnce({
+      id: 'receipt-1',
     });
+    mockTx.receiptEditRequest.updateMany.mockResolvedValueOnce({ count: 1 });
 
     await reviewReceiptEdit({
       currentUser: adminUser,
@@ -585,8 +623,12 @@ describe('receipt-edit-request-service', () => {
     expect(mockTx.receiptEditRequest.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'req-2' },
     }));
-    expect(mockTx.receiptEditRequest.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'req-2' },
+    expectReceiptLookupById(mockTx.receipt.findFirst, 'receipt-1');
+    expect(mockTx.receiptEditRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: 'req-2',
+        status: ReceiptEditRequestStatus.PENDING,
+      }),
       data: expect.objectContaining({
         status: ReceiptEditRequestStatus.REJECTED,
         approvedBy: 'admin-1',
@@ -629,8 +671,6 @@ describe('receipt-edit-request-service', () => {
         createdById: 'admin-9',
       }),
     });
-    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(false);
-
     await expect(reviewReceiptEdit({
       currentUser: adminUser,
       requestId: 'req-foreign',
@@ -641,10 +681,10 @@ describe('receipt-edit-request-service', () => {
       status: 403,
     });
 
-    expect(mockCanAccessOwnedResourceAsync).toHaveBeenCalledWith('sales-foreign', adminUser);
+    expect(mockCanAccessOwnedResourceAsync).not.toHaveBeenCalled();
     expect(mockTx.receipt.update).not.toHaveBeenCalled();
     expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
-    expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.updateMany).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
@@ -681,7 +721,7 @@ describe('receipt-edit-request-service', () => {
 
     expect(mockTx.receipt.update).not.toHaveBeenCalled();
     expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
-    expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.updateMany).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
@@ -717,8 +757,51 @@ describe('receipt-edit-request-service', () => {
 
     expect(mockTx.receipt.update).not.toHaveBeenCalled();
     expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
-    expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.updateMany).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects review when the request receipt is outside reviewer visibility', async () => {
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-hidden-receipt',
+      receiptId: 'receipt-hidden',
+      status: ReceiptEditRequestStatus.PENDING,
+      requestedBy: salesUser.id,
+      afterSnapshot: validEditPayload,
+      receipt: {
+        id: 'receipt-hidden',
+        createdBy: 'sales-owner',
+        status: ReceiptStatus.SR_Received,
+        receiptNo: '0001888',
+        date: null,
+        invNo: 'INV-888',
+        customerMark: 'MAB-888',
+        payer: 'HIDDEN',
+        tel: '888',
+      },
+      requester: salesUser,
+    });
+    mockGetHierarchyScope.mockResolvedValueOnce({
+      selfId: adminUser.id,
+      ancestorIds: new Set<string>(),
+      descendantIds: new Set<string>(['sales-1']),
+      visibleIds: new Set<string>(['admin-1', 'sales-1']),
+      ownerVisibleIds: new Set<string>(['admin-1', 'sales-1']),
+    });
+    mockTx.receipt.findFirst.mockResolvedValueOnce(null);
+
+    await expect(reviewReceiptEdit({
+      currentUser: adminUser,
+      requestId: 'req-hidden-receipt',
+      decision: 'approve',
+      comment: 'receipt out of scope',
+    })).rejects.toMatchObject({
+      code: 'RECEIPT_EDIT_REVIEW_FORBIDDEN',
+      status: 403,
+    });
+
+    expect(mockTx.receiptEditRequest.updateMany).not.toHaveBeenCalled();
+    expect(mockTx.receipt.update).not.toHaveBeenCalled();
   });
 
   it('lists receipt edit requests using the store row shape', async () => {

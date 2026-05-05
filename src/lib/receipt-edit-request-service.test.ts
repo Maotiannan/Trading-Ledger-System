@@ -2,7 +2,7 @@ import { ReceiptEditRequestStatus, ReceiptStatus, UserRole } from '@prisma/clien
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-edit-contract-types';
+import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { recordAuditEvent } from '@/lib/audit';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
@@ -119,6 +119,78 @@ const mockTx = {
     update: jest.fn(),
   },
 };
+
+type WhereClause = Record<string, unknown>;
+
+function isWhereClause(value: unknown): value is WhereClause {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sameMembers(values: unknown[], expectedValues: string[]): boolean {
+  return values.length === expectedValues.length
+    && expectedValues.every((value) => values.includes(value));
+}
+
+function hasWhereNode(value: unknown, predicate: (node: WhereClause) => boolean): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasWhereNode(entry, predicate));
+  }
+  if (!isWhereClause(value)) {
+    return false;
+  }
+  if (predicate(value)) {
+    return true;
+  }
+  return Object.values(value).some((entry) => hasWhereNode(entry, predicate));
+}
+
+function getListWhereClause(): WhereClause {
+  expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledTimes(1);
+  const [args] = mockDb.receiptEditRequest.findMany.mock.calls[0] as [{ where?: WhereClause }];
+  expect(args?.where).toBeDefined();
+  return args.where as WhereClause;
+}
+
+function hasRequestedByScope(where: WhereClause, expectedIds: string[]): boolean {
+  return hasWhereNode(where, (node) => {
+    const requestedBy = node.requestedBy;
+    if (typeof requestedBy === 'string') {
+      return expectedIds.length === 1 && requestedBy === expectedIds[0];
+    }
+    if (!isWhereClause(requestedBy)) {
+      return false;
+    }
+    const inScope = requestedBy.in;
+    return Array.isArray(inScope) && sameMembers(inScope, expectedIds);
+  });
+}
+
+function hasReceiptVisibilityConstraint(where: WhereClause, expectedOwnerIds: string[]): boolean {
+  return hasWhereNode(where, (node) => {
+    const receipt = node.receipt;
+    if (!isWhereClause(receipt)) {
+      return false;
+    }
+    return hasWhereNode(receipt, (receiptNode) => {
+      const directCreatedBy = receiptNode.createdBy;
+      const directOwnerId = receiptNode.ownerId;
+
+      if (isWhereClause(directCreatedBy)) {
+        const inScope = directCreatedBy.in;
+        if (Array.isArray(inScope) && sameMembers(inScope, expectedOwnerIds)) {
+          return true;
+        }
+      }
+      if (isWhereClause(directOwnerId)) {
+        const inScope = directOwnerId.in;
+        if (Array.isArray(inScope) && sameMembers(inScope, expectedOwnerIds)) {
+          return true;
+        }
+      }
+      return false;
+    });
+  });
+}
 
 describe('receipt-edit-request-service', () => {
   beforeEach(() => {
@@ -427,11 +499,84 @@ describe('receipt-edit-request-service', () => {
       decision: 'approve',
       comment: 'out of scope',
     })).rejects.toMatchObject({
-      code: 'RECEIPT_EDIT_REQUEST_FORBIDDEN',
+      code: 'RECEIPT_EDIT_REVIEW_FORBIDDEN',
       status: 403,
     });
 
     expect(mockCanAccessOwnedResourceAsync).toHaveBeenCalledWith('sales-foreign', adminUser);
+    expect(mockTx.receipt.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects self-review of a pending request', async () => {
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-self',
+      receiptId: 'receipt-1',
+      status: ReceiptEditRequestStatus.PENDING,
+      requestedBy: adminUser.id,
+      afterSnapshot: validEditPayload,
+      receipt: {
+        id: 'receipt-1',
+        createdBy: adminUser.id,
+        status: ReceiptStatus.SR_Received,
+        receiptNo: '0001001',
+        date: null,
+        invNo: 'INV-1',
+        customerMark: 'MAB-1',
+        payer: 'ACME',
+        tel: '123',
+      },
+      requester: adminUser,
+    });
+
+    await expect(reviewReceiptEdit({
+      currentUser: adminUser,
+      requestId: 'req-self',
+      decision: 'approve',
+      comment: 'self review should be blocked',
+    })).rejects.toMatchObject({
+      code: 'RECEIPT_EDIT_REVIEW_FORBIDDEN',
+      status: 403,
+    });
+
+    expect(mockTx.receipt.update).not.toHaveBeenCalled();
+    expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
+    expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it('rejects review of an already-processed request', async () => {
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-approved',
+      receiptId: 'receipt-1',
+      status: ReceiptEditRequestStatus.APPROVED,
+      requestedBy: salesUser.id,
+      afterSnapshot: validEditPayload,
+      receipt: {
+        id: 'receipt-1',
+        createdBy: 'sales-owner',
+        status: ReceiptStatus.SR_Received,
+        receiptNo: '0001001',
+        date: null,
+        invNo: 'INV-1',
+        customerMark: 'MAB-1',
+        payer: 'ACME',
+        tel: '123',
+      },
+      requester: salesUser,
+    });
+
+    await expect(reviewReceiptEdit({
+      currentUser: adminUser,
+      requestId: 'req-approved',
+      decision: 'reject',
+      comment: 'already handled',
+    })).rejects.toMatchObject({
+      code: 'RECEIPT_EDIT_REQUEST_ALREADY_PROCESSED',
+    });
+
     expect(mockTx.receipt.update).not.toHaveBeenCalled();
     expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
     expect(mockTx.receiptEditRequest.update).not.toHaveBeenCalled();
@@ -621,14 +766,16 @@ describe('receipt-edit-request-service', () => {
       },
     ]);
 
+    const where = getListWhereClause();
+
     expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        requestedBy: 'sales-1',
-      }),
+      where: expect.any(Object),
     }));
+    expect(hasRequestedByScope(where, ['sales-1'])).toBe(true);
+    expect(hasReceiptVisibilityConstraint(where, ['sales-1'])).toBe(true);
   });
 
-  it('lists manager-visible requests with broader visibility than self-submitted rows', async () => {
+  it('lists manager-visible requests with descendant-bounded review scope', async () => {
     const requestedAt = new Date('2026-05-05T01:00:00.000Z');
     mockGetHierarchyScope.mockResolvedValueOnce({
       selfId: branchManagerUser.id,
@@ -702,15 +849,12 @@ describe('receipt-edit-request-service', () => {
       },
     ]);
 
+    const where = getListWhereClause();
+
     expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.not.objectContaining({
-        requestedBy: 'manager-1',
-      }),
+      where: expect.any(Object),
     }));
-    expect(mockDb.receiptEditRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        receipt: expect.any(Object),
-      }),
-    }));
+    expect(hasRequestedByScope(where, ['sales-1', 'sales-2'])).toBe(true);
+    expect(hasReceiptVisibilityConstraint(where, ['manager-1', 'sales-1', 'sales-2'])).toBe(true);
   });
 });

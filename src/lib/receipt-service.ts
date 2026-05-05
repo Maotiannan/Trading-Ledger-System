@@ -9,6 +9,7 @@ import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { createOrder, ensureDepositPoolInvoice, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { syncOrderAliases } from '@/lib/order-alias-db';
+import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
@@ -228,7 +229,7 @@ export async function createReceiptRecord(params: {
 export async function updateReceiptRecord(params: {
   currentUser: CurrentUser;
   receiptId: string;
-  payload: ReceiptPayload;
+  payload: ReceiptEditablePatch;
   imagePath?: string | null;
   imageName?: string | null;
 }) {

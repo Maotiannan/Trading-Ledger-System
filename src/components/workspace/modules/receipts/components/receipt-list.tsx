@@ -4,7 +4,7 @@ import type { Receipt } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Check, Eye, PenSquare, Trash2 } from 'lucide-react';
+import { Check, Eye, PenSquare, Pencil, Trash2 } from 'lucide-react';
 
 export type ReceiptListProps = {
   receipts: Receipt[];
@@ -12,10 +12,12 @@ export type ReceiptListProps = {
   currentPage: number;
   totalPages: number;
   isAdmin: boolean;
+  canEdit: boolean;
   canResumeSigning: boolean;
   tx: (zh: string, en: string) => string;
   getStatusBadge: (status: string) => React.ReactNode;
   onViewImage: (receipt: Receipt) => void;
+  onEditReceipt: (receipt: Receipt) => void;
   onMarkReceived: (receiptId: string) => void;
   onDeleteReceipt: (receiptId: string) => void;
   onResumeSigning: (receiptId: string) => void;
@@ -29,10 +31,12 @@ export function ReceiptList({
   currentPage,
   totalPages,
   isAdmin,
+  canEdit,
   canResumeSigning,
   tx,
   getStatusBadge,
   onViewImage,
+  onEditReceipt,
   onMarkReceived,
   onDeleteReceipt,
   onResumeSigning,
@@ -73,6 +77,11 @@ export function ReceiptList({
                     {receipt.imageUrl && (
                       <Button size="sm" variant="ghost" onClick={() => onViewImage(receipt)} title={tx('查看图片', 'View image')}>
                         <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canEdit && (
+                      <Button size="sm" variant="ghost" onClick={() => onEditReceipt(receipt)} title={tx('修改收据', 'Edit receipt')}>
+                        <Pencil className="h-4 w-4" />
                       </Button>
                     )}
                     {receipt.status === 'SIGNING_PENDING' && canResumeSigning && (

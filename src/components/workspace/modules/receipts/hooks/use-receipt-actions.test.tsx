@@ -1279,4 +1279,133 @@ describe('useReceiptActions', () => {
 
     expect(window.alert).toHaveBeenCalledWith('操作失败');
   });
+
+  it('submits sales receipt edits as approval requests and reloads receipts plus request list', async () => {
+    const loadReceiptEditRequests = jest.fn(async () => undefined);
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      message: '成功提交，等待管理员同意',
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      loadReceiptEditRequests,
+    })));
+
+    await act(async () => {
+      const outcome = await result.current.handleSubmitReceiptEdit({
+        receiptId: 'receipt-1',
+        data: {
+          receiptNo: 'R-UPDATED',
+          date: '2026-05-04',
+          invNo: 'INV-UPDATED',
+          customerMark: 'MAB-2',
+          payer: 'BETA',
+          tel: '456',
+        },
+        isAdmin: false,
+      });
+      expect(outcome).toEqual({
+        success: true,
+        message: '成功提交，等待管理员同意',
+      });
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'request-edit',
+        receiptId: 'receipt-1',
+        data: JSON.stringify({
+          receiptNo: 'R-UPDATED',
+          date: '2026-05-04',
+          invNo: 'INV-UPDATED',
+          customerMark: 'MAB-2',
+          payer: 'BETA',
+          tel: '456',
+        }),
+      }),
+    }));
+    expect(window.alert).toHaveBeenCalledWith('成功提交，等待管理员同意');
+    expect(loadReceipts).toHaveBeenCalledTimes(1);
+    expect(loadReceiptEditRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies admin receipt edits immediately and reloads receipts plus request list', async () => {
+    const loadReceiptEditRequests = jest.fn(async () => undefined);
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      message: '修改已完成',
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      loadReceiptEditRequests,
+    })));
+
+    await act(async () => {
+      const outcome = await result.current.handleSubmitReceiptEdit({
+        receiptId: 'receipt-1',
+        data: {
+          receiptNo: 'R-UPDATED',
+          date: '2026-05-04',
+          invNo: 'INV-UPDATED',
+          customerMark: 'MAB-2',
+          payer: 'BETA',
+          tel: '456',
+        },
+        isAdmin: true,
+      });
+      expect(outcome).toEqual({
+        success: true,
+        message: '修改已完成',
+      });
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update',
+        receiptId: 'receipt-1',
+        data: JSON.stringify({
+          receiptNo: 'R-UPDATED',
+          date: '2026-05-04',
+          invNo: 'INV-UPDATED',
+          customerMark: 'MAB-2',
+          payer: 'BETA',
+          tel: '456',
+        }),
+      }),
+    }));
+    expect(window.alert).toHaveBeenCalledWith('修改已完成');
+    expect(loadReceipts).toHaveBeenCalledTimes(1);
+    expect(loadReceiptEditRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('reviews receipt edit requests and reloads visible receipt state', async () => {
+    const loadReceiptEditRequests = jest.fn(async () => undefined);
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      message: '修改已完成',
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      loadReceiptEditRequests,
+    })));
+
+    await act(async () => {
+      const approved = await result.current.handleReviewReceiptEdit({
+        requestId: 'request-1',
+        decision: 'approve',
+      });
+      expect(approved).toBe(true);
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'review-edit',
+        requestId: 'request-1',
+        decision: 'approve',
+      }),
+    }));
+    expect(window.alert).toHaveBeenCalledWith('修改已完成');
+    expect(loadReceipts).toHaveBeenCalledTimes(1);
+    expect(loadReceiptEditRequests).toHaveBeenCalledTimes(1);
+  });
 });

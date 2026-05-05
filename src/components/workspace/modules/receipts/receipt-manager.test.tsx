@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { ReceiptManager } from './receipt-manager';
 import { apiCall, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -9,6 +9,8 @@ import {
   useReceiptForms,
   useReceiptGenerator,
 } from './hooks';
+import type { ReceiptListProps } from './components/receipt-list';
+import type { ReceiptEditDialogProps } from './components/receipt-edit-dialog';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(async () => ({ success: true, data: [] })),
@@ -36,9 +38,16 @@ jest.mock('./hooks', () => ({
 jest.mock('./components', () => ({
   ReceiptDirectCreateDialog: () => null,
   ReceiptDirectImageConfirmDialog: () => null,
+  ReceiptEditDialog: (props: ReceiptEditDialogProps) => {
+    (globalThis as { __receiptEditDialogProps?: ReceiptEditDialogProps }).__receiptEditDialogProps = props;
+    return null;
+  },
   ReceiptGeneratorLaunchDialog: () => null,
   ReceiptImagePreviewDialog: () => null,
-  ReceiptList: () => null,
+  ReceiptList: (props: ReceiptListProps) => {
+    (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps = props;
+    return null;
+  },
   ReceiptUploadDialog: () => null,
 }));
 
@@ -53,6 +62,8 @@ const mockUseReceiptGenerator = useReceiptGenerator as jest.Mock;
 
 describe('ReceiptManager', () => {
   beforeEach(() => {
+    delete (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps;
+    delete (globalThis as { __receiptEditDialogProps?: ReceiptEditDialogProps }).__receiptEditDialogProps;
     mockApiCall.mockClear();
     mockUseUiText.mockReturnValue((zh: string) => zh);
     mockUseStore.mockReturnValue({
@@ -139,6 +150,8 @@ describe('ReceiptManager', () => {
       handleMarkReceived: jest.fn(),
       handleDirectCreate: jest.fn(),
       handleDeleteReceipt: jest.fn(),
+      handleSubmitReceiptEdit: jest.fn(),
+      handleReviewReceiptEdit: jest.fn(),
     });
     mockUseReceiptGenerator.mockReturnValue({
       showGeneratorLaunch: false,
@@ -157,8 +170,10 @@ describe('ReceiptManager', () => {
     });
   });
 
-  it('orders top receipt actions for mobile-first flow and enables wrapping layout', () => {
-    render(<ReceiptManager />);
+  it('orders top receipt actions for mobile-first flow and enables wrapping layout', async () => {
+    await act(async () => {
+      render(<ReceiptManager />);
+    });
 
     const actionGroup = screen.getByTestId('receipt-manager-primary-actions');
     const actionButtons = screen.getAllByRole('button', {
@@ -171,5 +186,47 @@ describe('ReceiptManager', () => {
       '直接创建',
       '生成签名收据',
     ]);
+  });
+
+  it('wires receipt edit affordances for sales-visible receipts', async () => {
+    mockUseStore.mockReturnValue({
+      receipts: [
+        {
+          id: 'receipt-1',
+          receiptNo: 'R-1',
+          date: '2026-05-04',
+          tel: '123',
+          usd: 100,
+          invNo: 'INV-1',
+          orderNo: 'ORD-1',
+          payer: 'ACME',
+          customerMark: 'MAB',
+          status: 'SR_Received',
+          imageUrl: null,
+          isDeposit: false,
+          isMerged: false,
+          note: null,
+          createdAt: '2026-05-04T00:00:00.000Z',
+          creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+        },
+      ],
+      setReceipts: jest.fn(),
+      loading: false,
+      setLoading: jest.fn(),
+      user: { role: 'SALES' },
+    });
+
+    await act(async () => {
+      render(<ReceiptManager />);
+    });
+
+    const receiptListProps = (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps;
+    const editDialogProps = (globalThis as { __receiptEditDialogProps?: ReceiptEditDialogProps }).__receiptEditDialogProps;
+
+    expect(receiptListProps).toBeDefined();
+    expect(receiptListProps?.canEdit).toBe(true);
+    expect(typeof receiptListProps?.onEditReceipt).toBe('function');
+    expect(editDialogProps).toBeDefined();
+    expect(editDialogProps?.isAdmin).toBe(false);
   });
 });

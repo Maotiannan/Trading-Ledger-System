@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
 import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
+import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { compressReceiptDirectImage } from '../utils/image-compression';
 import type { PendingDirectImageSelection, ReceiptDirectForm } from '../types';
 
@@ -12,6 +13,7 @@ export type ReceiptActionText = (zh: string, en: string) => string;
 export type ReceiptActionDeps = {
   tx: ReceiptActionText;
   loadReceipts: () => Promise<void>;
+  loadReceiptEditRequests?: () => Promise<void>;
   selectedFile: File | null;
   ocrResult: Record<string, unknown> | null;
   ocrCustomerMark: string;
@@ -47,6 +49,7 @@ export type ReceiptActionDeps = {
 export function useReceiptActions({
   tx,
   loadReceipts,
+  loadReceiptEditRequests,
   selectedFile,
   ocrResult,
   ocrCustomerMark,
@@ -536,6 +539,88 @@ export function useReceiptActions({
     }
   };
 
+  const reloadReceiptViews = async () => {
+    await loadReceipts();
+    if (loadReceiptEditRequests) {
+      await loadReceiptEditRequests();
+    }
+  };
+
+  const handleSubmitReceiptEdit = async (params: {
+    receiptId: string;
+    data: ReceiptEditablePatch;
+    isAdmin: boolean;
+  }) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiCall('receipt', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: params.isAdmin ? 'update' : 'request-edit',
+          receiptId: params.receiptId,
+          data: JSON.stringify(params.data),
+        }),
+      });
+
+      if (!result.success) {
+        const message = getErrorMessage(result, tx('修改失败，请重试', 'Edit failed, please retry.'));
+        setError(message);
+        return { success: false, message };
+      }
+
+      const successMessage = result.message
+        || (params.isAdmin
+          ? tx('修改已完成', 'Update completed.')
+          : tx('成功提交，等待管理员同意', 'Submitted successfully. Waiting for admin approval.'));
+      alert(successMessage);
+      await reloadReceiptViews();
+      return { success: true, message: successMessage };
+    } catch (err) {
+      const message = getErrorMessage(err, tx('修改失败，请重试', 'Edit failed, please retry.'));
+      setError(message);
+      return { success: false, message };
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReviewReceiptEdit = async (params: {
+    requestId: string;
+    decision: 'approve' | 'reject';
+  }) => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiCall('receipt', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'review-edit',
+          requestId: params.requestId,
+          decision: params.decision,
+        }),
+      });
+
+      if (!result.success) {
+        const message = getErrorMessage(result, tx('审批失败，请重试', 'Review failed, please retry.'));
+        setError(message);
+        alert(message);
+        return false;
+      }
+
+      alert(result.message || tx('修改已完成', 'Update completed.'));
+      await reloadReceiptViews();
+      return true;
+    } catch (err) {
+      const message = getErrorMessage(err, tx('审批失败，请重试', 'Review failed, please retry.'));
+      setError(message);
+      alert(message);
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return {
     uploading,
     directUploading,
@@ -547,5 +632,7 @@ export function useReceiptActions({
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,
+    handleSubmitReceiptEdit,
+    handleReviewReceiptEdit,
   };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useStore } from '@/lib/store';
+import { useStore, type Receipt } from '@/lib/store';
 import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,14 +19,16 @@ import {
 import {
   ReceiptDirectCreateDialog,
   ReceiptDirectImageConfirmDialog,
+  ReceiptEditDialog,
   ReceiptGeneratorLaunchDialog,
   ReceiptImagePreviewDialog,
   ReceiptList,
   ReceiptUploadDialog,
 } from './components';
 import { useReceiptCustomerLookup, useReceiptForms, useReceiptActions, useReceiptGenerator } from './hooks';
+import type { ReceiptEditablePatch, ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
 import {
-  Loader2, Trash2, Plus, Upload, Check, PenSquare
+  Loader2, Plus, Upload, Check, PenSquare, X
 } from 'lucide-react';
 
 export function ReceiptManager() {
@@ -39,6 +41,18 @@ export function ReceiptManager() {
   const [dateTo, setDateTo] = useState('');
   const [minUsd, setMinUsd] = useState('');
   const [maxUsd, setMaxUsd] = useState('');
+  const [editRequests, setEditRequests] = useState<ReceiptEditRequestRow[]>([]);
+  const [editRequestsLoading, setEditRequestsLoading] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingReceiptId, setEditingReceiptId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<ReceiptEditablePatch>({
+    receiptNo: null,
+    date: null,
+    invNo: null,
+    customerMark: null,
+    payer: null,
+    tel: null,
+  });
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
@@ -131,6 +145,27 @@ export function ReceiptManager() {
     setLoading(false);
   }, [setReceipts, setLoading, search, statusFilter, dateFrom, dateTo, minUsd, maxUsd]);
 
+  const loadReceiptEditRequests = useCallback(async () => {
+    if (user?.role !== 'ADMIN' && user?.role !== 'SALES') {
+      setEditRequests([]);
+      return;
+    }
+
+    setEditRequestsLoading(true);
+    const result = await apiCall('receipt', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'list-edit-requests' }),
+    });
+
+    if (result.success && Array.isArray(result.data)) {
+      setEditRequests(result.data as ReceiptEditRequestRow[]);
+    } else {
+      setEditRequests([]);
+      setError(result.error || tx('加载收据修改申请失败', 'Failed to load receipt edit requests.'));
+    }
+    setEditRequestsLoading(false);
+  }, [user?.role, setError, tx]);
+
   const {
     uploading,
     directUploading,
@@ -142,9 +177,12 @@ export function ReceiptManager() {
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,
+    handleSubmitReceiptEdit,
+    handleReviewReceiptEdit,
   } = useReceiptActions({
     tx,
     loadReceipts,
+    loadReceiptEditRequests,
     selectedFile,
     ocrResult,
     ocrCustomerMark,
@@ -202,6 +240,10 @@ export function ReceiptManager() {
     loadReceipts();
   }, [loadReceipts]);
 
+  useEffect(() => {
+    void loadReceiptEditRequests();
+  }, [loadReceiptEditRequests]);
+
   const resetToFirstPage = () => setCurrentPage(1);
 
   const getStatusBadge = (status: string) => {
@@ -216,6 +258,49 @@ export function ReceiptManager() {
   };
 
   const isAdmin = user?.role === 'ADMIN';
+  const canEditReceipts = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const canApproveReceiptEdits = user?.role === 'ADMIN';
+
+  const getEditRequestStatusBadge = (status: ReceiptEditRequestRow['status']) => {
+    const variants: Record<ReceiptEditRequestRow['status'], 'outline' | 'default' | 'destructive'> = {
+      PENDING: 'outline',
+      APPROVED: 'default',
+      REJECTED: 'destructive',
+    };
+    return <Badge variant={variants[status]}>{status}</Badge>;
+  };
+
+  const openEditDialog = (receipt: Receipt) => {
+    setEditingReceiptId(receipt.id);
+    setEditForm({
+      receiptNo: receipt.receiptNo ?? null,
+      date: receipt.date ?? null,
+      invNo: receipt.invNo ?? null,
+      customerMark: receipt.customerMark ?? null,
+      payer: receipt.payer ?? null,
+      tel: receipt.tel ?? null,
+    });
+    setShowEditDialog(true);
+    setError(null);
+  };
+
+  const closeEditDialog = () => {
+    if (submitting) return;
+    setShowEditDialog(false);
+    setEditingReceiptId(null);
+  };
+
+  const submitReceiptEdit = async () => {
+    if (!editingReceiptId) return;
+    const outcome = await handleSubmitReceiptEdit({
+      receiptId: editingReceiptId,
+      data: editForm,
+      isAdmin,
+    });
+    if (outcome.success) {
+      closeEditDialog();
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -241,6 +326,12 @@ export function ReceiptManager() {
           )}
         </div>
       </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardContent className="pt-6 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -282,6 +373,7 @@ export function ReceiptManager() {
         currentPage={currentPage}
         totalPages={totalPages}
         isAdmin={isAdmin}
+        canEdit={canEditReceipts}
         canResumeSigning={canUseReceiptGenerator}
         tx={tx}
         getStatusBadge={getStatusBadge}
@@ -292,12 +384,88 @@ export function ReceiptManager() {
             name: receipt.imageName || tx('收据图片', 'Receipt image'),
           });
         }}
+        onEditReceipt={openEditDialog}
         onMarkReceived={handleMarkReceived}
         onDeleteReceipt={handleDeleteReceipt}
         onResumeSigning={resumeGeneratorSession}
         onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
         onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
       />
+
+      {canEditReceipts && (
+        <Card>
+          <CardContent className="p-0">
+            <div className="border-b px-6 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">{tx('收据修改申请', 'Receipt Edit Requests')}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {tx('销售提交后等待管理员审批；管理员可直接审批可见范围内的申请。', 'Sales submissions wait for admin approval; admins can review visible requests directly.')}
+                  </p>
+                </div>
+                {editRequestsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left">
+                    <th className="px-4 py-3">{tx('收据号', 'Receipt No.')}</th>
+                    <th className="px-4 py-3">{tx('申请人', 'Requester')}</th>
+                    <th className="px-4 py-3">{tx('修改后', 'Requested Values')}</th>
+                    <th className="px-4 py-3">{tx('状态', 'Status')}</th>
+                    <th className="px-4 py-3">{tx('申请时间', 'Requested At')}</th>
+                    <th className="px-4 py-3">{tx('操作', 'Actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editRequests.map((request) => (
+                    <tr key={request.id} className="border-b align-top">
+                      <td className="px-4 py-3">{request.afterSnapshot.receiptNo || request.beforeSnapshot.receiptNo || '-'}</td>
+                      <td className="px-4 py-3">{request.requestedByName || '-'}</td>
+                      <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
+                        <div>{`Receipt No: ${request.afterSnapshot.receiptNo ?? '-'}`}</div>
+                        <div>{`Payment Date: ${request.afterSnapshot.date ?? '-'}`}</div>
+                        <div>{`INV No: ${request.afterSnapshot.invNo ?? '-'}`}</div>
+                        <div>{`MARK: ${request.afterSnapshot.customerMark ?? '-'}`}</div>
+                        <div>{`Payer: ${request.afterSnapshot.payer ?? '-'}`}</div>
+                        <div>{`Phone: ${request.afterSnapshot.tel ?? '-'}`}</div>
+                      </td>
+                      <td className="px-4 py-3">{getEditRequestStatusBadge(request.status)}</td>
+                      <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3">
+                        {request.status === 'PENDING' && canApproveReceiptEdits ? (
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="default" onClick={() => void handleReviewReceiptEdit({ requestId: request.id, decision: 'approve' })} disabled={submitting}>
+                              <Check className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => void handleReviewReceiptEdit({ requestId: request.id, decision: 'reject' })} disabled={submitting}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {request.status === 'PENDING'
+                              ? tx('等待审批', 'Pending review')
+                              : request.approvedByName || '-'}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {editRequests.length === 0 && !editRequestsLoading && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                        {tx('暂无收据修改申请', 'No receipt edit requests')}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <ReceiptGeneratorLaunchDialog
         open={showGeneratorLaunch}
@@ -380,6 +548,23 @@ export function ReceiptManager() {
         image={viewingImage}
         onOpenChange={(open) => {
           if (!open) setViewingImage(null);
+        }}
+      />
+
+      <ReceiptEditDialog
+        open={showEditDialog}
+        locale={locale}
+        form={editForm}
+        submitting={submitting}
+        isAdmin={isAdmin}
+        tx={tx}
+        onOpenChange={(open) => {
+          if (!open) closeEditDialog();
+          else setShowEditDialog(true);
+        }}
+        onFormChange={setEditForm}
+        onSubmit={() => {
+          void submitReceiptEdit();
         }}
       />
     </div>

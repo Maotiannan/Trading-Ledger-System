@@ -260,9 +260,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         });
       }
 
-      const payload = typeof data.data === 'string'
-        ? parseJsonWithSchema(data.data, receiptPayloadSchema, '收据数据格式错误')
-        : parseReceiptPayload(data);
+      const payload = parseReceiptEditablePatch(data);
       const result = await updateReceiptRecord({
         currentUser,
         receiptId,

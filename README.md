@@ -34,8 +34,9 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.112`
-- 本次更新：付款明细与 SWIFT 现在也接入了和收据一致的“修改审批”能力。`SALES` 对可见记录发起修改时，会提示“成功提交，等待管理员同意”；`ADMIN` 在可见范围内直接修改会提示“修改已完成”。
+- 当前版本：`1.0.113`
+- 本次更新：修复了手机端 `Upload Payment Detail` 在 AI 识别成功后点击 `Confirm Create` 报 `Invalid input: expected array, received undefined` 的问题。付款明细 OCR 确认创建现在同时兼容顶层 payload 和前端当前使用的嵌套 `data` payload，不会再因为解析错层导致确认失败。
+- 上一批更新：付款明细与 SWIFT 现在也接入了和收据一致的“修改审批”能力。`SALES` 对可见记录发起修改时，会提示“成功提交，等待管理员同意”；`ADMIN` 在可见范围内直接修改会提示“修改已完成”。
 - `Detail` 仅允许在 `Waiting_SWIFT / ERROR` 状态下修改 `date` 与每行的 `mark / orderNo / amount / receiptId`；`Swift` 仅允许在 `ERROR / Bank_Transfer` 状态下修改 `date / amount / senderName / senderAddress / receiverName / receiverAccount`。已完成链路的记录不会开放修改。
 - 同一条收据、付款明细或 SWIFT 在待审批期间都不能重复提交新的修改申请；审批通过后才会正式写回数据。
 - 上一批更新已完成收据管理移动端体验优化：顶部操作按钮在窄屏下会自动换行/纵向堆叠；直接上传图片确认页改为固定返回/确认头部，超长图片会在预览区内按可视高度缩放并独立滚动，避免确认按钮被挤出屏幕。

@@ -233,8 +233,10 @@ export default async function run(t) {
     const detailConfirm = await t.request('POST', '/api/detail', {
       json: {
         action: 'confirm',
-        date: '2026-04-30',
-        items: [{ mark: `${suffix}-DETAIL`, orderNo: detailOrderNo, amount: 260 }],
+        data: {
+          date: '2026-04-30',
+          items: [{ mark: `${suffix}-DETAIL`, orderNo: detailOrderNo, amount: 260 }],
+        },
         imagePath: stagedDetailOcrAsset.path,
         imageName: stagedDetailOcrAsset.name,
       },

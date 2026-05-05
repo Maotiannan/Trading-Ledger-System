@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.112
+> 当前版本：v1.0.113
 > 最后更新：2026-05-05
 
 ## 当前状态
@@ -50,6 +50,10 @@
 - 付款明细与 SWIFT 新增“修改审批”能力：`SALES` 及以上权限账号可以对自己可见范围内的记录发起修改；`SALES` 提交后进入待审批状态，`ADMIN` 对自己可见范围内的记录可直接修改。
 - `Detail` 仅允许在 `Waiting_SWIFT / ERROR` 状态下修改 `date` 与每行 `mark / orderNo / amount / receiptId`；`Swift` 仅允许在 `ERROR / Bank_Transfer` 状态下修改 `date / amount / senderName / senderAddress / receiverName / receiverAccount`。
 - 两条链路都新增待审批列表、审批通过/拒绝动作和 API 自动化回归；同一条记录在 `PENDING` 期间不能重复提交新的修改申请。
+
+### v1.0.113
+- 修复 `Upload Payment Detail` 的 OCR 确认创建兼容性问题：移动端 AI 识别成功后，前端提交的是嵌套 `data` payload，后端此前错误按顶层 payload 解析，导致 `Confirm Create` 报 `Invalid input: expected array, received undefined`。
+- `/api/detail` 的 `confirm/direct-create` 现在同时兼容顶层 payload 和嵌套 `data` payload；已补 route 单测和真实 isolated API 回归，确认付款明细 OCR 从识别到确认创建再次可用。
 
 ### v1.0.111
 - 收据管理新增“收据修改审批”能力：`SALES` 及以上权限账号现在都可以对可见收据发起修改；`SALES` 提交后进入待审批状态，同一收据在审批完成前不能重复提交；`ADMIN` 可对自己可见范围内的收据直接修改。

@@ -37,6 +37,10 @@ function parseDetailPayload(data: Record<string, unknown>) {
   return parseDetailPayloadValue(data);
 }
 
+function parseDetailCreatePayload(data: Record<string, unknown>) {
+  return parseDetailPayloadValue(data.data ?? data);
+}
+
 function parseDetailEditablePatch(value: unknown): DetailEditablePatch {
   const payload = parseDetailPayloadValue(value);
   return {
@@ -173,7 +177,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     if (action === 'confirm' || action === 'direct-create') {
       const result = await createDetailRecord({
         currentUser,
-        payload: parseDetailPayload(requestData),
+        payload: parseDetailCreatePayload(requestData),
         imagePath: typeof requestData.imagePath === 'string' ? requestData.imagePath : null,
         imageName: typeof requestData.imageName === 'string' ? requestData.imageName : null,
         mode: action,

@@ -48,8 +48,9 @@ jest.mock('@/lib/detail-edit-request-service', () => ({
 
 import { POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
-import { updateDetailRecord } from '@/lib/detail-service';
+import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 
+const mockCreateDetailRecord = createDetailRecord as jest.Mock;
 const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
 const mockReviewDetailEdit = reviewDetailEdit as jest.Mock;
 const mockListDetailEditRequests = listDetailEditRequests as jest.Mock;
@@ -152,6 +153,37 @@ describe('detail route edit-approval actions', () => {
       },
       imagePath: null,
       imageName: null,
+    }));
+    expect(json.success).toBe(true);
+  });
+
+  it('accepts nested confirm payloads used by OCR confirm flow', async () => {
+    mockCreateDetailRecord.mockResolvedValueOnce({
+      data: { id: 'detail-1' },
+      message: '付款明细已创建',
+    });
+
+    const response = await POST(buildJsonRequest({
+      action: 'confirm',
+      data: {
+        date: '2026-05-05',
+        items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, matchedReceiptId: 'receipt-2' }],
+      },
+      imagePath: '/upload/test.png',
+      imageName: 'test.png',
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockCreateDetailRecord).toHaveBeenCalledWith(expect.objectContaining({
+      currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
+      payload: {
+        date: '2026-05-05',
+        items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, matchedReceiptId: 'receipt-2', receiptId: null }],
+      },
+      imagePath: '/upload/test.png',
+      imageName: 'test.png',
+      mode: 'confirm',
     }));
     expect(json.success).toBe(true);
   });

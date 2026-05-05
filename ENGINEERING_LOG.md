@@ -1,13 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.112
+> 当前版本：v1.0.113
 > 最后更新：2026-05-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
 
+- [x] 修复 `Upload Payment Detail` OCR 确认创建 payload 解析错层：移动端前端提交 `action=confirm + data={date,items}`，后端 `/api/detail` 旧实现错误按顶层 `requestData` 走 `detailPayloadSchema`，导致 `items` 缺失并报 `Invalid input: expected array, received undefined`；现已新增 `parseDetailCreatePayload()` 同时兼容顶层 payload 与嵌套 `data` payload，并补 `route.test.ts` 红绿测试及 `85-uploaded-asset-cleanup` isolated API 回归，真实确认创建链路恢复 ✅ 2026-05-05
 - [x] 付款明细与 SWIFT 修改审批流落地：新增 `DetailEditRequest / SwiftEditRequest` 持久化与 `PENDING / APPROVED / REJECTED` 状态、`pendingDetailId / pendingSwiftId` 唯一约束防重复待审批；`detail-edit-request-service / swift-edit-request-service` 事务化实现申请/审批/列表逻辑，`/api/detail` 与 `/api/swift` 新增 `request-edit / review-edit / list-edit-requests`；前端在付款明细页和 SWIFT 页新增编辑弹窗、待审批列表和管理员审批动作；`SALES` 走审批流、`ADMIN` 直接修改，字段白名单与可编辑状态严格限定为 `Detail(Waiting_SWIFT|ERROR)` 与 `Swift(ERROR|Bank_Transfer)`；补齐 route/service/hook/UI/unit/isolated API 回归，并新增 isolated harness 限流重置入口避免测试间的登录桶污染 ✅ 2026-05-05
 - [x] 收据修改审批流落地：新增 `ReceiptEditRequest` 持久化与 `PENDING / APPROVED / REJECTED` 状态、`pendingReceiptId` 唯一约束防重复待审批、`receipt-edit-request-service` 事务化申请/审批/列表逻辑；`/api/receipt` 新增 `request-edit / review-edit / list-edit-requests`，收据页新增编辑弹窗、待审批列表和管理员审批动作；`SALES` 走审批流、`ADMIN` 直接修改，字段白名单限定为 `receiptNo / date / invNo / customerMark / payer / tel`；补齐 route/service/hook/UI/unit/isolated API 回归并修复 reviewer 指出的 ISO 日期编辑和 nested payload 契约问题 ✅ 2026-05-05
 

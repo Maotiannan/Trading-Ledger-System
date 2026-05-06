@@ -1,5 +1,6 @@
 import type { ApiErrorCode } from '@/lib/api-error';
 import { defaultLocale, isSupportedLocale, type SupportedLocale } from '@/lib/i18n';
+import { presentBusinessErrorMessage } from '@/lib/business-error-message-map';
 
 const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   AUTH_REQUIRED: { zh: '未登录', en: 'Not logged in' },
@@ -122,6 +123,8 @@ export function normalizeApiErrorLocale(locale?: string | null): SupportedLocale
 
 export function translateApiErrorMessage(raw: string, locale: SupportedLocale): string {
   if (!raw) return raw;
+  const presented = presentBusinessErrorMessage(raw, locale);
+  if (presented !== raw) return presented;
   if (locale === 'zh') return raw;
 
   if (exactMessageMap[raw]) {

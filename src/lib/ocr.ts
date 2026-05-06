@@ -1,5 +1,6 @@
 import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult } from '@/lib/types';
 import { getSystemSettings } from '@/lib/system-settings';
+import { normalizeSwiftOcrResult } from '@/lib/swift-normalization';
 
 type OcrConfig = {
   maxRetries: number;
@@ -497,7 +498,8 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
     receiverAccount: null
   };
 
-  return runVisionRequest<SwiftOcrResult>('swift', imageBase64, prompt, fallback);
+  const raw = await runVisionRequest<SwiftOcrResult>('swift', imageBase64, prompt, fallback);
+  return normalizeSwiftOcrResult(raw);
 }
 
 export async function testOcrConnectivity(): Promise<{ success: boolean; message: string; detail?: string }> {

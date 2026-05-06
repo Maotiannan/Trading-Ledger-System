@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Check, Loader2 } from 'lucide-react';
-import type { DetailOcrResult, DetailOcrUploadStatus } from '../types';
+import type { DetailOcrResult, DetailOcrUploadStatus, PaymentAgentSummary } from '../types';
 
 export type DetailUploadDialogProps = {
   open: boolean;
@@ -19,8 +19,12 @@ export type DetailUploadDialogProps = {
   ocrUploadStatus: DetailOcrUploadStatus;
   ocrUploadMessage: string | null;
   ocrUploadProgress: number | null;
+  agents: PaymentAgentSummary[];
+  agentsLoading: boolean;
+  selectedAgentId: string;
   tx: (zh: string, en: string) => string;
   onOpenChange: (open: boolean) => void;
+  onSelectedAgentIdChange: (value: string) => void;
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onOcrResultChange: (value: DetailOcrResult | null) => void;
   onConfirm: () => void;
@@ -36,8 +40,12 @@ export function DetailUploadDialog({
   ocrUploadStatus,
   ocrUploadMessage,
   ocrUploadProgress,
+  agents,
+  agentsLoading,
+  selectedAgentId,
   tx,
   onOpenChange,
+  onSelectedAgentIdChange,
   onFileSelect,
   onOcrResultChange,
   onConfirm,
@@ -85,6 +93,23 @@ export function DetailUploadDialog({
                 <div className="space-y-3 border rounded-lg p-4">
                   <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
                   <div>
+                    <Label className="text-sm text-gray-500">{tx('付款代理', 'Payment Agent')}</Label>
+                    <select
+                      className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                      value={selectedAgentId}
+                      onChange={(event) => onSelectedAgentIdChange(event.target.value)}
+                    >
+                      <option value="">
+                        {agentsLoading ? tx('加载中...', 'Loading...') : tx('请选择付款代理', 'Please select a payment agent')}
+                      </option>
+                      {agents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.companyName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <Label className="text-sm text-gray-500">{tx('日期', 'Date')}</Label>
                     <Input value={ocrResult.date || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, date: e.target.value })} />
                   </div>
@@ -130,7 +155,7 @@ export function DetailUploadDialog({
           </div>
           <DialogFooter className="shrink-0 border-t px-6 py-4 flex-col-reverse gap-2 sm:flex-row sm:gap-0">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
-            <Button onClick={onConfirm} disabled={!ocrResult || submitting || uploading}>
+            <Button onClick={onConfirm} disabled={!ocrResult || !selectedAgentId || submitting || uploading || agentsLoading}>
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />

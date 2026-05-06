@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore, type Detail } from '@/lib/store';
 import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
@@ -21,11 +21,13 @@ import {
   DetailEditDialog,
   DetailImagePreviewDialog,
   DetailList,
+  PaymentAgentManagerDialog,
   DetailUploadDialog,
 } from './components';
 import { useDetailActions, useDetailForms } from './hooks';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
-import { Plus, Upload } from 'lucide-react';
+import type { PaymentAgentSummary } from './types';
+import { Building2, Plus, Upload } from 'lucide-react';
 
 export function DetailManager() {
   const tx = useUiText();
@@ -38,8 +40,11 @@ export function DetailManager() {
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showAgentManager, setShowAgentManager] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
   const [editLinkedReceiptLabels, setEditLinkedReceiptLabels] = useState<string[]>([]);
+  const [agents, setAgents] = useState<PaymentAgentSummary[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [editForm, setEditForm] = useState<DetailEditablePatch>({
     date: null,
     items: [],
@@ -58,6 +63,8 @@ export function DetailManager() {
     setError,
     savedImagePath,
     setSavedImagePath,
+    selectedAgentId,
+    setSelectedAgentId,
     ocrUploadStatus,
     setOcrUploadStatus,
     ocrUploadMessage,
@@ -77,6 +84,19 @@ export function DetailManager() {
     resetDirectForm,
   } = useDetailForms();
   const detailRequestGuard = useLatestRequestGuard();
+  const editPreviewTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  const loadAgents = useCallback(async () => {
+    setAgentsLoading(true);
+    try {
+      const result = await apiCall('agent');
+      if (result.success && Array.isArray(result.data)) {
+        setAgents(result.data as PaymentAgentSummary[]);
+      }
+    } finally {
+      setAgentsLoading(false);
+    }
+  }, []);
 
   const loadDetails = useCallback(async () => {
     const requestToken = detailRequestGuard.nextToken();
@@ -109,6 +129,10 @@ export function DetailManager() {
     loadDetails();
   }, [loadDetails]);
 
+  useEffect(() => {
+    void loadAgents();
+  }, [loadAgents]);
+
   const {
     uploading,
     submitting,
@@ -124,6 +148,7 @@ export function DetailManager() {
     selectedFile,
     ocrResult,
     savedImagePath,
+    selectedAgentId,
     directDate,
     directItems,
     setOcrResult,
@@ -154,12 +179,8 @@ export function DetailManager() {
       if (!item.receipt) {
         return tx('未匹配', 'Unmatched');
       }
-      const receiptNo = item.receipt.receiptNo?.trim();
-      if (receiptNo) return receiptNo;
       const orderNo = item.receipt.orderNo?.trim();
       if (orderNo) return orderNo;
-      const payer = item.receipt.payer?.trim();
-      if (payer) return payer;
       return tx('已关联收据', 'Linked receipt');
     }));
     setEditForm({
@@ -177,10 +198,93 @@ export function DetailManager() {
 
   const closeEditDialog = () => {
     if (submitting) return;
+    for (const timer of editPreviewTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    editPreviewTimersRef.current.clear();
     setShowEditDialog(false);
     setEditingDetailId(null);
     setEditLinkedReceiptLabels([]);
   };
+
+  const handleEditItemChange = useCallback((index: number, patch: { mark?: string | null; orderNo?: string | null; amount?: number }) => {
+    setEditForm((prev) => {
+      const nextItems = prev.items.map((current, currentIndex) => {
+        if (currentIndex !== index) return current;
+        return {
+          ...current,
+          ...(patch.mark !== undefined ? { mark: patch.mark } : {}),
+          ...(patch.orderNo !== undefined ? { orderNo: patch.orderNo } : {}),
+          ...(patch.amount !== undefined ? { amount: patch.amount } : {}),
+          ...(patch.orderNo !== undefined ? { receiptId: null } : {}),
+        };
+      });
+      return { ...prev, items: nextItems };
+    });
+
+    if (patch.orderNo === undefined && patch.amount === undefined) {
+      return;
+    }
+
+    const existingTimer = editPreviewTimersRef.current.get(index);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      editPreviewTimersRef.current.delete(index);
+    }
+
+    const timer = setTimeout(async () => {
+      const currentRow = editForm.items[index];
+      const nextOrderNo = patch.orderNo !== undefined ? patch.orderNo : currentRow?.orderNo;
+      const nextAmount = patch.amount !== undefined ? patch.amount : currentRow?.amount;
+      const trimmedOrderNo = String(nextOrderNo || '').trim();
+      if (!trimmedOrderNo) {
+        setEditLinkedReceiptLabels((prev) => prev.map((label, labelIndex) => (
+          labelIndex === index ? tx('未匹配', 'Unmatched') : label
+        )));
+        return;
+      }
+
+      try {
+        const query = new URLSearchParams({
+          action: 'order-preview',
+          orderNo: trimmedOrderNo,
+          amount: String(Number(nextAmount || 0)),
+        });
+        const result = await apiCall(`detail?${query.toString()}`);
+        if (!result.success || !result.data || typeof result.data !== 'object') return;
+        const payload = result.data as {
+          matchedReceiptId?: string | null;
+          linkedReceiptLabel?: string | null;
+          suggestedMark?: string | null;
+          willCreateReceipt?: boolean;
+        };
+
+        setEditLinkedReceiptLabels((prev) => prev.map((label, labelIndex) => {
+          if (labelIndex !== index) return label;
+          if (payload.linkedReceiptLabel) return payload.linkedReceiptLabel;
+          if (payload.willCreateReceipt) return tx('保存后将创建新收据', 'A new receipt will be created on save');
+          return tx('未匹配', 'Unmatched');
+        }));
+
+        setEditForm((prev) => {
+          const nextItems = prev.items.map((current, currentIndex) => {
+            if (currentIndex !== index) return current;
+            if (String(current.orderNo || '').trim() !== trimmedOrderNo) return current;
+            return {
+              ...current,
+              mark: payload.suggestedMark ?? current.mark,
+              receiptId: payload.matchedReceiptId ?? null,
+            };
+          });
+          return { ...prev, items: nextItems };
+        });
+      } catch {
+        // keep current draft; preview is best-effort only
+      }
+    }, 260);
+
+    editPreviewTimersRef.current.set(index, timer);
+  }, [editForm.items, tx]);
 
   const submitDetailEdit = async () => {
     if (!editingDetailId) return;
@@ -206,6 +310,10 @@ export function DetailManager() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold">{tx('付款明细管理', 'Payment Detail Management')}</h2>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <Button variant="outline" onClick={() => setShowAgentManager(true)}>
+            <Building2 className="mr-2 h-4 w-4" />
+            {tx('付款代理', 'AGENT')}
+          </Button>
           <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
             <Plus className="h-4 w-4 mr-2" />
             {tx('直接创建', 'Create Directly')}
@@ -283,11 +391,24 @@ export function DetailManager() {
         ocrUploadStatus={ocrUploadStatus}
         ocrUploadMessage={ocrUploadMessage}
         ocrUploadProgress={ocrUploadProgress}
+        agents={agents}
+        agentsLoading={agentsLoading}
+        selectedAgentId={selectedAgentId}
         tx={tx}
         onOpenChange={handleShowUploadChange}
+        onSelectedAgentIdChange={setSelectedAgentId}
         onFileSelect={handleFileSelect}
         onOcrResultChange={setOcrResult}
         onConfirm={handleConfirm}
+      />
+
+      <PaymentAgentManagerDialog
+        open={showAgentManager}
+        agents={agents}
+        loading={agentsLoading}
+        tx={tx}
+        onOpenChange={setShowAgentManager}
+        onAgentsReload={loadAgents}
       />
 
       <DetailDirectCreateDialog
@@ -324,6 +445,7 @@ export function DetailManager() {
           else setShowEditDialog(true);
         }}
         onFormChange={setEditForm}
+        onItemChange={handleEditItemChange}
         onSubmit={submitDetailEdit}
       />
     </div>

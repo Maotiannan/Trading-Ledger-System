@@ -15,6 +15,7 @@ export type DetailEditDialogProps = {
   tx: (zh: string, en: string) => string;
   onOpenChange: (open: boolean) => void;
   onFormChange: (value: DetailEditablePatch) => void;
+  onItemChange: (index: number, patch: { mark?: string | null; orderNo?: string | null; amount?: number }) => void;
   onSubmit: () => void;
 };
 
@@ -28,6 +29,7 @@ export function DetailEditDialog({
   tx,
   onOpenChange,
   onFormChange,
+  onItemChange,
   onSubmit,
 }: DetailEditDialogProps) {
   return (
@@ -53,26 +55,16 @@ export function DetailEditDialog({
               />
               <div className="space-y-3">
                 {form.items.map((item, index) => (
-                  <div key={`${index}-${item.orderNo ?? 'item'}`} className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-4">
+                  <div key={index} className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-4">
                     <Input
                       placeholder={tx('客户MARK', 'Customer MARK')}
                       value={item.mark ?? ''}
-                      onChange={(e) => {
-                        const nextItems = form.items.map((current, currentIndex) => currentIndex === index
-                          ? { ...current, mark: e.target.value || null }
-                          : current);
-                        onFormChange({ ...form, items: nextItems });
-                      }}
+                      onChange={(e) => onItemChange(index, { mark: e.target.value || null })}
                     />
                     <Input
                       placeholder={tx('单号', 'Order No.')}
                       value={item.orderNo ?? ''}
-                      onChange={(e) => {
-                        const nextItems = form.items.map((current, currentIndex) => currentIndex === index
-                          ? { ...current, orderNo: e.target.value || null }
-                          : current);
-                        onFormChange({ ...form, items: nextItems });
-                      }}
+                      onChange={(e) => onItemChange(index, { orderNo: e.target.value || null })}
                     />
                     <Input
                       type="number"
@@ -81,10 +73,7 @@ export function DetailEditDialog({
                       value={Number.isFinite(item.amount) ? String(item.amount) : ''}
                       onChange={(e) => {
                         const nextAmount = Number(e.target.value);
-                        const nextItems = form.items.map((current, currentIndex) => currentIndex === index
-                          ? { ...current, amount: Number.isFinite(nextAmount) ? nextAmount : 0 }
-                          : current);
-                        onFormChange({ ...form, items: nextItems });
+                        onItemChange(index, { amount: Number.isFinite(nextAmount) ? nextAmount : 0 });
                       }}
                     />
                     <div className="space-y-1">

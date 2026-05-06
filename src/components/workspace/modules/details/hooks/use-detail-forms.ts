@@ -12,6 +12,7 @@ export function useDetailForms() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedImagePath, setSavedImagePath] = useState<{ path: string; name: string } | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
   const [ocrUploadStatus, setOcrUploadStatus] = useState<DetailOcrUploadStatus>('idle');
   const [ocrUploadMessage, setOcrUploadMessage] = useState<string | null>(null);
   const [ocrUploadProgress, setOcrUploadProgress] = useState<number | null>(null);
@@ -35,6 +36,7 @@ export function useDetailForms() {
       setImagePreview(null);
       setSelectedFile(null);
       setSavedImagePath(null);
+      setSelectedAgentId('');
       setOcrUploadStatus('idle');
       setOcrUploadMessage(null);
       setOcrUploadProgress(null);
@@ -75,6 +77,8 @@ export function useDetailForms() {
     setError,
     savedImagePath,
     setSavedImagePath,
+    selectedAgentId,
+    setSelectedAgentId,
     ocrUploadStatus,
     setOcrUploadStatus,
     ocrUploadMessage,

@@ -3,3 +3,4 @@ export * from './detail-edit-dialog';
 export * from './detail-image-preview-dialog';
 export * from './detail-list';
 export * from './detail-upload-dialog';
+export * from './payment-agent-manager-dialog';

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeSwiftAmount, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
 
 export const MAX_SEARCH_LENGTH = 100;
 
@@ -44,6 +45,7 @@ export type ReceiptPayload = z.infer<typeof receiptPayloadSchema>;
 
 export const detailPayloadSchema = z.object({
   date: nullableTrimmedString,
+  agentId: nullableTrimmedString.optional(),
   items: z
     .array(
       z.object({
@@ -59,12 +61,12 @@ export const detailPayloadSchema = z.object({
 export type DetailPayload = z.infer<typeof detailPayloadSchema>;
 
 export const swiftPayloadSchema = z.object({
-  amount: z.coerce.number().positive('SWIFT金额无效'),
+  amount: z.preprocess((value) => normalizeSwiftAmount(value), z.number().positive('SWIFT金额无效')),
   date: nullableTrimmedString,
   senderName: nullableTrimmedString,
   senderAddress: nullableTrimmedString,
   receiverName: nullableTrimmedString,
-  receiverAccount: nullableTrimmedString,
+  receiverAccount: z.preprocess((value) => normalizeSwiftReceiverAccount(typeof value === 'string' ? value : null), nullableTrimmedString),
 });
 export type SwiftPayload = z.infer<typeof swiftPayloadSchema>;
 

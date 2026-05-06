@@ -2,14 +2,32 @@ import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = new Set([
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
   'image/heic',
   'image/heif',
 ]);
-const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif']);
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif']);
+const ALLOWED_FILE_MIME_TYPES = new Set([
+  ...ALLOWED_IMAGE_MIME_TYPES,
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+]);
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  ...ALLOWED_IMAGE_EXTENSIONS,
+  '.pdf',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.txt',
+]);
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const DEFAULT_UPLOAD_PUBLIC_PATH = '/upload/images';
 
@@ -38,7 +56,7 @@ function sanitizeFileName(fileName: string): string {
   return replaced || 'upload.bin';
 }
 
-function validateUploadFile(file: File): void {
+function validateUploadFile(file: File, options: { allowGenericFiles?: boolean } = {}): void {
   if (!file || file.size <= 0) {
     throw new UploadValidationError('上传文件为空');
   }
@@ -48,13 +66,15 @@ function validateUploadFile(file: File): void {
   }
 
   const mimeType = (file.type || '').toLowerCase();
-  if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-    throw new UploadValidationError('仅支持 JPG、PNG、WEBP、HEIC 图片');
+  const allowedMimeTypes = options.allowGenericFiles ? ALLOWED_FILE_MIME_TYPES : ALLOWED_IMAGE_MIME_TYPES;
+  if (!allowedMimeTypes.has(mimeType)) {
+    throw new UploadValidationError(options.allowGenericFiles ? '文件类型不受支持' : '仅支持 JPG、PNG、WEBP、HEIC 图片');
   }
 
   const safeName = sanitizeFileName(file.name);
   const extension = path.extname(safeName).toLowerCase();
-  if (!ALLOWED_EXTENSIONS.has(extension)) {
+  const allowedExtensions = options.allowGenericFiles ? ALLOWED_FILE_EXTENSIONS : ALLOWED_IMAGE_EXTENSIONS;
+  if (!allowedExtensions.has(extension)) {
     throw new UploadValidationError('文件扩展名不受支持');
   }
 }
@@ -97,22 +117,61 @@ function authoritativeMimeTypeForExtension(extension: string): string {
       return 'image/heic';
     case '.heif':
       return 'image/heif';
+    case '.pdf':
+      return 'application/pdf';
+    case '.doc':
+      return 'application/msword';
+    case '.docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case '.xls':
+      return 'application/vnd.ms-excel';
+    case '.xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case '.txt':
+      return 'text/plain';
     default:
       throw new UploadValidationError('文件扩展名不受支持');
   }
 }
 
-export async function saveUploadedImage(
+function validateGenericFileMagic(buffer: Buffer, extension: string): boolean {
+  if (ALLOWED_IMAGE_EXTENSIONS.has(extension)) {
+    return hasValidImageMagic(buffer, extension);
+  }
+
+  if (extension === '.pdf') {
+    return buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+  }
+
+  if (extension === '.docx' || extension === '.xlsx') {
+    return buffer.length >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+  }
+
+  if (extension === '.doc' || extension === '.xls') {
+    return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]));
+  }
+
+  if (extension === '.txt') {
+    return true;
+  }
+
+  return false;
+}
+
+async function saveUploadedBlob(
   file: File,
-  options: { subDir?: string | null } = {},
+  options: { subDir?: string | null; allowGenericFiles?: boolean } = {},
 ): Promise<{ path: string; name: string; mimeType: string; sizeBytes: number }> {
-  validateUploadFile(file);
+  validateUploadFile(file, { allowGenericFiles: options.allowGenericFiles });
 
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
   const safeName = sanitizeFileName(file.name);
   const extension = path.extname(safeName).toLowerCase();
-  if (!hasValidImageMagic(buffer, extension)) {
+  const hasValidMagic = options.allowGenericFiles
+    ? validateGenericFileMagic(buffer, extension)
+    : hasValidImageMagic(buffer, extension);
+  if (!hasValidMagic) {
     throw new UploadValidationError('文件内容与扩展名不匹配');
   }
   const mimeType = authoritativeMimeTypeForExtension(extension);
@@ -134,4 +193,18 @@ export async function saveUploadedImage(
     ? `${publicBase.replace(/\/$/, '')}/${subDir}/${fileName}`
     : `${publicBase.replace(/\/$/, '')}/${fileName}`;
   return { path: publicPath, name: safeName, mimeType, sizeBytes: buffer.byteLength };
+}
+
+export async function saveUploadedImage(
+  file: File,
+  options: { subDir?: string | null } = {},
+): Promise<{ path: string; name: string; mimeType: string; sizeBytes: number }> {
+  return saveUploadedBlob(file, options);
+}
+
+export async function saveUploadedFile(
+  file: File,
+  options: { subDir?: string | null } = {},
+): Promise<{ path: string; name: string; mimeType: string; sizeBytes: number }> {
+  return saveUploadedBlob(file, { ...options, allowGenericFiles: true });
 }

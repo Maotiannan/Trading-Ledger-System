@@ -35,6 +35,14 @@ function createBadRequestError(message: string, detail?: unknown) {
   });
 }
 
+function createSwiftAmountRejectedError(validationMessage: string) {
+  throw createApiError({
+    code: 'VALIDATION_ERROR',
+    status: 400,
+    message: validationMessage,
+  });
+}
+
 function assertEditableSwiftStatus(status: SwiftStatus, detail?: unknown) {
   if (status === SwiftStatus.RECEIVED) {
     throw createBadRequestError('RECEIVED状态下禁止修改SWIFT', detail);
@@ -85,6 +93,9 @@ async function applySwiftUpdate(params: {
     warningTolerance,
     rejectTolerance,
   });
+  if (!validation.valid) {
+    createSwiftAmountRejectedError(validation.message);
+  }
 
   const nextSwift = await tx.swift.update({
     where: { id: swiftId },
@@ -215,6 +226,9 @@ export async function createSwiftRecord(params: {
     warningTolerance,
     rejectTolerance,
   });
+  if (!validation.valid) {
+    createSwiftAmountRejectedError(validation.message);
+  }
 
   try {
     const swift = await runInTransaction(async (tx) => {

@@ -16,6 +16,7 @@ export type DetailActionDeps = {
   selectedFile: File | null;
   ocrResult: DetailOcrResult | null;
   savedImagePath: { path: string; name: string } | null;
+  selectedAgentId?: string;
   directDate: string;
   directItems: DetailDirectItemForm[];
   setOcrResult: (value: DetailOcrResult | null) => void;
@@ -38,6 +39,7 @@ export function useDetailActions({
   selectedFile,
   ocrResult,
   savedImagePath,
+  selectedAgentId,
   directDate,
   directItems,
   setOcrResult,
@@ -262,12 +264,19 @@ export function useDetailActions({
 
   const handleConfirm = async () => {
     if (!selectedFile || !ocrResult) return;
+    if (!selectedAgentId) {
+      setError(tx('请选择付款代理后再确认创建', 'Select a payment agent before confirming creation.'));
+      return;
+    }
 
     setError(null);
     setSubmitting(true);
     const formData = new FormData();
     formData.append('action', 'confirm');
-    formData.append('data', JSON.stringify(ocrResult));
+    formData.append('data', JSON.stringify({
+      ...ocrResult,
+      agentId: selectedAgentId,
+    }));
     formData.append('imagePath', savedImagePath?.path || '');
     formData.append('imageName', savedImagePath?.name || selectedFile.name);
 
@@ -282,6 +291,7 @@ export function useDetailActions({
         handleShowUploadChange(false);
         setSelectedFile(null);
         setSavedImagePath(null);
+        setOcrResult(null);
         await loadDetails();
       } else {
         setError(getErrorMessage(result, tx('创建失败，请重试', 'Create failed, please retry.')));

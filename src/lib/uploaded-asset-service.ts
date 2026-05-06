@@ -8,7 +8,7 @@ import path from 'path';
 import { addHours } from 'date-fns';
 import { db } from '@/lib/db';
 import { getUploadedAssetCleanupSettings } from '@/lib/system-settings';
-import { saveUploadedImage } from '@/lib/upload';
+import { saveUploadedFile, saveUploadedImage } from '@/lib/upload';
 
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const DEFAULT_UPLOAD_PUBLIC_PATH = '/upload/images';
@@ -90,25 +90,33 @@ export async function stageUploadedAsset(input: {
   createdBy: string;
 }) {
   const { stagedTtlHours } = await getUploadedAssetCleanupSettings();
-  const image = await saveUploadedImage(input.file, {
-    subDir: uploadedAssetSubDirForCategory(input.category),
-  });
+  const savedFile = isGenericUploadedAssetCategory(input.category)
+    ? await saveUploadedFile(input.file, {
+        subDir: uploadedAssetSubDirForCategory(input.category),
+      })
+    : await saveUploadedImage(input.file, {
+        subDir: uploadedAssetSubDirForCategory(input.category),
+      });
 
   try {
     await registerUploadedAsset({
-      path: image.path,
-      name: image.name,
+      path: savedFile.path,
+      name: savedFile.name,
       category: input.category,
-      mimeType: image.mimeType,
-      sizeBytes: image.sizeBytes,
+      mimeType: savedFile.mimeType,
+      sizeBytes: savedFile.sizeBytes,
       createdBy: input.createdBy,
       expiresAt: addHours(new Date(), stagedTtlHours),
     });
-    return image;
+    return savedFile;
   } catch (error) {
-    await rm(resolveUploadedAssetAbsolutePath(image.path), { force: true }).catch(() => undefined);
+    await rm(resolveUploadedAssetAbsolutePath(savedFile.path), { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+function isGenericUploadedAssetCategory(category: UploadedAssetCategory): boolean {
+  return category === UploadedAssetCategory.AGENT_FILE;
 }
 
 export function uploadedAssetSubDirForCategory(category: UploadedAssetCategory): string {
@@ -125,6 +133,8 @@ export function uploadedAssetSubDirForCategory(category: UploadedAssetCategory):
       return 'receipts/generated';
     case UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE:
       return 'receipts/generated/signatures';
+    case UploadedAssetCategory.AGENT_FILE:
+      return 'agents/files';
   }
 
   const exhaustiveCheck: never = category;

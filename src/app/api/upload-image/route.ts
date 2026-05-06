@@ -18,6 +18,7 @@ const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const PUBLIC_UPLOAD_PREFIX = '/upload/images/';
 const UPLOAD_CATEGORIES: Record<string, UploadedAssetCategory> = {
   'receipt-direct': UploadedAssetCategory.RECEIPT_DIRECT,
+  'agent-file': UploadedAssetCategory.AGENT_FILE,
 };
 
 function resolveImageMimeType(filePath: string): string {
@@ -27,6 +28,12 @@ function resolveImageMimeType(filePath: string): string {
   if (ext === '.webp') return 'image/webp';
   if (ext === '.heic') return 'image/heic';
   if (ext === '.heif') return 'image/heif';
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.doc') return 'application/msword';
+  if (ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === '.xls') return 'application/vnd.ms-excel';
+  if (ext === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (ext === '.txt') return 'text/plain; charset=utf-8';
   return 'application/octet-stream';
 }
 
@@ -49,7 +56,7 @@ export async function GET(request: NextRequest) {
     }
 
     const ownerIds = await getOwnerVisibleIds(currentUser);
-    const [receipt, detail, swift] = await Promise.all([
+    const [receipt, detail, swift, agentFile] = await Promise.all([
       db.receipt.findFirst({
         where: {
           imageUrl: rawPath,
@@ -71,8 +78,19 @@ export async function GET(request: NextRequest) {
         },
         select: { id: true },
       }),
+      db.paymentAgentFile.findFirst({
+        where: {
+          path: rawPath,
+          agent: {
+            createdBy: {
+              in: ownerIds,
+            },
+          },
+        },
+        select: { id: true },
+      }),
     ]);
-    if (!receipt && !detail && !swift) {
+    if (!receipt && !detail && !swift && !agentFile) {
       return createApiErrorResponse({ code: apiErrorCodes.FILE_ACCESS_DENIED, status: 403, message: '无权访问该图片' }, request);
     }
 
@@ -133,7 +151,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const image = uploadedAssetCategory
+    const saved = uploadedAssetCategory
       ? await stageUploadedAsset({
           file,
           category: uploadedAssetCategory,
@@ -141,7 +159,16 @@ export async function POST(request: NextRequest) {
         })
       : await saveUploadedImage(file);
 
-    return createApiSuccessResponse({ data: image }, request);
+    const payload = uploadedAssetCategory === UploadedAssetCategory.AGENT_FILE
+      ? {
+          path: saved.path,
+          name: saved.name,
+          mimeType: saved.mimeType,
+          sizeBytes: saved.sizeBytes,
+        }
+      : saved;
+
+    return createApiSuccessResponse({ data: payload }, request);
   } catch (error) {
     console.error('Upload image error:', error);
     if (error instanceof Error && (error.message === 'aborted' || ('code' in error && (error as NodeJS.ErrnoException).code === 'ECONNRESET'))) {

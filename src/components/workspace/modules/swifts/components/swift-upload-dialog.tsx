@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Check, Loader2 } from 'lucide-react';
 import type { SwiftDetailOption, SwiftOcrResult, SwiftOcrUploadStatus } from '../types';
+import { normalizeSwiftAmount, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
 
 export type SwiftUploadDialogProps = {
   open: boolean;
@@ -51,8 +52,7 @@ export function SwiftUploadDialog({
   onConfirm,
 }: SwiftUploadDialogProps) {
   const updateAmount = (value: string) => {
-    const trimmed = value.trim();
-    onOcrResultChange({ ...ocrResult, amount: trimmed ? Number(trimmed) : null });
+    onOcrResultChange({ ...ocrResult, amount: normalizeSwiftAmount(value) });
   };
 
   return (
@@ -150,7 +150,7 @@ export function SwiftUploadDialog({
                       <Label className="text-sm text-gray-500">{tx('收款人银行账号', 'Receiver Account')}</Label>
                       <Input
                         value={ocrResult.receiverAccount || ''}
-                        onChange={(e) => onOcrResultChange({ ...ocrResult, receiverAccount: e.target.value || null })}
+                        onChange={(e) => onOcrResultChange({ ...ocrResult, receiverAccount: normalizeSwiftReceiverAccount(e.target.value) })}
                       />
                     </div>
                   </div>

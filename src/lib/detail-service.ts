@@ -10,6 +10,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { DetailPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
+import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -251,11 +252,13 @@ async function applyDetailUpdate(params: {
   });
 
   await tx.detailItem.deleteMany({ where: { detailId } });
+  const agentId = await resolveAccessiblePaymentAgentId(currentUser, payload.agentId ?? existingDetail.agentId);
 
   const nextDetail = await tx.detail.update({
     where: { id: detailId },
     data: {
       date: payload.date ? new Date(payload.date) : null,
+      agentId,
       imageUrl: imagePath || existingDetail.imageUrl,
       imageName: imageName || existingDetail.imageName,
       totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),
@@ -284,6 +287,9 @@ export async function createDetailRecord(params: {
   mode: 'confirm' | 'direct-create';
 }) {
   const { currentUser, payload, imagePath, imageName, mode } = params;
+  if (mode === 'confirm' && !payload.agentId) {
+    throw badRequest('请选择付款代理');
+  }
 
   const effectiveDate = payload.date
     ? new Date(payload.date)
@@ -304,9 +310,11 @@ export async function createDetailRecord(params: {
       autoCreateNote: mode === 'direct-create' ? '由付款明细直接创建' : '由付款明细自动创建',
       tx,
     });
+    const agentId = await resolveAccessiblePaymentAgentId(currentUser, payload.agentId);
     const created = await tx.detail.create({
       data: {
         date: effectiveDate,
+        agentId,
         status: DetailStatus.Waiting_SWIFT,
         sourceMode: mode === 'direct-create' ? DetailSourceMode.DIRECT : DetailSourceMode.OCR,
         imageUrl: mode === 'direct-create' ? null : (imagePath || null),

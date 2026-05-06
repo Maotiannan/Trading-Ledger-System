@@ -16,11 +16,12 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
-import { renderDetailExportJpeg } from '@/lib/detail-export-image';
+import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
+import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 
 function parseDetailPayloadValue(value: unknown) {
   if (typeof value === 'string') {
@@ -87,6 +88,56 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       return NextResponse.json({ success: true, data: rows });
     }
 
+    if (action === 'order-preview') {
+      const orderNo = (searchParams.get('orderNo') || '').trim();
+      const amountRaw = searchParams.get('amount') || '';
+      const amount = Number(amountRaw);
+      if (!orderNo) {
+        return NextResponse.json({
+          success: true,
+          data: {
+            matchedReceiptId: null,
+            linkedReceiptLabel: null,
+            suggestedMark: null,
+            willCreateReceipt: false,
+          },
+        });
+      }
+
+      const matchedReceiptId = Number.isFinite(amount) && amount > 0
+        ? await findMatchingReceipt(orderNo, amount)
+        : null;
+      const matchedReceipt = matchedReceiptId
+        ? await db.receipt.findUnique({
+            where: { id: matchedReceiptId },
+            select: { id: true, orderNo: true },
+          })
+        : null;
+      const context = await lookupInvoiceOrderContext(currentUser, orderNo);
+      const exactMatches = Array.isArray(context.data?.exactMatches) ? context.data.exactMatches : [];
+      const latestExactMatch = exactMatches.length > 0 && exactMatches[0] && typeof exactMatches[0] === 'object'
+        ? exactMatches[0] as Record<string, unknown>
+        : null;
+      const inferredCustomer = context.data?.inferredCustomer && typeof context.data.inferredCustomer === 'object'
+        ? context.data.inferredCustomer as Record<string, unknown>
+        : null;
+      const suggestedMark = String(
+        latestExactMatch?.customerMark
+        || inferredCustomer?.mark
+        || ''
+      ).trim() || null;
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          matchedReceiptId,
+          linkedReceiptLabel: matchedReceipt?.orderNo?.trim() || null,
+          suggestedMark,
+          willCreateReceipt: !matchedReceiptId,
+        },
+      });
+    }
+
     if (action === 'export-pic') {
       const detailId = searchParams.get('detailId') || '';
       if (!detailId) {
@@ -104,14 +155,21 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           ...buildDetailVisibilityWhere(Array.from(scope.ownerVisibleIds)),
         },
         include: {
+          agent: true,
           creator: { select: { id: true, name: true, email: true } },
           items: {
             include: {
               receipt: {
                 select: {
-                  note: true,
+                  orderNo: true,
+                  orderId: true,
                 },
               },
+            },
+          },
+          swift: {
+            select: {
+              status: true,
             },
           },
         },
@@ -125,7 +183,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           detail: { detailId },
         });
       }
-      const buffer = await renderDetailExportJpeg(detail);
+      const exportViewModel = await buildDetailExportViewModel(detail);
+      const buffer = await renderDetailExportJpeg(exportViewModel);
       const fileDate = detail.date ? new Date(detail.date).toISOString().slice(0, 10) : 'undated';
       return new NextResponse(new Uint8Array(buffer), {
         status: 200,

@@ -63,6 +63,7 @@ jest.mock('@/lib/user-hierarchy', () => ({
 }));
 
 jest.mock('@/lib/detail-export-image', () => ({
+  buildDetailExportViewModel: jest.fn(),
   renderDetailExportJpeg: jest.fn(),
 }));
 
@@ -79,7 +80,7 @@ jest.mock('@/lib/detail-edit-request-service', () => ({
 
 import { db } from '@/lib/db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
-import { renderDetailExportJpeg } from '@/lib/detail-export-image';
+import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
 import { GET, POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
@@ -91,6 +92,7 @@ const mockDb = db as unknown as {
   };
 };
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
+const mockBuildDetailExportViewModel = buildDetailExportViewModel as jest.Mock;
 const mockRenderDetailExportJpeg = renderDetailExportJpeg as jest.Mock;
 const mockCreateDetailRecord = createDetailRecord as jest.Mock;
 const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
@@ -296,8 +298,17 @@ describe('detail route edit-approval actions', () => {
       id: 'detail-1',
       sourceMode: 'DIRECT',
       date: '2026-05-05T00:00:00.000Z',
-      items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receipt: { note: null } }],
+      items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receipt: { orderNo: 'MAB-1-01', orderId: 'order-1' } }],
       creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
+      agent: { companyName: 'Mitty Group' },
+      swift: { status: 'RECEIVED' },
+    });
+    mockBuildDetailExportViewModel.mockResolvedValueOnce({
+      dateLabel: '05 / 05 / 2026',
+      totalAmount: 120,
+      transactionCount: 1,
+      footerAgentLabel: 'Mitty Group',
+      rows: [{ index: 1, mark: 'MAB', orderNo: 'MAB-1-01', type: 'Std', amount: 120 }],
     });
     const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
     mockRenderDetailExportJpeg.mockResolvedValueOnce(jpeg);
@@ -308,7 +319,8 @@ describe('detail route edit-approval actions', () => {
     expect(mockDb.detail.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ id: 'detail-1' }),
     }));
-    expect(mockRenderDetailExportJpeg).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
+    expect(mockBuildDetailExportViewModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
+    expect(mockRenderDetailExportJpeg).toHaveBeenCalledWith(expect.objectContaining({ footerAgentLabel: 'Mitty Group' }));
     expect(response.headers.get('content-type')).toBe('image/jpeg');
     expect(response.headers.get('content-disposition')).toContain('.jpg');
   });

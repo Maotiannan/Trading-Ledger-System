@@ -7,6 +7,7 @@ import type { UserImageCompressionPreference } from '@/components/workspace/modu
 import type { Swift } from '@/lib/store';
 import type { SwiftDirectForm, SwiftOcrResult } from '../types';
 import type { SwiftEditablePatch } from '@/lib/swift-edit-types';
+import { normalizeSwiftAmount, normalizeSwiftOcrResult, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
 
 export type SwiftActionText = (zh: string, en: string) => string;
 
@@ -224,7 +225,7 @@ export function useSwiftActions({
       });
 
       const successfulPayload = getSuccessfulOcrPayload(response, invalidPayloadMessage);
-      setOcrResult(successfulPayload.ocrResult);
+      setOcrResult(normalizeSwiftOcrResult(successfulPayload.ocrResult));
       setSavedImagePath(successfulPayload.image);
       applyOcrUploadStage({
         stage: 'success',
@@ -251,7 +252,8 @@ export function useSwiftActions({
       setError(tx('请选择付款明细', 'Please select a payment detail.'));
       return;
     }
-    if (!(typeof ocrResult.amount === 'number' && Number.isFinite(ocrResult.amount) && ocrResult.amount > 0)) {
+    const normalizedAmount = normalizeSwiftAmount(ocrResult.amount);
+    if (!(typeof normalizedAmount === 'number' && Number.isFinite(normalizedAmount) && normalizedAmount > 0)) {
       setError(tx('请输入有效的汇款金额', 'Please enter a valid transfer amount.'));
       return;
     }
@@ -261,7 +263,11 @@ export function useSwiftActions({
     const formData = new FormData();
     formData.append('action', 'confirm');
     formData.append('detailId', selectedDetailId);
-    formData.append('data', JSON.stringify(ocrResult));
+    formData.append('data', JSON.stringify({
+      ...normalizeSwiftOcrResult(ocrResult),
+      amount: normalizedAmount,
+      receiverAccount: normalizeSwiftReceiverAccount(ocrResult.receiverAccount) ?? null,
+    }));
     formData.append('imagePath', savedImagePath?.path || '');
     formData.append('imageName', savedImagePath?.name || selectedFile.name);
 

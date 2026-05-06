@@ -49,6 +49,7 @@ enum UploadedAssetAttachmentType {
   DETAIL
   SWIFT
   RECEIPT_GENERATOR_SESSION
+  PAYMENT_AGENT_FILE
 }
 
 enum UploadedAssetCategory {
@@ -58,6 +59,7 @@ enum UploadedAssetCategory {
   SWIFT_OCR
   RECEIPT_GENERATOR_FINAL
   RECEIPT_GENERATOR_SIGNATURE
+  AGENT_FILE
 }
 
 // 付款明细状态枚举
@@ -146,6 +148,8 @@ model User {
   approvedDetailEditRequests   DetailEditRequest[]  @relation("DetailEditApprover")
   requestedSwiftEditRequests   SwiftEditRequest[]   @relation("SwiftEditRequester")
   approvedSwiftEditRequests    SwiftEditRequest[]   @relation("SwiftEditApprover")
+  paymentAgents                PaymentAgent[]       @relation("PaymentAgentCreatedBy")
+  paymentAgentFiles            PaymentAgentFile[]   @relation("PaymentAgentFileUploadedBy")
 
   @@index([parentId])
   @@index([createdById])
@@ -374,12 +378,14 @@ model Detail {
   imageUrl     String?       @db.LongText // 图片路径
   imageName    String?       @db.Text // 图片原始名称
   totalAmount  Decimal       @default(0) @db.Decimal(18, 2) // 总金额
+  agentId      String?
   createdBy    String
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
   // 关联
   creator    User           @relation(fields: [createdBy], references: [id])
+  agent      PaymentAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
   items      DetailItem[]
   histories  DetailHistory[]
   swift      Swift?
@@ -387,6 +393,7 @@ model Detail {
 
   @@index([status])
   @@index([createdBy])
+  @@index([agentId])
 }
 
 // ==================== 付款明细行项目表 ====================
@@ -503,6 +510,41 @@ model SwiftEditRequest {
   @@index([swiftId, status])
   @@index([requestedBy, status])
   @@index([approvedBy])
+}
+
+model PaymentAgent {
+  id             String             @id @default(cuid())
+  companyName    String             @db.Text
+  companyAddress String?            @db.Text
+  contactName    String?            @db.Text
+  contactPhone   String?
+  createdBy      String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  creator User               @relation("PaymentAgentCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  files   PaymentAgentFile[]
+  details Detail[]
+
+  @@index([createdBy])
+}
+
+model PaymentAgentFile {
+  id         String   @id @default(cuid())
+  agentId     String
+  name       String   @db.Text
+  path       String   @db.LongText
+  mimeType   String?
+  size       Int?
+  uploadedBy String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  agent    PaymentAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  uploader User         @relation("PaymentAgentFileUploadedBy", fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([uploadedBy])
 }
 
 // ==================== 客户表 ====================

@@ -18,12 +18,16 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createSwiftRecord, deleteSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
 import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
+import { normalizeSwiftOcrResult } from '@/lib/swift-normalization';
 
 function parseSwiftPayloadValue(value: unknown) {
+  const normalized = value && typeof value === 'object'
+    ? normalizeSwiftOcrResult(value as Record<string, unknown> as never)
+    : value;
   if (typeof value === 'string') {
     return parseJsonWithSchema(value, swiftPayloadSchema, 'SWIFT数据格式错误');
   }
-  const result = swiftPayloadSchema.safeParse(value);
+  const result = swiftPayloadSchema.safeParse(normalized);
   if (!result.success) {
     const issue = result.error.issues[0];
     throw new InputValidationError(issue?.message || 'SWIFT数据格式错误');
@@ -116,7 +120,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       try {
         const base64 = await toOcrDataUrl(file);
-        const ocrResult = await recognizeSwift(base64);
+        const ocrResult = normalizeSwiftOcrResult(await recognizeSwift(base64));
         const imagePath = await stageUploadedAsset({
           file,
           category: UploadedAssetCategory.SWIFT_OCR,

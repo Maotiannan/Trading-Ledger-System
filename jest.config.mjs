@@ -10,8 +10,8 @@ const customJestConfig = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
-  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/tests/e2e/'],
-  modulePathIgnorePatterns: ['<rootDir>/.next/standalone/'],
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/.worktrees/', '/tests/e2e/'],
+  modulePathIgnorePatterns: ['<rootDir>/.next/standalone/', '<rootDir>/.worktrees/'],
   collectCoverageFrom: [
     'src/components/workspace/modules/invoices/hooks/use-invoice-view-state.ts',
     'src/components/workspace/modules/invoices/hooks/use-invoice-actions.ts',

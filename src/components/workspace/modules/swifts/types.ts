@@ -1,10 +1,20 @@
 export type SwiftOcrResult = {
-  amount?: number;
+  amount?: number | null;
   date?: string | null;
   senderName?: string | null;
   senderAddress?: string | null;
   receiverName?: string | null;
   receiverAccount?: string | null;
+};
+
+export type SwiftImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
+
+export type SwiftOcrUploadStatus = SwiftImageUploadStatus;
+
+export type SwiftDetailOption = {
+  id: string;
+  date: string | null;
+  totalAmount: number;
 };
 
 export type SwiftDirectForm = {

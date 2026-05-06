@@ -53,6 +53,7 @@ jest.mock('@/lib/db', () => ({
   db: {
     detail: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
   },
 }));
@@ -62,7 +63,7 @@ jest.mock('@/lib/user-hierarchy', () => ({
 }));
 
 jest.mock('@/lib/detail-export-image', () => ({
-  renderDetailExportPng: jest.fn(),
+  renderDetailExportJpeg: jest.fn(),
 }));
 
 jest.mock('@/lib/detail-service', () => ({
@@ -78,7 +79,7 @@ jest.mock('@/lib/detail-edit-request-service', () => ({
 
 import { db } from '@/lib/db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
-import { renderDetailExportPng } from '@/lib/detail-export-image';
+import { renderDetailExportJpeg } from '@/lib/detail-export-image';
 import { GET, POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
@@ -86,10 +87,11 @@ import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 const mockDb = db as unknown as {
   detail: {
     findFirst: jest.Mock;
+    findMany: jest.Mock;
   };
 };
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
-const mockRenderDetailExportPng = renderDetailExportPng as jest.Mock;
+const mockRenderDetailExportJpeg = renderDetailExportJpeg as jest.Mock;
 const mockCreateDetailRecord = createDetailRecord as jest.Mock;
 const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
 const mockReviewDetailEdit = reviewDetailEdit as jest.Mock;
@@ -271,16 +273,34 @@ describe('detail route edit-approval actions', () => {
     expect(json.data).toHaveLength(1);
   });
 
+  it('returns waiting detail options for swift creation', async () => {
+    mockDb.detail.findMany.mockResolvedValueOnce([
+      { id: 'detail-1', date: '2026-05-05T00:00:00.000Z', totalAmount: 101326 },
+    ]);
+
+    const response = await GET(buildGetRequest('https://example.com/api/detail?action=waiting-options'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockDb.detail.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ status: 'Waiting_SWIFT' }),
+    }));
+    expect(json.success).toBe(true);
+    expect(json.data).toEqual([
+      { id: 'detail-1', date: '2026-05-05T00:00:00.000Z', totalAmount: 101326 },
+    ]);
+  });
+
   it('exports direct-created payment detail pictures through the export-pic action', async () => {
     mockDb.detail.findFirst.mockResolvedValueOnce({
       id: 'detail-1',
       sourceMode: 'DIRECT',
       date: '2026-05-05T00:00:00.000Z',
-      items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120 }],
+      items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receipt: { note: null } }],
       creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
     });
-    const png = Buffer.from([137, 80, 78, 71]);
-    mockRenderDetailExportPng.mockResolvedValueOnce(png);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
+    mockRenderDetailExportJpeg.mockResolvedValueOnce(jpeg);
 
     const response = await GET(buildGetRequest('https://example.com/api/detail?action=export-pic&detailId=detail-1'));
 
@@ -288,7 +308,8 @@ describe('detail route edit-approval actions', () => {
     expect(mockDb.detail.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ id: 'detail-1' }),
     }));
-    expect(mockRenderDetailExportPng).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
-    expect(response.headers.get('content-type')).toBe('image/png');
+    expect(mockRenderDetailExportJpeg).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
+    expect(response.headers.get('content-type')).toBe('image/jpeg');
+    expect(response.headers.get('content-disposition')).toContain('.jpg');
   });
 });

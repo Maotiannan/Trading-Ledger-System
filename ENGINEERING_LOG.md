@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.116
+> 当前版本：v1.0.117
 > 最后更新：2026-05-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard / Detail / SWIFT UX 收口：新增 `/api/dashboard?action=summary` 与 `dashboard-summary-service`，把首页统计改成后端直接汇总，不再依赖先打开其他业务页才能有数据；`SWIFT Management` 打开上传/直建弹窗时会主动加载 `Waiting_SWIFT` 的付款明细选项；`Payment Detail -> Export Pic` 改为按标准 `payment_details.html` 结构渲染模板化 JPG；`SWIFT` OCR 改为按报文 `Block 4` 的 `:50K:` / `:59:` 解析付款人、付款人地址、收款人和收款账号，并修复 `Confirm Create` 数值解析、`Detail/SWIFT` 手机弹窗底部按钮超窗，以及 `Edit Payment Detail` 暴露内部 `receiptId` 的问题；补齐 `dashboard route / dashboard summary service / detail export image / swift route / swift hook / detail manager` 回归并重新跑通 `build + test:ci` ✅ 2026-05-06
 
 - [x] workspace 移动端观看性与列表交互收口：`Dashboard / Invoice / Receipt / Payment Detail / SWIFT / Customer / Approval / Settings` 的头部操作区、筛选区、表格溢出和按钮折行统一改成更稳的窄屏布局；设置页新增通用 `CollapsibleSettingsSection`，把密码、Excel Token、图片压缩、用户管理、分支清库、系统配置、设置审计全部收成折叠面板；收据页新增多状态筛选与 `30/50/100/200` 分页大小，并把 `/api/receipt` 扩展为支持多 `status` 查询参数；账单列表默认排序改为“未完成在前、已完成在后、空 shipDate 置顶、其余按 shipDate 从早到晚”；补齐 `receipt route / receipt manager / settings manager / invoice ordering / settings workspace e2e` 回归并重新跑通 `build + test:ci` ✅ 2026-05-06
 

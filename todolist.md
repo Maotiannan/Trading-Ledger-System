@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.116
+> 当前版本：v1.0.117
 > 最后更新：2026-05-05
 
 ## 当前状态
@@ -45,6 +45,11 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.117
+- `Dashboard` 首屏汇总改成直接走后端 summary API，页面不再依赖先进入其他模块才能显示统计内容；`Upload SWIFT` 弹窗现在会在打开时主动加载 `Waiting_SWIFT` 的付款明细选项，不再要求先打开 `Payment Detail` 页面“预热”数据。
+- `Payment Detail -> Export Pic` 改为稳定导出模板化 JPG，版式对齐标准 `payment_details.html`；同时 `Edit Payment Detail` 不再展示内部 `receiptId`，改成可读的关联收据标签。
+- `SWIFT` OCR 识别逻辑改为按报文 `Block 4` 业务字段回填，新增 `Sender Address / Receiver Account` 字段显示，并修复 `Confirm Create` 的 `NaN` 解析错误与详情/SWIFT 两个移动端弹窗底部按钮超出屏幕的问题。
 
 ### v1.0.116
 - 八个业务页的手机浏览器观看性继续收口：`Dashboard / Invoice / Receipt / Payment Detail / SWIFT / Customer / Approval / Settings` 的头部操作区、筛选区和表格溢出统一改为窄屏友好布局；`Settings` 进一步改成模块折叠面板，避免长页一次性展开所有设置内容。

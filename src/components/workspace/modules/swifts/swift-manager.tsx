@@ -19,12 +19,15 @@ import {
 import { SwiftDirectCreateDialog, SwiftEditDialog, SwiftImagePreviewDialog, SwiftList, SwiftUploadDialog } from './components';
 import { useSwiftActions, useSwiftForms } from './hooks';
 import type { SwiftEditablePatch } from '@/lib/swift-edit-types';
+import type { SwiftDetailOption } from './types';
 import { Plus, Upload } from 'lucide-react';
 
 export function SwiftManager() {
   const tx = useUiText();
   const locale = useLocale();
   const { swifts, setSwifts, details, user } = useStore();
+  const [waitingDetailsOptions, setWaitingDetailsOptions] = useState<SwiftDetailOption[]>([]);
+  const [waitingDetailsLoading, setWaitingDetailsLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -58,6 +61,12 @@ export function SwiftManager() {
     setSelectedDetailId,
     error,
     setError,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     directForm,
     setDirectForm,
     handleShowUploadChange,
@@ -119,12 +128,43 @@ export function SwiftManager() {
     setSelectedFile,
     setSavedImagePath,
     setError,
+    setOcrUploadStatus,
+    setOcrUploadMessage,
+    setOcrUploadProgress,
     handleShowUploadChange,
     handleShowDirectCreateChange,
     resetDirectForm,
   });
 
-  const waitingDetails = details.filter(d => d.status === 'Waiting_SWIFT');
+  const loadWaitingDetailsOptions = useCallback(async () => {
+    setWaitingDetailsLoading(true);
+    try {
+      const result = await apiCall('detail?action=waiting-options');
+      if (!result.success || !Array.isArray(result.data)) {
+        setWaitingDetailsOptions([]);
+        return;
+      }
+      setWaitingDetailsOptions(result.data as SwiftDetailOption[]);
+    } finally {
+      setWaitingDetailsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showUpload && !showDirectCreate) return;
+    void loadWaitingDetailsOptions();
+  }, [loadWaitingDetailsOptions, showDirectCreate, showUpload]);
+
+  const waitingDetails = waitingDetailsOptions.length > 0
+    ? waitingDetailsOptions
+    : details
+      .filter((detail) => detail.status === 'Waiting_SWIFT')
+      .map((detail) => ({
+        id: detail.id,
+        date: detail.date,
+        totalAmount: detail.totalAmount,
+      }));
+
   const isAdmin = user?.role === 'ADMIN';
   const canEditSwifts = user?.role === 'ADMIN' || user?.role === 'SALES';
   const toEditableDateValue = (value: string | null | undefined) => {
@@ -243,28 +283,33 @@ export function SwiftManager() {
         onDeleteSwift={handleDeleteSwift}
       />
 
-      <SwiftUploadDialog
-        open={showUpload}
-        waitingDetails={waitingDetails}
-        uploading={uploading}
-        submitting={submitting}
-        selectedDetailId={selectedDetailId}
-        error={error}
-        imagePreview={imagePreview}
-        ocrResult={ocrResult}
-        tx={tx}
-        onOpenChange={handleShowUploadChange}
-        onSelectedDetailIdChange={setSelectedDetailId}
+        <SwiftUploadDialog
+          open={showUpload}
+          waitingDetails={waitingDetails}
+          waitingDetailsLoading={waitingDetailsLoading}
+          uploading={uploading}
+          submitting={submitting}
+          selectedDetailId={selectedDetailId}
+          error={error}
+          imagePreview={imagePreview}
+          ocrResult={ocrResult}
+          ocrUploadStatus={ocrUploadStatus}
+          ocrUploadMessage={ocrUploadMessage}
+          ocrUploadProgress={ocrUploadProgress}
+          tx={tx}
+          onOpenChange={handleShowUploadChange}
+          onSelectedDetailIdChange={setSelectedDetailId}
         onFileSelect={handleFileSelect}
         onOcrResultChange={setOcrResult}
         onConfirm={handleConfirm}
       />
 
-      <SwiftDirectCreateDialog
-        open={showDirectCreate}
-        waitingDetails={waitingDetails}
-        form={directForm}
-        tx={tx}
+        <SwiftDirectCreateDialog
+          open={showDirectCreate}
+          waitingDetails={waitingDetails}
+          waitingDetailsLoading={waitingDetailsLoading}
+          form={directForm}
+          tx={tx}
         onOpenChange={handleShowDirectCreateChange}
         onFormChange={setDirectForm}
         onSubmit={handleDirectCreate}

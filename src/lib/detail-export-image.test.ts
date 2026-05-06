@@ -1,4 +1,4 @@
-import { buildDetailExportSvg, renderDetailExportPng } from '@/lib/detail-export-image';
+import { buildDetailExportSvg, renderDetailExportJpeg } from '@/lib/detail-export-image';
 import type { Detail } from '@/lib/store';
 
 const detail: Detail = {
@@ -12,25 +12,76 @@ const detail: Detail = {
   createdAt: '2026-05-05T00:00:00.000Z',
   creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
   items: [
-    { id: 'item-1', mark: 'Simagan', orderNo: 'Simagan-07', amount: 5277, receiptId: null },
-    { id: 'item-2', mark: 'Sabou', orderNo: 'Sabou-01', amount: 3003, receiptId: null },
+    {
+      id: 'item-1',
+      mark: 'Simagan',
+      orderNo: 'Simagan-07',
+      amount: 5277,
+      receiptId: null,
+      receipt: {
+        id: 'receipt-1',
+        receiptNo: 'RCPT-1',
+        date: '2026-05-05T00:00:00.000Z',
+        tel: null,
+        usd: 5277,
+        invNo: 'INV-1',
+        orderNo: 'Simagan-07',
+        payer: 'Simagan',
+        status: 'SR_Received',
+        imageUrl: null,
+        imageName: null,
+        isDeposit: false,
+        isMerged: false,
+        note: 'Final payment for Simagan-07',
+        createdAt: '2026-05-05T00:00:00.000Z',
+        creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
+      },
+    },
+    {
+      id: 'item-2',
+      mark: 'Sabou',
+      orderNo: 'Sabou-01',
+      amount: 3003,
+      receiptId: null,
+      receipt: {
+        id: 'receipt-2',
+        receiptNo: 'RCPT-2',
+        date: '2026-05-05T00:00:00.000Z',
+        tel: null,
+        usd: 3003,
+        invNo: 'INV-2',
+        orderNo: 'Sabou-01',
+        payer: 'Sabou',
+        status: 'SR_Received',
+        imageUrl: null,
+        imageName: null,
+        isDeposit: false,
+        isMerged: false,
+        note: null,
+        createdAt: '2026-05-05T00:00:00.000Z',
+        creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
+      },
+    },
   ],
 };
 
 describe('detail-export-image', () => {
-  it('builds svg content using numbered payment rows', () => {
+  it('builds svg content using the payment-details sheet layout', () => {
     const svg = buildDetailExportSvg(detail);
 
-    expect(svg).toContain('Payment details for $8,280');
+    expect(svg).toContain('TOTAL');
+    expect(svg).toContain('TRANSACTIONS');
     expect(svg).toContain('Simagan');
-    expect(svg).toContain('Payment for Simagan-07');
-    expect(svg).toContain('Total amount transferred $8,280#');
+    expect(svg).toContain('Simagan-07');
+    expect(svg).toContain('Final');
+    expect(svg).toContain('Mitty Group');
+    expect(svg).toContain('Total transferred');
   });
 
-  it('renders a png buffer from the svg layout', async () => {
-    const png = await renderDetailExportPng(detail);
+  it('renders a jpeg buffer from the sheet layout', async () => {
+    const jpeg = await renderDetailExportJpeg(detail);
 
-    expect(Buffer.isBuffer(png)).toBe(true);
-    expect(png.subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
+    expect(Buffer.isBuffer(jpeg)).toBe(true);
+    expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
   });
 });

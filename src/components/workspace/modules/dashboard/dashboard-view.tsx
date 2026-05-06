@@ -32,6 +32,7 @@ import {
   toDateInputValue,
   toInvoiceImportRowResults,
   toInvoiceImportRowResultsFromIssues,
+  useLatestRequestGuard,
   useUiText,
   type CustomerImportIssueRow,
   type CustomerImportRowResult,
@@ -51,15 +52,66 @@ export function Dashboard() {
   const t = useTranslations('dashboard');
   const tx = useUiText();
   const { invoices, receipts, details, deletionRequests } = useStore();
+  const dashboardRequestGuard = useLatestRequestGuard();
+  const [summary, setSummary] = useState<{
+    invoiceCount: number;
+    unpaidTotal: number;
+    pendingReceipts: number;
+    waitingSwift: number;
+    pendingDeletion: number;
+    recentReceipts: Array<{
+      id: string;
+      orderNo: string | null;
+      receiptNo: string | null;
+      usd: number;
+      status: string;
+    }>;
+    recentDetails: Array<{
+      id: string;
+      itemCount: number;
+      totalAmount: number;
+      status: string;
+    }>;
+  } | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
+  const loadSummary = useCallback(async () => {
+    const requestToken = dashboardRequestGuard.nextToken();
+    const result = await apiCall('dashboard?action=summary');
+    if (!dashboardRequestGuard.isLatest(requestToken)) return;
+    if (result.success && result.data) {
+      setSummary(result.data);
+    }
+  }, [dashboardRequestGuard]);
+
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary]);
+
   const normalInvoices = invoices.filter((i) => i.invNo !== 'Un_Associated' && i.invNo !== 'DEPOSIT_POOL');
   const unpaidTotal = normalInvoices.reduce((sum, inv) => sum + Math.max(inv.invBalance, 0), 0);
+  const invoiceCount = summary?.invoiceCount ?? normalInvoices.length;
+  const pendingReceipts = summary?.pendingReceipts ?? receipts.filter(r => r.status === 'SR_Received').length;
+  const waitingSwift = summary?.waitingSwift ?? details.filter(d => d.status === 'Waiting_SWIFT').length;
+  const pendingDeletion = summary?.pendingDeletion ?? deletionRequests.filter(d => d.status === 'PENDING').length;
+  const recentReceipts = summary?.recentReceipts ?? receipts.slice(0, 5).map((receipt) => ({
+    id: receipt.id,
+    orderNo: receipt.orderNo,
+    receiptNo: receipt.receiptNo,
+    usd: receipt.usd,
+    status: receipt.status,
+  }));
+  const recentDetails = summary?.recentDetails ?? details.slice(0, 5).map((detail) => ({
+    id: detail.id,
+    itemCount: detail.items.length,
+    totalAmount: detail.totalAmount,
+    status: detail.status,
+  }));
   
   const stats = [
-    { label: tx(`账单总数 (${normalInvoices.length})`, `Invoice Balance (${normalInvoices.length})`), value: `$${unpaidTotal.toFixed(2)}`, color: 'text-blue-600' },
-    { label: t('pendingReceipts'), value: receipts.filter(r => r.status === 'SR_Received').length, color: 'text-yellow-600' },
-    { label: t('waitingSwift'), value: details.filter(d => d.status === 'Waiting_SWIFT').length, color: 'text-orange-600' },
-    { label: t('pendingDeletion'), value: deletionRequests.filter(d => d.status === 'PENDING').length, color: 'text-red-600' },
+    { label: tx(`账单总数 (${invoiceCount})`, `Invoice Balance (${invoiceCount})`), value: `$${(summary?.unpaidTotal ?? unpaidTotal).toFixed(2)}`, color: 'text-blue-600' },
+    { label: t('pendingReceipts'), value: pendingReceipts, color: 'text-yellow-600' },
+    { label: t('waitingSwift'), value: waitingSwift, color: 'text-orange-600' },
+    { label: t('pendingDeletion'), value: pendingDeletion, color: 'text-red-600' },
   ];
 
   const handleExport = async (format: 'excel' | 'pdf') => {
@@ -144,16 +196,16 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-64">
-              {receipts.slice(0, 5).map((receipt) => (
+              {recentReceipts.map((receipt) => (
                 <div key={receipt.id} className="flex justify-between items-center py-2 border-b">
                   <div>
                     <p className="font-medium">{receipt.orderNo || receipt.receiptNo || t('unnamed')}</p>
-                    <p className="text-sm text-gray-500">${receipt.usd.toFixed(2)}</p>
+                    <p className="text-sm text-gray-500">${Number(receipt.usd).toFixed(2)}</p>
                   </div>
                   <Badge>{receipt.status}</Badge>
                 </div>
               ))}
-              {receipts.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
+              {recentReceipts.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
         </Card>
@@ -164,16 +216,16 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-64">
-              {details.slice(0, 5).map((detail) => (
+              {recentDetails.map((detail) => (
                 <div key={detail.id} className="flex justify-between items-center py-2 border-b">
                   <div>
-                    <p className="font-medium">{t('detailItems', { count: detail.items.length })}</p>
-                    <p className="text-sm text-gray-500">{t('total', { value: detail.totalAmount.toFixed(2) })}</p>
+                    <p className="font-medium">{t('detailItems', { count: detail.itemCount })}</p>
+                    <p className="text-sm text-gray-500">{t('total', { value: Number(detail.totalAmount).toFixed(2) })}</p>
                   </div>
                   <Badge variant={detail.status === 'ERROR' ? 'destructive' : 'default'}>{detail.status}</Badge>
                 </div>
               ))}
-              {details.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
+              {recentDetails.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
         </Card>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchServerDate } from '@/components/workspace/shared';
-import { EMPTY_SWIFT_DIRECT_FORM, type SwiftDirectForm, type SwiftOcrResult } from '../types';
+import { EMPTY_SWIFT_DIRECT_FORM, type SwiftDirectForm, type SwiftOcrResult, type SwiftOcrUploadStatus } from '../types';
 
 export function useSwiftForms() {
   const [showUpload, setShowUpload] = useState(false);
@@ -14,6 +14,9 @@ export function useSwiftForms() {
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
   const [selectedDetailId, setSelectedDetailId] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [ocrUploadStatus, setOcrUploadStatus] = useState<SwiftOcrUploadStatus>('idle');
+  const [ocrUploadMessage, setOcrUploadMessage] = useState<string | null>(null);
+  const [ocrUploadProgress, setOcrUploadProgress] = useState<number | null>(null);
   const [directForm, setDirectForm] = useState<SwiftDirectForm>({ ...EMPTY_SWIFT_DIRECT_FORM });
 
   useEffect(() => {
@@ -31,6 +34,9 @@ export function useSwiftForms() {
       setImagePreview(null);
       setSavedImagePath(null);
       setSelectedDetailId('');
+      setOcrUploadStatus('idle');
+      setOcrUploadMessage(null);
+      setOcrUploadProgress(null);
     }
   };
 
@@ -59,6 +65,12 @@ export function useSwiftForms() {
     setSelectedDetailId,
     error,
     setError,
+    ocrUploadStatus,
+    setOcrUploadStatus,
+    ocrUploadMessage,
+    setOcrUploadMessage,
+    ocrUploadProgress,
+    setOcrUploadProgress,
     directForm,
     setDirectForm,
     handleShowUploadChange,

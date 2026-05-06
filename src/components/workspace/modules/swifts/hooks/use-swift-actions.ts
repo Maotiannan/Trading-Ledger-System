@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
+import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
+import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
 import type { Swift } from '@/lib/store';
 import type { SwiftDirectForm, SwiftOcrResult } from '../types';
 import type { SwiftEditablePatch } from '@/lib/swift-edit-types';
@@ -22,6 +24,9 @@ export type SwiftActionDeps = {
   setSelectedFile: (value: File | null) => void;
   setSavedImagePath: (value: { path: string; name: string } | null) => void;
   setError: (value: string | null) => void;
+  setOcrUploadStatus: (value: 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed') => void;
+  setOcrUploadMessage: (value: string | null) => void;
+  setOcrUploadProgress: (value: number | null) => void;
   handleShowUploadChange: (open: boolean) => void;
   handleShowDirectCreateChange: (open: boolean) => void;
   resetDirectForm: () => void;
@@ -41,10 +46,16 @@ export function useSwiftActions({
   setSelectedFile,
   setSavedImagePath,
   setError,
+  setOcrUploadStatus,
+  setOcrUploadMessage,
+  setOcrUploadProgress,
   handleShowUploadChange,
   handleShowDirectCreateChange,
   resetDirectForm,
 }: SwiftActionDeps) {
+  const USER_PREFERENCE_SOFT_TIMEOUT_MS = 1_500;
+  const OCR_UPLOAD_IDLE_TIMEOUT_MS = 15_000;
+  const OCR_UPLOAD_HARD_TIMEOUT_MS = 120_000;
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,47 +66,193 @@ export function useSwiftActions({
     }
   };
 
+  const resetOcrRecognitionState = () => {
+    setOcrResult(null);
+    setSavedImagePath(null);
+  };
+
+  const buildOcrUploadMessage = (event: Pick<BusinessImageUploadStageEvent, 'stage' | 'progress' | 'compressed'>) => {
+    switch (event.stage) {
+      case 'compressing':
+        return tx('正在压缩图片...', 'Compressing image...');
+      case 'uploading': {
+        const percent = typeof event.progress === 'number' ? event.progress : 0;
+        return event.compressed
+          ? tx(`正在上传压缩后的图片（${percent}%）...`, `Uploading compressed image (${percent}%)...`)
+          : tx(`正在上传图片（${percent}%）...`, `Uploading image (${percent}%)...`);
+      }
+      case 'saving':
+        return tx('图片已上传，AI正在识别...', 'Image uploaded. AI is recognizing...');
+      case 'success':
+        return tx('AI识别完成', 'AI recognition completed.');
+      case 'failed':
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  const applyOcrUploadStage = (
+    event: Pick<BusinessImageUploadStageEvent, 'stage' | 'progress' | 'compressed'>,
+    failureMessage?: string
+  ) => {
+    setOcrUploadStatus(event.stage);
+    if (event.stage === 'failed') {
+      setOcrUploadMessage(failureMessage ?? null);
+      setOcrUploadProgress(null);
+      return;
+    }
+    setOcrUploadMessage(buildOcrUploadMessage(event));
+    if (event.stage === 'saving' || event.stage === 'success') {
+      setOcrUploadProgress(100);
+      return;
+    }
+    setOcrUploadProgress(typeof event.progress === 'number' ? event.progress : null);
+  };
+
+  const resolveWithSoftTimeout = <T,>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> => new Promise((resolve) => {
+    const timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timeoutId);
+        resolve(fallback);
+      }
+    );
+  });
+
+  const loadUserCompressionPreference = async (): Promise<Partial<UserImageCompressionPreference> | undefined> => {
+    const result = await resolveWithSoftTimeout(
+      apiCall('settings?view=user-preferences'),
+      USER_PREFERENCE_SOFT_TIMEOUT_MS,
+      undefined
+    );
+    if (!result?.success || !result.data || typeof result.data !== 'object') {
+      return undefined;
+    }
+    return result.data as Partial<UserImageCompressionPreference>;
+  };
+
+  const isSwiftOcrResult = (value: unknown): value is SwiftOcrResult => {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const candidate = value as SwiftOcrResult;
+    return (candidate.amount === null || candidate.amount === undefined || (typeof candidate.amount === 'number' && Number.isFinite(candidate.amount)))
+      && (candidate.date === null || candidate.date === undefined || typeof candidate.date === 'string')
+      && (candidate.senderName === null || candidate.senderName === undefined || typeof candidate.senderName === 'string')
+      && (candidate.senderAddress === null || candidate.senderAddress === undefined || typeof candidate.senderAddress === 'string')
+      && (candidate.receiverName === null || candidate.receiverName === undefined || typeof candidate.receiverName === 'string')
+      && (candidate.receiverAccount === null || candidate.receiverAccount === undefined || typeof candidate.receiverAccount === 'string');
+  };
+
+  const getSuccessfulOcrPayload = (
+    response: {
+      success?: boolean;
+      data?: {
+        ocrResult?: SwiftOcrResult | null;
+        image?: { path: string; name: string } | null;
+      };
+    },
+    invalidPayloadMessage: string
+  ) => {
+    if (!response.success || !isSwiftOcrResult(response.data?.ocrResult)) {
+      throw new Error(invalidPayloadMessage);
+    }
+
+    return {
+      ocrResult: response.data.ocrResult,
+      image: response.data?.image ?? null,
+    };
+  };
+
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const input = event.target;
 
     setSelectedFile(file);
     setUploading(true);
     setError(null);
+    resetOcrRecognitionState();
+    applyOcrUploadStage({
+      stage: 'compressing',
+      progress: null,
+      compressed: null,
+    });
 
     const reader = new FileReader();
     reader.onload = () => setImagePreview(reader.result as string);
     reader.readAsDataURL(file);
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('action', 'recognize');
-
     try {
-      const result = await fetch('/api/swift', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      }).then((response) => response.json());
+      const invalidPayloadMessage = tx('AI识别结果无效，请重试', 'AI returned an invalid recognition result. Please retry.');
+      const preference = await loadUserCompressionPreference();
+      const { response } = await uploadBusinessImage<{
+        success?: boolean;
+        data?: {
+          ocrResult?: SwiftOcrResult | null;
+          image?: { path: string; name: string } | null;
+        };
+      }>({
+        file,
+        endpoint: 'swift',
+        buildFormData: (preparedFile) => {
+          const formData = new FormData();
+          formData.append('file', preparedFile);
+          formData.append('action', 'recognize');
+          return formData;
+        },
+        compression: { preference },
+        idleTimeoutMs: OCR_UPLOAD_IDLE_TIMEOUT_MS,
+        hardTimeoutMs: OCR_UPLOAD_HARD_TIMEOUT_MS,
+        failureMessage: tx('AI识别失败，请重试', 'AI recognition failed, please retry.'),
+        onStageChange: (stageEvent) => {
+          if (stageEvent.stage === 'failed') {
+            applyOcrUploadStage(
+              stageEvent,
+              getApiErrorMessage(stageEvent.error, tx('AI识别失败，请重试', 'AI recognition failed, please retry.'))
+            );
+            return;
+          }
+          applyOcrUploadStage(stageEvent);
+        },
+      });
 
-      if (result.success) {
-        setOcrResult(result.data.ocrResult);
-        setSavedImagePath(result.data.image || null);
-      } else {
-        setSavedImagePath(null);
-        setError(getErrorMessage(result, tx('AI识别失败，请重试', 'AI recognition failed, please retry.')));
-      }
+      const successfulPayload = getSuccessfulOcrPayload(response, invalidPayloadMessage);
+      setOcrResult(successfulPayload.ocrResult);
+      setSavedImagePath(successfulPayload.image);
+      applyOcrUploadStage({
+        stage: 'success',
+        progress: 100,
+        compressed: null,
+      });
     } catch (err) {
-      console.error('OCR error:', err);
-      setSavedImagePath(null);
-      setError(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
+      const message = getApiErrorMessage(err, tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
+      applyOcrUploadStage({
+        stage: 'failed',
+        progress: null,
+        compressed: null,
+      }, message);
+      resetOcrRecognitionState();
+      setError(message);
+    } finally {
+      input.value = '';
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleConfirm = async () => {
     if (!selectedFile || !ocrResult || !selectedDetailId) {
       setError(tx('请选择付款明细', 'Please select a payment detail.'));
+      return;
+    }
+    if (!(typeof ocrResult.amount === 'number' && Number.isFinite(ocrResult.amount) && ocrResult.amount > 0)) {
+      setError(tx('请输入有效的汇款金额', 'Please enter a valid transfer amount.'));
       return;
     }
 
@@ -119,6 +276,9 @@ export function useSwiftActions({
         handleShowUploadChange(false);
         setSelectedFile(null);
         setSavedImagePath(null);
+        setOcrUploadStatus('idle');
+        setOcrUploadMessage(null);
+        setOcrUploadProgress(null);
         await loadSwifts();
       } else {
         setError(getErrorMessage(result, tx('创建失败，请重试', 'Create failed, please retry.')));

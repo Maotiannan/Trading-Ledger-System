@@ -39,6 +39,7 @@ export function DetailManager() {
   const [maxAmount, setMaxAmount] = useState('');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
+  const [editLinkedReceiptLabels, setEditLinkedReceiptLabels] = useState<string[]>([]);
   const [editForm, setEditForm] = useState<DetailEditablePatch>({
     date: null,
     items: [],
@@ -149,6 +150,18 @@ export function DetailManager() {
 
   const openEditDialog = (detail: Detail) => {
     setEditingDetailId(detail.id);
+    setEditLinkedReceiptLabels(detail.items.map((item) => {
+      if (!item.receipt) {
+        return tx('未匹配', 'Unmatched');
+      }
+      const receiptNo = item.receipt.receiptNo?.trim();
+      if (receiptNo) return receiptNo;
+      const orderNo = item.receipt.orderNo?.trim();
+      if (orderNo) return orderNo;
+      const payer = item.receipt.payer?.trim();
+      if (payer) return payer;
+      return tx('已关联收据', 'Linked receipt');
+    }));
     setEditForm({
       date: toEditableDateValue(detail.date),
       items: detail.items.map((item) => ({
@@ -166,6 +179,7 @@ export function DetailManager() {
     if (submitting) return;
     setShowEditDialog(false);
     setEditingDetailId(null);
+    setEditLinkedReceiptLabels([]);
   };
 
   const submitDetailEdit = async () => {
@@ -301,6 +315,7 @@ export function DetailManager() {
         open={showEditDialog}
         locale={locale}
         form={editForm}
+        linkedReceiptLabels={editLinkedReceiptLabels}
         submitting={submitting}
         isAdmin={isAdmin}
         tx={tx}

@@ -16,7 +16,7 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
-import { renderDetailExportPng } from '@/lib/detail-export-image';
+import { renderDetailExportJpeg } from '@/lib/detail-export-image';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
@@ -66,6 +66,27 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const minAmount = searchParams.get('minAmount');
     const maxAmount = searchParams.get('maxAmount');
 
+    if (action === 'waiting-options') {
+      const scope = await getHierarchyScope(currentUser);
+      const ownerIds = Array.from(scope.ownerVisibleIds);
+      const rows = await db.detail.findMany({
+        where: {
+          status: DetailStatus.Waiting_SWIFT,
+          ...buildDetailVisibilityWhere(ownerIds),
+        },
+        select: {
+          id: true,
+          date: true,
+          totalAmount: true,
+        },
+        orderBy: [
+          { date: 'desc' },
+          { createdAt: 'desc' },
+        ],
+      });
+      return NextResponse.json({ success: true, data: rows });
+    }
+
     if (action === 'export-pic') {
       const detailId = searchParams.get('detailId') || '';
       if (!detailId) {
@@ -84,7 +105,15 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         },
         include: {
           creator: { select: { id: true, name: true, email: true } },
-          items: true,
+          items: {
+            include: {
+              receipt: {
+                select: {
+                  note: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -96,13 +125,13 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           detail: { detailId },
         });
       }
-      const buffer = await renderDetailExportPng(detail);
+      const buffer = await renderDetailExportJpeg(detail);
       const fileDate = detail.date ? new Date(detail.date).toISOString().slice(0, 10) : 'undated';
       return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers: {
-          'Content-Type': 'image/png',
-          'Content-Disposition': `attachment; filename=\"payment-detail-${fileDate}-${detail.id}.png\"`,
+          'Content-Type': 'image/jpeg',
+          'Content-Disposition': `attachment; filename=\"payment-detail-${fileDate}-${detail.id}.jpg\"`,
           'Cache-Control': 'no-store',
         },
       });

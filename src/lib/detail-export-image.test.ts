@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import { buildDetailExportSvg, renderDetailExportJpeg } from '@/lib/detail-export-image';
 import type { Detail } from '@/lib/store';
 
@@ -76,12 +77,18 @@ describe('detail-export-image', () => {
     expect(svg).toContain('Final');
     expect(svg).toContain('Mitty Group');
     expect(svg).toContain('Total transferred');
+    expect(svg).toContain("font-family: 'DetailExportSans'");
+    expect(svg).toContain('data:image/png;base64,');
+    expect(svg).not.toContain('>Date<');
   });
 
   it('renders a jpeg buffer from the sheet layout', async () => {
     const jpeg = await renderDetailExportJpeg(detail);
+    const metadata = await sharp(jpeg).metadata();
 
     expect(Buffer.isBuffer(jpeg)).toBe(true);
     expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(metadata.width).toBe(1560);
+    expect((metadata.height ?? 0) > 0).toBe(true);
   });
 });

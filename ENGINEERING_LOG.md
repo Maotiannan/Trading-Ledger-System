@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.117
-> 最后更新：2026-05-05
+> 当前版本：v1.0.118
+> 最后更新：2026-05-06
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail -> Export Pic` 模板资产收口：新增项目内置透明 `MU Group` logo 与内嵌 `Noto Sans` 字体资源，`detail-export-image` 不再依赖容器字体或旧 `public/logo.svg`，导出 JPG 的 logo、日期、表格和 footer 进一步对齐用户提供的 `payment_details.html` 与参考图，同时补 `detail-export-image` 元数据/字体回归并重新验证 `build + targeted jest` ✅ 2026-05-06
 
 - [x] Dashboard / Detail / SWIFT UX 收口：新增 `/api/dashboard?action=summary` 与 `dashboard-summary-service`，把首页统计改成后端直接汇总，不再依赖先打开其他业务页才能有数据；`SWIFT Management` 打开上传/直建弹窗时会主动加载 `Waiting_SWIFT` 的付款明细选项；`Payment Detail -> Export Pic` 改为按标准 `payment_details.html` 结构渲染模板化 JPG；`SWIFT` OCR 改为按报文 `Block 4` 的 `:50K:` / `:59:` 解析付款人、付款人地址、收款人和收款账号，并修复 `Confirm Create` 数值解析、`Detail/SWIFT` 手机弹窗底部按钮超窗，以及 `Edit Payment Detail` 暴露内部 `receiptId` 的问题；补齐 `dashboard route / dashboard summary service / detail export image / swift route / swift hook / detail manager` 回归并重新跑通 `build + test:ci` ✅ 2026-05-06
 

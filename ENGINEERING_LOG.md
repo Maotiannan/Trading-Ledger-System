@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.121
+> 当前版本：v1.0.122
 > 最后更新：2026-05-06
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail -> Export Pic` TYPE 规则修正：旧实现用历史 `DetailItem` 判断首付款，但当前真实历史付款主要存在 `Receipt` 链路中，导致只有一条 detail 时所有订单都被误判为 `Initial`；现改为按订单下有效 `Receipt` 的时间顺序判断当前 linked receipt 是否第一笔，同时严格要求 `detail.swift.status === RECEIVED && orderBalance <= 5` 才显示 `Final`，否则回退 `Std`；补齐 `Initial / Std / Final` 与“余额清零但 SWIFT 未到账不能 Final”的回归 ✅ 2026-05-06
 
 - [x] `Payment Detail -> Export Pic` 手机竖屏版式与代理编辑收口：导出模板从 1560px 宽幅改为 720px 竖屏友好宽度，并同步调整 logo、汇总卡、表格列距、行高和字号；`DetailEditablePatch`、`/api/detail request-edit`、审批快照与 `DetailEditDialog` 全链路加入 `agentId`，管理员直接修改或销售审批通过后都会更新 `Detail.agentId`，导出 footer 使用新代理名称；`listPaymentAgents` 自动补齐默认 `Mitty Group`，补齐 route/service/UI/export 回归 ✅ 2026-05-06
 

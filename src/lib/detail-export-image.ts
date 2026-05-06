@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 
@@ -9,8 +10,10 @@ type DetailExportSourceItem = {
   orderNo: string | null;
   amount: number | { toString(): string };
   receipt?: {
+    id?: string | null;
     orderNo?: string | null;
     orderId?: string | null;
+    createdAt?: string | Date | null;
   } | null;
 };
 
@@ -169,7 +172,7 @@ function resolveResvgConstructor() {
 type ResolvedItemAnalysis = {
   orderId: string | null;
   orderBalance: number | null;
-  hasPreviousPayments: boolean;
+  isFirstPayment: boolean;
 };
 
 async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedItemAnalysis[]> {
@@ -182,7 +185,7 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
 
   const uniqueOrderIds = Array.from(new Set(resolvedOrderIds.filter((value): value is string => Boolean(value))));
   const orderBalanceMap = new Map<string, number>();
-  const previousPaymentMap = new Map<string, number>();
+  const earliestReceiptIdMap = new Map<string, string>();
 
   if (uniqueOrderIds.length > 0) {
     const orderRows = await db.order.findMany({
@@ -193,36 +196,37 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
       orderBalanceMap.set(row.id, Number(row.orderBalance));
     }
 
-    const createdAtCutoff = detail.createdAt ? new Date(detail.createdAt) : null;
-    if (createdAtCutoff && !Number.isNaN(createdAtCutoff.getTime())) {
-      const previousRows = await db.detailItem.findMany({
-        where: {
-          receipt: { orderId: { in: uniqueOrderIds } },
-          detail: {
-            id: { not: detail.id },
-            createdAt: { lt: createdAtCutoff },
-          },
-        },
-        select: {
-          receipt: {
-            select: { orderId: true },
-          },
-        },
-      });
+    const receiptRows = await db.receipt.findMany({
+      where: {
+        orderId: { in: uniqueOrderIds },
+        status: { not: ReceiptStatus.SIGNING_PENDING },
+      },
+      select: {
+        id: true,
+        orderId: true,
+        createdAt: true,
+      },
+      orderBy: [
+        { createdAt: 'asc' },
+        { id: 'asc' },
+      ],
+    });
 
-      for (const row of previousRows) {
-        const orderId = row.receipt?.orderId;
-        if (!orderId) continue;
-        previousPaymentMap.set(orderId, (previousPaymentMap.get(orderId) ?? 0) + 1);
-      }
+    for (const row of receiptRows) {
+      if (!row.orderId || earliestReceiptIdMap.has(row.orderId)) continue;
+      earliestReceiptIdMap.set(row.orderId, row.id);
     }
   }
 
-  return resolvedOrderIds.map((orderId) => ({
-    orderId,
-    orderBalance: orderId ? (orderBalanceMap.get(orderId) ?? null) : null,
-    hasPreviousPayments: orderId ? (previousPaymentMap.get(orderId) ?? 0) > 0 : false,
-  }));
+  return resolvedOrderIds.map((orderId, index) => {
+    const currentReceiptId = detail.items[index]?.receipt?.id || null;
+    const earliestReceiptId = orderId ? (earliestReceiptIdMap.get(orderId) ?? null) : null;
+    return {
+      orderId,
+      orderBalance: orderId ? (orderBalanceMap.get(orderId) ?? null) : null,
+      isFirstPayment: Boolean(orderId && currentReceiptId && earliestReceiptId && currentReceiptId === earliestReceiptId),
+    };
+  });
 }
 
 function determineType(detail: DetailExportSource, analysis: ResolvedItemAnalysis): DetailExportRow['type'] {
@@ -230,7 +234,7 @@ function determineType(detail: DetailExportSource, analysis: ResolvedItemAnalysi
   if (swiftReceived && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
     return 'Final';
   }
-  if (analysis.orderId && !analysis.hasPreviousPayments) {
+  if (analysis.isFirstPayment) {
     return 'Initial';
   }
   return 'Std';
@@ -240,7 +244,7 @@ export async function buildDetailExportViewModel(detail: DetailExportSource): Pr
   const rowsAnalysis = await analyzeDetailItems(detail);
   const rows = detail.items.map((item, index) => {
     const amount = toNumber(item.amount);
-    const analysis = rowsAnalysis[index] ?? { orderId: null, orderBalance: null, hasPreviousPayments: false };
+    const analysis = rowsAnalysis[index] ?? { orderId: null, orderBalance: null, isFirstPayment: false };
     return {
       index: index + 1,
       mark: normalizeText(item.mark),

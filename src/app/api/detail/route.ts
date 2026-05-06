@@ -162,8 +162,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
             include: {
               receipt: {
                 select: {
+                  id: true,
                   orderNo: true,
                   orderId: true,
+                  createdAt: true,
                 },
               },
             },

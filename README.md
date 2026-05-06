@@ -34,9 +34,9 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.119`
-- 本次更新：`Payment Detail -> Export Pic` 的导出模板进一步收口到用户提供的标准 `payment_details.html` 视觉效果：导出改为使用固定内嵌字体与透明 `MU Group` logo 资源，不再依赖 Docker 运行环境字体，也不再使用错误的左上角小 logo。
-- 同批修复：`Export Pic` 生成图中的小方块/缺字问题已消除，日期、表格、footer 与模板样式统一按项目内置资源渲染，避免主机和容器导出结果不一致。
+- 当前版本：`1.0.120`
+- 本次更新：`Payment Detail -> Export Pic` 的导出字体改为项目内置 `Arial / Arial Bold`，Docker 内也会显式加载同一套字体，修复导出图只剩 logo、线条和空白表格的问题。
+- 同批修复：`Export Pic` 生成图中的文字现在随镜像一起打包，不再依赖运行环境是否安装 Arial；日期、表格、footer 与模板样式统一按项目内置资源渲染，避免主机和容器导出结果不一致。
 - 同批更新：`Payment Detail -> Export Pic` 改为导出模板化 JPG，整体版式按标准 `payment_details.html` 收口；`Edit Payment Detail` 不再暴露原始 `receiptId` 这类内部标识，而是改成人类可读的关联收据标签。
 - 同批更新：`SWIFT` OCR 改为按报文 `Block 4` 业务字段解析，`Sender Name / Sender Address / Receiver Name / Receiver Account` 都会进入识别窗口；同时修复了 `Confirm Create` 的数值解析错误和移动端弹窗底部按钮超窗问题。
 - 同批更新：`Settings` 页面改成折叠式设置面板，`修改密码 / Excel Token / 图片压缩 / 用户管理 / 分支清库 / 系统配置 / 设置审计` 默认按模块折叠展开，避免长页堆满所有配置项。

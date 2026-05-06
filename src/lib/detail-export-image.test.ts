@@ -1,5 +1,10 @@
 import sharp from 'sharp';
-import { buildDetailExportSvg, renderDetailExportJpeg, type DetailExportViewModel } from '@/lib/detail-export-image';
+import {
+  buildDetailExportSvg,
+  getDetailExportFontPaths,
+  renderDetailExportJpeg,
+  type DetailExportViewModel,
+} from '@/lib/detail-export-image';
 
 const viewModel: DetailExportViewModel = {
   dateLabel: '05 / 05 / 2026',
@@ -39,5 +44,14 @@ describe('detail-export-image', () => {
     expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
     expect(metadata.width).toBe(1560);
     expect((metadata.height ?? 0) > 0).toBe(true);
+  });
+
+  it('uses bundled Arial font files for deterministic server rendering', () => {
+    const fontPaths = getDetailExportFontPaths();
+
+    expect(fontPaths).toEqual(expect.arrayContaining([
+      expect.stringMatching(/arial\.ttf$/),
+      expect.stringMatching(/arial-bold\.ttf$/),
+    ]));
   });
 });

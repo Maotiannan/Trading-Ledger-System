@@ -77,6 +77,7 @@ const TABLE_COLUMNS = {
 } as const;
 
 let cachedLogoDataUri: string | null = null;
+let cachedFontPaths: string[] | null = null;
 type ResvgConstructor = new (
   svg: string,
   options?: {
@@ -141,6 +142,15 @@ function resolveLogoDataUri() {
   const logoPath = path.join(process.cwd(), 'public', 'detail-export', 'payment-detail-logo.png');
   cachedLogoDataUri = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
   return cachedLogoDataUri;
+}
+
+export function getDetailExportFontPaths() {
+  if (cachedFontPaths) return cachedFontPaths;
+  cachedFontPaths = [
+    path.join(process.cwd(), 'public', 'detail-export', 'arial.ttf'),
+    path.join(process.cwd(), 'public', 'detail-export', 'arial-bold.ttf'),
+  ];
+  return cachedFontPaths;
 }
 
 function resolveResvgConstructor() {
@@ -342,6 +352,7 @@ export async function renderDetailExportJpeg(viewModel: DetailExportViewModel) {
     },
     font: {
       loadSystemFonts: true,
+      fontFiles: getDetailExportFontPaths(),
       defaultFontFamily: 'Arial',
     },
   });

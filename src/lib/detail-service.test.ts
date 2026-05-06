@@ -5,6 +5,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
+import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -53,6 +54,10 @@ jest.mock('@/lib/customer-matching', () => ({
   resolveCustomer: jest.fn(),
 }));
 
+jest.mock('@/lib/payment-agent-service', () => ({
+  resolveAccessiblePaymentAgentId: jest.fn(),
+}));
+
 function makeUser(overrides: Partial<{ id: string; role: UserRole }> = {}) {
   return {
     id: 'sales-1',
@@ -81,6 +86,7 @@ const mockFindMatchingReceipt = findMatchingReceipt as jest.Mock;
 const mockFindOrCreateOrder = findOrCreateOrder as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
+const mockResolveAccessiblePaymentAgentId = resolveAccessiblePaymentAgentId as jest.Mock;
 
 describe('detail-service', () => {
   beforeEach(() => {
@@ -95,6 +101,7 @@ describe('detail-service', () => {
       customerCity: 'Conakry',
       needsCustomerFix: false,
     });
+    mockResolveAccessiblePaymentAgentId.mockResolvedValue('agent-1');
   });
 
   it('creates missing receipts/orders during direct detail creation', async () => {
@@ -110,6 +117,7 @@ describe('detail-service', () => {
     const result = await createDetailRecord({
       currentUser: makeUser(),
       payload: {
+        agentId: null,
         date: null,
         items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
       },
@@ -143,6 +151,7 @@ describe('detail-service', () => {
     await createDetailRecord({
       currentUser: makeUser(),
       payload: {
+        agentId: 'agent-1',
         date: null,
         items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
       },
@@ -175,6 +184,7 @@ describe('detail-service', () => {
     await expect(createDetailRecord({
       currentUser: makeUser(),
       payload: {
+        agentId: 'agent-1',
         date: null,
         items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
       },
@@ -192,6 +202,7 @@ describe('detail-service', () => {
       id: 'detail-received',
       createdBy: 'sales-1',
       status: DetailStatus.RECEIVED,
+      agentId: 'agent-existing',
       items: [],
       imageUrl: null,
       imageName: null,
@@ -202,6 +213,7 @@ describe('detail-service', () => {
       currentUser: makeUser(),
       detailId: 'detail-received',
       payload: {
+        agentId: 'agent-1',
         date: null,
         items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: null, matchedReceiptId: null }],
       },
@@ -216,6 +228,7 @@ describe('detail-service', () => {
       id: 'detail-edit',
       createdBy: 'sales-1',
       status: DetailStatus.Waiting_SWIFT,
+      agentId: 'agent-existing',
       items: [{ receiptId: 'receipt-old' }],
       imageUrl: '/old.png',
       imageName: 'old.png',
@@ -237,6 +250,7 @@ describe('detail-service', () => {
       currentUser: makeUser(),
       detailId: 'detail-edit',
       payload: {
+        agentId: 'agent-1',
         date: null,
         items: [{ mark: 'IB', orderNo: 'IB-2', amount: 120, receiptId: null, matchedReceiptId: null }],
       },

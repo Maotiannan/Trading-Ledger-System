@@ -199,6 +199,7 @@ describe('detail route edit-approval actions', () => {
       currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
       detailId: 'detail-1',
       payload: {
+        agentId: null,
         date: '2026-05-05',
         items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2', matchedReceiptId: null }],
       },
@@ -229,6 +230,7 @@ describe('detail route edit-approval actions', () => {
     expect(mockCreateDetailRecord).toHaveBeenCalledWith(expect.objectContaining({
       currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
       payload: {
+        agentId: null,
         date: '2026-05-05',
         items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, matchedReceiptId: 'receipt-2', receiptId: null }],
       },

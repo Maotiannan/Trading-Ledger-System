@@ -97,6 +97,7 @@ describe('useDetailActions', () => {
       selectedFile: null,
       ocrResult: null,
       savedImagePath: null,
+      selectedAgentId: 'agent-1',
       directDate: '2026-03-11',
       directItems: [
         { mark: 'MAB-1', orderNo: 'MAB-1-01', amount: '120' },
@@ -138,6 +139,7 @@ describe('useDetailActions', () => {
         selectedFile,
         ocrResult,
         savedImagePath,
+        selectedAgentId: overrides.selectedAgentId ?? 'agent-1',
         setSelectedFile,
         setOcrResult,
         setSavedImagePath,

@@ -40,6 +40,7 @@ jest.mock('./components', () => ({
     (globalThis as { __detailListProps?: DetailListProps }).__detailListProps = props;
     return null;
   },
+  PaymentAgentManagerDialog: () => null,
   DetailUploadDialog: () => null,
 }));
 
@@ -182,6 +183,6 @@ describe('DetailManager', () => {
     expect(openedEditDialogProps?.form.items).toEqual([
       { mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: 'receipt-1' },
     ]);
-    expect(openedEditDialogProps?.linkedReceiptLabels).toEqual(['RCPT-1']);
+    expect(openedEditDialogProps?.linkedReceiptLabels).toEqual(['MAB-1-01']);
   });
 });

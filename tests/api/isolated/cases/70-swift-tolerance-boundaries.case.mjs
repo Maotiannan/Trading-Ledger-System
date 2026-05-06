@@ -12,6 +12,14 @@ function findSwiftByDetail(rows, detailId) {
   return (Array.isArray(rows) ? rows : []).find((row) => row.detailId === detailId);
 }
 
+function assertHumanReadableRejectMessage(t, message, label) {
+  const candidates = [
+    '与payment details金额差异过大，录入失败',
+    'Amount differs too much from the selected payment detail. Record creation failed.',
+  ];
+  t.assertOk(candidates.includes(message), `${label} returns localized human-readable message`);
+}
+
 async function createPair(t, suffix, orderSuffix, amount) {
   const orderNo = `TOL-${suffix}-${orderSuffix}`;
   const customerMark = `TOL-${suffix}`;
@@ -142,35 +150,20 @@ export default async function run(t) {
       senderName: 'Tolerance Sender',
       receiverName: 'Tolerance Receiver',
     },
-    expectedStatus: 200,
+    expectedStatus: 400,
   });
-  t.assertEqual(Boolean(errorBoundarySwift.data?.data?.validation?.valid), false, 'difference of 51 is rejected');
-  t.assertEqual(Boolean(errorBoundarySwift.data?.data?.validation?.hasWarning), true, 'difference of 51 still flags warning');
-  t.assertMatch(errorBoundarySwift.data?.data?.validation?.message || '', /超过允许范围/, 'difference of 51 returns hard failure message');
+  t.assertEqual(errorBoundarySwift.data?.success, false, 'difference of 51 is rejected');
+  t.assertEqual(errorBoundarySwift.data?.code, 'VALIDATION_ERROR', 'difference of 51 returns validation error code');
+  assertHumanReadableRejectMessage(t, errorBoundarySwift.data?.error, 'difference of 51');
 
   const errorSwiftList = await t.request('GET', `/api/swift?search=${encodeURIComponent(errorBoundary.orderNo)}`, { expectedStatus: 200 });
   const errorSwiftRow = findSwiftByDetail(errorSwiftList.data?.data, errorBoundary.detailId);
-  t.assertOk(Boolean(errorSwiftRow?.id), 'error swift row is still persisted for review');
-  t.assertEqual(Boolean(errorSwiftRow?.hasError), true, 'difference of 51 persists with hasError');
-  t.assertEqual(errorSwiftRow?.status, 'ERROR', 'difference of 51 persists as ERROR');
+  t.assertOk(!errorSwiftRow, 'difference of 51 does not persist a rejected swift record');
 
   const errorReceipt = await t.request('GET', `/api/receipt?search=${encodeURIComponent(errorBoundary.orderNo)}`, { expectedStatus: 200 });
   t.assertEqual(findReceiptByOrder(errorReceipt.data?.data, errorBoundary.orderNo)?.status, 'Waiting_SWIFT', 'difference of 51 keeps receipt waiting');
   const errorDetail = await t.request('GET', `/api/detail?search=${encodeURIComponent(errorBoundary.orderNo)}`, { expectedStatus: 200 });
   t.assertEqual(findDetailByOrder(errorDetail.data?.data, errorBoundary.orderNo)?.status, 'Waiting_SWIFT', 'difference of 51 keeps detail waiting');
-
-  await t.request('POST', '/api/swift', {
-    json: {
-      action: 'delete',
-      swiftId: errorSwiftRow.id,
-    },
-    expectedStatus: 200,
-  });
-  t.step('creator can directly delete hard-error swift');
-
-  const errorSwiftAfterDelete = await t.request('GET', `/api/swift?search=${encodeURIComponent(errorBoundary.orderNo)}`, { expectedStatus: 200 });
-  const deletedErrorSwift = findSwiftByDetail(errorSwiftAfterDelete.data?.data, errorBoundary.detailId);
-  t.assertOk(!deletedErrorSwift, 'hard-error swift is removed after direct delete');
 
   await t.logout();
   await t.loginAdmin();
@@ -211,10 +204,11 @@ export default async function run(t) {
       senderName: 'Tolerance Sender',
       receiverName: 'Tolerance Receiver',
     },
-    expectedStatus: 200,
+    expectedStatus: 400,
   });
-  t.assertEqual(Boolean(configuredRejectSwift.data?.data?.validation?.valid), false, 'configured difference of 5 is rejected after settings update');
-  t.assertMatch(configuredRejectSwift.data?.data?.validation?.message || '', /±4/, 'configured reject message uses updated threshold');
+  t.assertEqual(configuredRejectSwift.data?.success, false, 'configured difference of 5 is rejected after settings update');
+  t.assertEqual(configuredRejectSwift.data?.code, 'VALIDATION_ERROR', 'configured reject returns validation error code');
+  assertHumanReadableRejectMessage(t, configuredRejectSwift.data?.error, 'configured reject');
 
   await t.logout();
 }

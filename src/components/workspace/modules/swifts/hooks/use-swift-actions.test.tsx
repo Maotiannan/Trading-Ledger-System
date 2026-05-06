@@ -129,8 +129,9 @@ describe('useSwiftActions', () => {
 
     expect(setSelectedFile).toHaveBeenCalledWith(file);
     expect(setImagePreview).toHaveBeenCalledWith('data:image/png;base64,mock');
-    expect(setOcrResult).toHaveBeenCalledWith({
+    expect(setOcrResult).toHaveBeenLastCalledWith({
       amount: 330,
+      date: null,
       senderName: 'SALAM ENTERPRISE',
       senderAddress: 'ADDRESS LINE1',
       receiverName: 'MARKET UNION CO LTD',

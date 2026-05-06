@@ -142,6 +142,19 @@ export default async function run(t) {
     });
     assert.ok(salesUser?.id, 'sales user exists');
 
+    const agentCreate = await t.request('POST', '/api/agent', {
+      json: {
+        action: 'create',
+        companyName: `Agent ${suffix}`,
+        companyAddress: 'Asset Cleanup Road',
+        contactName: `Owner ${suffix}`,
+        contactPhone: '+224600000000',
+      },
+      expectedStatus: 200,
+    });
+    const agentId = agentCreate.data?.data?.id;
+    assert.ok(agentId, 'payment agent exists for detail confirm flow');
+
     const filePath = t.writeTempFile(`uploaded-asset-${suffix}.png`, PNG_BUFFER);
 
     const directUpload = await uploadReceiptDirectImage(t, filePath);
@@ -236,6 +249,7 @@ export default async function run(t) {
         data: {
           date: '2026-04-30',
           items: [{ mark: `${suffix}-DETAIL`, orderNo: detailOrderNo, amount: 260 }],
+          agentId,
         },
         imagePath: stagedDetailOcrAsset.path,
         imageName: stagedDetailOcrAsset.name,

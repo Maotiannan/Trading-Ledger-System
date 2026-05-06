@@ -1,5 +1,11 @@
 export const name = 'swift-edit-approval';
 
+function normalizeAccount(value) {
+  return String(value || '')
+    .replace(/[oO]/g, '0')
+    .replace(/[^0-9]/g, '');
+}
+
 function editablePatch(suffix, variant, amount) {
   return {
     date: '2026-05-05',
@@ -146,7 +152,7 @@ export default async function run(t) {
   t.assertEqual(approvedSwift?.senderName, requestedPatch.senderName, 'approved swift edit updates sender name');
   t.assertEqual(approvedSwift?.senderAddress, requestedPatch.senderAddress, 'approved swift edit updates sender address');
   t.assertEqual(approvedSwift?.receiverName, requestedPatch.receiverName, 'approved swift edit updates receiver name');
-  t.assertEqual(approvedSwift?.receiverAccount, requestedPatch.receiverAccount, 'approved swift edit updates receiver account');
+  t.assertEqual(approvedSwift?.receiverAccount, normalizeAccount(requestedPatch.receiverAccount), 'approved swift edit updates receiver account');
 
   const requestListAfterApproval = await t.request('POST', '/api/swift', {
     json: { action: 'list-edit-requests' },
@@ -192,7 +198,7 @@ export default async function run(t) {
   t.assertEqual(updatedAdminSwift?.senderName, adminPatch.senderName, 'direct admin swift update changes sender name immediately');
   t.assertEqual(updatedAdminSwift?.senderAddress, adminPatch.senderAddress, 'direct admin swift update changes sender address immediately');
   t.assertEqual(updatedAdminSwift?.receiverName, adminPatch.receiverName, 'direct admin swift update changes receiver name immediately');
-  t.assertEqual(updatedAdminSwift?.receiverAccount, adminPatch.receiverAccount, 'direct admin swift update changes receiver account immediately');
+  t.assertEqual(updatedAdminSwift?.receiverAccount, normalizeAccount(adminPatch.receiverAccount), 'direct admin swift update changes receiver account immediately');
 
   const finalRequestList = await t.request('POST', '/api/swift', {
     json: { action: 'list-edit-requests' },

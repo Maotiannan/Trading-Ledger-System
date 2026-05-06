@@ -88,14 +88,8 @@ describe('swift-service', () => {
       items: [{ receiptId: 'receipt-1' }],
     });
     mockDb.swift.findUnique.mockResolvedValueOnce(null);
-    mockDb.swift.create.mockResolvedValueOnce({
-      id: 'swift-1',
-      detailId: 'detail-1',
-      status: SwiftStatus.ERROR,
-      hasError: true,
-    });
 
-    const result = await createSwiftRecord({
+    await expect(createSwiftRecord({
       currentUser: makeUser(),
       detailId: 'detail-1',
       payload: {
@@ -107,10 +101,11 @@ describe('swift-service', () => {
         receiverAccount: null,
       },
       mode: 'direct-create',
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('±2'),
     });
 
-    expect(result.validation.valid).toBe(false);
-    expect(result.validation.message).toMatch(/±2/);
     expect(mockDb.detail.update).not.toHaveBeenCalled();
     expect(mockDb.receipt.updateMany).not.toHaveBeenCalled();
   });
@@ -360,17 +355,7 @@ describe('swift-service', () => {
         items: [{ receiptId: 'receipt-2' }],
       },
     });
-    mockDb.swift.update.mockResolvedValueOnce({
-      id: 'swift-update-bad',
-      detailId: 'detail-update-bad',
-      status: SwiftStatus.ERROR,
-      detail: {
-        id: 'detail-update-bad',
-        items: [{ receiptId: 'receipt-2' }],
-      },
-    });
-
-    const result = await updateSwiftRecord({
+    await expect(updateSwiftRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
       swiftId: 'swift-update-bad',
       payload: {
@@ -382,14 +367,16 @@ describe('swift-service', () => {
         receiverAccount: 'ACC-1',
       },
       skipAudit: true,
+    })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: expect.stringContaining('±50'),
     });
 
-    expect(result.validation.valid).toBe(false);
-    expect(mockDb.detail.update).toHaveBeenCalledWith({
+    expect(mockDb.detail.update).not.toHaveBeenCalledWith({
       where: { id: 'detail-update-bad' },
       data: { status: DetailStatus.Waiting_SWIFT },
     });
-    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+    expect(mockDb.receipt.updateMany).not.toHaveBeenCalledWith({
       where: { id: { in: ['receipt-2'] } },
       data: { status: ReceiptStatus.Waiting_SWIFT },
     });

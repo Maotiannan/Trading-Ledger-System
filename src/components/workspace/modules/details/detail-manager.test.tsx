@@ -114,10 +114,24 @@ describe('DetailManager', () => {
           date: '2026-05-04T00:00:00.000Z',
           status: 'Waiting_SWIFT',
           imageUrl: null,
+          imageName: null,
           totalAmount: 120,
           createdAt: '2026-05-04T00:00:00.000Z',
           creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
-          items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: 'receipt-1' }],
+          items: [{
+            id: 'item-1',
+            mark: 'MAB',
+            orderNo: 'MAB-1-01',
+            amount: 120,
+            receiptId: 'receipt-1',
+            receipt: {
+              id: 'receipt-1',
+              receiptNo: 'RCPT-1',
+              orderNo: 'MAB-1-01',
+              payer: 'Payer A',
+              usd: 120,
+            },
+          }],
         },
       ],
       setDetails: jest.fn(),
@@ -142,10 +156,24 @@ describe('DetailManager', () => {
         date: '2026-05-04T00:00:00.000Z',
         status: 'Waiting_SWIFT',
         imageUrl: null,
+        imageName: null,
         totalAmount: 120,
         createdAt: '2026-05-04T00:00:00.000Z',
         creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
-        items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: 'receipt-1' }],
+        items: [{
+          id: 'item-1',
+          mark: 'MAB',
+          orderNo: 'MAB-1-01',
+          amount: 120,
+          receiptId: 'receipt-1',
+          receipt: {
+            id: 'receipt-1',
+            receiptNo: 'RCPT-1',
+            orderNo: 'MAB-1-01',
+            payer: 'Payer A',
+            usd: 120,
+          },
+        }],
       } as never);
     });
 
@@ -154,5 +182,6 @@ describe('DetailManager', () => {
     expect(openedEditDialogProps?.form.items).toEqual([
       { mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: 'receipt-1' },
     ]);
+    expect(openedEditDialogProps?.linkedReceiptLabels).toEqual(['RCPT-1']);
   });
 });

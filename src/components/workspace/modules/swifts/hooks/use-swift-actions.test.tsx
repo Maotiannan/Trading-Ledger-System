@@ -1,13 +1,21 @@
 import { act, renderHook } from '@testing-library/react';
 import { useSwiftActions } from './use-swift-actions';
-import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
+import { uploadBusinessImage } from '@/components/workspace/modules/shared/business-image-upload';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  getApiErrorMessage: jest.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => error instanceof Error ? error.message : fallback),
 }));
 
+jest.mock('@/components/workspace/modules/shared/business-image-upload', () => ({
+  uploadBusinessImage: jest.fn(),
+}));
+
 const mockApiCall = apiCall as jest.Mock;
+const mockGetApiErrorMessage = getApiErrorMessage as jest.Mock;
+const mockUploadBusinessImage = uploadBusinessImage as jest.Mock;
 
 describe('useSwiftActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -37,6 +45,9 @@ describe('useSwiftActions', () => {
 
   beforeEach(() => {
     mockApiCall.mockReset();
+    mockApiCall.mockResolvedValue({ success: true, data: null });
+    mockGetApiErrorMessage.mockClear();
+    mockUploadBusinessImage.mockReset();
     mockFetch.mockReset();
     loadSwifts.mockClear();
     setOcrResult.mockClear();
@@ -81,6 +92,9 @@ describe('useSwiftActions', () => {
       setSelectedFile,
       setSavedImagePath,
       setError,
+      setOcrUploadStatus: jest.fn(),
+      setOcrUploadMessage: jest.fn(),
+      setOcrUploadProgress: jest.fn(),
       handleShowUploadChange,
       handleShowDirectCreateChange,
       resetDirectForm,
@@ -90,14 +104,20 @@ describe('useSwiftActions', () => {
 
   it('recognizes uploaded swift image', async () => {
     const file = new File(['swift'], 'swift.png', { type: 'image/png' });
-    mockFetch.mockResolvedValue({
-      json: async () => ({
+    mockUploadBusinessImage.mockResolvedValue({
+      response: {
         success: true,
         data: {
-          ocrResult: { amount: 330, senderName: 'Sender A' },
+          ocrResult: {
+            amount: 330,
+            senderName: 'SALAM ENTERPRISE',
+            senderAddress: 'ADDRESS LINE1',
+            receiverName: 'MARKET UNION CO LTD',
+            receiverAccount: '76881488000007249',
+          },
           image: { path: '/uploads/swift.png', name: 'swift.png' },
         },
-      }),
+      },
     });
     const { result } = renderHook(() => useSwiftActions(createDeps()));
 
@@ -109,14 +129,20 @@ describe('useSwiftActions', () => {
 
     expect(setSelectedFile).toHaveBeenCalledWith(file);
     expect(setImagePreview).toHaveBeenCalledWith('data:image/png;base64,mock');
-    expect(setOcrResult).toHaveBeenCalledWith({ amount: 330, senderName: 'Sender A' });
+    expect(setOcrResult).toHaveBeenCalledWith({
+      amount: 330,
+      senderName: 'SALAM ENTERPRISE',
+      senderAddress: 'ADDRESS LINE1',
+      receiverName: 'MARKET UNION CO LTD',
+      receiverAccount: '76881488000007249',
+    });
     expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/swift.png', name: 'swift.png' });
   });
 
   it('shows OCR failure returned by the server and clears saved image path', async () => {
     const file = new File(['swift'], 'swift.png', { type: 'image/png' });
-    mockFetch.mockResolvedValue({
-      json: async () => ({ success: false, message: 'ocr failed' }),
+    mockUploadBusinessImage.mockResolvedValue({
+      response: { success: false, message: 'ocr failed' },
     });
     const { result } = renderHook(() => useSwiftActions(createDeps()));
 
@@ -127,12 +153,12 @@ describe('useSwiftActions', () => {
     });
 
     expect(setSavedImagePath).toHaveBeenCalledWith(null);
-    expect(setError).toHaveBeenCalledWith('AI识别失败，请重试');
+    expect(setError).toHaveBeenCalledWith('AI识别结果无效，请重试');
   });
 
   it('shows OCR network errors and clears saved image path', async () => {
     const file = new File(['swift'], 'swift.png', { type: 'image/png' });
-    mockFetch.mockRejectedValue(new Error('fetch failed'));
+    mockUploadBusinessImage.mockRejectedValue(new Error('fetch failed'));
     const { result } = renderHook(() => useSwiftActions(createDeps()));
 
     await act(async () => {
@@ -145,11 +171,223 @@ describe('useSwiftActions', () => {
     expect(setError).toHaveBeenCalledWith('fetch failed');
   });
 
+  it('uses shared upload stage messages and tolerates user-preference lookup failures', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    const setOcrUploadStatus = jest.fn();
+    const setOcrUploadMessage = jest.fn();
+    const setOcrUploadProgress = jest.fn();
+    mockApiCall.mockRejectedValueOnce(new Error('settings unavailable'));
+    mockUploadBusinessImage.mockImplementation(async (options) => {
+      const formData = options.buildFormData(file);
+      expect(formData.get('action')).toBe('recognize');
+      expect(formData.get('file')).toBe(file);
+      options.onStageChange({ stage: 'uploading', progress: 42, compressed: true });
+      options.onStageChange({ stage: 'saving', progress: null, compressed: null });
+      return {
+        response: {
+          success: true,
+          data: {
+            ocrResult: {
+              amount: 51386,
+              date: '2026-05-01',
+              senderName: 'SALAM ENTERPRISE',
+              senderAddress: 'ADDRESS LINE1',
+              receiverName: 'MARKET UNION CO LTD',
+              receiverAccount: '76881488000007249',
+            },
+            image: { path: '/uploads/swift.png', name: 'swift.png' },
+          },
+        },
+      };
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      setOcrUploadStatus,
+      setOcrUploadMessage,
+      setOcrUploadProgress,
+    })));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('compressing');
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('uploading');
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('saving');
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('success');
+    expect(setOcrUploadMessage).toHaveBeenCalledWith('正在上传压缩后的图片（42%）...');
+    expect(setOcrUploadMessage).toHaveBeenCalledWith('图片已上传，AI正在识别...');
+    expect(setOcrUploadProgress).toHaveBeenCalledWith(42);
+    expect(setOcrUploadProgress).toHaveBeenCalledWith(100);
+  });
+
+  it('passes persisted image compression preferences into the shared uploader', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        enabled: true,
+        qualityFloor: 0.45,
+        targetMaxKb: 480,
+      },
+    });
+    mockUploadBusinessImage.mockImplementation(async (options) => {
+      expect(options.compression.preference).toEqual({
+        enabled: true,
+        qualityFloor: 0.45,
+        targetMaxKb: 480,
+      });
+      return {
+        response: {
+          success: true,
+          data: {
+            ocrResult: {
+              amount: 51386,
+              date: '2026-05-01',
+              senderName: 'SALAM ENTERPRISE',
+              senderAddress: 'ADDRESS LINE1',
+              receiverName: 'MARKET UNION CO LTD',
+              receiverAccount: '76881488000007249',
+            },
+            image: { path: '/uploads/swift.png', name: 'swift.png' },
+          },
+        },
+      };
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(mockUploadBusinessImage).toHaveBeenCalled();
+  });
+
+  it('falls back after the user-preference soft timeout when settings never resolve', async () => {
+    jest.useFakeTimers();
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockApiCall.mockReturnValue(new Promise(() => undefined));
+    mockUploadBusinessImage.mockImplementation(async (options) => {
+      expect(options.compression.preference).toBeUndefined();
+      return {
+        response: {
+          success: true,
+          data: {
+            ocrResult: {
+              amount: 51386,
+              date: '2026-05-01',
+              senderName: 'SALAM ENTERPRISE',
+              senderAddress: 'ADDRESS LINE1',
+              receiverName: 'MARKET UNION CO LTD',
+              receiverAccount: '76881488000007249',
+            },
+            image: { path: '/uploads/swift.png', name: 'swift.png' },
+          },
+        },
+      };
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    const pending = act(async () => {
+      const work = result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+      jest.advanceTimersByTime(1_500);
+      await work;
+    });
+
+    await pending;
+    jest.useRealTimers();
+    expect(mockUploadBusinessImage).toHaveBeenCalled();
+  });
+
+  it('maps failed upload stages through API error messages', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    const setOcrUploadStatus = jest.fn();
+    const setOcrUploadMessage = jest.fn();
+    const setOcrUploadProgress = jest.fn();
+    mockUploadBusinessImage.mockImplementation(async (options) => {
+      options.onStageChange({
+        stage: 'failed',
+        progress: null,
+        compressed: null,
+        error: new Error('upload interrupted'),
+      });
+      throw new Error('upload interrupted');
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      setOcrUploadStatus,
+      setOcrUploadMessage,
+      setOcrUploadProgress,
+    })));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(mockGetApiErrorMessage).toHaveBeenCalled();
+    expect(setOcrUploadStatus).toHaveBeenCalledWith('failed');
+    expect(setOcrUploadMessage).toHaveBeenCalledWith('upload interrupted');
+    expect(setOcrUploadProgress).toHaveBeenCalledWith(null);
+  });
+
+  it('rejects invalid OCR payload shapes before filling the form', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockUploadBusinessImage.mockResolvedValue({
+      response: {
+        success: true,
+        data: {
+          ocrResult: {
+            amount: '51386',
+            senderName: 'SALAM ENTERPRISE',
+          },
+          image: { path: '/uploads/swift.png', name: 'swift.png' },
+        },
+      },
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setError).toHaveBeenCalledWith('AI识别结果无效，请重试');
+  });
+
+  it('rejects missing OCR payload values before filling the form', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    mockUploadBusinessImage.mockResolvedValue({
+      response: {
+        success: true,
+        data: {
+          ocrResult: null,
+          image: { path: '/uploads/swift.png', name: 'swift.png' },
+        },
+      },
+    });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setError).toHaveBeenCalledWith('AI识别结果无效，请重试');
+  });
+
   it('requires a linked detail before confirming OCR swift', async () => {
     const file = new File(['swift'], 'swift.png', { type: 'image/png' });
     const { result } = renderHook(() => useSwiftActions(createDeps({
       selectedFile: file,
-      ocrResult: { amount: 330 },
+      ocrResult: { amount: 330, senderName: null, senderAddress: null, receiverName: null, receiverAccount: null, date: null },
       selectedDetailId: '',
     })));
 
@@ -161,6 +399,22 @@ describe('useSwiftActions', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it('requires a valid OCR amount before confirming OCR swift', async () => {
+    const file = new File(['swift'], 'swift.png', { type: 'image/png' });
+    const { result } = renderHook(() => useSwiftActions(createDeps({
+      selectedFile: file,
+      ocrResult: { amount: null, senderName: null, senderAddress: null, receiverName: null, receiverAccount: null, date: null },
+      selectedDetailId: 'detail-1',
+    })));
+
+    await act(async () => {
+      await result.current.handleConfirm();
+    });
+
+    expect(setError).toHaveBeenCalledWith('请输入有效的汇款金额');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('confirms OCR swift creation and refreshes list', async () => {
     const file = new File(['swift'], 'swift.png', { type: 'image/png' });
     mockFetch.mockResolvedValue({
@@ -168,7 +422,7 @@ describe('useSwiftActions', () => {
     });
     const { result } = renderHook(() => useSwiftActions(createDeps({
       selectedFile: file,
-      ocrResult: { amount: 330 },
+      ocrResult: { amount: 330, senderName: null, senderAddress: null, receiverName: null, receiverAccount: null, date: null },
       selectedDetailId: 'detail-1',
       savedImagePath: { path: '/uploads/swift.png', name: 'swift.png' },
     })));
@@ -193,7 +447,7 @@ describe('useSwiftActions', () => {
     });
     const { result } = renderHook(() => useSwiftActions(createDeps({
       selectedFile: file,
-      ocrResult: { amount: 330 },
+      ocrResult: { amount: 330, senderName: null, senderAddress: null, receiverName: null, receiverAccount: null, date: null },
       selectedDetailId: 'detail-1',
       savedImagePath: { path: '/uploads/swift.png', name: 'swift.png' },
     })));
@@ -211,7 +465,7 @@ describe('useSwiftActions', () => {
     mockFetch.mockRejectedValue(new Error('confirm fetch failed'));
     const { result } = renderHook(() => useSwiftActions(createDeps({
       selectedFile: file,
-      ocrResult: { amount: 330 },
+      ocrResult: { amount: 330, senderName: null, senderAddress: null, receiverName: null, receiverAccount: null, date: null },
       selectedDetailId: 'detail-1',
       savedImagePath: { path: '/uploads/swift.png', name: 'swift.png' },
     })));
@@ -261,6 +515,17 @@ describe('useSwiftActions', () => {
     expect(setError).toHaveBeenCalledWith('swift create failed');
   });
 
+  it('surfaces direct-create business failures', async () => {
+    mockApiCall.mockResolvedValue({ success: false, message: 'bad payload' });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(setError).toHaveBeenCalledWith('创建失败');
+  });
+
   it('deletes erroneous swift directly without approval flow', async () => {
     mockApiCall.mockResolvedValue({ success: true });
     const { result } = renderHook(() => useSwiftActions(createDeps()));
@@ -295,6 +560,20 @@ describe('useSwiftActions', () => {
 
     expect(getErrorMessage).toHaveBeenCalled();
     expect(window.alert).toHaveBeenCalledWith('delete failed');
+  });
+
+  it('alerts when direct deletion of erroneous swift returns a business failure payload', async () => {
+    mockApiCall.mockResolvedValue({ success: false, message: 'cannot delete' });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleDeleteSwift({
+        id: 'swift-err',
+        hasError: true,
+      } as never);
+    });
+
+    expect(window.alert).toHaveBeenCalledWith('删除失败');
   });
 
   it('submits deletion request for normal swift', async () => {

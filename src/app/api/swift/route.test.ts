@@ -49,8 +49,9 @@ jest.mock('@/lib/swift-edit-request-service', () => ({
 
 import { POST } from '@/app/api/swift/route';
 import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
-import { updateSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
 
+const mockCreateSwiftRecord = createSwiftRecord as jest.Mock;
 const mockRequestSwiftEdit = requestSwiftEdit as jest.Mock;
 const mockReviewSwiftEdit = reviewSwiftEdit as jest.Mock;
 const mockListSwiftEditRequests = listSwiftEditRequests as jest.Mock;
@@ -169,6 +170,48 @@ describe('swift route edit-approval actions', () => {
         receiverAccount: '123',
       },
     });
+    expect(json.success).toBe(true);
+  });
+
+  it('accepts nested confirm payloads used by OCR confirm flow', async () => {
+    mockCreateSwiftRecord.mockResolvedValueOnce({
+      swift: { id: 'swift-1' },
+      validation: { valid: true, hasWarning: false, message: null },
+      message: 'SWIFT已创建',
+    });
+
+    const response = await POST(buildJsonRequest({
+      action: 'confirm',
+      detailId: 'detail-1',
+      data: {
+        amount: 51386,
+        date: '2026-05-01',
+        senderName: 'SALAM ENTERPRISE',
+        senderAddress: 'ADDRESS LINE1 MONROVIA',
+        receiverName: 'MARKET UNION CO LTD',
+        receiverAccount: '76881488000007249',
+      },
+      imagePath: '/upload/swift.jpg',
+      imageName: 'swift.jpg',
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockCreateSwiftRecord).toHaveBeenCalledWith(expect.objectContaining({
+      currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
+      detailId: 'detail-1',
+      payload: {
+        amount: 51386,
+        date: '2026-05-01',
+        senderName: 'SALAM ENTERPRISE',
+        senderAddress: 'ADDRESS LINE1 MONROVIA',
+        receiverName: 'MARKET UNION CO LTD',
+        receiverAccount: '76881488000007249',
+      },
+      imagePath: '/upload/swift.jpg',
+      imageName: 'swift.jpg',
+      mode: 'confirm',
+    }));
     expect(json.success).toBe(true);
   });
 

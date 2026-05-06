@@ -473,17 +473,20 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
 {
   "amount": 汇款金额(数字，不含货币符号),
   "date": "汇款日期(格式: YYYY-MM-DD)",
-  "senderName": "汇款人姓名",
-  "senderAddress": "汇款人地址",
-  "receiverName": "收款人姓名",
-  "receiverAccount": "收款人账号"
+  "senderName": "业务付款人姓名（优先取报文正文 Block 4 里的 :50K: 字段，不要取报文头 Sender BIC）",
+  "senderAddress": "业务付款人地址（取 :50K: 后续地址行）",
+  "receiverName": "业务收款人名称（优先取报文正文 Block 4 里的 :59: 收款方名称，不要取报文头 Receiver BIC）",
+  "receiverAccount": "业务收款人银行账号（取 :59: 账号部分）"
 }
 
 注意：
-1. 金额通常是USD或美元金额
-2. 日期格式化为YYYY-MM-DD
-3. 如果某个字段无法识别，返回null
-4. 只返回JSON，不要其他文字`;
+1. 必须优先解析报文正文 Message Text / Block 4 里的业务字段，而不是报文头里的 Sender/Receiver BIC。
+2. :50K: 表示业务付款人；其第一行是付款人姓名，后续行合并为付款人地址。
+3. :59: 表示业务收款人；账号部分放入 receiverAccount，名称行合并为 receiverName。
+4. 金额优先取 :32A: 或正文中最明确的业务汇款金额，返回数字，不含货币符号和千位分隔。
+5. 日期优先取 Value Date / :32A: 日期，并格式化为 YYYY-MM-DD。
+6. 如果某个字段无法识别，返回 null。
+7. 只返回JSON，不要其他文字。`;
 
   const fallback: SwiftOcrResult = {
     amount: null,

@@ -82,6 +82,12 @@ describe('SwiftManager', () => {
       setSelectedDetailId: jest.fn(),
       error: null,
       setError: jest.fn(),
+      ocrUploadStatus: 'idle',
+      setOcrUploadStatus: jest.fn(),
+      ocrUploadMessage: null,
+      setOcrUploadMessage: jest.fn(),
+      ocrUploadProgress: null,
+      setOcrUploadProgress: jest.fn(),
       directForm: {
         detailId: 'detail-1',
         amount: '120',

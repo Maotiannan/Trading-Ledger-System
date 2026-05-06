@@ -35,6 +35,10 @@ function parseSwiftPayload(data: Record<string, unknown>) {
   return parseSwiftPayloadValue(data);
 }
 
+function parseSwiftCreatePayload(data: Record<string, unknown>) {
+  return parseSwiftPayloadValue(data.data ?? data);
+}
+
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
@@ -144,7 +148,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (action === 'confirm' || action === 'direct-create') {
-      const payload = parseSwiftPayload(requestData);
+      const payload = parseSwiftCreatePayload(requestData);
       const result = await createSwiftRecord({
         currentUser,
         detailId: typeof requestData.detailId === 'string' ? requestData.detailId : '',

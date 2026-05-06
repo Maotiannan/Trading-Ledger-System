@@ -34,8 +34,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.116`
-- 本次更新：手机浏览器观看性继续优化，`Dashboard / Invoice / Receipt / Payment Detail / SWIFT / Customer / Approval / Settings` 八个业务页的头部操作区、筛选区和表格溢出都已收口到窄屏可读布局，不再要求横向拖动画面才能完成主要操作。
+- 当前版本：`1.0.117`
+- 本次更新：`Dashboard` 现在会直接读取后端汇总，不再依赖先打开其他分页才能看到关键数字；`SWIFT Management` 的 `Upload SWIFT` 也会在弹窗打开时主动加载可选 `Payment Detail`，不再要求先手动进入明细页“预热”数据。
+- 同批更新：`Payment Detail -> Export Pic` 改为导出模板化 JPG，整体版式按标准 `payment_details.html` 收口；`Edit Payment Detail` 不再暴露原始 `receiptId` 这类内部标识，而是改成人类可读的关联收据标签。
+- 同批更新：`SWIFT` OCR 改为按报文 `Block 4` 业务字段解析，`Sender Name / Sender Address / Receiver Name / Receiver Account` 都会进入识别窗口；同时修复了 `Confirm Create` 的数值解析错误和移动端弹窗底部按钮超窗问题。
 - 同批更新：`Settings` 页面改成折叠式设置面板，`修改密码 / Excel Token / 图片压缩 / 用户管理 / 分支清库 / 系统配置 / 设置审计` 默认按模块折叠展开，避免长页堆满所有配置项。
 - 同批更新：`Receipt Management` 现在支持状态多选筛选，默认只看未完成收据（不默认勾选 `RECEIVED`）；列表每页默认 `30` 条，并可切换到 `50 / 100 / 200`。
 - 同批更新：`Invoice Management` 列表默认排序调整为“未完成发票在前、已完成发票在后”，且每个分组内 `shipDate` 为空的发票置顶，其余发票按 `shipDate` 从早到晚排序。

@@ -12,6 +12,7 @@ import { updateDetailRecord } from '@/lib/detail-service';
 
 type DetailSnapshotSource = {
   date?: unknown;
+  agentId?: unknown;
   items?: unknown;
 } | null | undefined;
 
@@ -85,8 +86,13 @@ function normalizeDetailItems(items: unknown): DetailEditableItemPatch[] {
 }
 
 function normalizeDetailSnapshot(input: DetailSnapshotSource): DetailEditablePatch {
+  const rawAgentId = input?.agentId;
+  const agentId = typeof rawAgentId === 'string' && rawAgentId.trim()
+    ? rawAgentId.trim()
+    : null;
   return {
     date: typeof input?.date === 'string' ? input.date : null,
+    agentId,
     items: normalizeDetailItems(input?.items ?? []),
   };
 }
@@ -213,6 +219,7 @@ export async function requestDetailEdit(params: {
           createdBy: true,
           status: true,
           date: true,
+          agentId: true,
           items: {
             select: {
               mark: true,
@@ -249,6 +256,7 @@ export async function requestDetailEdit(params: {
 
       const beforeSnapshot: DetailEditablePatch = {
         date: detail.date instanceof Date ? detail.date.toISOString().slice(0, 10) : null,
+        agentId: detail.agentId ?? null,
         items: detail.items.map((item) => ({
           mark: item.mark,
           orderNo: item.orderNo,

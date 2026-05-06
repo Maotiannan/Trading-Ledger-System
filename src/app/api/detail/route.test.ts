@@ -161,6 +161,7 @@ describe('detail route edit-approval actions', () => {
       detailId: 'detail-1',
       data: {
         date: '2026-05-05',
+        agentId: 'agent-2',
         items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' }],
       },
     }));
@@ -172,6 +173,7 @@ describe('detail route edit-approval actions', () => {
       detailId: 'detail-1',
       data: {
         date: '2026-05-05',
+        agentId: 'agent-2',
         items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' }],
       },
     }));

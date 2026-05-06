@@ -4,11 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
+import type { PaymentAgentSummary } from '../types';
 
 export type DetailEditDialogProps = {
   open: boolean;
   locale: string;
   form: DetailEditablePatch;
+  agents: PaymentAgentSummary[];
+  agentsLoading: boolean;
   linkedReceiptLabels: string[];
   submitting: boolean;
   isAdmin: boolean;
@@ -23,6 +26,8 @@ export function DetailEditDialog({
   open,
   locale,
   form,
+  agents,
+  agentsLoading,
   linkedReceiptLabels,
   submitting,
   isAdmin,
@@ -53,6 +58,22 @@ export function DetailEditDialog({
                 value={form.date ?? ''}
                 onChange={(e) => onFormChange({ ...form, date: e.target.value || null })}
               />
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={form.agentId ?? ''}
+                onChange={(e) => onFormChange({ ...form, agentId: e.target.value || null })}
+                disabled={submitting || agentsLoading}
+                aria-label={tx('付款代理', 'Payment agent')}
+              >
+                <option value="">
+                  {agentsLoading ? tx('代理加载中', 'Loading agents') : tx('未选择付款代理', 'No payment agent')}
+                </option>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.companyName}
+                  </option>
+                ))}
+              </select>
               <div className="space-y-3">
                 {form.items.map((item, index) => (
                   <div key={index} className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-4">

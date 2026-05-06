@@ -42,8 +42,16 @@ describe('detail-export-image', () => {
 
     expect(Buffer.isBuffer(jpeg)).toBe(true);
     expect(jpeg.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
-    expect(metadata.width).toBe(1560);
+    expect(metadata.width).toBe(720);
     expect((metadata.height ?? 0) > 0).toBe(true);
+  });
+
+  it('keeps the export layout readable on portrait mobile screens', () => {
+    const svg = buildDetailExportSvg(viewModel);
+
+    expect(svg).toContain('width="720"');
+    expect(svg).toContain('font-size="15" font-weight="700" fill="#000000">Simagan');
+    expect(svg).toContain('font-size="24" font-weight="700" fill="#415cc3">$101,326</text>');
   });
 
   it('uses bundled Arial font files for deterministic server rendering', () => {

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.120
+> 当前版本：v1.0.121
 > 最后更新：2026-05-06
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail -> Export Pic` 手机竖屏版式与代理编辑收口：导出模板从 1560px 宽幅改为 720px 竖屏友好宽度，并同步调整 logo、汇总卡、表格列距、行高和字号；`DetailEditablePatch`、`/api/detail request-edit`、审批快照与 `DetailEditDialog` 全链路加入 `agentId`，管理员直接修改或销售审批通过后都会更新 `Detail.agentId`，导出 footer 使用新代理名称；`listPaymentAgents` 自动补齐默认 `Mitty Group`，补齐 route/service/UI/export 回归 ✅ 2026-05-06
 
 - [x] `Payment Detail -> Export Pic` Arial 字体二次收口：确认用户反馈的“非乱码但内容空白”根因是 Docker 运行镜像没有 Arial 字体，Resvg 只能画出 logo、线条和色块；现已把 `Arial / Arial Bold` 固化到 `public/detail-export` 并由 `detail-export-image` 显式加载，同时删除旧的 `Noto Sans` 资产路径，补回归测试确保导出不再依赖容器系统字体 ✅ 2026-05-06
 

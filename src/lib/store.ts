@@ -87,6 +87,14 @@ export interface DetailItem {
 
 export interface Detail {
   id: string;
+  agentId?: string | null;
+  agent?: {
+    id: string;
+    companyName: string;
+    companyAddress?: string | null;
+    contactName?: string | null;
+    contactPhone?: string | null;
+  } | null;
   date: string | null;
   status: DetailStatus;
   sourceMode?: 'OCR' | 'DIRECT';

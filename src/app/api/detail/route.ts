@@ -47,6 +47,7 @@ function parseDetailEditablePatch(value: unknown): DetailEditablePatch {
   const payload = parseDetailPayloadValue(value);
   return {
     date: payload.date,
+    agentId: payload.agentId ?? null,
     items: payload.items.map((item) => ({
       mark: item.mark,
       orderNo: item.orderNo,
@@ -225,6 +226,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const details = await db.detail.findMany({
       where,
       include: {
+        agent: true,
         creator: { select: { id: true, name: true, email: true } },
         items: {
           include: {

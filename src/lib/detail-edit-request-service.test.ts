@@ -72,6 +72,7 @@ const adminUser = makeUser({
 
 const validDetailPatch: DetailEditablePatch = {
   date: '2026-05-05',
+  agentId: 'agent-2',
   items: [
     { mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' },
   ],
@@ -116,6 +117,7 @@ describe('detail-edit-request-service', () => {
       status: 'Waiting_SWIFT',
       createdBy: 'sales-owner',
       date: null,
+      agentId: 'agent-1',
       items: [{ mark: 'MAB-1', orderNo: 'MAB-1-10', amount: 100, receiptId: 'receipt-1' }],
     });
     mockDb.detailEditRequest.findFirst.mockResolvedValue(null);
@@ -138,6 +140,7 @@ describe('detail-edit-request-service', () => {
       status: 'Waiting_SWIFT',
       createdBy: 'sales-owner',
       date: null,
+      agentId: 'agent-1',
       items: [],
     });
     mockDb.detailEditRequest.findFirst.mockResolvedValue({ id: 'detail-req-existing', status: 'PENDING' });
@@ -155,6 +158,7 @@ describe('detail-edit-request-service', () => {
       status: 'RECEIVED',
       createdBy: 'sales-owner',
       date: null,
+      agentId: 'agent-1',
       items: [],
     });
 
@@ -217,6 +221,7 @@ describe('detail-edit-request-service', () => {
       reviewedAt: null,
       beforeSnapshot: {
         date: null,
+        agentId: 'agent-1',
         items: [{ mark: 'MAB-1', orderNo: 'MAB-1-10', amount: 100, receiptId: 'receipt-1' }],
       },
       afterSnapshot: validDetailPatch,
@@ -233,6 +238,7 @@ describe('detail-edit-request-service', () => {
         reviewedAt: null,
         beforeSnapshot: {
           date: null,
+          agentId: 'agent-1',
           items: [{ mark: 'MAB-1', orderNo: 'MAB-1-10', amount: 100, receiptId: 'receipt-1' }],
         },
         afterSnapshot: validDetailPatch,

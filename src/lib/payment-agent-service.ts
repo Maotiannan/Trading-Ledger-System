@@ -14,6 +14,8 @@ export type PaymentAgentPayload = {
   contactPhone?: string | null;
 };
 
+const DEFAULT_PAYMENT_AGENT_NAME = 'Mitty Group';
+
 function assertManager(currentUser: CurrentUser) {
   if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SALES) {
     return;
@@ -52,6 +54,25 @@ function normalizePayload(payload: PaymentAgentPayload) {
 export async function listPaymentAgents(currentUser: CurrentUser, options: { search?: string } = {}) {
   assertManager(currentUser);
   const ownerIds = await getOwnerVisibleIds(currentUser);
+  const existingDefault = await db.paymentAgent.findFirst({
+    where: {
+      companyName: DEFAULT_PAYMENT_AGENT_NAME,
+      createdBy: { in: ownerIds },
+    },
+    select: { id: true },
+  });
+  if (!existingDefault) {
+    await db.paymentAgent.create({
+      data: {
+        companyName: DEFAULT_PAYMENT_AGENT_NAME,
+        companyAddress: null,
+        contactName: null,
+        contactPhone: null,
+        createdBy: currentUser.id,
+      },
+    });
+  }
+
   const search = (options.search || '').trim();
   const where = {
     createdBy: { in: ownerIds },

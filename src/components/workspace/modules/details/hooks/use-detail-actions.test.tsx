@@ -709,6 +709,7 @@ describe('useDetailActions', () => {
         detailId: 'detail-1',
         data: {
           date: '2026-05-05',
+          agentId: 'agent-1',
           items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' }],
         },
         isAdmin: true,
@@ -722,6 +723,7 @@ describe('useDetailActions', () => {
         detailId: 'detail-1',
         data: {
           date: '2026-05-05',
+          agentId: 'agent-1',
           items: [{ mark: 'MAB-2', orderNo: 'MAB-2-11', amount: 120, receiptId: 'receipt-2' }],
         },
       }),
@@ -734,6 +736,7 @@ describe('useDetailActions', () => {
         detailId: 'detail-1',
         data: {
           date: '2026-05-06',
+          agentId: 'agent-2',
           items: [{ mark: 'MAB-3', orderNo: 'MAB-3-12', amount: 140, receiptId: 'receipt-3' }],
         },
         isAdmin: false,
@@ -747,6 +750,7 @@ describe('useDetailActions', () => {
         detailId: 'detail-1',
         data: {
           date: '2026-05-06',
+          agentId: 'agent-2',
           items: [{ mark: 'MAB-3', orderNo: 'MAB-3-12', amount: 140, receiptId: 'receipt-3' }],
         },
       }),

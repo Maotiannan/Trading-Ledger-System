@@ -47,6 +47,7 @@ export function DetailManager() {
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [editForm, setEditForm] = useState<DetailEditablePatch>({
     date: null,
+    agentId: null,
     items: [],
   });
 
@@ -185,6 +186,7 @@ export function DetailManager() {
     }));
     setEditForm({
       date: toEditableDateValue(detail.date),
+      agentId: detail.agentId ?? null,
       items: detail.items.map((item) => ({
         mark: item.mark ?? null,
         orderNo: item.orderNo ?? null,
@@ -436,6 +438,8 @@ export function DetailManager() {
         open={showEditDialog}
         locale={locale}
         form={editForm}
+        agents={agents}
+        agentsLoading={agentsLoading}
         linkedReceiptLabels={editLinkedReceiptLabels}
         submitting={submitting}
         isAdmin={isAdmin}

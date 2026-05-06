@@ -7,6 +7,7 @@ export type DetailEditableItemPatch = {
 
 export type DetailEditablePatch = {
   date: string | null;
+  agentId: string | null;
   items: DetailEditableItemPatch[];
 };
 

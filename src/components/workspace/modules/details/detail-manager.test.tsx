@@ -108,10 +108,30 @@ describe('DetailManager', () => {
   });
 
   it('wires detail edit affordances for sales and preserves editable values', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'agent') {
+        return {
+          success: true,
+          data: [{
+            id: 'agent-1',
+            companyName: 'Mitty Group',
+            companyAddress: null,
+            contactName: null,
+            contactPhone: null,
+            createdBy: 'admin-1',
+            createdAt: '2026-05-01T00:00:00.000Z',
+            updatedAt: '2026-05-01T00:00:00.000Z',
+            files: [],
+          }],
+        };
+      }
+      return { success: true, data: [] };
+    });
     mockUseStore.mockReturnValue({
       details: [
         {
           id: 'detail-1',
+          agentId: 'agent-1',
           date: '2026-05-04T00:00:00.000Z',
           status: 'Waiting_SWIFT',
           imageUrl: null,
@@ -154,6 +174,7 @@ describe('DetailManager', () => {
     await act(async () => {
       detailListProps?.onEditDetail?.({
         id: 'detail-1',
+        agentId: 'agent-1',
         date: '2026-05-04T00:00:00.000Z',
         status: 'Waiting_SWIFT',
         imageUrl: null,
@@ -179,6 +200,10 @@ describe('DetailManager', () => {
     });
 
     const openedEditDialogProps = (globalThis as { __detailEditDialogProps?: DetailEditDialogProps }).__detailEditDialogProps;
+    expect(openedEditDialogProps?.agents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'agent-1', companyName: 'Mitty Group' }),
+    ]));
+    expect(openedEditDialogProps?.form.agentId).toBe('agent-1');
     expect(openedEditDialogProps?.form.date).toBe('2026-05-04');
     expect(openedEditDialogProps?.form.items).toEqual([
       { mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: 'receipt-1' },

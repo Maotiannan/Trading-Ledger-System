@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.118
+> 当前版本：v1.0.119
 > 最后更新：2026-05-06
 
 ## 当前状态
@@ -45,6 +45,9 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.119
+- `Payment Detail -> Export Pic` 导出字体统一切到 `Arial` 体系，移除此前依赖项目内嵌 `Noto Sans` 字体文件的渲染路径；修复部分运行环境里仍然输出方块字/tofu 的问题，并保持完整 `MU Group` logo、日期、汇总卡、表格和 footer 结构与标准模板一致。
 
 ### v1.0.118
 - `Payment Detail -> Export Pic` 的导出模板继续收口到标准 `payment_details.html`：左上角改用透明底完整 `MU Group` logo，日期/表格/footer 视觉层级与参考图对齐。

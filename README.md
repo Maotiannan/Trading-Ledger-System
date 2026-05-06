@@ -34,7 +34,7 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.118`
+- 当前版本：`1.0.119`
 - 本次更新：`Payment Detail -> Export Pic` 的导出模板进一步收口到用户提供的标准 `payment_details.html` 视觉效果：导出改为使用固定内嵌字体与透明 `MU Group` logo 资源，不再依赖 Docker 运行环境字体，也不再使用错误的左上角小 logo。
 - 同批修复：`Export Pic` 生成图中的小方块/缺字问题已消除，日期、表格、footer 与模板样式统一按项目内置资源渲染，避免主机和容器导出结果不一致。
 - 同批更新：`Payment Detail -> Export Pic` 改为导出模板化 JPG，整体版式按标准 `payment_details.html` 收口；`Edit Payment Detail` 不再暴露原始 `receiptId` 这类内部标识，而是改成人类可读的关联收据标签。

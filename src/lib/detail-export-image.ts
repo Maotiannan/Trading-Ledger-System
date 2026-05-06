@@ -77,7 +77,6 @@ const TABLE_COLUMNS = {
 } as const;
 
 let cachedLogoDataUri: string | null = null;
-let cachedFontPath: string | null = null;
 type ResvgConstructor = new (
   svg: string,
   options?: {
@@ -142,12 +141,6 @@ function resolveLogoDataUri() {
   const logoPath = path.join(process.cwd(), 'public', 'detail-export', 'payment-detail-logo.png');
   cachedLogoDataUri = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
   return cachedLogoDataUri;
-}
-
-function resolveFontPath() {
-  if (cachedFontPath) return cachedFontPath;
-  cachedFontPath = path.join(process.cwd(), 'public', 'detail-export', 'noto-sans-latin-regular.ttf');
-  return cachedFontPath;
 }
 
 function resolveResvgConstructor() {
@@ -304,7 +297,7 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
   return `
     <svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
       <style>
-        .root { font-family: "Noto Sans", "DejaVu Sans", Arial, Helvetica, sans-serif; }
+        .root { font-family: Arial, Helvetica, sans-serif; }
       </style>
       <rect width="${WIDTH}" height="${height}" fill="#ffffff" />
       <rect x="${SIDE_PADDING}" y="0" width="${sheetWidth}" height="${TOP_BORDER}" fill="${COLORS.blue}" />
@@ -349,8 +342,7 @@ export async function renderDetailExportJpeg(viewModel: DetailExportViewModel) {
     },
     font: {
       loadSystemFonts: true,
-      fontFiles: [resolveFontPath()],
-      defaultFontFamily: 'Noto Sans',
+      defaultFontFamily: 'Arial',
     },
   });
   const pngBuffer = resvg.render().asPng();

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.118
+> 当前版本：v1.0.119
 > 最后更新：2026-05-06
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail -> Export Pic` Arial 字体收口：确认乱码根因是运行中的导出服务仍然走旧字体配置，`detail-export-image` 现已移除 `Noto Sans` 内嵌字体依赖，统一改为 `Arial, Helvetica, sans-serif` 体系并让 Resvg 直接加载系统字体；本地源码导出样张已恢复正常可读文本和完整 `MU Group` logo，后续通过本地 Docker 重建将运行服务切到 `1.0.119` ✅ 2026-05-06
 
 - [x] `Payment Detail -> Export Pic` 模板资产收口：新增项目内置透明 `MU Group` logo 与内嵌 `Noto Sans` 字体资源，`detail-export-image` 不再依赖容器字体或旧 `public/logo.svg`，导出 JPG 的 logo、日期、表格和 footer 进一步对齐用户提供的 `payment_details.html` 与参考图，同时补 `detail-export-image` 元数据/字体回归并重新验证 `build + targeted jest` ✅ 2026-05-06
 

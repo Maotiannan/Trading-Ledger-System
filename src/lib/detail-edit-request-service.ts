@@ -60,9 +60,6 @@ function assertEditableDetailStatus(status: string, detail?: unknown) {
   if (status === 'RECEIVED') {
     throw badRequest('RECEIVED状态下禁止修改付款明细', detail);
   }
-  if (status === 'Bank_Transfer') {
-    throw badRequest('Bank_Transfer状态下禁止修改付款明细', detail);
-  }
 }
 
 function normalizeDetailItems(items: unknown): DetailEditableItemPatch[] {

@@ -82,7 +82,7 @@ describe('detail-export-image', () => {
     ]);
   });
 
-  it('does not classify a cleared balance as Final before SWIFT is received', async () => {
+  it('classifies cleared balances as Final once SWIFT has entered bank transfer', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([
       { id: 'order-final', orderBalance: 0 },
     ]);
@@ -97,6 +97,51 @@ describe('detail-export-image', () => {
       createdAt: '2026-05-06T00:00:00.000Z',
       totalAmount: 120,
       swift: { status: 'Bank_Transfer' },
+      items: [
+        { mark: 'IBS', orderNo: 'IBS-01', amount: 120, receipt: { id: 'receipt-final-current', orderNo: 'IBS-01', orderId: 'order-final', createdAt: '2026-05-01T00:00:00.000Z' } },
+      ],
+    });
+
+    expect(model.rows[0].type).toBe('Final');
+  });
+
+  it('keeps a first payment as Final when it also clears the order', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([
+      { id: 'order-first-final', orderBalance: 0 },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      { id: 'receipt-first-final', orderId: 'order-first-final', createdAt: new Date('2026-05-01T00:00:00.000Z') },
+    ]);
+
+    const model = await buildDetailExportViewModel({
+      id: 'detail-1',
+      date: '2026-05-05T00:00:00.000Z',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      totalAmount: 120,
+      swift: { status: 'RECEIVED' },
+      items: [
+        { mark: 'IBS', orderNo: 'IBS-01', amount: 120, receipt: { id: 'receipt-first-final', orderNo: 'IBS-01', orderId: 'order-first-final', createdAt: '2026-05-01T00:00:00.000Z' } },
+      ],
+    });
+
+    expect(model.rows[0].type).toBe('Final');
+  });
+
+  it('does not classify a cleared balance as Final before SWIFT is attached', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([
+      { id: 'order-final', orderBalance: 0 },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      { id: 'receipt-final-old', orderId: 'order-final', createdAt: new Date('2026-04-01T00:00:00.000Z') },
+      { id: 'receipt-final-current', orderId: 'order-final', createdAt: new Date('2026-05-01T00:00:00.000Z') },
+    ]);
+
+    const model = await buildDetailExportViewModel({
+      id: 'detail-1',
+      date: '2026-05-05T00:00:00.000Z',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      totalAmount: 120,
+      swift: null,
       items: [
         { mark: 'IBS', orderNo: 'IBS-01', amount: 120, receipt: { id: 'receipt-final-current', orderNo: 'IBS-01', orderId: 'order-final', createdAt: '2026-05-01T00:00:00.000Z' } },
       ],

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.122
+> 当前版本：v1.0.123
 > 最后更新：2026-05-06
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail` 编辑与导出 TYPE 二次收口：`Detail` 修改状态门禁改为只禁止 `RECEIVED`，`Bank_Transfer` 下管理员直接修改与 SALES 修改审批均可继续提交；`applyDetailUpdate` 根据原 detail 状态保持关联收据状态，`Bank_Transfer` 更新不再回退到 `Waiting_SWIFT`；`order-preview` 与保存链路新增编辑专用 receipt 匹配参数，可匹配 `SR_Received / Waiting_SWIFT / Bank_Transfer` 的已有收据并按金额接近排序，避免已有订单号误提示新建收据；`Export Pic` 将 `Bank_Transfer / RECEIVED` 都视为 SWIFT 已生效，余额 `<= 5` 时优先显示 `Final`，覆盖首付款同时结清订单的场景；同步优化 `PaymentAgentManagerDialog` 桌面/移动端可视高度、滚动区和底部按钮 ✅ 2026-05-06
 
 - [x] `Payment Detail -> Export Pic` TYPE 规则修正：旧实现用历史 `DetailItem` 判断首付款，但当前真实历史付款主要存在 `Receipt` 链路中，导致只有一条 detail 时所有订单都被误判为 `Initial`；现改为按订单下有效 `Receipt` 的时间顺序判断当前 linked receipt 是否第一笔，同时严格要求 `detail.swift.status === RECEIVED && orderBalance <= 5` 才显示 `Final`，否则回退 `Std`；补齐 `Initial / Std / Final` 与“余额清零但 SWIFT 未到账不能 Final”的回归 ✅ 2026-05-06
 

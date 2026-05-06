@@ -55,6 +55,9 @@ jest.mock('@/lib/db', () => ({
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
+    receipt: {
+      findUnique: jest.fn(),
+    },
   },
 }));
 
@@ -78,17 +81,30 @@ jest.mock('@/lib/detail-edit-request-service', () => ({
   listDetailEditRequests: jest.fn(),
 }));
 
+jest.mock('@/lib/matching', () => ({
+  findMatchingReceipt: jest.fn(),
+}));
+
+jest.mock('@/lib/invoice-read-service', () => ({
+  lookupInvoiceOrderContext: jest.fn(),
+}));
+
 import { db } from '@/lib/db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
 import { GET, POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
+import { findMatchingReceipt } from '@/lib/matching';
+import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 
 const mockDb = db as unknown as {
   detail: {
     findFirst: jest.Mock;
     findMany: jest.Mock;
+  };
+  receipt: {
+    findUnique: jest.Mock;
   };
 };
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
@@ -99,6 +115,8 @@ const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
 const mockReviewDetailEdit = reviewDetailEdit as jest.Mock;
 const mockListDetailEditRequests = listDetailEditRequests as jest.Mock;
 const mockUpdateDetailRecord = updateDetailRecord as jest.Mock;
+const mockFindMatchingReceipt = findMatchingReceipt as jest.Mock;
+const mockLookupInvoiceOrderContext = lookupInvoiceOrderContext as jest.Mock;
 
 function buildJsonRequest(payload: Record<string, unknown>) {
   return {
@@ -134,6 +152,12 @@ describe('detail route edit-approval actions', () => {
     };
     mockGetHierarchyScope.mockResolvedValue({
       ownerVisibleIds: new Set(['admin-1', 'sales-1']),
+    });
+    mockLookupInvoiceOrderContext.mockResolvedValue({
+      data: {
+        exactMatches: [],
+        inferredCustomer: null,
+      },
     });
   });
 
@@ -295,6 +319,35 @@ describe('detail route edit-approval actions', () => {
     expect(json.data).toEqual([
       { id: 'detail-1', date: '2026-05-05T00:00:00.000Z', totalAmount: 101326 },
     ]);
+  });
+
+  it('previews detail edit order matches against existing workflow receipts', async () => {
+    mockFindMatchingReceipt.mockResolvedValueOnce('receipt-bank');
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-bank',
+      orderNo: 'IBS-01',
+    });
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        exactMatches: [{ customerMark: 'IBS' }],
+        inferredCustomer: null,
+      },
+    });
+
+    const response = await GET(buildGetRequest('https://example.com/api/detail?action=order-preview&orderNo=IBS-01&amount=2000'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockFindMatchingReceipt).toHaveBeenCalledWith('IBS-01', 2000, expect.objectContaining({
+      statuses: ['SR_Received', 'Waiting_SWIFT', 'Bank_Transfer'],
+      requireAmountTolerance: false,
+    }));
+    expect(json.data).toEqual(expect.objectContaining({
+      matchedReceiptId: 'receipt-bank',
+      linkedReceiptLabel: 'IBS-01',
+      suggestedMark: 'IBS',
+      willCreateReceipt: false,
+    }));
   });
 
   it('exports direct-created payment detail pictures through the export-pic action', async () => {

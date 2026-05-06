@@ -134,6 +134,28 @@ describe('detail-edit-request-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
+  it('creates a pending detail edit request for SALES on a visible Bank_Transfer detail', async () => {
+    mockDb.detail.findFirst.mockResolvedValue({
+      id: 'detail-bank',
+      status: 'Bank_Transfer',
+      createdBy: 'sales-owner',
+      date: null,
+      agentId: 'agent-1',
+      items: [{ mark: 'MAB-1', orderNo: 'MAB-1-10', amount: 100, receiptId: 'receipt-1' }],
+    });
+    mockDb.detailEditRequest.findFirst.mockResolvedValue(null);
+    mockDb.detailEditRequest.create.mockResolvedValue({ id: 'detail-req-bank', status: 'PENDING' });
+
+    const result = await requestDetailEdit({
+      currentUser: salesUser,
+      detailId: 'detail-bank',
+      data: validDetailPatch,
+    });
+
+    expect(result.message).toMatch(/等待管理员同意/);
+    expect(mockDb.detailEditRequest.create).toHaveBeenCalled();
+  });
+
   it('rejects a second pending detail edit request for the same detail', async () => {
     mockDb.detail.findFirst.mockResolvedValue({
       id: 'detail-1',

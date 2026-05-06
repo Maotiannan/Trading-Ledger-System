@@ -223,6 +223,47 @@ describe('detail-service', () => {
     });
   });
 
+  it('allows detail update while status is Bank_Transfer and keeps linked receipts in Bank_Transfer', async () => {
+    mockDb.detail.findUnique.mockResolvedValueOnce({
+      id: 'detail-bank',
+      createdBy: 'sales-1',
+      status: DetailStatus.Bank_Transfer,
+      agentId: 'agent-existing',
+      items: [{ receiptId: 'receipt-old' }],
+      imageUrl: null,
+      imageName: null,
+      date: null,
+    });
+    mockFindMatchingReceipt.mockResolvedValueOnce('receipt-bank');
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-bank',
+      createdBy: 'sales-1',
+      imageUrl: null,
+      imageName: null,
+      status: ReceiptStatus.Bank_Transfer,
+    });
+    mockDb.detail.update.mockResolvedValueOnce({
+      id: 'detail-bank',
+      items: [{ receiptId: 'receipt-bank', receipt: { id: 'receipt-bank' } }],
+    });
+
+    await updateDetailRecord({
+      currentUser: makeUser(),
+      detailId: 'detail-bank',
+      payload: {
+        agentId: 'agent-2',
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-2', amount: 120, receiptId: null, matchedReceiptId: null }],
+      },
+    });
+
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['receipt-bank'] } },
+      data: { status: ReceiptStatus.Bank_Transfer },
+    });
+    expect(mockResolveAccessiblePaymentAgentId).toHaveBeenCalledWith(expect.objectContaining({ id: 'sales-1' }), 'agent-2');
+  });
+
   it('writes history and relinks items on detail update', async () => {
     mockDb.detail.findUnique.mockResolvedValueOnce({
       id: 'detail-edit',

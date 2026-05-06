@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DetailStatus } from '@prisma/client';
+import { DetailStatus, ReceiptStatus } from '@prisma/client';
 import { UploadedAssetCategory } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recognizeDetail } from '@/lib/ocr';
@@ -106,7 +106,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       }
 
       const matchedReceiptId = Number.isFinite(amount) && amount > 0
-        ? await findMatchingReceipt(orderNo, amount)
+        ? await findMatchingReceipt(orderNo, amount, {
+            statuses: [ReceiptStatus.SR_Received, ReceiptStatus.Waiting_SWIFT, ReceiptStatus.Bank_Transfer],
+            requireAmountTolerance: false,
+          })
         : null;
       const matchedReceipt = matchedReceiptId
         ? await db.receipt.findUnique({

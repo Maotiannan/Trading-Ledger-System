@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.122
+> 当前版本：v1.0.123
 > 最后更新：2026-05-06
 
 ## 当前状态
@@ -45,6 +45,11 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.123
+- `Payment Detail -> Export Pic` 的 `TYPE` 判断再次按业务语义收口：`Bank_Transfer / RECEIVED` 都视为 SWIFT 已生效，订单余额 `<= 5` 时显示 `Final`；如果第一笔付款同时也是最后一笔，也显示 `Final`。
+- `Edit Payment Detail` 在 `RECEIVED` 前均可修改；编辑已有订单号时会匹配流程中的已有收据，不再误提示会新建收据。
+- `Payment Agent Management` 弹窗改成桌面和手机都可完整操作的布局。
 
 ### v1.0.122
 - 修正 `Payment Detail -> Export Pic` 的 `TYPE` 判断：`Final` 必须满足所属 detail 的 SWIFT 已到账且对应订单余额 `<= 5`；`Initial` 改为按该 `ORDER NO` 在系统历史付款里的第一笔有效收据判断；其余统一显示 `Std`。

@@ -34,8 +34,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.122`
-- 本次更新：修正 `Payment Detail -> Export Pic` 的 `TYPE` 计算规则：`Final` 必须要求所属 detail 的 SWIFT 已到账且订单余额 `<= 5`；`Initial` 改为按该 `ORDER NO` 在系统历史付款中的第一笔有效收据判断；其他显示 `Std`。
+- 当前版本：`1.0.123`
+- 本次更新：继续修正 `Payment Detail -> Export Pic` 的 `TYPE` 计算规则：所属 detail 的 SWIFT 进入 `Bank_Transfer / RECEIVED` 且订单余额 `<= 5` 时显示 `Final`，并且“第一笔也是最后一笔”优先显示 `Final` 而不是 `Initial`。
+- 同批修复：`Edit Payment Detail` 在 `Bank_Transfer` 状态下也可修改，直到 `RECEIVED` 才禁止；修改订单时会优先匹配已有流程内收据，不再误提示“保存后将创建新收据”。
+- 同批优化：`Payment Agent Management` 弹窗已改为桌面和手机都能完整显示，内容区滚动、底部操作固定可见。
 - 同批更新：`Payment Detail -> Export Pic` 改为更适合手机竖屏查看的 720px 宽模板，字号和列距同步放大；`Edit Payment Detail` 现在可修改 `AGENT`，导出图片底部的代理名称会跟随更新。
 - 同批更新：系统会在付款代理列表中自动补齐默认 `Mitty Group`，避免新环境或空账号范围内没有可选代理。
 - 同批更新：`Payment Detail -> Export Pic` 的导出字体改为项目内置 `Arial / Arial Bold`，Docker 内也会显式加载同一套字体，修复导出图只剩 logo、线条和空白表格的问题。
@@ -45,7 +47,7 @@ README 现在只保留用户应该看的内容。
 - 同批更新：`Settings` 页面改成折叠式设置面板，`修改密码 / Excel Token / 图片压缩 / 用户管理 / 分支清库 / 系统配置 / 设置审计` 默认按模块折叠展开，避免长页堆满所有配置项。
 - 同批更新：`Receipt Management` 现在支持状态多选筛选，默认只看未完成收据（不默认勾选 `RECEIVED`）；列表每页默认 `30` 条，并可切换到 `50 / 100 / 200`。
 - 同批更新：`Invoice Management` 列表默认排序调整为“未完成发票在前、已完成发票在后”，且每个分组内 `shipDate` 为空的发票置顶，其余发票按 `shipDate` 从早到晚排序。
-- `Detail` 仅允许在 `Waiting_SWIFT / ERROR` 状态下修改 `date` 与每行的 `mark / orderNo / amount / receiptId`；`Swift` 仅允许在 `ERROR / Bank_Transfer` 状态下修改 `date / amount / senderName / senderAddress / receiverName / receiverAccount`。已完成链路的记录不会开放修改。
+- `Detail` 在 `RECEIVED` 前允许修改 `date / AGENT` 与每行的 `mark / orderNo / amount / receiptId`；`Swift` 仅允许在 `ERROR / Bank_Transfer` 状态下修改 `date / amount / senderName / senderAddress / receiverName / receiverAccount`。已完成链路的记录不会开放修改。
 - 同一条收据、付款明细或 SWIFT 在待审批期间都不能重复提交新的修改申请；审批通过后才会正式写回数据。
 - 上一批更新已完成收据管理移动端体验优化：顶部操作按钮在窄屏下会自动换行/纵向堆叠；直接上传图片确认页改为固定返回/确认头部，超长图片会在预览区内按可视高度缩放并独立滚动，避免确认按钮被挤出屏幕。
 - 设置接口已增加用户级图片压缩偏好持久化能力，图片压缩开关、质量下限、OCR 目标大小按当前登录账号单独保存，不影响系统级配置审计。

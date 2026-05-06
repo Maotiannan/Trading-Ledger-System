@@ -201,19 +201,19 @@ export function PaymentAgentManagerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0">
-        <div className="flex max-h-[90vh] flex-col">
-          <DialogHeader className="border-b px-6 py-4">
+      <DialogContent className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-hidden p-0 sm:h-auto sm:max-h-[90vh] sm:w-[min(1100px,calc(100vw-2rem))]">
+        <div className="flex h-full max-h-[calc(100dvh-1rem)] flex-col sm:max-h-[90vh]">
+          <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('付款代理管理', 'Payment Agent Management')}</DialogTitle>
             <DialogDescription>{tx('维护付款代理基础信息和附件', 'Maintain payment agent master data and attachments.')}</DialogDescription>
           </DialogHeader>
           <div className="grid flex-1 min-h-0 grid-cols-1 gap-0 md:grid-cols-[260px_1fr]">
-            <div className="border-b md:border-b-0 md:border-r">
+            <div className="flex min-h-0 flex-col border-b md:border-b-0 md:border-r">
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="text-sm font-medium">{tx('代理列表', 'Agents')}</div>
                 <Button size="sm" variant="outline" onClick={handleNew}>{tx('新增', 'New')}</Button>
               </div>
-              <ScrollArea className="h-[240px] md:h-full">
+              <ScrollArea className="h-40 min-h-0 md:h-auto md:flex-1">
                 <div className="space-y-1 px-2 pb-4">
                   {agents.map((agent) => (
                     <button
@@ -234,7 +234,7 @@ export function PaymentAgentManagerDialog({
               </ScrollArea>
             </div>
             <div className="flex min-h-0 flex-col">
-              <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
                 <div className="space-y-4">
                   {error && (
                     <Alert variant="destructive">
@@ -262,15 +262,15 @@ export function PaymentAgentManagerDialog({
 
                   {!isCreating && (
                     <div className="space-y-3 rounded-lg border p-4">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="text-sm font-medium">{tx('公司文件', 'Company Files')}</div>
-                        <Input className="max-w-xs" type="file" onChange={handleFileUpload} disabled={uploading} />
+                        <Input className="w-full sm:max-w-xs" type="file" onChange={handleFileUpload} disabled={uploading} />
                       </div>
                       <div className="space-y-2">
                         {selectedAgent?.files.length ? selectedAgent.files.map((file) => (
-                          <div key={file.id} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                          <div key={file.id} className="flex flex-col gap-2 rounded-md border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
                             <a
-                              className="truncate text-primary underline-offset-2 hover:underline"
+                              className="min-w-0 truncate text-primary underline-offset-2 hover:underline"
                               href={`/api/upload-image?path=${encodeURIComponent(file.path)}`}
                               target="_blank"
                               rel="noreferrer"
@@ -289,16 +289,16 @@ export function PaymentAgentManagerDialog({
                   )}
                 </div>
               </div>
-              <DialogFooter className="border-t px-6 py-4">
+              <DialogFooter className="shrink-0 flex-col-reverse gap-2 border-t px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6">
                 {selectedAgent && (
-                  <Button variant="destructive" onClick={() => void handleDelete()} disabled={saving || uploading}>
+                  <Button className="w-full sm:w-auto" variant="destructive" onClick={() => void handleDelete()} disabled={saving || uploading}>
                     {tx('删除代理', 'Delete Agent')}
                   </Button>
                 )}
-                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || uploading}>
+                <Button className="w-full sm:w-auto" variant="outline" onClick={() => onOpenChange(false)} disabled={saving || uploading}>
                   {tx('关闭', 'Close')}
                 </Button>
-                <Button onClick={() => void handleSave()} disabled={saving || uploading || !draft.companyName.trim()}>
+                <Button className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={saving || uploading || !draft.companyName.trim()}>
                   {saving ? tx('保存中...', 'Saving...') : tx('保存', 'Save')}
                 </Button>
               </DialogFooter>

@@ -5,7 +5,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
-import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/lib/matching';
+import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance, type FindMatchingReceiptOptions } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { DetailPayload } from '@/lib/validators';
@@ -107,6 +107,7 @@ async function processDetailItems(params: {
   imagePath: string | null;
   imageName: string | null;
   autoCreateNote: string;
+  receiptMatchOptions?: FindMatchingReceiptOptions;
   tx: DbTransactionClient;
 }): Promise<{ items: DetailProcessedItem[]; touchedOrderIds: string[] }> {
   const processedItems: DetailProcessedItem[] = [];
@@ -121,7 +122,7 @@ async function processDetailItems(params: {
     }
 
     if (!receiptId && item.orderNo) {
-      const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount);
+      const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount, params.receiptMatchOptions);
       if (autoMatchedReceiptId) {
         const matchedReceipt = await getAccessibleReceipt(autoMatchedReceiptId, params.currentUser, params.tx);
         receiptId = autoMatchedReceiptId;
@@ -187,11 +188,21 @@ function normalizeItems(payload: DetailPayload) {
 }
 
 async function setReceiptsWaitingSwift(tx: DbTransactionClient, receiptIds: string[]) {
+  await setReceiptsStatus(tx, receiptIds, ReceiptStatus.Waiting_SWIFT);
+}
+
+async function setReceiptsStatus(tx: DbTransactionClient, receiptIds: string[], status: ReceiptStatus) {
   if (receiptIds.length === 0) return;
   await tx.receipt.updateMany({
     where: { id: { in: receiptIds } },
-    data: { status: ReceiptStatus.Waiting_SWIFT },
+    data: { status },
   });
+}
+
+function getReceiptStatusAfterDetailUpdate(detailStatus: DetailStatus): ReceiptStatus {
+  return detailStatus === DetailStatus.Bank_Transfer
+    ? ReceiptStatus.Bank_Transfer
+    : ReceiptStatus.Waiting_SWIFT;
 }
 
 async function applyDetailUpdate(params: {
@@ -226,9 +237,6 @@ async function applyDetailUpdate(params: {
   if (existingDetail.status === DetailStatus.RECEIVED) {
     throw badRequest('RECEIVED状态下禁止修改', { detailId, status: existingDetail.status });
   }
-  if (existingDetail.status === DetailStatus.Bank_Transfer) {
-    throw badRequest('Bank_Transfer状态下禁止修改', { detailId, status: existingDetail.status });
-  }
 
   const processedItems = await processDetailItems({
     items: normalizeItems(payload),
@@ -236,6 +244,10 @@ async function applyDetailUpdate(params: {
     imagePath: imagePath || existingDetail.imageUrl || null,
     imageName: imageName || existingDetail.imageName || null,
     autoCreateNote: '由付款明细自动创建',
+    receiptMatchOptions: {
+      statuses: [ReceiptStatus.SR_Received, ReceiptStatus.Waiting_SWIFT, ReceiptStatus.Bank_Transfer],
+      requireAmountTolerance: false,
+    },
     tx,
   });
   await tx.detailHistory.create({
@@ -274,7 +286,7 @@ async function applyDetailUpdate(params: {
   const receiptIds = nextDetail.items
     .map((item) => item.receiptId)
     .filter((receiptId): receiptId is string => Boolean(receiptId));
-  await setReceiptsWaitingSwift(tx as DbTransactionClient, receiptIds);
+  await setReceiptsStatus(tx as DbTransactionClient, receiptIds, getReceiptStatusAfterDetailUpdate(existingDetail.status));
 
   return { detail: nextDetail, touchedOrderIds: processedItems.touchedOrderIds };
 }

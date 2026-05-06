@@ -9,6 +9,11 @@ import { runInTransaction } from '@/lib/transaction';
 
 type MatchingWriteClient = Pick<DbTransactionClient, 'invoice' | 'order' | 'receipt' | 'systemSetting'>;
 
+export type FindMatchingReceiptOptions = {
+  statuses?: ReceiptStatus[];
+  requireAmountTolerance?: boolean;
+};
+
 // 确保DEPOSIT_POOL发票池存在
 export async function ensureDepositPoolInvoice(userId: string, client: MatchingWriteClient = db): Promise<string> {
   // 查找或创建DEPOSIT_POOL发票
@@ -323,12 +328,17 @@ export async function getAvailableReceipts(): Promise<{
 // 查找匹配的RECEIPT
 export async function findMatchingReceipt(
   orderNo: string | null,
-  amount: number
+  amount: number,
+  options: FindMatchingReceiptOptions = {}
 ): Promise<string | null> {
   if (!orderNo) return null;
   const normalizedInput = normalizeOrderNo(orderNo);
   if (!normalizedInput) return null;
 
+  const statuses = options.statuses && options.statuses.length > 0
+    ? options.statuses
+    : [ReceiptStatus.SR_Received];
+  const requireAmountTolerance = options.requireAmountTolerance ?? true;
   const toleranceSetting = await db.systemSetting.findUnique({
     where: { key: 'DETAIL_RECEIPT_MATCH_TOLERANCE' },
     select: { value: true },
@@ -336,15 +346,13 @@ export async function findMatchingReceipt(
   const tolerance = Number(toleranceSetting?.value ?? '5');
   const effectiveTolerance = Number.isFinite(tolerance) && tolerance >= 0 ? tolerance : 5;
 
-  // 严格规则：
-  // 1) ORDER 必须是同一客组（按常见分隔符拆分后去掉最右元素，剩余元素100%一致）
-  // 2) 金额允许 ±5 浮动
+  // 严格创建规则要求金额在容差内；编辑规则可放宽金额，只按同一订单/别名组匹配后取金额最接近的收据。
   const minAmount = amount - effectiveTolerance;
   const maxAmount = amount + effectiveTolerance;
   const candidates = await db.receipt.findMany({
     where: {
-      status: ReceiptStatus.SR_Received,
-      usd: { gte: minAmount, lte: maxAmount },
+      status: { in: statuses },
+      ...(requireAmountTolerance ? { usd: { gte: minAmount, lte: maxAmount } } : {}),
       orderNo: { not: null },
     },
     orderBy: { createdAt: 'asc' },

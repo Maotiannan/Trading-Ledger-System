@@ -229,9 +229,12 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
   });
 }
 
+function hasEffectiveSwift(status: string | null | undefined): boolean {
+  return status === 'Bank_Transfer' || status === 'RECEIVED';
+}
+
 function determineType(detail: DetailExportSource, analysis: ResolvedItemAnalysis): DetailExportRow['type'] {
-  const swiftReceived = detail.swift?.status === 'RECEIVED';
-  if (swiftReceived && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
+  if (hasEffectiveSwift(detail.swift?.status) && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
     return 'Final';
   }
   if (analysis.isFirstPayment) {

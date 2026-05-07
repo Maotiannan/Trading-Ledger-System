@@ -69,6 +69,24 @@ describe('business-image-upload', () => {
     expect(bitmapClose).toHaveBeenCalled();
   });
 
+  it('does not try to compress non-image files such as SWIFT PDFs', async () => {
+    const file = new File([new Uint8Array(2_000_000)], 'swift.pdf', { type: 'application/pdf' });
+    global.createImageBitmap = jest.fn();
+
+    const result = await compressBusinessImage(file, {
+      preference: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: 0.3,
+        ocrTargetMaxKb: 500,
+      },
+    });
+
+    expect(global.createImageBitmap).not.toHaveBeenCalled();
+    expect(result.file).toBe(file);
+    expect(result.compressed).toBe(false);
+    expect(result.outputSize).toBe(file.size);
+  });
+
   it('searches for a jpeg quality that satisfies the target byte budget', async () => {
     const file = new File([new Uint8Array(4_000_000)], 'receipt.png', { type: 'image/png' });
     const bitmapClose = jest.fn();

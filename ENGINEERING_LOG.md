@@ -1,12 +1,18 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.130
+> 当前版本：v1.0.132
 > 最后更新：2026-05-07
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 移动端筛选与客户历史弹窗收口：新增 `ResponsiveFilterCard`，`Receipt / Detail / SWIFT` 三页手机端只展示搜索框和筛选收纳按钮，`Receipt` 额外保留外部查询按钮，桌面端仍走完整筛选网格；`Customer Management` 的 `ORDER_NAME` 改为可点击 alias chip，新增 `customer?action=order-history` 和 `getCustomerOrderNameHistory()`，按可见客户与选中 `ORDER_NAME` 返回历史订单/发票/金额/未收金额，并在桌面弹窗右侧展示该客户最近收据状态；`Create Invoice` 弹窗将 `Add Order / Cancel / Create` 统一放到底部操作区并修复手机端输入行遮挡问题；补齐 manager/component/service 回归 ✅ 2026-05-07
+
+- [x] 工程数据安全基线补充：明确本项目日常验证优先采用 app-only rebuild，不把普通 Docker Desktop daemon EOF / lingering process 视为数据库删除事件；禁止在活跃数据服务上执行 `docker compose down -v`、Docker volume 删除、`prisma migrate reset`、`prisma db push --force-reset`、清表或重建业务库等破坏性命令；涉及数据库结构变更前必须先说明迁移路径、回滚路径和数据风险，风险验证应优先单开测试部署，不替换现有数据服务 ✅ 2026-05-07
+
+- [x] SWIFT PDF 多页识别接入：确认 `glm-4.6v` 的 chat `file_url` 不接受 `data:application/pdf;base64`，本地实测会返回平台侧网络错误；现改为 PDF 文件走 BigModel `/files/parser/sync` 同步文件解析，联合提取多页文本后再调用同一 OCR 配置的 GLM 做 SWIFT JSON 结构化。`/api/swift?action=recognize` 支持 `application/pdf`，`SWIFT_OCR` 暂存资产从图片专用写入扩展为通用文件写入，前端上传弹窗支持 `image/*,application/pdf` 并对 PDF 显示文件预览卡；补齐 OCR、OCR input、上传压缩、暂存资产和弹窗回归，并用用户示例 PDF 真实 API 验证 HTTP 200 ✅ 2026-05-07
 
 - [x] 收据 OCR 进度与客户显示规则收口：确认 `Upload Receipt` 在上传完成后仍等待 `/api/receipt?action=recognize` 返回，旧 UI 只显示 `100%` 进度条导致用户感知为卡死；现将阶段拆为压缩、上传、AI 识别、AI 回传整理、识别完成核对，并补 hook 回归。新增 `customer-display` 纯工具统一 `COMPANY_NAME -> NAME + "MARK"` 显示规则，替换 `receipt-service / receipt-generator-layout / invoice-read-service / api client / Generate Signed Receipt` 弹窗内的重复拼接逻辑，防止模板层再次退回只用 `customer.name`；补齐工具、弹窗、hook、client 回归 ✅ 2026-05-07
 

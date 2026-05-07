@@ -177,6 +177,34 @@ describe('uploaded-asset-service', () => {
     expect(result.path).toMatch(/\/upload\/images\/receipts\/direct\//);
   });
 
+  it('stages SWIFT OCR PDFs as generic files instead of image-only uploads', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.5\n1 0 obj\n<<>>\nendobj\n');
+    const file = {
+      name: 'swift.pdf',
+      type: 'application/pdf',
+      size: pdfBytes.byteLength,
+      arrayBuffer: async () => pdfBytes.buffer.slice(
+        pdfBytes.byteOffset,
+        pdfBytes.byteOffset + pdfBytes.byteLength,
+      ),
+    } as File;
+
+    const result = await stageUploadedAsset({
+      file,
+      category: UploadedAssetCategory.SWIFT_OCR,
+      createdBy: 'user-1',
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        category: UploadedAssetCategory.SWIFT_OCR,
+        mimeType: 'application/pdf',
+        name: 'swift.pdf',
+      }),
+    }));
+    expect(result.path).toMatch(/\/upload\/images\/swifts\/ocr\/.+\.pdf$/);
+  });
+
   it('compensates the uploaded file when asset registration fails', async () => {
     const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
     const file = {

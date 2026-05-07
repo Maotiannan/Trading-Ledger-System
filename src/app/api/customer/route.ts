@@ -17,6 +17,7 @@ import {
   type ImportRow,
 } from '@/lib/customer-service';
 import {
+  getCustomerOrderNameHistory,
   listCustomerOwnerOptions,
   listCustomers,
 } from '@/lib/customer-read-service';
@@ -114,6 +115,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
   if (action === 'owner-options') {
     const result = await listCustomerOwnerOptions(currentUser);
+    return createApiSuccessResponse(result, request);
+  }
+
+  if (action === 'order-history') {
+    const result = await getCustomerOrderNameHistory(currentUser, {
+      customerId: trimStr(searchParams.get('customerId')),
+      orderName: trimStr(searchParams.get('orderName')),
+    });
     return createApiSuccessResponse(result, request);
   }
 

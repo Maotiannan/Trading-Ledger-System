@@ -18,7 +18,9 @@ import {
   CustomerFormDialog,
   CustomerList,
   CustomerLongTextPreviewDialog,
+  CustomerOrderHistoryDialog,
   CustomerToolbar,
+  type CustomerOrderHistory,
 } from './components';
 import type { CustomerOwnerOption } from './types';
 import { useCustomerActions, useCustomerForms, useCustomerImportColumns } from './hooks';
@@ -44,6 +46,11 @@ export function CustomerManager() {
   const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
   const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
   const [search, setSearch] = useState('');
+  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
+  const [orderHistoryLoading, setOrderHistoryLoading] = useState(false);
+  const [orderHistoryError, setOrderHistoryError] = useState('');
+  const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
+  const [orderHistory, setOrderHistory] = useState<CustomerOrderHistory | null>(null);
   const customerRequestGuard = useLatestRequestGuard();
   const {
     customerImportInputRef,
@@ -181,6 +188,26 @@ export function CustomerManager() {
     });
   })();
 
+  const openOrderNameHistory = async (row: Record<string, unknown>, orderName: string) => {
+    const customerId = String(row.id || '').trim();
+    const trimmedOrderName = orderName.trim();
+    if (!customerId || !trimmedOrderName) return;
+
+    setOrderHistoryOpen(true);
+    setOrderHistoryLoading(true);
+    setOrderHistoryError('');
+    setOrderHistory(null);
+    setOrderHistoryTitle(trimmedOrderName);
+
+    const result = await apiCall(`customer?action=order-history&customerId=${encodeURIComponent(customerId)}&orderName=${encodeURIComponent(trimmedOrderName)}`);
+    if (result.success && result.data) {
+      setOrderHistory(result.data as CustomerOrderHistory);
+    } else {
+      setOrderHistoryError(String(result.message || result.error || tx('加载失败', 'Load failed')));
+    }
+    setOrderHistoryLoading(false);
+  };
+
   return (
     <div className="space-y-6">
       <CustomerToolbar
@@ -219,6 +246,7 @@ export function CustomerManager() {
             formatOwnerLabel={formatOwnerLabel}
             truncateLongText={truncateLongText}
             onPreviewLongText={(label, value) => setCustomerLongTextPreview({ label, value })}
+            onOpenOrderNameHistory={(row, orderName) => { void openOrderNameHistory(row, orderName); }}
             onEdit={openEdit}
             onDelete={handleDelete}
           />
@@ -281,6 +309,22 @@ export function CustomerManager() {
       <CustomerLongTextPreviewDialog
         preview={customerLongTextPreview}
         onOpenChange={(open) => { if (!open) setCustomerLongTextPreview(null); }}
+      />
+
+      <CustomerOrderHistoryDialog
+        open={orderHistoryOpen}
+        loading={orderHistoryLoading}
+        error={orderHistoryError}
+        title={orderHistoryTitle}
+        history={orderHistory}
+        tx={tx}
+        onOpenChange={(open) => {
+          setOrderHistoryOpen(open);
+          if (!open) {
+            setOrderHistory(null);
+            setOrderHistoryError('');
+          }
+        }}
       />
     </div>
   );

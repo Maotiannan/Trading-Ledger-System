@@ -113,6 +113,10 @@ function shouldTranscodeToJpeg(file: File): boolean {
   return mime === 'image/heic' || mime === 'image/heif';
 }
 
+function isImageUpload(file: File): boolean {
+  return (file.type || '').toLowerCase().startsWith('image/');
+}
+
 function createCanvas(width: number, height: number): HTMLCanvasElement | null {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
@@ -207,6 +211,8 @@ export async function compressBusinessImage(
   const compressionDisabled = !preference.imageCompressionEnabled;
 
   if (
+    !isImageUpload(file)
+    ||
     (compressionDisabled && !shouldForceJpeg)
     || typeof window === 'undefined'
     || typeof document === 'undefined'

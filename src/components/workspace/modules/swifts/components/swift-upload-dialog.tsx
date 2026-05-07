@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, FileText, Loader2 } from 'lucide-react';
 import type { SwiftDetailOption, SwiftOcrResult, SwiftOcrUploadStatus } from '../types';
 import { normalizeSwiftAmount, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
 
@@ -51,6 +51,8 @@ export function SwiftUploadDialog({
   onOcrResultChange,
   onConfirm,
 }: SwiftUploadDialogProps) {
+  const isPdfPreview = Boolean(imagePreview?.startsWith('data:application/pdf'));
+
   const updateAmount = (value: string) => {
     onOcrResultChange({ ...ocrResult, amount: normalizeSwiftAmount(value) });
   };
@@ -61,7 +63,7 @@ export function SwiftUploadDialog({
         <div className="flex max-h-[90vh] flex-col">
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{tx('上传SWIFT水单', 'Upload SWIFT Record')}</DialogTitle>
-            <DialogDescription>{tx('上传SWIFT水单图片，AI将自动识别内容', 'Upload SWIFT image and let AI recognize content')}</DialogDescription>
+            <DialogDescription>{tx('上传SWIFT水单图片或PDF，AI将自动识别内容', 'Upload SWIFT image or PDF and let AI recognize content')}</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-4">
@@ -83,7 +85,7 @@ export function SwiftUploadDialog({
               </div>
 
               <div className="border-2 border-dashed rounded-lg p-4">
-                <Input type="file" accept="image/*" onChange={onFileSelect} />
+                <Input type="file" accept="image/*,application/pdf" onChange={onFileSelect} />
               </div>
 
               {ocrUploadStatus !== 'idle' && ocrUploadMessage && (
@@ -102,7 +104,14 @@ export function SwiftUploadDialog({
 
               {imagePreview && (
                 <div className="border rounded-lg p-2">
-                  <img src={imagePreview} alt="Preview" className="max-h-64 mx-auto rounded" />
+                  {isPdfPreview ? (
+                    <div className="flex items-center justify-center gap-3 rounded bg-muted/40 px-4 py-8 text-sm text-muted-foreground">
+                      <FileText className="h-8 w-8" />
+                      <span>{tx('已选择PDF文件', 'PDF file selected')}</span>
+                    </div>
+                  ) : (
+                    <img src={imagePreview} alt="Preview" className="max-h-64 mx-auto rounded" />
+                  )}
                 </div>
               )}
 

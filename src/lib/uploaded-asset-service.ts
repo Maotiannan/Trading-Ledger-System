@@ -116,7 +116,8 @@ export async function stageUploadedAsset(input: {
 }
 
 function isGenericUploadedAssetCategory(category: UploadedAssetCategory): boolean {
-  return category === UploadedAssetCategory.AGENT_FILE;
+  return category === UploadedAssetCategory.AGENT_FILE
+    || category === UploadedAssetCategory.SWIFT_OCR;
 }
 
 export function uploadedAssetSubDirForCategory(category: UploadedAssetCategory): string {

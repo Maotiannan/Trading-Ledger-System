@@ -5,9 +5,9 @@ import { useStore, type Detail } from '@/lib/store';
 import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -333,21 +333,29 @@ export function DetailManager() {
         </Alert>
       )}
 
-      <Card>
-        <CardContent className="pt-6 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <ResponsiveFilterCard
+        testIdPrefix="detail"
+        filterLabel={tx('筛选', 'Filters')}
+        renderSearch={() => (
           <Input placeholder={tx('搜索唛头/单号', 'Search mark/order no.')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">{tx('全部状态', 'All statuses')}</option>
-            <option value="Waiting_SWIFT">Waiting_SWIFT</option>
-            <option value="Bank_Transfer">Bank_Transfer</option>
-            <option value="RECEIVED">RECEIVED</option>
-            <option value="ERROR">ERROR</option>
-          </select>
-          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Input type="number" placeholder={tx('最小总金额', 'Min total amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-          <Input type="number" placeholder={tx('最大总金额', 'Max total amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
-          <div className="md:col-span-3 lg:col-span-6 flex justify-end">
+        )}
+        renderFilters={() => (
+          <>
+            <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">{tx('全部状态', 'All statuses')}</option>
+              <option value="Waiting_SWIFT">Waiting_SWIFT</option>
+              <option value="Bank_Transfer">Bank_Transfer</option>
+              <option value="RECEIVED">RECEIVED</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input type="number" placeholder={tx('最小总金额', 'Min total amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+            <Input type="number" placeholder={tx('最大总金额', 'Max total amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+          </>
+        )}
+        renderActions={() => (
+          <div className="flex justify-end md:col-span-3 lg:col-span-6">
             <Button
               variant="outline"
               onClick={() => {
@@ -362,8 +370,8 @@ export function DetailManager() {
               {tx('重置筛选', 'Reset Filters')}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
 
       <DetailList
         details={details}

@@ -6,10 +6,10 @@ import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -379,38 +379,53 @@ export function ReceiptManager() {
         </Alert>
       )}
 
-      <Card>
-        <CardContent className="pt-6 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <Input placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')} value={search} onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }} />
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="justify-between" aria-label={tx('状态筛选', 'Status Filter')}>
-                <span>{tx('状态筛选', 'Status Filter')}</span>
-                <span className="text-xs text-muted-foreground">{statusSummary}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-72">
-              <div className="mb-3 text-sm font-medium">{tx('状态筛选', 'Status Filter')}</div>
-              <div className="grid gap-2">
-                {receiptStatusOptions.map((status) => (
-                  <Label key={status} className="flex items-center gap-2 text-sm font-normal">
-                    <input
-                      type="checkbox"
-                      aria-label={status}
-                      checked={statusFilter.includes(status)}
-                      onChange={() => toggleStatusFilter(status)}
-                    />
-                    <span>{status}</span>
-                  </Label>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
-          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
-          <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => { setMinUsd(e.target.value); resetToFirstPage(); }} />
-          <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => { setMaxUsd(e.target.value); resetToFirstPage(); }} />
-          <div className="md:col-span-3 lg:col-span-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <ResponsiveFilterCard
+        testIdPrefix="receipt"
+        filterLabel={tx('筛选', 'Filters')}
+        renderSearch={() => (
+          <Input
+            placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')}
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }}
+          />
+        )}
+        renderMobileSearchAction={() => (
+          <Button onClick={applyFilters}>{tx('查询', 'Search')}</Button>
+        )}
+        renderFilters={() => (
+          <>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="justify-between" aria-label={tx('状态筛选', 'Status Filter')}>
+                  <span>{tx('状态筛选', 'Status Filter')}</span>
+                  <span className="text-xs text-muted-foreground">{statusSummary}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72">
+                <div className="mb-3 text-sm font-medium">{tx('状态筛选', 'Status Filter')}</div>
+                <div className="grid gap-2">
+                  {receiptStatusOptions.map((status) => (
+                    <Label key={status} className="flex items-center gap-2 text-sm font-normal">
+                      <input
+                        type="checkbox"
+                        aria-label={status}
+                        checked={statusFilter.includes(status)}
+                        onChange={() => toggleStatusFilter(status)}
+                      />
+                      <span>{status}</span>
+                    </Label>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
+            <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => { setMinUsd(e.target.value); resetToFirstPage(); }} />
+            <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => { setMaxUsd(e.target.value); resetToFirstPage(); }} />
+          </>
+        )}
+        renderActions={() => (
+          <div className="flex flex-col gap-2 md:col-span-3 lg:col-span-6 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
               onClick={resetFilters}
@@ -419,8 +434,8 @@ export function ReceiptManager() {
             </Button>
             <Button onClick={applyFilters}>{tx('查询', 'Search')}</Button>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
 
       <ReceiptList
         receipts={receipts}

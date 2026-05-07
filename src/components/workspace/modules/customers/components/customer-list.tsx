@@ -14,6 +14,7 @@ export type CustomerListProps = {
   formatOwnerLabel: (row: Record<string, unknown>) => string;
   truncateLongText: (value: string, maxLength?: number) => string;
   onPreviewLongText: (label: string, value: string) => void;
+  onOpenOrderNameHistory: (row: Record<string, unknown>, orderName: string) => void;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 };
@@ -27,9 +28,20 @@ export function CustomerList({
   formatOwnerLabel,
   truncateLongText,
   onPreviewLongText,
+  onOpenOrderNameHistory,
   onEdit,
   onDelete,
 }: CustomerListProps) {
+  const getOrderNames = (row: Record<string, unknown>) => {
+    const aliases = Array.isArray(row.orderNames)
+      ? row.orderNames
+        .map((item) => (item && typeof item === 'object' ? String((item as Record<string, unknown>).orderName || '').trim() : ''))
+        .filter(Boolean)
+      : [];
+    const primary = String(row.orderName || '').trim();
+    return Array.from(new Set([primary, ...aliases].filter(Boolean)));
+  };
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -53,10 +65,24 @@ export function CustomerList({
             {customers.map((row) => {
               const consigneeFull = String(row.consignee || '').trim();
               const addressFull = String(row.companyAddress || '').trim();
+              const orderNames = getOrderNames(row);
               return (
                 <TableRow key={String(row.id)}>
                   <TableCell>{String(row.mark || '-')}</TableCell>
-                  <TableCell>{String(row.orderName || '-')}</TableCell>
+                  <TableCell>
+                    <div className="flex min-w-[160px] flex-wrap gap-1">
+                      {orderNames.length > 0 ? orderNames.map((orderName) => (
+                        <button
+                          key={orderName}
+                          type="button"
+                          className="rounded-full border px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:underline"
+                          onClick={() => onOpenOrderNameHistory(row, orderName)}
+                        >
+                          {orderName}
+                        </button>
+                      )) : '-'}
+                    </div>
+                  </TableCell>
                   <TableCell>{String(row.name || '-')}</TableCell>
                   <TableCell
                     className={row.phoneConflict ? 'text-red-600 font-medium' : undefined}

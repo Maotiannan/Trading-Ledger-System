@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DetailStatus, ReceiptStatus, SwiftStatus } from '@prisma/client';
 import { UploadedAssetCategory } from '@prisma/client';
 import { db } from '@/lib/db';
-import { recognizeSwift } from '@/lib/ocr';
+import { recognizeSwift, recognizeSwiftPdf } from '@/lib/ocr';
 import { withAuth } from '@/lib/route-auth';
 import { UploadValidationError } from '@/lib/upload';
 import { assertSearchLength, InputValidationError, parseJsonWithSchema, swiftPayloadSchema } from '@/lib/validators';
@@ -41,6 +41,12 @@ function parseSwiftPayload(data: Record<string, unknown>) {
 
 function parseSwiftCreatePayload(data: Record<string, unknown>) {
   return parseSwiftPayloadValue(data.data ?? data);
+}
+
+function isPdfUpload(file: File): boolean {
+  const mime = (file.type || '').toLowerCase();
+  const name = String(file.name || '').toLowerCase();
+  return mime === 'application/pdf' || name.endsWith('.pdf');
 }
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -114,13 +120,14 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         throw createApiError({
           code: 'BAD_REQUEST',
           status: 400,
-          message: '请上传图片',
+          message: '请上传SWIFT水单图片或PDF文件',
         });
       }
 
       try {
-        const base64 = await toOcrDataUrl(file);
-        const ocrResult = normalizeSwiftOcrResult(await recognizeSwift(base64));
+        const ocrResult = normalizeSwiftOcrResult(isPdfUpload(file)
+          ? await recognizeSwiftPdf(file)
+          : await recognizeSwift(await toOcrDataUrl(file)));
         const imagePath = await stageUploadedAsset({
           file,
           category: UploadedAssetCategory.SWIFT_OCR,

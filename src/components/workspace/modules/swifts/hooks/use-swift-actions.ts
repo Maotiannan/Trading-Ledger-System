@@ -75,15 +75,15 @@ export function useSwiftActions({
   const buildOcrUploadMessage = (event: Pick<BusinessImageUploadStageEvent, 'stage' | 'progress' | 'compressed'>) => {
     switch (event.stage) {
       case 'compressing':
-        return tx('正在压缩图片...', 'Compressing image...');
+        return tx('正在准备文件...', 'Preparing file...');
       case 'uploading': {
         const percent = typeof event.progress === 'number' ? event.progress : 0;
         return event.compressed
           ? tx(`正在上传压缩后的图片（${percent}%）...`, `Uploading compressed image (${percent}%)...`)
-          : tx(`正在上传图片（${percent}%）...`, `Uploading image (${percent}%)...`);
+          : tx(`正在上传文件（${percent}%）...`, `Uploading file (${percent}%)...`);
       }
       case 'saving':
-        return tx('图片已上传，AI正在识别...', 'Image uploaded. AI is recognizing...');
+        return tx('文件已上传，AI正在识别...', 'File uploaded. AI is recognizing...');
       case 'success':
         return tx('AI识别完成', 'AI recognition completed.');
       case 'failed':

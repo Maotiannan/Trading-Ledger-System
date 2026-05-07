@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { SwiftManager } from './swift-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -195,5 +195,22 @@ describe('SwiftManager', () => {
     const swiftListProps = (globalThis as { __swiftListProps?: SwiftListProps }).__swiftListProps;
     expect(swiftListProps?.isAdmin).toBe(true);
     expect(swiftListProps?.onMarkReceived).toBe(handleMarkSwiftReceived);
+  });
+
+  it('keeps only search and the filter toggle in the mobile filter bar', async () => {
+    await act(async () => {
+      render(<SwiftManager />);
+    });
+
+    const mobileBar = screen.getByTestId('swift-mobile-filter-bar');
+    expect(mobileBar).toHaveTextContent('筛选');
+    expect(mobileBar.querySelector('input[placeholder="搜索汇款人/收款人/账号"]')).toBeInTheDocument();
+
+    const mobileContent = screen.getByTestId('swift-mobile-filter-content');
+    expect(mobileContent).toHaveAttribute('data-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: '筛选' }));
+
+    expect(screen.getByTestId('swift-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
   });
 });

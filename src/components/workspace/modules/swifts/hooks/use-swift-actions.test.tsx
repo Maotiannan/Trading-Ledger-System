@@ -218,7 +218,7 @@ describe('useSwiftActions', () => {
     expect(setOcrUploadStatus).toHaveBeenCalledWith('saving');
     expect(setOcrUploadStatus).toHaveBeenCalledWith('success');
     expect(setOcrUploadMessage).toHaveBeenCalledWith('正在上传压缩后的图片（42%）...');
-    expect(setOcrUploadMessage).toHaveBeenCalledWith('图片已上传，AI正在识别...');
+    expect(setOcrUploadMessage).toHaveBeenCalledWith('文件已上传，AI正在识别...');
     expect(setOcrUploadProgress).toHaveBeenCalledWith(42);
     expect(setOcrUploadProgress).toHaveBeenCalledWith(100);
   });

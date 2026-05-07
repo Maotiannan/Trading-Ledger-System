@@ -190,7 +190,30 @@ Recommended verification ladder:
 5. `npm run build`
 6. `docker compose up -d --build` when local service must be updated
 
-## 11. Practical Default For Future Changes
+## 11. Docker And Data Safety
+
+The active business database and upload storage must be treated as production data, even during local verification.
+
+Hard rules:
+- do not run `docker compose down -v` on the active project
+- do not remove Docker volumes that may contain business data
+- do not run `prisma migrate reset`, `prisma db push --force-reset`, or any reset command against the active database
+- do not clear, truncate, or recreate business tables unless the user explicitly approves a verified backup-and-restore plan
+- do not test a new risky deployment by replacing the active data service
+
+Safe defaults:
+- prefer app-only rebuilds: `docker compose up -d --build app`
+- run typecheck, lint, unit tests, and isolated API tests before rebuilding the active app
+- if a new version needs risky runtime validation, start a separate test deployment instead of touching existing data services
+- before database schema changes, document the migration path, rollback path, and data-risk assessment
+- before any command that could affect persistent storage, state the exact data impact in plain language
+
+Operational note:
+- Docker Desktop errors such as daemon EOF, lingering process warnings, or app-container rebuild failures are not database deletion events by themselves.
+- App container rebuilds should not delete external MySQL data or NAS-uploaded files.
+- Data risk mainly comes from destructive volume/database commands, not from normal app image rebuilds.
+
+## 12. Practical Default For Future Changes
 
 When unsure, use this default bundle:
 - code change

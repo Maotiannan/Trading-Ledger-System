@@ -5,9 +5,9 @@ import { useStore, type Swift } from '@/lib/store';
 import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -238,19 +238,27 @@ export function SwiftManager() {
         </Alert>
       )}
 
-      <Card>
-        <CardContent className="pt-6 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <ResponsiveFilterCard
+        testIdPrefix="swift"
+        filterLabel={tx('筛选', 'Filters')}
+        renderSearch={() => (
           <Input placeholder={tx('搜索汇款人/收款人/账号', 'Search sender/receiver/account')} value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="border rounded-md px-3 py-2 text-sm" value={hasErrorFilter} onChange={(e) => setHasErrorFilter(e.target.value)}>
-            <option value="">{tx('全部状态', 'All statuses')}</option>
-            <option value="true">{tx('仅异常', 'Errors only')}</option>
-            <option value="false">{tx('仅正常', 'Normal only')}</option>
-          </select>
-          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
-          <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
-          <div className="md:col-span-3 lg:col-span-6 flex justify-end">
+        )}
+        renderFilters={() => (
+          <>
+            <select className="border rounded-md px-3 py-2 text-sm" value={hasErrorFilter} onChange={(e) => setHasErrorFilter(e.target.value)}>
+              <option value="">{tx('全部状态', 'All statuses')}</option>
+              <option value="true">{tx('仅异常', 'Errors only')}</option>
+              <option value="false">{tx('仅正常', 'Normal only')}</option>
+            </select>
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} />
+            <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} />
+          </>
+        )}
+        renderActions={() => (
+          <div className="flex justify-end md:col-span-3 lg:col-span-6">
             <Button
               variant="outline"
               onClick={() => {
@@ -265,8 +273,8 @@ export function SwiftManager() {
               {tx('重置筛选', 'Reset Filters')}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
 
       <SwiftList
         swifts={swifts}

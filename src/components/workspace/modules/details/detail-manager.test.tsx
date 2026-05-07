@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { DetailManager } from './detail-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -209,5 +209,22 @@ describe('DetailManager', () => {
       { mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: 'receipt-1' },
     ]);
     expect(openedEditDialogProps?.linkedReceiptLabels).toEqual(['MAB-1-01']);
+  });
+
+  it('keeps only search and the filter toggle in the mobile filter bar', async () => {
+    await act(async () => {
+      render(<DetailManager />);
+    });
+
+    const mobileBar = screen.getByTestId('detail-mobile-filter-bar');
+    expect(mobileBar).toHaveTextContent('筛选');
+    expect(mobileBar.querySelector('input[placeholder="搜索唛头/单号"]')).toBeInTheDocument();
+
+    const mobileContent = screen.getByTestId('detail-mobile-filter-content');
+    expect(mobileContent).toHaveAttribute('data-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: '筛选' }));
+
+    expect(screen.getByTestId('detail-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
   });
 });

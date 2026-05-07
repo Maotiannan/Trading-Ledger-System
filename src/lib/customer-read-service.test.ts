@@ -2,6 +2,7 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import {
+  getCustomerOrderNameHistory,
   listCustomerOwnerOptions,
   listCustomers,
 } from '@/lib/customer-read-service';
@@ -13,6 +14,13 @@ jest.mock('@/lib/db', () => ({
       findMany: jest.fn(),
     },
     customer: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    order: {
+      findMany: jest.fn(),
+    },
+    receipt: {
       findMany: jest.fn(),
     },
   },
@@ -49,7 +57,9 @@ function makeUser(overrides: Partial<{
 
 const mockDb = db as unknown as {
   user: { findMany: jest.Mock };
-  customer: { findMany: jest.Mock };
+  customer: { findMany: jest.Mock; findFirst: jest.Mock };
+  order: { findMany: jest.Mock };
+  receipt: { findMany: jest.Mock };
 };
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockCanSalesEditExtendedCustomerFields = canSalesEditExtendedCustomerFields as jest.Mock;
@@ -424,5 +434,72 @@ describe('customer-read-service', () => {
         ],
       }),
     ]);
+  });
+
+  it('returns selected ORDER_NAME history and recent receipts for a visible customer', async () => {
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'MAB',
+      orderName: 'MAB-1',
+      orderNames: [
+        { orderName: 'MAB-1', normalizedOrderName: 'mab-1', isPrimary: true },
+        { orderName: 'MARY', normalizedOrderName: 'mary', isPrimary: false },
+      ],
+    });
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-1',
+        orderNo: 'MAB-1-10',
+        amount: 1000,
+        orderBalance: 250,
+        invoice: { invNo: 'L25MH090001' },
+        createdAt: new Date('2026-05-07T00:00:00Z'),
+      },
+      {
+        id: 'order-2',
+        orderNo: 'MARY-01',
+        amount: 500,
+        orderBalance: 0,
+        invoice: { invNo: 'L25MH090002' },
+        createdAt: new Date('2026-05-08T00:00:00Z'),
+      },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      {
+        id: 'receipt-1',
+        receiptNo: '0001001',
+        orderNo: 'MAB-1-10',
+        invNo: 'L25MH090001',
+        usd: 750,
+        status: 'RECEIVED',
+        date: new Date('2026-05-07T00:00:00Z'),
+        createdAt: new Date('2026-05-07T00:00:00Z'),
+      },
+    ]);
+
+    const result = await getCustomerOrderNameHistory(makeUser(), {
+      customerId: 'customer-1',
+      orderName: 'MAB-1',
+    });
+
+    expect(result.data.orders).toEqual([
+      {
+        id: 'order-1',
+        orderNo: 'MAB-1-10',
+        invNo: 'L25MH090001',
+        amount: 1000,
+        outstanding: 250,
+      },
+    ]);
+    expect(result.data.receipts).toEqual([
+      expect.objectContaining({
+        id: 'receipt-1',
+        receiptNo: '0001001',
+        status: 'RECEIVED',
+      }),
+    ]);
+    expect(mockDb.customer.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: 'customer-1' }),
+    }));
   });
 });

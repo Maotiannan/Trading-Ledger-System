@@ -221,11 +221,30 @@ describe('ReceiptManager', () => {
     fireEvent.click(screen.getByLabelText('RECEIVED'));
     expect(mockApiCall).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: /查询/ }));
+    const queryButtons = screen.getAllByRole('button', { name: /查询/ });
+    fireEvent.click(queryButtons[queryButtons.length - 1]);
 
     await waitFor(() => {
       expect(mockApiCall).toHaveBeenCalledWith(expect.stringContaining('status=RECEIVED'));
     });
+  });
+
+  it('keeps only search, mobile filters toggle, and search action in the mobile filter bar', async () => {
+    await act(async () => {
+      render(<ReceiptManager />);
+    });
+
+    const mobileBar = screen.getByTestId('receipt-mobile-filter-bar');
+    expect(mobileBar).toHaveTextContent('筛选');
+    expect(mobileBar).toHaveTextContent('查询');
+    expect(mobileBar.querySelector('input[placeholder="搜索收据号/单号/付款人"]')).toBeInTheDocument();
+
+    const mobileContent = screen.getByTestId('receipt-mobile-filter-content');
+    expect(mobileContent).toHaveAttribute('data-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: '筛选' }));
+
+    expect(screen.getByTestId('receipt-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
   });
 
   it('resets to page 1 when the page size changes', async () => {

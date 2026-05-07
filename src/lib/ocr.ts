@@ -64,19 +64,29 @@ function resolveVisionModel(config: OcrConfig): string {
   return 'glm-4.6v';
 }
 
-function prepareImageUrlForProvider(imageBase64: string, config: OcrConfig): string {
-  const input = String(imageBase64 || '').trim();
+function prepareOcrInputUrlForProvider(ocrInput: string, config: OcrConfig): string {
+  const input = String(ocrInput || '').trim();
   if (!input) return input;
   if (input.startsWith('http://') || input.startsWith('https://')) return input;
   if (input.startsWith('data:')) return input;
   return ensureDataUrl(input);
 }
 
-function ensureDataUrl(imageBase64: string): string {
-  if (imageBase64.startsWith('data:')) return imageBase64;
-  return `data:image/jpeg;base64,${imageBase64}`;
+function ensureDataUrl(ocrInput: string): string {
+  if (ocrInput.startsWith('data:')) return ocrInput;
+  return `data:image/jpeg;base64,${ocrInput}`;
 }
 
+function isPdfOcrInputUrl(url: string): boolean {
+  return /^data:application\/pdf[;,]/i.test(url) || /\.pdf(?:[?#].*)?$/i.test(url);
+}
+
+function buildOcrFileContentPart(url: string) {
+  if (isPdfOcrInputUrl(url)) {
+    return { type: 'file_url', file_url: { url } };
+  }
+  return { type: 'image_url', image_url: { url } };
+}
 
 function parseBoolean(value: string): boolean {
   return value.toLowerCase() === 'true';
@@ -128,7 +138,7 @@ async function createVisionCompletion(
   }
 
   const model = resolveVisionModel(config);
-  const imageUrl = prepareImageUrlForProvider(imageBase64, config);
+  const ocrInputUrl = prepareOcrInputUrlForProvider(imageBase64, config);
   const body: Record<string, unknown> = {
     model,
     messages: [
@@ -136,7 +146,7 @@ async function createVisionCompletion(
         role: 'user',
         content: [
           { type: 'text', text: prompt },
-          { type: 'image_url', image_url: { url: imageUrl } },
+          buildOcrFileContentPart(ocrInputUrl),
         ],
       },
     ],
@@ -163,6 +173,88 @@ async function createVisionCompletion(
   }
 
   return response.json();
+}
+
+async function createTextCompletion(
+  prompt: string,
+  config: OcrConfig,
+  signal?: AbortSignal
+) {
+  if (config.disabled) {
+    throw new Error('OCR disabled by OCR_DISABLED=true');
+  }
+  if (!config.apiKey) {
+    throw new Error('OCR_API_KEY is not configured');
+  }
+
+  const body: Record<string, unknown> = {
+    model: resolveVisionModel(config),
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0,
+  };
+  if (isBigModelProvider(config.apiBaseUrl)) {
+    body.thinking = { type: 'disabled' };
+  }
+
+  const response = await fetch(buildEndpoint(config.apiBaseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`OCR provider HTTP ${response.status}: ${text}`);
+  }
+
+  return response.json();
+}
+
+async function parsePdfFileToText(
+  file: File,
+  config: OcrConfig,
+  signal?: AbortSignal
+): Promise<string> {
+  if (config.disabled) {
+    throw new Error('OCR disabled by OCR_DISABLED=true');
+  }
+  if (!config.apiKey) {
+    throw new Error('OCR_API_KEY is not configured');
+  }
+
+  const formData = new FormData();
+  formData.append('file', file, file.name || 'swift.pdf');
+  formData.append('tool_type', 'prime-sync');
+  formData.append('file_type', 'PDF');
+
+  const response = await fetch(buildEndpoint(config.apiBaseUrl, '/files/parser/sync'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: formData,
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`OCR PDF parser HTTP ${response.status}: ${text}`);
+  }
+
+  const json = await response.json().catch(() => ({}));
+  if (json?.status !== 'succeeded') {
+    throw new Error(`OCR PDF parser failed: ${json?.message || json?.status || 'unknown error'}`);
+  }
+
+  const content = typeof json?.content === 'string' ? json.content.trim() : '';
+  if (!content) {
+    throw new Error('OCR PDF parser returned empty content');
+  }
+  return content;
 }
 
 async function probeProviderModels(
@@ -319,6 +411,11 @@ function parseJsonObject<T>(content: string): T | null {
         continue;
       }
 
+      if (ch.charCodeAt(0) < 0x20) {
+        out += ' ';
+        continue;
+      }
+
       if (ch === '"') {
         let j = i + 1;
         while (j < raw.length && /\s/.test(raw[j])) j++;
@@ -403,6 +500,38 @@ async function runVisionRequest<T>(
   }
 }
 
+async function runTextRequest<T>(
+  label: string,
+  prompt: string,
+  fallback: T
+): Promise<T> {
+  const config = await getOcrConfig();
+
+  if (!canUseOcr(config)) {
+    logOcrDisabledReason(label, config);
+    return fallback;
+  }
+
+  try {
+    const response = await withRetry(
+      (signal) => createTextCompletion(prompt, config, signal),
+      label,
+      config
+    );
+
+    logUsage(label, response, config);
+    const content = response?.choices?.[0]?.message?.content || '{}';
+    const parsed = parseJsonObject<T>(content);
+    if (parsed) return parsed;
+
+    console.error(`[OCR:${label}] parse failed`, content);
+    throw new Error('OCR响应解析失败，请检查模型输出格式');
+  } catch (error) {
+    console.error(`[OCR:${label}] request failed`, error);
+    throw (error instanceof Error ? error : new Error('OCR识别失败'));
+  }
+}
+
 // 识别收据(RECEIPT)
 export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrResult> {
   const prompt = `请识别这张收据图片并提取以下信息，以JSON格式返回：
@@ -472,7 +601,7 @@ export async function recognizeDetail(imageBase64: string): Promise<DetailOcrRes
 
 // 识别SWIFT水单
 export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResult> {
-  const prompt = `请识别这张SWIFT转账水单图片并提取以下信息，以JSON格式返回：
+  const prompt = `请识别这份SWIFT转账水单图片或PDF文件并提取以下信息；如果PDF有多页，必须联合阅读所有页面后再给出最终数据，以JSON格式返回：
 {
   "amount": 汇款金额(数字，不含货币符号),
   "date": "汇款日期(格式: YYYY-MM-DD)",
@@ -489,7 +618,8 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
 4. 金额优先取 :32A: 或正文中最明确的业务汇款金额，返回数字，不含货币符号和千位分隔。
 5. 日期优先取 Value Date / :32A: 日期，并格式化为 YYYY-MM-DD。
 6. 如果某个字段无法识别，返回 null。
-7. 只返回JSON，不要其他文字。`;
+7. 如果PDF多页存在重复字段，以业务正文 Message Text / Block 4 和 Value Date / :32A: 的最终一致结果为准。
+8. 只返回JSON，不要其他文字。`;
 
   const fallback: SwiftOcrResult = {
     amount: null,
@@ -501,6 +631,54 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
   };
 
   const raw = await runVisionRequest<SwiftOcrResult>('swift', imageBase64, prompt, fallback);
+  return normalizeSwiftOcrResult(raw);
+}
+
+export async function recognizeSwiftPdf(file: File): Promise<SwiftOcrResult> {
+  const fallback: SwiftOcrResult = {
+    amount: null,
+    date: null,
+    senderName: null,
+    senderAddress: null,
+    receiverName: null,
+    receiverAccount: null
+  };
+  const config = await getOcrConfig();
+
+  if (!canUseOcr(config)) {
+    logOcrDisabledReason('swift-pdf', config);
+    return fallback;
+  }
+
+  const parsedText = await withRetry(
+    (signal) => parsePdfFileToText(file, config, signal),
+    'swift-pdf-parser',
+    config
+  );
+
+  const prompt = `请根据下面这份多页SWIFT水单PDF解析文本，提取业务汇款信息，以JSON格式返回：
+{
+  "amount": 汇款金额(数字，不含货币符号),
+  "date": "汇款日期(格式: YYYY-MM-DD)",
+  "senderName": "业务付款人姓名（优先取报文正文 Block 4 里的 :50K: 字段，不要取报文头 Sender BIC）",
+  "senderAddress": "业务付款人地址（取 :50K: 后续地址行）",
+  "receiverName": "业务收款人名称（优先取报文正文 Block 4 里的 :59: 收款方名称，不要取报文头 Receiver BIC）",
+  "receiverAccount": "业务收款人银行账号（取 :59: 账号部分）"
+}
+
+注意：
+1. 必须联合阅读所有页的解析文本。
+2. 必须优先解析 Message Text / Block 4 中的 :50K:、:59:、:32A:，不要把报文头 Sender/Receiver BIC 当作业务付款人/收款人。
+3. 金额返回数字，不含货币符号和千位分隔。
+4. 日期优先取 Value Date / :32A: 日期，并格式化为 YYYY-MM-DD。
+5. receiverAccount 只返回数字账号；如果OCR带出斜杠、空格或把0识别成O，请自行清洗。
+6. 如果某个字段无法识别，返回 null。
+7. 只返回JSON，不要其他文字。
+
+PDF解析文本：
+${parsedText}`;
+
+  const raw = await runTextRequest<SwiftOcrResult>('swift-pdf', prompt, fallback);
   return normalizeSwiftOcrResult(raw);
 }
 

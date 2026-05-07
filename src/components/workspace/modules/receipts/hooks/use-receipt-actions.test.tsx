@@ -366,6 +366,65 @@ describe('useReceiptActions', () => {
     expect(result.current.uploading).toBe(false);
   });
 
+  it('keeps OCR recognition stage messages clear after upload reaches 100 percent', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: false,
+      },
+    });
+    mockUploadBusinessImage.mockImplementationOnce(async (options) => {
+      options.onStageChange?.({ stage: 'compressing', progress: null, compressed: null });
+      options.onStageChange?.({ stage: 'uploading', progress: 100, compressed: true, preparedFile: file });
+      options.onStageChange?.({ stage: 'saving', progress: 100, compressed: true, preparedFile: file });
+      const response = {
+        success: true,
+        data: {
+          ocrResult: { receiptNo: 'OCR-STAGE', orderNo: 'MAB-1-10' },
+          image: { path: '/uploads/receipt-stage.png', name: 'receipt-stage.png' },
+        },
+      };
+      options.onStageChange?.({
+        stage: 'success',
+        progress: 100,
+        compressed: true,
+        preparedFile: file,
+        response,
+      });
+      return {
+        prepared: {
+          file,
+          compressed: true,
+          qualityUsed: 0.72,
+          originalSize: file.size,
+          outputSize: file.size,
+          targetMaxBytes: 500 * 1024,
+        },
+        response,
+      };
+    });
+    const { result, history } = renderStatefulReceiptActions();
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file], value: 'receipt.png' },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(history.ocrUploadMessageHistory).toEqual(expect.arrayContaining([
+      '图片上传完成，AI 正在识别收据内容...',
+      'AI 已回传内容，正在整理识别字段...',
+      'AI识别完成，请核对后创建收据。',
+    ]));
+    expect(result.current.ocrUploadStatus).toBe('success');
+    expect(result.current.ocrUploadProgress).toBe(100);
+    expect(result.current.ocrResult).toEqual(normalizedOcr({
+      receiptNo: 'OCR-STAGE',
+      orderNo: 'MAB-1-10',
+    }));
+  });
+
   it('normalizes OCR aliases so recognized ORDER NO is kept and deposit defaults unchecked', async () => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
     mockApiCall.mockResolvedValueOnce({
@@ -661,7 +720,7 @@ describe('useReceiptActions', () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.ocrUploadStatus).toBe('success');
-    expect(result.current.ocrUploadMessage).toBe('AI识别完成');
+    expect(result.current.ocrUploadMessage).toBe('AI识别完成，请核对后创建收据。');
     expect(result.current.ocrUploadProgress).toBe(100);
     expect(result.current.ocrResult).toEqual(normalizedOcr({ receiptNo: 'OCR-1' }));
     expect(result.current.savedImagePath).toEqual({ path: '/uploads/partial-receipt.png', name: 'partial-receipt.png' });
@@ -875,7 +934,7 @@ describe('useReceiptActions', () => {
     expect(mockUploadBusinessImage).toHaveBeenCalledTimes(2);
     expect(result.current.error).toBeNull();
     expect(result.current.ocrUploadStatus).toBe('success');
-    expect(result.current.ocrUploadMessage).toBe('AI识别完成');
+    expect(result.current.ocrUploadMessage).toBe('AI识别完成，请核对后创建收据。');
     expect(result.current.ocrUploadProgress).toBe(100);
     expect(result.current.ocrResult).toEqual(normalizedOcr({ receiptNo: 'OCR-RETRY-SUCCESS' }));
     expect(result.current.savedImagePath).toEqual({ path: '/uploads/retry-success.png', name: 'retry-success.png' });

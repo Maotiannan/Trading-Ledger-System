@@ -8,6 +8,7 @@ import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { createOrder, ensureDepositPoolInvoice, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
+import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
@@ -38,13 +39,6 @@ function parseEditableDateValue(date: string | null | undefined): Date | null {
   }
 
   return parsed;
-}
-
-function formatReceiptPayer(customerPayerName: string | null | undefined, customerMark: string | null | undefined): string | null {
-  const base = String(customerPayerName || '').trim();
-  const mark = String(customerMark || '').trim();
-  if (!base) return null;
-  return mark ? `${base} "${mark}"` : base;
 }
 
 async function getReceiptOwnerVisibleIds(currentUser: CurrentUser): Promise<string[]> {
@@ -134,10 +128,10 @@ export async function createReceiptRecord(params: {
     customerOrderNo: effectiveOrderNo,
   });
   const effectiveInvNo = matchedOrder ? (payload.invNo || null) : null;
-  const effectivePayer = formatReceiptPayer(
-    customerResolution.customerPayerName,
-    customerResolution.customerMark,
-  ) || (payload.payer || null);
+  const effectivePayer = formatCustomerPayerLabel({
+    name: customerResolution.customerPayerName,
+    mark: customerResolution.customerMark,
+  }) || (payload.payer || null);
 
   const effectiveDate = payload.date
     ? new Date(payload.date)

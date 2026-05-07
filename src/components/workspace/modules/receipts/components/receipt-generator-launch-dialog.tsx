@@ -4,12 +4,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatCustomerPayerLabel } from '@/lib/customer-display';
 
 type OrderContext = {
   invNo: string | null;
   customer: {
     id: string;
     mark: string;
+    companyName?: string | null;
     name: string;
     phone: string | null;
     city: string | null;
@@ -58,6 +60,14 @@ export function ReceiptGeneratorLaunchDialog({
   onPaymentModeChange,
   onSubmit,
 }: ReceiptGeneratorLaunchDialogProps) {
+  const customerLabel = context?.customer
+    ? formatCustomerPayerLabel({
+        companyName: context.customer.companyName,
+        name: context.customer.name,
+        mark: context.customer.mark,
+      }, { fallbackToMark: true })
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -117,7 +127,7 @@ export function ReceiptGeneratorLaunchDialog({
               </div>
               <div>
                 <div className="text-muted-foreground">{tx('客户', 'Customer')}</div>
-                <div>{context?.customer ? `${context.customer.name} "${context.customer.mark}"` : '-'}</div>
+                <div>{customerLabel || '-'}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">{tx('电话', 'Phone')}</div>

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.129
+> 当前版本：v1.0.130
 > 最后更新：2026-05-07
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 收据 OCR 进度与客户显示规则收口：确认 `Upload Receipt` 在上传完成后仍等待 `/api/receipt?action=recognize` 返回，旧 UI 只显示 `100%` 进度条导致用户感知为卡死；现将阶段拆为压缩、上传、AI 识别、AI 回传整理、识别完成核对，并补 hook 回归。新增 `customer-display` 纯工具统一 `COMPANY_NAME -> NAME + "MARK"` 显示规则，替换 `receipt-service / receipt-generator-layout / invoice-read-service / api client / Generate Signed Receipt` 弹窗内的重复拼接逻辑，防止模板层再次退回只用 `customer.name`；补齐工具、弹窗、hook、client 回归 ✅ 2026-05-07
 
 - [x] 复合订单收据录入回填收口：`lookupOrderContextByOrderNo` 新增 `orderSuggestion` 返回真实命中的完整 `ORDER NO`，`Upload Receipt / Create Receipt Directly` 表单在单段 `AB-13B` 命中复合订单 `AB-13B/AB-12B` 时会回填完整订单；`receipt-service` 后端入库同步改为优先保存 `matchedOrder.orderNo`，防止绕过前端直接 API 只存单段；`Generate Signed Receipt` 的 order context、预览、session 创建和占位收据也同步使用完整订单；底层 `order-alias` 兼容旧空格复合格式 `AB-13B AB-12B`，同时避免误拆 `OUMAR LAH-01` 等正常空格订单名；补齐 client/forms/service/generator/order-alias 回归 ✅ 2026-05-07
 

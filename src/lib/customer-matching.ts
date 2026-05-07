@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { getCustomerPayerBase } from '@/lib/customer-display';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
@@ -83,7 +84,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
       customerId: customer.id,
       customerMark: customer.mark,
       customerName: matchedOrderName,
-      customerPayerName: normalize(customer.companyName) || normalize(customer.name) || null,
+      customerPayerName: getCustomerPayerBase(customer),
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -99,7 +100,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
         customerId: selected.id,
         customerMark: selected.mark,
         customerName: selected.orderName,
-        customerPayerName: normalize(selected.companyName) || normalize(selected.name) || null,
+        customerPayerName: getCustomerPayerBase(selected),
         customerPhone: selected.phone,
         customerCity: selected.city,
         needsCustomerFix: false,
@@ -121,7 +122,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
         customerId: matchedAlias.customer.id,
         customerMark: matchedAlias.customer.mark,
         customerName: matchedAlias.orderName,
-        customerPayerName: normalize(matchedAlias.customer.companyName) || normalize(matchedAlias.customer.name) || null,
+        customerPayerName: getCustomerPayerBase(matchedAlias.customer),
         customerPhone: matchedAlias.customer.phone,
         customerCity: matchedAlias.customer.city,
         needsCustomerFix: false,

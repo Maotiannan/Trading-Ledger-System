@@ -1,3 +1,5 @@
+import { formatCustomerPayerLabel } from '@/lib/customer-display';
+
 export const RECEIPT_GENERATOR_RECEIVED_BY = 'Mamadou Dian Diallo';
 
 type ReceiptGeneratorLayoutInput = {
@@ -108,10 +110,11 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
   const customerCompanyName = (input.customerCompanyName || '').trim();
   const customerName = (input.customerName || '').trim();
   const customerMark = (input.customerMark || '').trim();
-  const displayName = customerCompanyName || customerName;
-  const clientName = displayName && customerMark
-    ? `${displayName} "${customerMark}"`
-    : displayName || customerMark || '-';
+  const clientName = formatCustomerPayerLabel({
+    companyName: customerCompanyName,
+    name: customerName,
+    mark: customerMark,
+  }, { fallbackToMark: true }) || '-';
   const motifParts = ['Payment for'];
   if (input.invNo) motifParts.push(input.invNo);
   motifParts.push(input.orderNo);

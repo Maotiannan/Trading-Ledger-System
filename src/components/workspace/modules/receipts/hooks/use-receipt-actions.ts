@@ -118,9 +118,9 @@ export function useReceiptActions({
           : tx(`正在上传图片（${percent}%）...`, `Uploading image (${percent}%)...`);
       }
       case 'saving':
-        return tx('图片已上传，AI正在识别...', 'Image uploaded. AI is recognizing...');
+        return tx('图片上传完成，AI 正在识别收据内容...', 'Image uploaded. AI is recognizing receipt content...');
       case 'success':
-        return tx('AI识别完成', 'AI recognition completed.');
+        return tx('AI 已回传内容，正在整理识别字段...', 'AI returned content. Organizing recognized fields...');
       case 'failed':
         return null;
       default:
@@ -291,11 +291,9 @@ export function useReceiptActions({
       const successfulPayload = getSuccessfulOcrPayload(response, invalidPayloadMessage);
       setOcrResult(successfulPayload.ocrResult);
       setSavedImagePath(successfulPayload.image);
-      applyOcrUploadStage({
-        stage: 'success',
-        progress: 100,
-        compressed: null,
-      });
+      setOcrUploadStatus('success');
+      setOcrUploadProgress(100);
+      setOcrUploadMessage(tx('AI识别完成，请核对后创建收据。', 'AI recognition completed. Please verify before creating the receipt.'));
     } catch (err) {
       const message = getApiErrorMessage(err, tx('AI识别失败，请重试', 'AI recognition failed, please retry.'));
       applyOcrUploadStage({

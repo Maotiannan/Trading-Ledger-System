@@ -10,6 +10,7 @@ import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
+import { getCustomerPayerBase } from '@/lib/customer-display';
 
 function rankInvoice(invNo: string) {
   if (invNo === 'DEPOSIT_POOL') return 0;
@@ -284,9 +285,7 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
   const exactContextMatches = exactMatches.map((row) => ({
     ...row,
     customerPhone: row.customerPhone || row.customer?.phone || null,
-    customerPayer: row.customer?.companyName?.trim()
-      ? row.customer.companyName.trim()
-      : (row.customer?.name?.trim() || null),
+    customerPayer: getCustomerPayerBase(row.customer || {}),
   }));
 
   let inferredCustomer: null | {

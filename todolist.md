@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.129
+> 当前版本：v1.0.130
 > 最后更新：2026-05-07
 
 ## 当前状态
@@ -45,6 +45,10 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.130
+- `Upload Receipt` 上传图片到 `100%` 后，现在会继续展示后端 OCR 的真实阶段：AI 正在识别、AI 已回传内容、正在整理识别字段、识别完成请核对，减少“100% 后一直转圈”的误解。
+- 客户/付款人显示规则抽成统一能力：优先 `COMPANY_NAME + "MARK"`，没有公司名时回退 `NAME + "MARK"`。`Generate Signed Receipt` 弹窗、收据创建入库、收据 OCR/直建建议、签名收据模板都使用同一规则。
 
 ### v1.0.129
 - 收据录入命中复合订单时，会自动回填完整 `ORDER NO`。例如 `AB-13B` 命中系统订单 `AB-13B/AB-12B` 后，`Upload Receipt / Create Receipt Directly / Generate Signed Receipt` 都会继续使用完整订单号。

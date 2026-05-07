@@ -1,6 +1,7 @@
 'use client';
 
 import { translateApiErrorCode, translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
+import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
 const DECIMAL_KEYS = new Set([
@@ -486,13 +487,6 @@ export type OrderContextLookupResult = {
   payerSuggestion: string | null;
 };
 
-function formatPayerSuggestion(baseName: string | null | undefined, mark: string | null | undefined): string | null {
-  const base = String(baseName || '').trim();
-  const customerMark = String(mark || '').trim();
-  if (!base) return null;
-  return customerMark ? `${base} "${customerMark}"` : base;
-}
-
 export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise<OrderContextLookupResult> {
   const normalized = orderNoInput.trim();
   if (!normalized) {
@@ -555,7 +549,10 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
       customerId: latestInvoice.customerId,
     };
     phoneSuggestion = latestInvoice.customerPhone || null;
-    payerSuggestion = formatPayerSuggestion(latestInvoice.customerPayer, latestInvoice.customerMark);
+    payerSuggestion = formatCustomerPayerLabel({
+      name: latestInvoice.customerPayer,
+      mark: latestInvoice.customerMark,
+    });
   } else if (inferredCustomer) {
     matchedCustomer = {
       mark: String(inferredCustomer.mark || ''),
@@ -563,10 +560,11 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
       customerId: String(inferredCustomer.id || ''),
     };
     phoneSuggestion = String(inferredCustomer.phone || '').trim() || null;
-    payerSuggestion = formatPayerSuggestion(
-      String(inferredCustomer.companyName || inferredCustomer.name || '').trim(),
-      matchedCustomer.mark,
-    );
+    payerSuggestion = formatCustomerPayerLabel({
+      companyName: String(inferredCustomer.companyName || '').trim(),
+      name: String(inferredCustomer.name || '').trim(),
+      mark: matchedCustomer.mark,
+    });
   }
 
   return {

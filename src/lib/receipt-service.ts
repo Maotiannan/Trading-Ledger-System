@@ -126,11 +126,12 @@ export async function createReceiptRecord(params: {
 
   const normalizedOrderNo = typeof orderNo === 'string' ? orderNo : null;
   const matchedOrder = await findMatchingOrder(normalizedOrderNo);
+  const effectiveOrderNo = matchedOrder?.orderNo || normalizedOrderNo;
   const customerResolution = await resolveCustomer({
     customerMark,
     customerName: customerName || null,
     customerId: customerId || null,
-    customerOrderNo: normalizedOrderNo,
+    customerOrderNo: effectiveOrderNo,
   });
   const effectiveInvNo = matchedOrder ? (payload.invNo || null) : null;
   const effectivePayer = formatReceiptPayer(
@@ -150,9 +151,9 @@ export async function createReceiptRecord(params: {
 
   const receipt = await runInTransaction(async (tx) => {
     let orderId: string | null = matchedOrder?.orderId || null;
-    if (payload.isDeposit && normalizedOrderNo && !matchedOrder) {
+    if (payload.isDeposit && effectiveOrderNo && !matchedOrder) {
       orderId = await createDepositOrder(tx, {
-        orderNo: normalizedOrderNo,
+        orderNo: effectiveOrderNo,
         usd,
         customerId: customerResolution.customerId,
         customerMark: customerResolution.customerMark,
@@ -164,8 +165,8 @@ export async function createReceiptRecord(params: {
       });
     }
 
-    if (!orderId && normalizedOrderNo) {
-      orderId = await createOrder(normalizedOrderNo, currentUser.id, tx);
+    if (!orderId && effectiveOrderNo) {
+      orderId = await createOrder(effectiveOrderNo, currentUser.id, tx);
     }
 
     const created = await tx.receipt.create({
@@ -175,7 +176,7 @@ export async function createReceiptRecord(params: {
         tel: payload.tel || null,
         usd,
         invNo: effectiveInvNo,
-        orderNo: normalizedOrderNo,
+        orderNo: effectiveOrderNo,
         payer: effectivePayer,
         customerId: customerResolution.customerId,
         customerMark: customerResolution.customerMark,

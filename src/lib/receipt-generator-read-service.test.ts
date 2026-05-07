@@ -117,6 +117,37 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.preview?.clientName).toBe('Alpha Trading SARL "Big Alpha"');
   });
 
+  it('returns the full matched composite ORDER NO for generator context', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'AB',
+        inferredCustomer: null,
+        exactMatches: [
+          {
+            id: 'order-composite',
+            orderNo: 'AB-13B/AB-12B',
+            orderBalance: 10000,
+            customerId: 'customer-ab',
+            customerMark: 'AB',
+            customerName: 'Abdoulaye Barry',
+            customerPhone: '+224 664 51 79 52',
+            customerCity: 'Conakry',
+            needsCustomerFix: false,
+            customer: {
+              companyName: 'AB Trading',
+            },
+            invoice: { id: 'inv-ab', invNo: 'L25MH060992C', createdAt: new Date('2026-05-07T00:00:00Z') },
+          },
+        ],
+      },
+    });
+
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'AB-13B', 3200);
+
+    expect(result.data.orderNo).toBe('AB-13B/AB-12B');
+    expect(result.data.preview?.orderNo).toBe('AB-13B/AB-12B');
+  });
+
   it('loads a pending generator session by sessionId', async () => {
     mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
       id: 'session-1',

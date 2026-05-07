@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.128
+> 当前版本：v1.0.129
 > 最后更新：2026-05-07
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 复合订单收据录入回填收口：`lookupOrderContextByOrderNo` 新增 `orderSuggestion` 返回真实命中的完整 `ORDER NO`，`Upload Receipt / Create Receipt Directly` 表单在单段 `AB-13B` 命中复合订单 `AB-13B/AB-12B` 时会回填完整订单；`receipt-service` 后端入库同步改为优先保存 `matchedOrder.orderNo`，防止绕过前端直接 API 只存单段；`Generate Signed Receipt` 的 order context、预览、session 创建和占位收据也同步使用完整订单；底层 `order-alias` 兼容旧空格复合格式 `AB-13B AB-12B`，同时避免误拆 `OUMAR LAH-01` 等正常空格订单名；补齐 client/forms/service/generator/order-alias 回归 ✅ 2026-05-07
 
 - [x] 收据 OCR Motif 发票号保留二次修复：确认根因在 `use-receipt-forms` 的上传回填层，订单匹配成功但无 `invoiceSuggestion` 时会把 OCR 已识别的 `invNo` 强制清空；现改为“数据库发票建议优先，否则保留 OCR `INV NO`”，并补强 `receipt-normalization` 从 `Payment for L25MH060523 Big Alpha-07` 这类 Motif 中分别拆出 `INV NO` 与 `ORDER NO`；同步更新 OCR prompt 与 hook/normalizer 回归 ✅ 2026-05-07
 

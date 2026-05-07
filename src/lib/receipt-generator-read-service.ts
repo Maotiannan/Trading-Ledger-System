@@ -100,12 +100,13 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
         count: exactMatches.length,
       }
     : null;
+  const matchedOrderNo = latestMatch?.orderNo || String(orderNo || '').trim();
 
   const balanceBefore = latestMatch ? Number(latestMatch.orderBalance || 0) : null;
   const receiptPreview = latestMatch && customer
     ? buildReceiptGeneratorLayout({
         receiptNo: 'PENDING',
-        orderNo: String(orderNo || '').trim(),
+        orderNo: matchedOrderNo,
         invNo: invoiceSuggestion?.invNo || null,
         customerMark: customer.mark || null,
         customerCompanyName: customer.companyName || null,
@@ -118,7 +119,7 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
 
   return {
     data: {
-      orderNo: String(orderNo || '').trim(),
+      orderNo: matchedOrderNo,
       invNo: invoiceSuggestion?.invNo || null,
       invoiceSuggestion,
       customer,

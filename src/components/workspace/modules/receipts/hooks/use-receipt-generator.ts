@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiCall, getErrorMessage } from '@/components/workspace/shared';
 
 type ReceiptGeneratorContext = {
+  orderNo: string;
   invNo: string | null;
   customer: {
     id: string;
@@ -111,7 +112,12 @@ export function useReceiptGenerator(params: {
         if (usdAmount) params.set('usdAmount', usdAmount);
         const result = await apiCall(`receipt-generator?${params.toString()}`);
         if (lastLookupToken.current !== token) return;
-        setGeneratorContext(result.data || null);
+        const context = result.data || null;
+        const suggestedOrderNo = typeof context?.orderNo === 'string' ? context.orderNo.trim() : '';
+        if (suggestedOrderNo && suggestedOrderNo !== orderNo) {
+          setGeneratorOrderNo((prev) => (prev.trim() === orderNo ? suggestedOrderNo : prev));
+        }
+        setGeneratorContext(context);
         setGeneratorError(null);
       } catch (error) {
         if (lastLookupToken.current !== token) return;
@@ -156,7 +162,7 @@ export function useReceiptGenerator(params: {
         method: 'POST',
         body: JSON.stringify({
           action: 'create-session',
-          orderNo: generatorOrderNo.trim(),
+          orderNo: generatorContext?.orderNo?.trim() || generatorOrderNo.trim(),
           usdAmount: Number(generatorUsdAmount),
           paymentMode: generatorPaymentMode,
         }),
@@ -180,7 +186,7 @@ export function useReceiptGenerator(params: {
     } finally {
       setGeneratorCreating(false);
     }
-  }, [generatorOrderNo, generatorPaymentMode, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
+  }, [generatorContext, generatorOrderNo, generatorPaymentMode, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
 
   const resumeGeneratorSession = useCallback(async (receiptId: string) => {
     try {

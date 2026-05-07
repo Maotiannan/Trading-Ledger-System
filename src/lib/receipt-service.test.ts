@@ -279,6 +279,59 @@ describe('receipt-service', () => {
     }));
   });
 
+  it('stores the full matched composite ORDER NO when a single segment matches an existing order', async () => {
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+    mockFindMatchingOrder.mockResolvedValueOnce({
+      orderId: 'order-composite',
+      orderNo: 'AB-13B/AB-12B',
+      amount: 10000,
+      orderBalance: 10000,
+    });
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'customer-ab',
+      customerMark: 'AB',
+      customerName: 'AB',
+      customerPayerName: 'Thierno Oumar Barry',
+      customerPhone: '+224 664 51 79 52',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-composite',
+      imageUrl: null,
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+
+    await createReceiptRecord({
+      currentUser: makeUser(),
+      payload: {
+        receiptNo: '0000991',
+        date: null,
+        tel: '+224 664 51 79 52',
+        usd: 3200,
+        invNo: 'L25MH060992C',
+        orderNo: 'AB-13B',
+        payer: 'AB',
+        customerMark: 'AB',
+        customerName: 'AB',
+        customerPhone: '+224 664 51 79 52',
+        customerCity: 'Conakry',
+        customerId: 'customer-ab',
+        isDeposit: false,
+      },
+      mode: 'confirm',
+    });
+
+    expect(mockCreateOrder).not.toHaveBeenCalled();
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        invNo: 'L25MH060992C',
+        orderNo: 'AB-13B/AB-12B',
+        orderId: 'order-composite',
+      }),
+    }));
+  });
+
   it('aborts receipt create before post-transaction work when attach fails', async () => {
     mockDb.receipt.findFirst.mockResolvedValueOnce(null);
     mockFindMatchingOrder.mockResolvedValueOnce(null);

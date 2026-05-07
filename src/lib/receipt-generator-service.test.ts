@@ -165,6 +165,65 @@ describe('receipt-generator-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
+  it('creates signing receipt with the full matched composite ORDER NO', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'AB',
+        inferredCustomer: null,
+        exactMatches: [
+          {
+            id: 'order-composite',
+            orderNo: 'AB-13B/AB-12B',
+            orderBalance: 10000,
+            customerId: 'customer-ab',
+            customerMark: 'AB',
+            customerName: 'Abdoulaye Barry',
+            customerPhone: '+224 664 51 79 52',
+            customerCity: 'Conakry',
+            needsCustomerFix: false,
+            customer: {
+              companyName: 'AB Trading',
+            },
+            invoice: { id: 'inv-ab', invNo: 'L25MH060992C', createdAt: new Date('2026-05-07T00:00:00Z') },
+          },
+        ],
+      },
+    });
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-composite',
+      receiptNo: '0001000',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+    mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
+      id: 'session-composite',
+      receiptId: 'receipt-composite',
+      receiptNo: '0001000',
+      status: ReceiptGeneratorSessionStatus.PENDING,
+    });
+
+    await createReceiptGeneratorSession(makeUser(), {
+      orderNo: 'AB-13B',
+      usdAmount: 3200,
+      paymentMode: 'Cash',
+    });
+
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderId: 'order-composite',
+        orderNo: 'AB-13B/AB-12B',
+        invNo: 'L25MH060992C',
+      }),
+    }));
+    expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderNo: 'AB-13B/AB-12B',
+        layoutSnapshot: expect.objectContaining({
+          orderNo: 'AB-13B/AB-12B',
+        }),
+      }),
+    }));
+  });
+
   it('finalizes a signing session into a normal receipt with generated image', async () => {
     mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
       id: 'session-1',

@@ -46,4 +46,17 @@ describe('order-alias-db', () => {
     }));
     expect(matched).toBe('order-1');
   });
+
+  it('matches a legacy space-composite order row by segment without treating normal spaced order names as composite', async () => {
+    mockDb.orderAlias.findFirst.mockResolvedValueOnce(null);
+    mockDb.order.findFirst.mockResolvedValueOnce(null);
+    mockDb.order.findMany.mockResolvedValueOnce([
+      { id: 'order-space-composite', orderNo: 'AB-13B AB-12B' },
+      { id: 'order-normal-space', orderNo: 'OUMAR LAH-01' },
+    ]);
+
+    const matched = await findOrderIdByNoOrAliasWithExecutor(mockDb as never, 'AB-13B');
+
+    expect(matched).toBe('order-space-composite');
+  });
 });

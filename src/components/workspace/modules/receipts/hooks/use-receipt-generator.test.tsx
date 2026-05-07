@@ -94,4 +94,34 @@ describe('useReceiptGenerator', () => {
     expect(result.current.showGeneratorLaunch).toBe(true);
     expect(result.current.generatorOrderNo).toBe('MOBILE-01');
   });
+
+  it('replaces generator ORDER NO with the full matched composite order from context', async () => {
+    jest.useFakeTimers();
+    mockApiCall.mockResolvedValue({
+      data: {
+        orderNo: 'AB-13B/AB-12B',
+        invNo: 'L25MH060992C',
+        customer: { id: 'customer-ab', mark: 'AB', name: 'Abdoulaye Barry', phone: '+224 664 51 79 52' },
+        balanceBefore: 10000,
+        preview: { balanceAfter: 6800 },
+      },
+    });
+    const { result } = renderHook(() => useReceiptGenerator({ tx, loadReceipts, setError }));
+
+    await act(async () => {
+      result.current.setShowGeneratorLaunch(true);
+      result.current.setGeneratorOrderNo('AB-13B');
+      result.current.setGeneratorUsdAmount('3200');
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.generatorOrderNo).toBe('AB-13B/AB-12B');
+    expect(result.current.generatorContext?.invNo).toBe('L25MH060992C');
+    jest.useRealTimers();
+  });
 });

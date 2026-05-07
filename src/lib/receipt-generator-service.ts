@@ -99,9 +99,10 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
   }
 
   const balanceBefore = Number(latestMatch.orderBalance || 0);
+  const matchedOrderNo = latestMatch.orderNo || rawOrderNo;
   const layout = buildReceiptGeneratorLayout({
       receiptNo: 'PENDING',
-      orderNo: rawOrderNo,
+      orderNo: matchedOrderNo,
       invNo: latestMatch.invoice?.invNo || null,
       customerMark: customer.mark,
       customerCompanyName: customer.companyName || null,
@@ -114,6 +115,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
 
   return {
     orderId: latestMatch.id,
+    orderNo: matchedOrderNo,
     invNo: latestMatch.invoice?.invNo || null,
     customerId: customer.id,
     customerMark: customer.mark,
@@ -139,12 +141,13 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   const usdAmount = sanitizePositiveAmount(input.usdAmount);
   const paymentMode = input.paymentMode === 'Transfer' ? 'Transfer' : 'Cash';
   const creationContext = await buildCreationContext(currentUser, orderNo, usdAmount);
+  const effectiveOrderNo = creationContext.orderNo;
 
   const result = await runInTransaction(async (tx) => {
     const receiptNo = await allocateNextReceiptNo(tx);
     const finalizedLayout = buildReceiptGeneratorLayout({
         receiptNo,
-        orderNo,
+        orderNo: effectiveOrderNo,
         invNo: creationContext.invNo,
         customerMark: creationContext.customerMark,
         customerCompanyName: creationContext.customerCompanyName,
@@ -162,7 +165,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
         tel: creationContext.customerPhone,
         usd: usdAmount,
         invNo: creationContext.invNo,
-        orderNo,
+        orderNo: effectiveOrderNo,
         payer: finalizedLayout.clientName,
         status: ReceiptStatus.SIGNING_PENDING,
         customerId: creationContext.customerId,
@@ -186,7 +189,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
       data: {
         receiptId: receipt.id,
         receiptNo,
-        orderNo,
+        orderNo: effectiveOrderNo,
         invNo: creationContext.invNo,
         customerId: creationContext.customerId,
         customerMark: creationContext.customerMark,

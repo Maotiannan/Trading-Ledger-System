@@ -32,6 +32,9 @@ describe('useReceiptForms', () => {
       },
       phoneSuggestion: '622 49 12 86',
       payerSuggestion: 'MAB SARL',
+      orderSuggestion: {
+        orderNo: 'TEST-1-05',
+      },
       invoiceSuggestion: {
         invNo: 'INV-LATEST',
         conflict: true,
@@ -73,6 +76,9 @@ describe('useReceiptForms', () => {
       },
       phoneSuggestion: '622 49 12 86',
       payerSuggestion: 'MAB SARL',
+      orderSuggestion: {
+        orderNo: 'TEST-1-05',
+      },
       invoiceSuggestion: {
         invNo: 'INV-DB',
         conflict: false,
@@ -116,6 +122,7 @@ describe('useReceiptForms', () => {
       },
       phoneSuggestion: '620000999',
       payerSuggestion: 'Fallback Name',
+      orderSuggestion: null,
       invoiceSuggestion: null,
     });
 
@@ -150,6 +157,7 @@ describe('useReceiptForms', () => {
       },
       phoneSuggestion: '+224 664 51 79 52',
       payerSuggestion: 'Thierno Oumar Barry "AB"',
+      orderSuggestion: null,
       invoiceSuggestion: null,
     });
 
@@ -187,6 +195,7 @@ describe('useReceiptForms', () => {
       },
       phoneSuggestion: '+224 664 51 79 52',
       payerSuggestion: 'Thierno Oumar Barry "AB"',
+      orderSuggestion: null,
       invoiceSuggestion: null,
     });
 
@@ -209,6 +218,89 @@ describe('useReceiptForms', () => {
 
     expect(result.current.ocrResult).toEqual(expect.objectContaining({
       orderNo: 'AB-13B',
+      invNo: 'L25MH060992C',
+      payer: 'Thierno Oumar Barry "AB"',
+    }));
+  });
+
+  it('replaces direct-create ORDER NO with the full matched composite order', async () => {
+    mockLookupOrderContextByOrderNo.mockResolvedValue({
+      matchedCustomer: {
+        mark: 'AB',
+        name: 'AB',
+        customerId: 'cust-ab',
+      },
+      phoneSuggestion: '+224 664 51 79 52',
+      payerSuggestion: 'Thierno Oumar Barry "AB"',
+      orderSuggestion: {
+        orderNo: 'AB-13B/AB-12B',
+      },
+      invoiceSuggestion: {
+        invNo: 'L25MH060992C',
+        conflict: false,
+        count: 1,
+      },
+    });
+
+    const loadCustomerCandidates = jest.fn();
+    const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));
+
+    await act(async () => {
+      result.current.handleShowDirectCreateChange(true);
+    });
+
+    await act(async () => {
+      result.current.setDirectForm((prev) => ({ ...prev, orderNo: 'AB-13B' }));
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.directForm.orderNo).toBe('AB-13B/AB-12B');
+    expect(result.current.directForm.invNo).toBe('L25MH060992C');
+  });
+
+  it('replaces OCR ORDER NO with the full matched composite order', async () => {
+    mockLookupOrderContextByOrderNo.mockResolvedValue({
+      matchedCustomer: {
+        mark: 'AB',
+        name: 'AB',
+        customerId: 'cust-ab',
+      },
+      phoneSuggestion: '+224 664 51 79 52',
+      payerSuggestion: 'Thierno Oumar Barry "AB"',
+      orderSuggestion: {
+        orderNo: 'AB-13B/AB-12B',
+      },
+      invoiceSuggestion: {
+        invNo: 'L25MH060992C',
+        conflict: false,
+        count: 1,
+      },
+    });
+
+    const loadCustomerCandidates = jest.fn();
+    const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));
+
+    await act(async () => {
+      result.current.handleShowUploadChange(true);
+    });
+
+    await act(async () => {
+      result.current.setOcrResult({ orderNo: 'AB-13B', invNo: 'OCR-INV' });
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.ocrResult).toEqual(expect.objectContaining({
+      orderNo: 'AB-13B/AB-12B',
       invNo: 'L25MH060992C',
       payer: 'Thierno Oumar Barry "AB"',
     }));

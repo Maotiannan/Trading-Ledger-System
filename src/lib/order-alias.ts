@@ -1,4 +1,5 @@
 const GROUP_SEPARATOR = '/';
+const ORDER_LIKE_TOKEN_PATTERN = /\S+-\S+/;
 
 export function normalizeOrderNo(value: string | null | undefined): string {
   if (!value) return '';
@@ -13,6 +14,13 @@ export function splitCompositeOrderNo(orderNo: string | null | undefined): strin
   if (!orderNo) return [];
   return orderNo
     .split(GROUP_SEPARATOR)
+    .flatMap((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return [];
+      const whitespaceParts = trimmed.split(/\s+/).filter(Boolean);
+      const orderLikeParts = whitespaceParts.filter((row) => ORDER_LIKE_TOKEN_PATTERN.test(row));
+      return orderLikeParts.length > 1 ? orderLikeParts : [trimmed];
+    })
     .map((part) => part.trim())
     .filter(Boolean);
 }

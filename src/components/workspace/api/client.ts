@@ -480,6 +480,7 @@ export async function fetchServerDate(): Promise<string> {
 
 export type OrderContextLookupResult = {
   matchedCustomer: { mark: string; name: string; customerId: string } | null;
+  orderSuggestion: { orderNo: string } | null;
   invoiceSuggestion: { invNo: string; conflict: boolean; count: number } | null;
   phoneSuggestion: string | null;
   payerSuggestion: string | null;
@@ -499,6 +500,7 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
       matchedCustomer: null,
       phoneSuggestion: null,
       payerSuggestion: null,
+      orderSuggestion: null,
       invoiceSuggestion: null,
     };
   }
@@ -509,6 +511,7 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
       matchedCustomer: null,
       phoneSuggestion: null,
       payerSuggestion: null,
+      orderSuggestion: null,
       invoiceSuggestion: null,
     };
   }
@@ -525,6 +528,7 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
         ? row.invoice as Record<string, unknown>
         : null;
       return {
+        orderNo: String(row.orderNo || '').trim(),
         invNo: String(invoice?.invNo || '').trim(),
         createdAt: String(invoice?.createdAt || row.createdAt || ''),
         customerMark: String(row.customerMark || '').trim(),
@@ -569,6 +573,9 @@ export async function lookupOrderContextByOrderNo(orderNoInput: string): Promise
     matchedCustomer,
     phoneSuggestion,
     payerSuggestion,
+    orderSuggestion: latestInvoice?.orderNo
+      ? { orderNo: latestInvoice.orderNo }
+      : null,
     invoiceSuggestion: latestInvoice
       ? {
           invNo: latestInvoice.invNo,

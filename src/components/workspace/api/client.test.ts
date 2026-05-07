@@ -144,12 +144,48 @@ describe('workspace api client', () => {
       },
       phoneSuggestion: '622 49 12 86',
       payerSuggestion: 'MAB SARL "ASD-DSA"',
+      orderSuggestion: {
+        orderNo: 'TEST-1-05',
+      },
       invoiceSuggestion: {
         invNo: 'INV-LATEST',
         conflict: true,
         count: 2,
       },
     });
+
+    Object.assign(global, { fetch: originalFetch });
+  });
+
+  it('returns the full matched composite ORDER NO from order context', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: {
+          exactMatches: [
+            {
+              orderNo: 'AB-13B/AB-12B',
+              customerMark: 'AB',
+              customerName: 'AB',
+              customerId: 'cust-ab',
+              customerPhone: '+224 664 51 79 52',
+              customerPayer: 'Thierno Oumar Barry',
+              createdAt: '2026-05-07T02:00:00.000Z',
+              invoice: { invNo: 'L25MH060992C', createdAt: '2026-05-07T02:00:00.000Z' },
+            },
+          ],
+          inferredCustomer: null,
+        },
+      }),
+    } as Response);
+    Object.assign(global, { fetch: fetchMock });
+
+    const result = await lookupOrderContextByOrderNo('AB-13B');
+
+    expect(result.orderSuggestion).toEqual({ orderNo: 'AB-13B/AB-12B' });
+    expect(result.invoiceSuggestion?.invNo).toBe('L25MH060992C');
 
     Object.assign(global, { fetch: originalFetch });
   });

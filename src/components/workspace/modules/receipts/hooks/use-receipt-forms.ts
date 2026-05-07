@@ -71,6 +71,14 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     }
     const timer = setTimeout(() => {
       void lookupOrderContextByOrderNo(currentOrderNo).then((context) => {
+        const suggestedOrderNo = context.orderSuggestion?.orderNo?.trim();
+        if (suggestedOrderNo && suggestedOrderNo !== currentOrderNo.trim()) {
+          setDirectForm((prev) => (
+            prev.orderNo.trim() === currentOrderNo.trim()
+              ? { ...prev, orderNo: suggestedOrderNo }
+              : prev
+          ));
+        }
         if (context.invoiceSuggestion?.invNo) {
           setDirectForm((prev) => ({ ...prev, invNo: context.invoiceSuggestion?.invNo || prev.invNo }));
           setDirectInvConflict(Boolean(context.invoiceSuggestion.conflict));
@@ -118,6 +126,14 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
     }
     const timer = setTimeout(() => {
       void lookupOrderContextByOrderNo(currentOrderNo).then((context) => {
+        const suggestedOrderNo = context.orderSuggestion?.orderNo?.trim();
+        if (suggestedOrderNo && suggestedOrderNo !== currentOrderNo.trim()) {
+          setOcrResult((prev) => (
+            prev && typeof prev.orderNo === 'string' && prev.orderNo.trim() === currentOrderNo.trim()
+              ? { ...prev, orderNo: suggestedOrderNo }
+              : prev
+          ));
+        }
         if (context.invoiceSuggestion?.invNo) {
           setOcrResult((prev) => prev ? ({ ...prev, invNo: context.invoiceSuggestion?.invNo || prev.invNo }) : prev);
           setOcrInvConflict(Boolean(context.invoiceSuggestion.conflict));

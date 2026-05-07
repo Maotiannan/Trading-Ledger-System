@@ -502,4 +502,135 @@ describe('customer-read-service', () => {
       where: expect.objectContaining({ id: 'customer-1' }),
     }));
   });
+
+  it('matches composite order history and formats non-Date receipt dates', async () => {
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'PIKIN',
+      orderName: 'PIKIN',
+      orderNames: [{ orderName: 'PIKIN', normalizedOrderName: 'pikin', isPrimary: true }],
+    });
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-1',
+        orderNo: 'PIKIN-20/PIKIN-21',
+        amount: '2500',
+        orderBalance: '0',
+        invoice: null,
+        createdAt: new Date('2026-05-07T00:00:00Z'),
+      },
+      {
+        id: 'order-2',
+        orderNo: null,
+        amount: 100,
+        orderBalance: 100,
+        invoice: { invNo: 'L25MH090099' },
+        createdAt: new Date('2026-05-08T00:00:00Z'),
+      },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      {
+        id: 'receipt-1',
+        receiptNo: '0001002',
+        orderNo: 'PIKIN-20/PIKIN-21',
+        invNo: null,
+        usd: '2500',
+        status: 'RECEIVED',
+        date: '2026-05-07T10:12:30.000Z',
+        createdAt: new Date('2026-05-07T10:12:30Z'),
+      },
+      {
+        id: 'receipt-2',
+        receiptNo: '0001003',
+        orderNo: 'PIKIN-22',
+        invNo: null,
+        usd: 100,
+        status: 'PENDING',
+        date: null,
+        createdAt: new Date('2026-05-08T10:12:30Z'),
+      },
+    ]);
+
+    const result = await getCustomerOrderNameHistory(makeUser(), {
+      customerId: ' customer-1 ',
+      orderName: ' PIKIN ',
+    });
+
+    expect(result.data.orders).toEqual([
+      {
+        id: 'order-1',
+        orderNo: 'PIKIN-20/PIKIN-21',
+        invNo: null,
+        amount: 2500,
+        outstanding: 0,
+      },
+    ]);
+    expect(result.data.receipts).toEqual([
+      expect.objectContaining({ id: 'receipt-1', date: '2026-05-07', usd: 2500 }),
+      expect.objectContaining({ id: 'receipt-2', date: null, usd: 100 }),
+    ]);
+    expect(result.message).toContain('1 条订单');
+  });
+
+  it('rejects invalid customer order history requests', async () => {
+    await expect(getCustomerOrderNameHistory(makeUser(), {
+      customerId: '',
+      orderName: 'MAB-1',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '缺少客户或ORDER_NAME',
+    });
+    expect(mockDb.customer.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects inaccessible customer order history requests', async () => {
+    mockDb.customer.findFirst.mockResolvedValueOnce(null);
+
+    await expect(getCustomerOrderNameHistory(makeUser(), {
+      customerId: 'customer-404',
+      orderName: 'MAB-1',
+    })).rejects.toMatchObject({
+      code: 'RESOURCE_NOT_FOUND',
+      status: 404,
+      message: '客户不存在或无权限',
+    });
+  });
+
+  it('rejects order-name history when the ORDER_NAME is not owned by that customer', async () => {
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'MAB',
+      orderName: 'MAB-1',
+      orderNames: [{ orderName: 'MAB-1', normalizedOrderName: 'mab-1', isPrimary: true }],
+    });
+
+    await expect(getCustomerOrderNameHistory(makeUser(), {
+      customerId: 'customer-1',
+      orderName: 'MARY',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: 'ORDER_NAME不属于该客户',
+    });
+    expect(mockDb.order.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-manager customer order history reads', async () => {
+    await expect(getCustomerOrderNameHistory(makeUser({
+      id: 'user-1',
+      email: 'user@example.com',
+      role: UserRole.USER,
+      level: 4,
+      parentId: 'sales-1',
+      createdById: 'sales-1',
+    }), {
+      customerId: 'customer-1',
+      orderName: 'MAB-1',
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      status: 403,
+      message: '无权限',
+    });
+  });
 });

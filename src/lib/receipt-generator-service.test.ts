@@ -165,6 +165,64 @@ describe('receipt-generator-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
+  it('uses the customer profile name when the order row customerName is a fallback alias', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'PIKIN',
+        inferredCustomer: null,
+        exactMatches: [
+          {
+            id: 'order-pikin',
+            orderNo: 'PIKIN-20',
+            orderBalance: 8458,
+            customerId: 'customer-pikin',
+            customerMark: 'PIKIN',
+            customerName: 'PIKIN',
+            customerPhone: '620000020',
+            customerCity: 'Conakry',
+            needsCustomerFix: false,
+            customer: {
+              companyName: null,
+              name: 'Mamadou Dian Diallo',
+            },
+            invoice: { id: 'inv-pikin', invNo: 'INV-PIKIN', createdAt: new Date('2026-05-07T00:00:00Z') },
+          },
+        ],
+      },
+    });
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-pikin',
+      receiptNo: '0001000',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+    mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
+      id: 'session-pikin',
+      receiptId: 'receipt-pikin',
+      receiptNo: '0001000',
+      status: ReceiptGeneratorSessionStatus.PENDING,
+    });
+
+    await createReceiptGeneratorSession(makeUser(), {
+      orderNo: 'PIKIN-20',
+      usdAmount: 1,
+      paymentMode: 'Cash',
+    });
+
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        payer: 'Mamadou Dian Diallo "PIKIN"',
+      }),
+    }));
+    expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        customerName: 'Mamadou Dian Diallo',
+        layoutSnapshot: expect.objectContaining({
+          clientName: 'Mamadou Dian Diallo "PIKIN"',
+        }),
+      }),
+    }));
+  });
+
   it('creates signing receipt with the full matched composite ORDER NO', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {

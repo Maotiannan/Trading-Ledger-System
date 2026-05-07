@@ -19,6 +19,10 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { runInTransaction } from '@/lib/transaction';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
+import {
+  getReceiptGeneratorCustomerCompanyName,
+  getReceiptGeneratorCustomerName,
+} from '@/lib/receipt-generator-customer';
 import type { CurrentUser } from '@/lib/request-auth';
 
 function badRequest(message: string, detail?: unknown) {
@@ -54,14 +58,6 @@ function fileToBuffer(file: File) {
   return new Response(file).arrayBuffer().then((data) => Buffer.from(data));
 }
 
-function getCustomerCompanyName(customer: unknown): string | null {
-  if (!customer || typeof customer !== 'object' || !('companyName' in customer)) {
-    return null;
-  }
-  const value = (customer as { companyName?: unknown }).companyName;
-  return typeof value === 'string' ? value : null;
-}
-
 async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string, usdAmount: number) {
   const context = await lookupInvoiceOrderContext(currentUser, rawOrderNo);
   const exactMatches = Array.isArray(context.data?.exactMatches) ? context.data.exactMatches : [];
@@ -72,8 +68,8 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
     ? {
         id: resolvedCustomerOrder.customerId,
         mark: resolvedCustomerOrder.customerMark,
-        companyName: getCustomerCompanyName(resolvedCustomerOrder.customer),
-        name: resolvedCustomerOrder.customerName,
+        companyName: getReceiptGeneratorCustomerCompanyName(resolvedCustomerOrder.customer),
+        name: getReceiptGeneratorCustomerName(resolvedCustomerOrder.customer, resolvedCustomerOrder.customerName),
         phone: resolvedCustomerOrder.customerPhone,
         city: resolvedCustomerOrder.customerCity,
       }
@@ -81,7 +77,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
       ? {
           id: inferredCustomer.id,
           mark: inferredCustomer.mark,
-          companyName: getCustomerCompanyName(inferredCustomer),
+          companyName: getReceiptGeneratorCustomerCompanyName(inferredCustomer),
           name: inferredCustomer.name,
           phone: inferredCustomer.phone,
           city: inferredCustomer.city,

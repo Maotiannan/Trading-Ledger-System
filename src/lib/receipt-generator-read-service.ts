@@ -4,6 +4,10 @@ import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { createApiError } from '@/lib/api-error';
 import { buildReceiptGeneratorLayout } from '@/lib/receipt-generator-layout';
+import {
+  getReceiptGeneratorCustomerCompanyName,
+  getReceiptGeneratorCustomerName,
+} from '@/lib/receipt-generator-customer';
 import type { CurrentUser } from '@/lib/request-auth';
 
 function badRequest(message: string, detail?: unknown) {
@@ -55,14 +59,6 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
   };
 }
 
-function getCustomerCompanyName(customer: unknown): string | null {
-  if (!customer || typeof customer !== 'object' || !('companyName' in customer)) {
-    return null;
-  }
-  const value = (customer as { companyName?: unknown }).companyName;
-  return typeof value === 'string' ? value : null;
-}
-
 export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUser, orderNo: string, usdAmount?: number) {
   assertGeneratorRole(currentUser);
 
@@ -76,8 +72,8 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
         id: resolvedOrderCustomer.customerId,
         mark: resolvedOrderCustomer.customerMark,
         orderName: context.data?.derivedOrderName || null,
-        companyName: getCustomerCompanyName(resolvedOrderCustomer.customer),
-        name: resolvedOrderCustomer.customerName,
+        companyName: getReceiptGeneratorCustomerCompanyName(resolvedOrderCustomer.customer),
+        name: getReceiptGeneratorCustomerName(resolvedOrderCustomer.customer, resolvedOrderCustomer.customerName),
         phone: resolvedOrderCustomer.customerPhone,
         city: resolvedOrderCustomer.customerCity,
       }
@@ -86,7 +82,7 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
           id: inferredCustomer.id,
           mark: inferredCustomer.mark,
           orderName: inferredCustomer.orderName,
-          companyName: getCustomerCompanyName(inferredCustomer),
+          companyName: getReceiptGeneratorCustomerCompanyName(inferredCustomer),
           name: inferredCustomer.name,
           phone: inferredCustomer.phone,
           city: inferredCustomer.city,

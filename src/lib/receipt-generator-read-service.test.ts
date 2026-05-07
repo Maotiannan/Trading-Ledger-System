@@ -117,6 +117,42 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.preview?.clientName).toBe('Alpha Trading SARL "Big Alpha"');
   });
 
+  it('prefers the customer profile name over the order row customerName for signed receipts', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'PIKIN',
+        inferredCustomer: null,
+        exactMatches: [
+          {
+            id: 'order-pikin',
+            orderNo: 'PIKIN-20',
+            orderBalance: 8458,
+            customerId: 'customer-pikin',
+            customerMark: 'PIKIN',
+            customerName: 'PIKIN',
+            customerPhone: '620000020',
+            customerCity: 'Conakry',
+            needsCustomerFix: false,
+            customer: {
+              companyName: null,
+              name: 'Mamadou Dian Diallo',
+            },
+            invoice: { id: 'inv-pikin', invNo: 'INV-PIKIN', createdAt: new Date('2026-05-07T00:00:00Z') },
+          },
+        ],
+      },
+    });
+
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'PIKIN-20', 1);
+
+    expect(result.data.customer).toEqual(expect.objectContaining({
+      name: 'Mamadou Dian Diallo',
+      companyName: null,
+      mark: 'PIKIN',
+    }));
+    expect(result.data.preview?.clientName).toBe('Mamadou Dian Diallo "PIKIN"');
+  });
+
   it('returns the full matched composite ORDER NO for generator context', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {

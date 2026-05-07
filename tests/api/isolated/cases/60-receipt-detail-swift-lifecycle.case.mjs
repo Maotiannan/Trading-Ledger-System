@@ -20,16 +20,71 @@ export default async function run(t) {
 
   const suffix = t.unique('lifecycle');
   const salesEmail = `${suffix}-sales@example.com`;
-  await t.createUser({
+  const sales = await t.createUser({
     email: salesEmail,
     password: 'Sales@2026!',
     role: 'SALES',
     name: `Lifecycle ${suffix}`,
   });
+  const salesId = String(sales.data?.data?.id || '');
   t.step('lifecycle sales account created');
+
+  const strictOrderName = `STRICT-${suffix}`;
+  const strictExistingOrderNo = `${strictOrderName}-07`;
+  const strictUnknownOrderNo = `${strictOrderName}-13B`;
+  const strictCustomerMark = `STRICT-MARK-${suffix}`;
+  const strictCompanyName = `Strict Company ${suffix}`;
+  await t.request('POST', '/api/customer', {
+    json: {
+      action: 'create',
+      mark: strictCustomerMark,
+      orderName: strictOrderName,
+      name: `Strict Customer ${suffix}`,
+      companyName: strictCompanyName,
+      phone: `629${Math.floor(Math.random() * 900000 + 100000)}`,
+      city: 'Conakry',
+      ownerId: salesId,
+    },
+    expectedStatus: 200,
+  });
+  t.step('strict receipt matching customer created');
+
+  await t.request('POST', '/api/invoice', {
+    json: {
+      invNo: `STRICT-INV-${suffix}`,
+      orders: [
+        { orderNo: strictExistingOrderNo, amount: 999, customerMark: strictCustomerMark, customerName: strictOrderName },
+      ],
+    },
+    expectedStatus: 200,
+  });
+  t.step('strict receipt matching existing invoice order created');
 
   await t.logout();
   await t.login(salesEmail, 'Sales@2026!');
+
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'direct-create',
+      receiptNo: `RCPT-STRICT-${suffix}`,
+      usd: 111,
+      invNo: `OCR-INV-${suffix}`,
+      orderNo: strictUnknownOrderNo,
+      payer: strictCustomerMark,
+      customerMark: strictCustomerMark,
+      customerName: strictOrderName,
+    },
+    expectedStatus: 200,
+  });
+  t.step('unregistered receipt order created without fuzzy invoice match');
+
+  const strictReceiptList = await t.request('GET', `/api/receipt?search=${encodeURIComponent(strictUnknownOrderNo)}`, { expectedStatus: 200 });
+  const strictReceipt = findReceiptByOrder(strictReceiptList.data?.data, strictUnknownOrderNo);
+  t.assertOk(Boolean(strictReceipt?.id), 'unregistered receipt is queryable by its own order');
+  t.assertEqual(strictReceipt?.invNo, null, 'unregistered receipt clears OCR invoice number');
+  t.assertEqual(strictReceipt?.payer, `${strictCompanyName} "${strictCustomerMark}"`, 'unregistered receipt payer uses company name plus mark');
+  t.assertEqual(strictReceipt?.order?.orderNo, strictUnknownOrderNo, 'unregistered receipt keeps its own order instead of existing same-prefix order');
+  t.assertEqual(strictReceipt?.order?.invoice?.invNo, 'Un_Associated', 'unregistered non-deposit receipt enters Un_Associated pool');
 
   const adminOnlyOrderNo = `ADMINONLY-${suffix}-01`;
   const adminOnlyMark = `ADMINONLY-${suffix}`;

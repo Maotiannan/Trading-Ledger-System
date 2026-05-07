@@ -6,6 +6,8 @@ import type { ReceiptEditRequestRow, ReceiptEditablePatch } from '@/lib/receipt-
 import { recordAuditEvent } from '@/lib/audit';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
+import { updateOrderBalance } from '@/lib/matching';
 import {
   listReceiptEditRequests,
   requestReceiptEdit,
@@ -45,6 +47,14 @@ jest.mock('@/lib/audit', () => ({
   recordAuditEvent: jest.fn(),
 }));
 
+jest.mock('@/lib/receipt-edit-binding', () => ({
+  resolveReceiptEditBinding: jest.fn(),
+}));
+
+jest.mock('@/lib/matching', () => ({
+  updateOrderBalance: jest.fn(),
+}));
+
 function makeUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
   return {
     id: 'sales-1',
@@ -81,6 +91,7 @@ const branchManagerUser = makeUser({
 const validEditPayload: ReceiptEditablePatch = {
   receiptNo: '0001002',
   date: '2026-05-04',
+  orderNo: 'ORD-2',
   invNo: 'INV-2',
   customerMark: 'MAB-2',
   payer: 'BETA',
@@ -109,6 +120,8 @@ const mockDb = db as unknown as {
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
+const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockTx = {
   receipt: {
     findFirst: jest.fn(),
@@ -348,6 +361,11 @@ describe('receipt-edit-request-service', () => {
       visibleIds: new Set<string>(['admin-1', 'sales-1']),
       ownerVisibleIds: new Set<string>(['admin-1', 'sales-1']),
     });
+    mockResolveReceiptEditBinding.mockImplementation(async (_tx, input) => ({
+      orderId: 'order-2',
+      orderNo: input.orderNo || null,
+      invNo: input.invNo || null,
+    }));
   });
 
   it('creates a pending receipt edit request for SALES on a visible receipt', async () => {
@@ -357,6 +375,7 @@ describe('receipt-edit-request-service', () => {
       status: ReceiptStatus.SR_Received,
       receiptNo: '0001001',
       date: null,
+      orderNo: 'ORD-1',
       invNo: 'INV-1',
       customerMark: 'MAB-1',
       payer: 'ACME',
@@ -372,6 +391,7 @@ describe('receipt-edit-request-service', () => {
         receiptNo: '0001001',
         date: null,
         invNo: 'INV-1',
+        orderNo: 'ORD-1',
         customerMark: 'MAB-1',
         payer: 'ACME',
         tel: '123',
@@ -397,6 +417,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001001',
           date: null,
+          orderNo: 'ORD-1',
           invNo: 'INV-1',
           customerMark: 'MAB-1',
           payer: 'ACME',
@@ -516,9 +537,15 @@ describe('receipt-edit-request-service', () => {
         tel: '123',
         usd: 100,
         orderNo: 'ORD-1',
+        orderId: 'order-1',
         imageUrl: null,
         imageName: null,
         isDeposit: false,
+        customerId: 'customer-1',
+        customerName: 'Mamadou',
+        customerPhone: '123',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
       },
       requester: salesUser,
     });
@@ -552,12 +579,16 @@ describe('receipt-edit-request-service', () => {
       data: expect.objectContaining({
         receiptNo: '0001002',
         date: new Date('2026-05-04'),
+        orderNo: 'ORD-2',
+        orderId: 'order-2',
         invNo: 'INV-2',
         customerMark: 'MAB-2',
         payer: 'BETA',
         tel: '456',
       }),
     }));
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-2');
     expectReceiptLookupById(mockTx.receipt.findFirst, 'receipt-1');
     expect(mockTx.receiptEditRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
@@ -827,6 +858,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001001',
           date: null,
+          orderNo: null,
           invNo: 'INV-1',
           customerMark: 'MAB-1',
           payer: 'ACME',
@@ -853,6 +885,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001003',
           date: '2026-05-01',
+          orderNo: null,
           invNo: 'INV-3',
           customerMark: null,
           payer: 'GAMMA',
@@ -861,6 +894,7 @@ describe('receipt-edit-request-service', () => {
         afterSnapshot: {
           receiptNo: '0001004',
           date: '2026-05-02',
+          orderNo: null,
           invNo: 'INV-4',
           customerMark: 'MAB-4',
           payer: 'DELTA',
@@ -883,6 +917,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001001',
           date: null,
+          orderNo: null,
           invNo: 'INV-1',
           customerMark: 'MAB-1',
           payer: 'ACME',
@@ -906,6 +941,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001003',
           date: '2026-05-01',
+          orderNo: null,
           invNo: 'INV-3',
           customerMark: null,
           payer: 'GAMMA',
@@ -914,6 +950,7 @@ describe('receipt-edit-request-service', () => {
         afterSnapshot: {
           receiptNo: '0001004',
           date: '2026-05-02',
+          orderNo: null,
           invNo: 'INV-4',
           customerMark: 'MAB-4',
           payer: 'DELTA',
@@ -953,6 +990,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001010',
           date: null,
+          orderNo: null,
           invNo: 'INV-10',
           customerMark: 'MAB-10',
           payer: 'ALPHA',
@@ -977,6 +1015,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001010',
           date: null,
+          orderNo: null,
           invNo: 'INV-10',
           customerMark: 'MAB-10',
           payer: 'ALPHA',
@@ -1021,6 +1060,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001011',
           date: '2026-05-01',
+          orderNo: null,
           invNo: 'INV-11',
           customerMark: null,
           payer: 'BRANCH',
@@ -1029,6 +1069,7 @@ describe('receipt-edit-request-service', () => {
         afterSnapshot: {
           receiptNo: '0001012',
           date: '2026-05-02',
+          orderNo: null,
           invNo: 'INV-12',
           customerMark: 'MAB-12',
           payer: 'BRANCH-NEW',
@@ -1052,6 +1093,7 @@ describe('receipt-edit-request-service', () => {
         beforeSnapshot: {
           receiptNo: '0001011',
           date: '2026-05-01',
+          orderNo: null,
           invNo: 'INV-11',
           customerMark: null,
           payer: 'BRANCH',
@@ -1060,6 +1102,7 @@ describe('receipt-edit-request-service', () => {
         afterSnapshot: {
           receiptNo: '0001012',
           date: '2026-05-02',
+          orderNo: null,
           invNo: 'INV-12',
           customerMark: 'MAB-12',
           payer: 'BRANCH-NEW',

@@ -15,6 +15,7 @@ export type CustomerResolveResult = {
   customerId: string | null;
   customerMark: string;
   customerName: string | null;
+  customerPayerName: string | null;
   customerPhone: string | null;
   customerCity: string | null;
   needsCustomerFix: boolean;
@@ -58,6 +59,8 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
           id: true,
           mark: true,
           orderName: true,
+          name: true,
+          companyName: true,
           phone: true,
           city: true,
           orderNames: {
@@ -80,6 +83,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
       customerId: customer.id,
       customerMark: customer.mark,
       customerName: matchedOrderName,
+      customerPayerName: normalize(customer.companyName) || normalize(customer.name) || null,
       customerPhone: customer.phone,
       customerCity: customer.city,
       needsCustomerFix: false,
@@ -95,6 +99,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
         customerId: selected.id,
         customerMark: selected.mark,
         customerName: selected.orderName,
+        customerPayerName: normalize(selected.companyName) || normalize(selected.name) || null,
         customerPhone: selected.phone,
         customerCity: selected.city,
         needsCustomerFix: false,
@@ -116,6 +121,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
         customerId: matchedAlias.customer.id,
         customerMark: matchedAlias.customer.mark,
         customerName: matchedAlias.orderName,
+        customerPayerName: normalize(matchedAlias.customer.companyName) || normalize(matchedAlias.customer.name) || null,
         customerPhone: matchedAlias.customer.phone,
         customerCity: matchedAlias.customer.city,
         needsCustomerFix: false,
@@ -129,6 +135,7 @@ export async function resolveCustomer(input: CustomerResolveInput): Promise<Cust
     customerId: null,
     customerMark,
     customerName: customerOrderNameInput || null,
+    customerPayerName: null,
     customerPhone: null,
     customerCity: null,
     needsCustomerFix: true,

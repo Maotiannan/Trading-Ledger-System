@@ -141,6 +141,79 @@ describe('useReceiptForms', () => {
     expect(result.current.directForm.payer).toBe('Fallback Name');
   });
 
+  it('clears direct-create INV NO when the entered order has no invoice match', async () => {
+    mockLookupOrderContextByOrderNo.mockResolvedValue({
+      matchedCustomer: {
+        mark: 'AB',
+        name: 'AB',
+        customerId: 'cust-ab',
+      },
+      phoneSuggestion: '+224 664 51 79 52',
+      payerSuggestion: 'Thierno Oumar Barry "AB"',
+      invoiceSuggestion: null,
+    });
+
+    const loadCustomerCandidates = jest.fn();
+    const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));
+
+    await act(async () => {
+      result.current.handleShowDirectCreateChange(true);
+    });
+
+    await act(async () => {
+      result.current.setDirectForm((prev) => ({
+        ...prev,
+        orderNo: 'AB-13B',
+        invNo: 'L25MH060992C',
+      }));
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.directForm.invNo).toBe('');
+    expect(result.current.directForm.payer).toBe('Thierno Oumar Barry "AB"');
+  });
+
+  it('clears OCR INV NO when the recognized order has no invoice match', async () => {
+    mockLookupOrderContextByOrderNo.mockResolvedValue({
+      matchedCustomer: {
+        mark: 'AB',
+        name: 'AB',
+        customerId: 'cust-ab',
+      },
+      phoneSuggestion: '+224 664 51 79 52',
+      payerSuggestion: 'Thierno Oumar Barry "AB"',
+      invoiceSuggestion: null,
+    });
+
+    const loadCustomerCandidates = jest.fn();
+    const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));
+
+    await act(async () => {
+      result.current.handleShowUploadChange(true);
+    });
+
+    await act(async () => {
+      result.current.setOcrResult({ orderNo: 'AB-13B', invNo: 'L25MH060992C' });
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.ocrResult).toEqual(expect.objectContaining({
+      orderNo: 'AB-13B',
+      invNo: '',
+      payer: 'Thierno Oumar Barry "AB"',
+    }));
+  });
+
   it('tracks OCR upload stage state and resets it when the upload dialog closes', async () => {
     const loadCustomerCandidates = jest.fn();
     const { result } = renderHook(() => useReceiptForms(loadCustomerCandidates));

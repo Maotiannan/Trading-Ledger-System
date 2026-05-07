@@ -32,6 +32,7 @@ export interface Order {
   orderNo: string;
   amount: number;
   orderBalance: number;
+  invoice?: { id?: string; invNo: string | null } | null;
   customerMark?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;

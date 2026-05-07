@@ -3,9 +3,10 @@ import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { createReceiptRecord, markReceiptReceived, updateReceiptRecord } from '@/lib/receipt-service';
-import { findMatchingOrder, updateOrderBalance } from '@/lib/matching';
+import { createOrder, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -60,6 +61,10 @@ jest.mock('@/lib/customer-matching', () => ({
   resolveCustomer: jest.fn(),
 }));
 
+jest.mock('@/lib/receipt-edit-binding', () => ({
+  resolveReceiptEditBinding: jest.fn(),
+}));
+
 jest.mock('@/lib/user-hierarchy', () => ({
   getHierarchyScope: jest.fn(),
 }));
@@ -94,10 +99,12 @@ const mockDb = db as unknown as {
 };
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockCreateOrder = createOrder as jest.Mock;
 const mockFindMatchingOrder = findMatchingOrder as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
+const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
 
 describe('receipt-service', () => {
   beforeEach(() => {
@@ -119,6 +126,11 @@ describe('receipt-service', () => {
       customerCity: 'Conakry',
       needsCustomerFix: false,
     });
+    mockResolveReceiptEditBinding.mockImplementation(async (_tx, input) => ({
+      orderId: input.orderNo ? 'order-old' : null,
+      orderNo: input.orderNo || null,
+      invNo: input.invNo || null,
+    }));
   });
 
   it('rejects receipt creation without customer mark', async () => {
@@ -217,6 +229,56 @@ describe('receipt-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
+  it('clears OCR invoice number and formats payer for an unmatched non-deposit order', async () => {
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+    mockFindMatchingOrder.mockResolvedValueOnce(null);
+    mockCreateOrder.mockResolvedValueOnce('order-unassociated');
+    mockResolveCustomer.mockResolvedValueOnce({
+      customerId: 'customer-ab',
+      customerMark: 'AB',
+      customerName: 'AB',
+      customerPayerName: 'Thierno Oumar Barry',
+      customerPhone: '+224 664 51 79 52',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+    });
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-990',
+      imageUrl: null,
+      creator: { id: 'sales-1', email: 'sales@example.com', name: 'Sales' },
+    });
+
+    await createReceiptRecord({
+      currentUser: makeUser(),
+      payload: {
+        receiptNo: '0000990',
+        date: null,
+        tel: '+224 664 51 79 52',
+        usd: 4000,
+        invNo: 'L25MH060992C',
+        orderNo: 'AB-13B',
+        payer: 'AB',
+        customerMark: 'AB',
+        customerName: 'AB',
+        customerPhone: '+224 664 51 79 52',
+        customerCity: 'Conakry',
+        customerId: 'customer-ab',
+        isDeposit: false,
+      },
+      mode: 'confirm',
+    });
+
+    expect(mockCreateOrder).toHaveBeenCalledWith('AB-13B', 'sales-1', mockDb);
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        invNo: null,
+        payer: 'Thierno Oumar Barry "AB"',
+        orderNo: 'AB-13B',
+        orderId: 'order-unassociated',
+      }),
+    }));
+  });
+
   it('aborts receipt create before post-transaction work when attach fails', async () => {
     mockDb.receipt.findFirst.mockResolvedValueOnce(null);
     mockFindMatchingOrder.mockResolvedValueOnce(null);
@@ -285,6 +347,7 @@ describe('receipt-service', () => {
       payload: {
         receiptNo: 'R-NEW',
         date: null,
+        orderNo: 'IB-1',
         tel: null,
         invNo: null,
         payer: null,
@@ -298,6 +361,8 @@ describe('receipt-service', () => {
       data: {
         receiptNo: 'R-NEW',
         date: null,
+        orderNo: 'IB-1',
+        orderId: 'order-old',
         tel: null,
         invNo: null,
         customerMark: 'IB',
@@ -308,6 +373,67 @@ describe('receipt-service', () => {
     expect(mockResolveCustomer).not.toHaveBeenCalled();
     expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
     expect(result.data.id).toBe('receipt-1');
+  });
+
+  it('rebinds receipt order and recalculates old and new order balances on direct admin update', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-1',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SR_Received,
+      receiptNo: 'R-OLD',
+      date: null,
+      tel: null,
+      usd: 100,
+      invNo: 'INV-OLD',
+      orderNo: 'IB-1',
+      payer: null,
+      imageUrl: null,
+      imageName: null,
+      isDeposit: false,
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'Ibrahima',
+      customerPhone: '+224',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      orderId: 'order-old',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
+    mockResolveReceiptEditBinding.mockResolvedValueOnce({
+      orderId: 'order-new',
+      orderNo: 'PIKIN-20',
+      invNo: 'INV-NEW',
+    });
+    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-new' });
+
+    await updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-1',
+      payload: {
+        receiptNo: 'R-NEW',
+        date: null,
+        orderNo: 'PIKIN-20',
+        tel: null,
+        invNo: 'INV-NEW',
+        payer: null,
+        customerMark: 'PIKIN',
+      },
+    });
+
+    expect(mockResolveReceiptEditBinding).toHaveBeenCalledWith(mockDb, expect.objectContaining({
+      orderNo: 'PIKIN-20',
+      invNo: 'INV-NEW',
+      customerMark: 'PIKIN',
+    }));
+    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderNo: 'PIKIN-20',
+        orderId: 'order-new',
+        invNo: 'INV-NEW',
+      }),
+    }));
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
   });
 
   it('rejects direct admin update when the receipt is outside receipt visibility scope', async () => {
@@ -341,6 +467,7 @@ describe('receipt-service', () => {
       payload: {
         receiptNo: 'R-NEW',
         date: null,
+        orderNo: 'IB-1',
         tel: null,
         invNo: null,
         payer: null,
@@ -360,6 +487,7 @@ describe('receipt-service', () => {
       payload: {
         receiptNo: 'R-NEW',
         date: '2026-02-31',
+        orderNo: 'IB-1',
         tel: null,
         invNo: null,
         payer: null,

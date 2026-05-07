@@ -1,6 +1,7 @@
 export type ReceiptEditablePatch = {
   receiptNo: string | null;
   date: string | null;
+  orderNo: string | null;
   invNo: string | null;
   customerMark: string | null;
   payer: string | null;

@@ -44,7 +44,13 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
   const [directInvConflictCount, setDirectInvConflictCount] = useState(0);
   const [ocrInvConflict, setOcrInvConflict] = useState(false);
   const [ocrInvConflictCount, setOcrInvConflictCount] = useState(0);
-  const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
+  const [viewingImage, setViewingImage] = useState<{
+    url: string;
+    alt: string;
+    orderNo: string;
+    invNo: string;
+    creator: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!showDirectCreate) return;
@@ -70,6 +76,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
           setDirectInvConflict(Boolean(context.invoiceSuggestion.conflict));
           setDirectInvConflictCount(context.invoiceSuggestion.count);
         } else {
+          setDirectForm((prev) => ({ ...prev, invNo: '' }));
           setDirectInvConflict(false);
           setDirectInvConflictCount(0);
         }
@@ -116,6 +123,7 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
           setOcrInvConflict(Boolean(context.invoiceSuggestion.conflict));
           setOcrInvConflictCount(context.invoiceSuggestion.count);
         } else {
+          setOcrResult((prev) => prev ? ({ ...prev, invNo: '' }) : prev);
           setOcrInvConflict(false);
           setOcrInvConflictCount(0);
         }

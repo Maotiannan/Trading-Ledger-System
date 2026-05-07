@@ -143,7 +143,7 @@ describe('workspace api client', () => {
         customerId: 'cust-latest',
       },
       phoneSuggestion: '622 49 12 86',
-      payerSuggestion: 'MAB SARL',
+      payerSuggestion: 'MAB SARL "ASD-DSA"',
       invoiceSuggestion: {
         invNo: 'INV-LATEST',
         conflict: true,

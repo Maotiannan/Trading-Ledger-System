@@ -53,6 +53,11 @@ export function ReceiptEditDialog({
             onChange={(e) => onFormChange({ ...form, date: e.target.value || null })}
           />
           <Input
+            placeholder={tx('客户单号(orderNo)', 'Order No. (orderNo)')}
+            value={form.orderNo ?? ''}
+            onChange={(e) => onFormChange({ ...form, orderNo: e.target.value || null })}
+          />
+          <Input
             placeholder={tx('账单号(invNo)', 'Invoice No. (invNo)')}
             value={form.invNo ?? ''}
             onChange={(e) => onFormChange({ ...form, invNo: e.target.value || null })}

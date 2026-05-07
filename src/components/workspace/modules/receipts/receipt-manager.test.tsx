@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ReceiptManager } from './receipt-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -61,6 +61,7 @@ const mockUseReceiptCustomerLookup = useReceiptCustomerLookup as jest.Mock;
 const mockUseReceiptForms = useReceiptForms as jest.Mock;
 const mockUseReceiptActions = useReceiptActions as jest.Mock;
 const mockUseReceiptGenerator = useReceiptGenerator as jest.Mock;
+let mockSetViewingImage: jest.Mock;
 
 describe('ReceiptManager', () => {
   beforeEach(() => {
@@ -80,6 +81,7 @@ describe('ReceiptManager', () => {
     mockUseReceiptCustomerLookup.mockReturnValue({
       loadCustomerCandidates: jest.fn(),
     });
+    mockSetViewingImage = jest.fn();
     mockUseReceiptForms.mockReturnValue({
       showUpload: false,
       showDirectCreate: false,
@@ -133,7 +135,7 @@ describe('ReceiptManager', () => {
       ocrInvConflict: false,
       ocrInvConflictCount: 0,
       viewingImage: null,
-      setViewingImage: jest.fn(),
+      setViewingImage: mockSetViewingImage,
       handleShowUploadChange: jest.fn(),
       handleShowDirectCreateChange: jest.fn(),
       handleOcrCustomerMarkChange: jest.fn(),
@@ -192,16 +194,28 @@ describe('ReceiptManager', () => {
     ]);
   });
 
-  it('defaults receipt status filters to unfinished statuses and excludes RECEIVED', async () => {
+  it('keeps receipt status filters in a dropdown draft until query is clicked', async () => {
     await act(async () => {
       render(<ReceiptManager />);
     });
+
+    mockApiCall.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /状态筛选/ }));
 
     expect(screen.getByLabelText('SIGNING_PENDING')).toBeChecked();
     expect(screen.getByLabelText('SR_Received')).toBeChecked();
     expect(screen.getByLabelText('Waiting_SWIFT')).toBeChecked();
     expect(screen.getByLabelText('Bank_Transfer')).toBeChecked();
     expect(screen.getByLabelText('RECEIVED')).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText('RECEIVED'));
+    expect(mockApiCall).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /查询/ }));
+
+    await waitFor(() => {
+      expect(mockApiCall).toHaveBeenCalledWith(expect.stringContaining('status=RECEIVED'));
+    });
   });
 
   it('resets to page 1 when the page size changes', async () => {
@@ -310,5 +324,50 @@ describe('ReceiptManager', () => {
 
     const openedEditDialogProps = (globalThis as { __receiptEditDialogProps?: ReceiptEditDialogProps }).__receiptEditDialogProps;
     expect(openedEditDialogProps?.form.date).toBe('2026-05-04');
+    expect(openedEditDialogProps?.form.orderNo).toBe('ORD-1');
+  });
+
+  it('opens receipt image preview with bound receipt, invoice, and creator metadata', async () => {
+    await act(async () => {
+      render(<ReceiptManager />);
+    });
+
+    const receiptListProps = (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps;
+    await act(async () => {
+      receiptListProps?.onViewImage?.({
+        id: 'receipt-990',
+        receiptNo: '0000990',
+        date: '2026-06-05T00:00:00.000Z',
+        tel: '+224 664 51 79 52',
+        usd: 4000,
+        invNo: null,
+        orderNo: 'AB-13B',
+        payer: 'Thierno Oumar Barry "AB"',
+        customerMark: 'AB',
+        status: 'SR_Received',
+        imageUrl: '/upload/images/receipts/ocr/ab.jpg',
+        imageName: 'IMG_20260506_172643.jpg',
+        isDeposit: false,
+        isMerged: false,
+        note: null,
+        createdAt: '2026-05-06T23:21:12.074Z',
+        creator: { id: 'sales-1', name: 'Pikin', email: 'grandtobusiness@gmail.com' },
+        order: {
+          id: 'order-unassociated',
+          orderNo: 'AB-13B',
+          amount: 0,
+          orderBalance: 0,
+          invoice: { invNo: 'Un_Associated' },
+        },
+      } as never);
+    });
+
+    expect(mockSetViewingImage).toHaveBeenCalledWith({
+      url: '/upload/images/receipts/ocr/ab.jpg',
+      alt: '收据图片',
+      orderNo: 'AB-13B',
+      invNo: 'Un_Associated',
+      creator: 'Pikin',
+    });
   });
 });

@@ -294,6 +294,7 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     mark: string;
     orderName: string;
     name: string;
+    companyName: string | null;
     phone: string | null;
     city: string | null;
   } = null;
@@ -306,7 +307,8 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
         id: matchedCustomers[0].customer.id,
         mark: matchedCustomers[0].customer.mark,
         orderName: matchedCustomers[0].orderName,
-        name: matchedCustomers[0].customer.orderName,
+        name: matchedCustomers[0].customer.name,
+        companyName: matchedCustomers[0].customer.companyName,
         phone: matchedCustomers[0].customer.phone,
         city: matchedCustomers[0].customer.city,
       };

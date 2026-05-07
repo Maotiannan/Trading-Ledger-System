@@ -1,7 +1,6 @@
 import { db } from '@/lib/db';
 import { ReceiptStatus } from '@prisma/client';
 import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
-import { deriveOrderGroupKey } from '@/lib/order-group';
 import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
 import { findOrderIdByNoOrAlias, mapOrderIdsByOrderNos, syncOrderAliases } from '@/lib/order-alias-db';
 import type { DbTransactionClient } from '@/lib/transaction';
@@ -188,50 +187,7 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
     };
   }
 
-  // 再做“拆分元素去掉最右序号”匹配
-  const inputKey = deriveOrderGroupKey(orderNo);
-  if (inputKey) {
-    const grouped = orders.find((order) => deriveOrderGroupKey(order.orderNo) === inputKey);
-    if (grouped) {
-      return {
-        orderId: grouped.id,
-        orderNo: grouped.orderNo,
-        amount: Number(grouped.amount),
-        orderBalance: Number(grouped.orderBalance),
-      };
-    }
-  }
-
-  let bestMatch: {
-    id: string;
-    orderNo: string;
-    amount: number;
-    orderBalance: number;
-    score: number;
-  } | null = null;
-
-  for (const order of orders) {
-    const score = calculateOrderSimilarity(orderNo, order.orderNo, parseOrderTokens(order.tokens));
-    if (!bestMatch || score > bestMatch.score) {
-      bestMatch = {
-        id: order.id,
-        orderNo: order.orderNo,
-        amount: Number(order.amount),
-        orderBalance: Number(order.orderBalance),
-        score,
-      };
-    }
-  }
-
-  if (bestMatch && bestMatch.score >= 0.58) {
-    return {
-      orderId: bestMatch.id,
-      orderNo: bestMatch.orderNo,
-      amount: bestMatch.amount,
-      orderBalance: bestMatch.orderBalance,
-    };
-  }
-
+  // 收据入账不能用同前缀或相似度兜底；未登记订单必须进入系统池等待管理员处理。
   return null;
 }
 

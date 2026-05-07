@@ -10,6 +10,7 @@ import { createOrder, ensureDepositPoolInvoice, findMatchingOrder, updateOrderBa
 import { resolveCustomer } from '@/lib/customer-matching';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
+import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
@@ -37,6 +38,13 @@ function parseEditableDateValue(date: string | null | undefined): Date | null {
   }
 
   return parsed;
+}
+
+function formatReceiptPayer(customerPayerName: string | null | undefined, customerMark: string | null | undefined): string | null {
+  const base = String(customerPayerName || '').trim();
+  const mark = String(customerMark || '').trim();
+  if (!base) return null;
+  return mark ? `${base} "${mark}"` : base;
 }
 
 async function getReceiptOwnerVisibleIds(currentUser: CurrentUser): Promise<string[]> {
@@ -122,7 +130,13 @@ export async function createReceiptRecord(params: {
     customerMark,
     customerName: customerName || null,
     customerId: customerId || null,
+    customerOrderNo: normalizedOrderNo,
   });
+  const effectiveInvNo = matchedOrder ? (payload.invNo || null) : null;
+  const effectivePayer = formatReceiptPayer(
+    customerResolution.customerPayerName,
+    customerResolution.customerMark,
+  ) || (payload.payer || null);
 
   const effectiveDate = payload.date
     ? new Date(payload.date)
@@ -160,9 +174,9 @@ export async function createReceiptRecord(params: {
         date: effectiveDate,
         tel: payload.tel || null,
         usd,
-        invNo: payload.invNo || null,
+        invNo: effectiveInvNo,
         orderNo: normalizedOrderNo,
-        payer: payload.payer || null,
+        payer: effectivePayer,
         customerId: customerResolution.customerId,
         customerMark: customerResolution.customerMark,
         customerName: customerResolution.customerName,
@@ -285,7 +299,22 @@ export async function updateReceiptRecord(params: {
     throw badRequest('Bank_Transfer状态下禁止修改', { receiptId, status: existingReceipt.status });
   }
 
+  const previousOrderId = existingReceipt.orderId || null;
   const updated = await runInTransaction(async (tx) => {
+    const binding = await resolveReceiptEditBinding(tx, {
+      currentUserId: currentUser.id,
+      ownerIds: ownerVisibleIds,
+      orderNo: payload.orderNo,
+      invNo: payload.invNo,
+      isDeposit: existingReceipt.isDeposit,
+      customerId: existingReceipt.customerId,
+      customerMark: payload.customerMark || existingReceipt.customerMark,
+      customerName: existingReceipt.customerName,
+      customerPhone: existingReceipt.customerPhone,
+      customerCity: existingReceipt.customerCity,
+      needsCustomerFix: existingReceipt.needsCustomerFix,
+    });
+
     await tx.receiptHistory.create({
       data: {
         receiptId,
@@ -310,12 +339,21 @@ export async function updateReceiptRecord(params: {
         receiptNo: payload.receiptNo || null,
         date: nextDate,
         tel: payload.tel || null,
-        invNo: payload.invNo || null,
+        invNo: binding.invNo,
+        orderNo: binding.orderNo,
+        orderId: binding.orderId,
         customerMark: payload.customerMark || null,
         payer: payload.payer || null,
       },
     });
   });
+
+  const nextOrderId = updated.orderId || null;
+  if (previousOrderId !== nextOrderId) {
+    for (const orderId of Array.from(new Set([previousOrderId, nextOrderId].filter(Boolean)))) {
+      await updateOrderBalance(orderId as string);
+    }
+  }
 
   await recordAuditEvent({
     action: auditActions.RECEIPT_UPDATE,

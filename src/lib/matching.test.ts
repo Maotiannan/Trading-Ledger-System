@@ -1,19 +1,31 @@
-import { calculateOrderBalance, validateAmountTolerance } from '@/lib/matching';
+import { calculateOrderBalance, findMatchingOrder, validateAmountTolerance } from '@/lib/matching';
 import { db } from '@/lib/db';
+import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 
 jest.mock('@/lib/db', () => ({
   db: {
     order: {
+      findMany: jest.fn(),
       findUnique: jest.fn(),
     },
   },
 }));
 
+jest.mock('@/lib/order-alias-db', () => ({
+  findOrderIdByNoOrAlias: jest.fn(),
+  mapOrderIdsByOrderNos: jest.fn(),
+  syncOrderAliases: jest.fn(),
+}));
+
+const mockedFindMany = db.order.findMany as jest.Mock;
 const mockedFindUnique = db.order.findUnique as jest.Mock;
+const mockedFindOrderIdByNoOrAlias = findOrderIdByNoOrAlias as jest.Mock;
 
 describe('matching.calculateOrderBalance', () => {
   beforeEach(() => {
+    mockedFindMany.mockReset();
     mockedFindUnique.mockReset();
+    mockedFindOrderIdByNoOrAlias.mockReset();
   });
 
   it('should include RECEIVED receipts in balance calculation', async () => {
@@ -34,6 +46,49 @@ describe('matching.calculateOrderBalance', () => {
     mockedFindUnique.mockResolvedValue(null);
 
     await expect(calculateOrderBalance('missing')).resolves.toBe(0);
+  });
+});
+
+describe('matching.findMatchingOrder', () => {
+  beforeEach(() => {
+    mockedFindMany.mockReset();
+    mockedFindUnique.mockReset();
+    mockedFindOrderIdByNoOrAlias.mockReset();
+  });
+
+  it('does not match an unregistered order to another order in the same prefix group', async () => {
+    mockedFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
+    mockedFindMany.mockResolvedValueOnce([
+      {
+        id: 'order-ab-07',
+        orderNo: 'AB-07',
+        amount: 110630,
+        orderBalance: 36058,
+        tokens: '["ab","07","ab07"]',
+      },
+    ]);
+
+    await expect(findMatchingOrder('AB-13B')).resolves.toBeNull();
+  });
+
+  it('still matches the same order number ignoring case', async () => {
+    mockedFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
+    mockedFindMany.mockResolvedValueOnce([
+      {
+        id: 'order-ab-13b',
+        orderNo: 'AB-13B',
+        amount: 4000,
+        orderBalance: 0,
+        tokens: '["ab","13b","ab13b"]',
+      },
+    ]);
+
+    await expect(findMatchingOrder('ab-13b')).resolves.toEqual({
+      orderId: 'order-ab-13b',
+      orderNo: 'AB-13B',
+      amount: 4000,
+      orderBalance: 0,
+    });
   });
 });
 

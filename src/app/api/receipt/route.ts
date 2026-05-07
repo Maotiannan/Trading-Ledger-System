@@ -33,6 +33,7 @@ import {
 const receiptEditablePatchSchema = z.object({
   receiptNo: z.string().nullable(),
   date: z.string().nullable(),
+  orderNo: z.string().nullable(),
   invNo: z.string().nullable(),
   customerMark: z.string().nullable(),
   payer: z.string().nullable(),
@@ -120,7 +121,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       where,
       include: {
         creator: { select: { id: true, name: true, email: true } },
-        order: true,
+        order: {
+          include: {
+            invoice: { select: { id: true, invNo: true } },
+          },
+        },
         histories: {
           orderBy: { createdAt: 'desc' },
           take: 1,

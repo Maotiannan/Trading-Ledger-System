@@ -1,12 +1,16 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.123
-> 最后更新：2026-05-06
+> 当前版本：v1.0.125
+> 最后更新：2026-05-07
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Receipt Management` 修改绑定链路补齐：图片预览元信息改为展示绑定 `ORDER NO / INV NO / creator`；`ReceiptEditablePatch`、`receipt-edit-request-service`、`receipt-service` 与 `/api/receipt` schema 新增 `orderNo`，`ReceiptEditDialog` 支持修改订单号；新增 `receipt-edit-binding` 统一处理“现有订单命中 / 临时池订单迁移到目标发票 / 未登记订单创建零金额订单 / 无法匹配回退系统池”，审批通过与管理员直接保存均在事务内重新绑定 `orderId/orderNo/invNo`，并在订单迁移后重算旧/新订单余额；补齐 binding/service/request/route/UI/API isolated 回归 ✅ 2026-05-07
+
+- [x] `Receipt Management` 未登记订单入账规则收口：`findMatchingOrder` 删除同组前缀与相似度兜底，只保留 `ORDER NO` 精确匹配和 `/` 复合订单 alias/分段命中，避免 `AB-13B -> AB-07` 误挂；`createReceiptRecord` 在未命中已登记发票订单时强制 `invNo = null`，继续按 `isDeposit` 创建 `DEPOSIT_POOL` 或 `Un_Associated` 系统池订单；`resolveCustomer` 扩展 `customerPayerName`，收据创建服务端统一生成 `COMPANY_NAME + "MARK"` 或 `NAME + "MARK"` 的 payer；前端订单上下文、OCR/Direct 表单同步清空无匹配订单的识别发票号；收据图片预览改为绑定元信息，状态筛选改成下拉草稿 + 查询按钮应用；补齐 matching / receipt-service / api client / receipt forms / receipt manager / image preview 回归 ✅ 2026-05-07
 
 - [x] `Payment Detail` 编辑与导出 TYPE 二次收口：`Detail` 修改状态门禁改为只禁止 `RECEIVED`，`Bank_Transfer` 下管理员直接修改与 SALES 修改审批均可继续提交；`applyDetailUpdate` 根据原 detail 状态保持关联收据状态，`Bank_Transfer` 更新不再回退到 `Waiting_SWIFT`；`order-preview` 与保存链路新增编辑专用 receipt 匹配参数，可匹配 `SR_Received / Waiting_SWIFT / Bank_Transfer` 的已有收据并按金额接近排序，避免已有订单号误提示新建收据；`Export Pic` 将 `Bank_Transfer / RECEIVED` 都视为 SWIFT 已生效，余额 `<= 5` 时优先显示 `Final`，覆盖首付款同时结清订单的场景；同步优化 `PaymentAgentManagerDialog` 桌面/移动端可视高度、滚动区和底部按钮 ✅ 2026-05-06
 

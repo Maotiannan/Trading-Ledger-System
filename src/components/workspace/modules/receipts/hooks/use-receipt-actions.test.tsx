@@ -1296,6 +1296,7 @@ describe('useReceiptActions', () => {
         data: {
           receiptNo: 'R-UPDATED',
           date: '2026-05-04',
+          orderNo: 'ORD-UPDATED',
           invNo: 'INV-UPDATED',
           customerMark: 'MAB-2',
           payer: 'BETA',
@@ -1317,6 +1318,7 @@ describe('useReceiptActions', () => {
         data: {
           receiptNo: 'R-UPDATED',
           date: '2026-05-04',
+          orderNo: 'ORD-UPDATED',
           invNo: 'INV-UPDATED',
           customerMark: 'MAB-2',
           payer: 'BETA',
@@ -1345,6 +1347,7 @@ describe('useReceiptActions', () => {
         data: {
           receiptNo: 'R-UPDATED',
           date: '2026-05-04',
+          orderNo: 'ORD-UPDATED',
           invNo: 'INV-UPDATED',
           customerMark: 'MAB-2',
           payer: 'BETA',
@@ -1366,6 +1369,7 @@ describe('useReceiptActions', () => {
         data: {
           receiptNo: 'R-UPDATED',
           date: '2026-05-04',
+          orderNo: 'ORD-UPDATED',
           invNo: 'INV-UPDATED',
           customerMark: 'MAB-2',
           payer: 'BETA',

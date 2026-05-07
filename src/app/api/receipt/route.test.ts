@@ -136,6 +136,7 @@ describe('receipt route edit-approval actions', () => {
       data: {
         receiptNo: '0001002',
         date: '2026-05-04',
+        orderNo: 'MAB-2-10',
         invNo: 'INV-2',
         customerMark: 'MAB-2',
         payer: 'BETA',
@@ -151,6 +152,7 @@ describe('receipt route edit-approval actions', () => {
       data: {
         receiptNo: '0001002',
         date: '2026-05-04',
+        orderNo: 'MAB-2-10',
         invNo: 'INV-2',
         customerMark: 'MAB-2',
         payer: 'BETA',

@@ -4,14 +4,16 @@ function findReceiptByOrder(rows, orderNo) {
   return (Array.isArray(rows) ? rows : []).find((row) => row.orderNo === orderNo);
 }
 
-function editablePatch(suffix, variant) {
+function editablePatch(suffix, variant, overrides = {}) {
   return {
     receiptNo: `EDIT-${variant}-${suffix}`,
     date: '2026-05-05',
+    orderNo: `EDIT-${variant}-ORDER-${suffix}`,
     invNo: `INV-${variant}-${suffix}`,
     customerMark: `MARK-${variant}-${suffix}`,
     payer: `PAYER-${variant}-${suffix}`,
     tel: `100-${String(variant).slice(0, 3)}`,
+    ...overrides,
   };
 }
 
@@ -85,7 +87,11 @@ export default async function run(t) {
   const requestReceipt = await fetchReceiptByOrder(t, requestOrderNo);
   t.assertOk(Boolean(requestReceipt?.id), 'sales receipt is queryable before edit request');
 
-  const requestedPatch = editablePatch(suffix, 'REQ');
+  const requestTargetInvNo = `REQ-TARGET-INV-${suffix}`;
+  const requestedPatch = editablePatch(suffix, 'REQ', {
+    orderNo: requestOrderNo,
+    invNo: requestTargetInvNo,
+  });
   const requestCreate = await t.request('POST', '/api/receipt', {
     json: {
       action: 'request-edit',
@@ -110,6 +116,17 @@ export default async function run(t) {
 
   await t.logout();
   await t.login(branchAdminEmail, 'BranchAdmin@2026!');
+
+  await t.request('POST', '/api/invoice', {
+    json: {
+      invNo: requestTargetInvNo,
+      orders: [
+        { orderNo: `REQ-TARGET-DUMMY-${suffix}`, amount: 1, customerMark: 'REQ-DUMMY', customerName: 'REQ-DUMMY' },
+      ],
+    },
+    expectedStatus: 200,
+  });
+  t.step('branch admin creates target invoice before approving receipt rebind');
 
   const requestList = await t.request('POST', '/api/receipt', {
     json: { action: 'list-edit-requests' },
@@ -136,6 +153,7 @@ export default async function run(t) {
   const approvedReceipt = await fetchReceiptByOrder(t, requestOrderNo);
   t.assertEqual(approvedReceipt?.receiptNo, requestedPatch.receiptNo, 'approved edit updates receiptNo');
   t.assertEqual(approvedReceipt?.date ? String(approvedReceipt.date).slice(0, 10) : null, requestedPatch.date, 'approved edit updates date');
+  t.assertEqual(approvedReceipt?.orderNo, requestedPatch.orderNo, 'approved edit keeps the corrected orderNo');
   t.assertEqual(approvedReceipt?.invNo, requestedPatch.invNo, 'approved edit updates invNo');
   t.assertEqual(approvedReceipt?.customerMark, requestedPatch.customerMark, 'approved edit updates customerMark');
   t.assertEqual(approvedReceipt?.payer, requestedPatch.payer, 'approved edit updates payer');
@@ -166,7 +184,22 @@ export default async function run(t) {
   const adminReceipt = await fetchReceiptByOrder(t, adminOrderNo);
   t.assertOk(Boolean(adminReceipt?.id), 'admin receipt is queryable before direct update');
 
-  const adminPatch = editablePatch(suffix, 'ADMIN');
+  const adminTargetInvNo = `ADMIN-TARGET-INV-${suffix}`;
+  await t.request('POST', '/api/invoice', {
+    json: {
+      invNo: adminTargetInvNo,
+      orders: [
+        { orderNo: `ADMIN-TARGET-DUMMY-${suffix}`, amount: 1, customerMark: 'ADMIN-DUMMY', customerName: 'ADMIN-DUMMY' },
+      ],
+    },
+    expectedStatus: 200,
+  });
+  t.step('admin creates target invoice before direct receipt rebind');
+
+  const adminPatch = editablePatch(suffix, 'ADMIN', {
+    orderNo: adminOrderNo,
+    invNo: adminTargetInvNo,
+  });
   const directUpdate = await t.request('POST', '/api/receipt', {
     json: {
       action: 'update',
@@ -180,6 +213,7 @@ export default async function run(t) {
   const updatedAdminReceipt = await fetchReceiptByOrder(t, adminOrderNo);
   t.assertEqual(updatedAdminReceipt?.receiptNo, adminPatch.receiptNo, 'direct admin update changes receiptNo immediately');
   t.assertEqual(updatedAdminReceipt?.date ? String(updatedAdminReceipt.date).slice(0, 10) : null, adminPatch.date, 'direct admin update changes date immediately');
+  t.assertEqual(updatedAdminReceipt?.orderNo, adminPatch.orderNo, 'direct admin update keeps the corrected orderNo immediately');
   t.assertEqual(updatedAdminReceipt?.invNo, adminPatch.invNo, 'direct admin update changes invNo immediately');
   t.assertEqual(updatedAdminReceipt?.customerMark, adminPatch.customerMark, 'direct admin update changes customerMark immediately');
   t.assertEqual(updatedAdminReceipt?.payer, adminPatch.payer, 'direct admin update changes payer immediately');

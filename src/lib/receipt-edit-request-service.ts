@@ -6,6 +6,8 @@ import { db } from '@/lib/db';
 import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { ReceiptEditablePatch, ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
+import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
+import { updateOrderBalance } from '@/lib/matching';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
@@ -59,6 +61,7 @@ function normalizeEditableSnapshot(input: EditableSnapshotSource): ReceiptEditab
   return {
     receiptNo: typeof input?.receiptNo === 'string' ? input.receiptNo : null,
     date: typeof input?.date === 'string' ? input.date : null,
+    orderNo: typeof input?.orderNo === 'string' ? input.orderNo : null,
     invNo: typeof input?.invNo === 'string' ? input.invNo : null,
     customerMark: typeof input?.customerMark === 'string' ? input.customerMark : null,
     payer: typeof input?.payer === 'string' ? input.payer : null,
@@ -192,6 +195,7 @@ export async function requestReceiptEdit(params: {
           status: true,
           receiptNo: true,
           date: true,
+          orderNo: true,
           invNo: true,
           customerMark: true,
           payer: true,
@@ -223,6 +227,7 @@ export async function requestReceiptEdit(params: {
       const beforeSnapshot = normalizeEditableSnapshot({
         receiptNo: receipt.receiptNo,
         date: receipt.date instanceof Date ? receipt.date.toISOString().slice(0, 10) : null,
+        orderNo: receipt.orderNo,
         invNo: receipt.invNo,
         customerMark: receipt.customerMark,
         payer: receipt.payer,
@@ -289,6 +294,7 @@ export async function reviewReceiptEdit(params: {
   const descendantIds = scope.descendantIds;
   const ownerIds = Array.from(scope.ownerVisibleIds);
 
+  const touchedOrderIds = new Set<string>();
   await runInTransaction(async (tx) => {
     const request = await tx.receiptEditRequest.findUnique({
       where: { id: requestId },
@@ -354,6 +360,20 @@ export async function reviewReceiptEdit(params: {
     }
 
     if (decision === 'approve') {
+      const binding = await resolveReceiptEditBinding(tx, {
+        currentUserId: currentUser.id,
+        ownerIds,
+        orderNo: nextSnapshot.orderNo,
+        invNo: nextSnapshot.invNo,
+        isDeposit: request.receipt.isDeposit,
+        customerId: request.receipt.customerId,
+        customerMark: nextSnapshot.customerMark || request.receipt.customerMark,
+        customerName: request.receipt.customerName,
+        customerPhone: request.receipt.customerPhone,
+        customerCity: request.receipt.customerCity,
+        needsCustomerFix: request.receipt.needsCustomerFix,
+      });
+
       await tx.receiptHistory.create({
         data: {
           receiptId: request.receiptId,
@@ -377,14 +397,26 @@ export async function reviewReceiptEdit(params: {
         data: {
           receiptNo: nextSnapshot.receiptNo,
           date: parseEditableDateValue(nextSnapshot.date),
-          invNo: nextSnapshot.invNo,
+          orderNo: binding.orderNo,
+          orderId: binding.orderId,
+          invNo: binding.invNo,
           customerMark: nextSnapshot.customerMark,
           payer: nextSnapshot.payer,
           tel: nextSnapshot.tel,
         },
       });
+
+      const previousOrderId = request.receipt.orderId || null;
+      if (previousOrderId !== binding.orderId) {
+        if (previousOrderId) touchedOrderIds.add(previousOrderId);
+        if (binding.orderId) touchedOrderIds.add(binding.orderId);
+      }
     }
   });
+
+  for (const orderId of touchedOrderIds) {
+    await updateOrderBalance(orderId);
+  }
 
   await recordAuditEvent({
     action: decision === 'approve'

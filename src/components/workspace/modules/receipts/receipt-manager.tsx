@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -34,6 +35,24 @@ const receiptStatusOptions = ['SIGNING_PENDING', 'SR_Received', 'Waiting_SWIFT',
 const defaultReceiptStatuses = receiptStatusOptions.filter((status) => status !== 'RECEIVED');
 const receiptPageSizeOptions = [30, 50, 100, 200] as const;
 
+type ReceiptFilterState = {
+  search: string;
+  statuses: string[];
+  dateFrom: string;
+  dateTo: string;
+  minUsd: string;
+  maxUsd: string;
+};
+
+const defaultAppliedFilters: ReceiptFilterState = {
+  search: '',
+  statuses: defaultReceiptStatuses,
+  dateFrom: '',
+  dateTo: '',
+  minUsd: '',
+  maxUsd: '',
+};
+
 export function ReceiptManager() {
   const tx = useUiText();
   const locale = useLocale();
@@ -44,11 +63,14 @@ export function ReceiptManager() {
   const [dateTo, setDateTo] = useState('');
   const [minUsd, setMinUsd] = useState('');
   const [maxUsd, setMaxUsd] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState<ReceiptFilterState>(defaultAppliedFilters);
+  const [filterRequestVersion, setFilterRequestVersion] = useState(0);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingReceiptId, setEditingReceiptId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<ReceiptEditablePatch>({
     receiptNo: null,
     date: null,
+    orderNo: null,
     invNo: null,
     customerMark: null,
     payer: null,
@@ -123,24 +145,24 @@ export function ReceiptManager() {
     const requestToken = receiptRequestGuard.nextToken();
     setLoading(true);
     const params = new URLSearchParams();
-    const trimmedSearch = search.trim();
+    const trimmedSearch = appliedFilters.search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
-    for (const status of statusFilter) params.append('status', status);
-    if (dateFrom) params.set('dateFrom', dateFrom);
-    if (dateTo) params.set('dateTo', dateTo);
-    if (minUsd) params.set('minUsd', minUsd);
-    if (maxUsd) params.set('maxUsd', maxUsd);
+    for (const status of appliedFilters.statuses) params.append('status', status);
+    if (appliedFilters.dateFrom) params.set('dateFrom', appliedFilters.dateFrom);
+    if (appliedFilters.dateTo) params.set('dateTo', appliedFilters.dateTo);
+    if (appliedFilters.minUsd) params.set('minUsd', appliedFilters.minUsd);
+    if (appliedFilters.maxUsd) params.set('maxUsd', appliedFilters.maxUsd);
     const query = params.toString();
     const endpoint = `receipt${query ? `?${query}` : ''}`;
     const canUsePrefetch =
       !trimmedSearch &&
-      statusFilter.length === defaultReceiptStatuses.length &&
-      statusFilter.every((status) => defaultReceiptStatuses.includes(status as typeof defaultReceiptStatuses[number])) &&
-      !dateFrom &&
-      !dateTo &&
-      !minUsd &&
-      !maxUsd;
-    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof receipts }>(endpoint) : null;
+      appliedFilters.statuses.length === defaultReceiptStatuses.length &&
+      appliedFilters.statuses.every((status) => defaultReceiptStatuses.includes(status as typeof defaultReceiptStatuses[number])) &&
+      !appliedFilters.dateFrom &&
+      !appliedFilters.dateTo &&
+      !appliedFilters.minUsd &&
+      !appliedFilters.maxUsd;
+    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: Receipt[] }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && receiptRequestGuard.isLatest(requestToken)) {
       setReceipts(cachedResult.data);
       setLoading(false);
@@ -154,7 +176,7 @@ export function ReceiptManager() {
       }
     }
     setLoading(false);
-  }, [dateFrom, dateTo, maxUsd, minUsd, receiptRequestGuard, receipts, search, setLoading, setReceipts, statusFilter]);
+  }, [appliedFilters, receiptRequestGuard, setLoading, setReceipts]);
 
   const {
     uploading,
@@ -229,7 +251,7 @@ export function ReceiptManager() {
 
   useEffect(() => {
     loadReceipts();
-  }, [loadReceipts]);
+  }, [filterRequestVersion, loadReceipts]);
 
   const resetToFirstPage = () => setCurrentPage(1);
 
@@ -238,6 +260,31 @@ export function ReceiptManager() {
       prev.includes(status) ? prev.filter((item) => item !== status) : [...prev, status]
     ));
     resetToFirstPage();
+  };
+
+  const applyFilters = () => {
+    setAppliedFilters({
+      search,
+      statuses: statusFilter,
+      dateFrom,
+      dateTo,
+      minUsd,
+      maxUsd,
+    });
+    resetToFirstPage();
+    setFilterRequestVersion((version) => version + 1);
+  };
+
+  const resetFilters = () => {
+    setSearch('');
+    setStatusFilter(defaultReceiptStatuses);
+    setDateFrom('');
+    setDateTo('');
+    setMinUsd('');
+    setMaxUsd('');
+    setAppliedFilters(defaultAppliedFilters);
+    resetToFirstPage();
+    setFilterRequestVersion((version) => version + 1);
   };
 
   const handlePageSizeChange = (nextPageSize: number) => {
@@ -258,6 +305,9 @@ export function ReceiptManager() {
 
   const isAdmin = user?.role === 'ADMIN';
   const canEditReceipts = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const statusSummary = statusFilter.length === receiptStatusOptions.length
+    ? tx('全部状态', 'All statuses')
+    : tx(`已选 ${statusFilter.length} 个状态`, `${statusFilter.length} statuses`);
   const toEditableDateValue = (value: string | null | undefined) => {
     if (!value) return null;
     const trimmed = value.trim();
@@ -270,6 +320,7 @@ export function ReceiptManager() {
     setEditForm({
       receiptNo: receipt.receiptNo ?? null,
       date: toEditableDateValue(receipt.date),
+      orderNo: receipt.order?.orderNo ?? receipt.orderNo ?? null,
       invNo: receipt.invNo ?? null,
       customerMark: receipt.customerMark ?? null,
       payer: receipt.payer ?? null,
@@ -331,22 +382,30 @@ export function ReceiptManager() {
       <Card>
         <CardContent className="pt-6 grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <Input placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')} value={search} onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }} />
-          <div className="rounded-md border px-3 py-2 md:col-span-2 lg:col-span-2">
-            <div className="mb-2 text-sm font-medium">{tx('状态筛选', 'Status Filter')}</div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {receiptStatusOptions.map((status) => (
-                <Label key={status} className="flex items-center gap-2 text-sm font-normal">
-                  <input
-                    type="checkbox"
-                    aria-label={status}
-                    checked={statusFilter.includes(status)}
-                    onChange={() => toggleStatusFilter(status)}
-                  />
-                  <span>{status}</span>
-                </Label>
-              ))}
-            </div>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="justify-between" aria-label={tx('状态筛选', 'Status Filter')}>
+                <span>{tx('状态筛选', 'Status Filter')}</span>
+                <span className="text-xs text-muted-foreground">{statusSummary}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72">
+              <div className="mb-3 text-sm font-medium">{tx('状态筛选', 'Status Filter')}</div>
+              <div className="grid gap-2">
+                {receiptStatusOptions.map((status) => (
+                  <Label key={status} className="flex items-center gap-2 text-sm font-normal">
+                    <input
+                      type="checkbox"
+                      aria-label={status}
+                      checked={statusFilter.includes(status)}
+                      onChange={() => toggleStatusFilter(status)}
+                    />
+                    <span>{status}</span>
+                  </Label>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => { setMinUsd(e.target.value); resetToFirstPage(); }} />
@@ -365,21 +424,14 @@ export function ReceiptManager() {
               ))}
             </select>
           </div>
-          <div className="md:col-span-3 lg:col-span-6 flex justify-end">
+          <div className="md:col-span-3 lg:col-span-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => {
-                setSearch('');
-                setStatusFilter(defaultReceiptStatuses);
-                setDateFrom('');
-                setDateTo('');
-                setMinUsd('');
-                setMaxUsd('');
-                resetToFirstPage();
-              }}
+              onClick={resetFilters}
             >
               {tx('重置筛选', 'Reset Filters')}
             </Button>
+            <Button onClick={applyFilters}>{tx('查询', 'Search')}</Button>
           </div>
         </CardContent>
       </Card>
@@ -398,7 +450,10 @@ export function ReceiptManager() {
           if (!receipt.imageUrl) return;
           setViewingImage({
             url: getDisplayImageUrl(receipt.imageUrl),
-            name: receipt.imageName || tx('收据图片', 'Receipt image'),
+            alt: tx('收据图片', 'Receipt image'),
+            orderNo: receipt.order?.orderNo || receipt.orderNo || '-',
+            invNo: receipt.order?.invoice?.invNo || receipt.invNo || '-',
+            creator: receipt.creator?.name || receipt.creator?.email || '-',
           });
         }}
         onEditReceipt={openEditDialog}
@@ -490,6 +545,7 @@ export function ReceiptManager() {
 
       <ReceiptImagePreviewDialog
         image={viewingImage}
+        tx={tx}
         onOpenChange={(open) => {
           if (!open) setViewingImage(null);
         }}

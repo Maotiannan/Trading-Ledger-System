@@ -34,8 +34,14 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.123`
-- 本次更新：继续修正 `Payment Detail -> Export Pic` 的 `TYPE` 计算规则：所属 detail 的 SWIFT 进入 `Bank_Transfer / RECEIVED` 且订单余额 `<= 5` 时显示 `Final`，并且“第一笔也是最后一笔”优先显示 `Final` 而不是 `Initial`。
+- 当前版本：`1.0.125`
+- 本次更新：`Receipt Management` 的收据图片预览改为显示已绑定 `ORDER NO`、已绑定 `INV NO` 和创建者，不再误把收据号当成订单绑定信息。
+- 同批更新：收据修改现在可修改 `ORDER NO`；`SALES` 提交后继续走上级可见管理员审批，`ADMIN` 及以上直接生效。保存或审批通过时会重新绑定到正确订单和发票。
+- 同批修复：如果收据原来落在 `Un_Associated / DEPOSIT_POOL` 临时池，管理员补录真实 `INV NO` 后，系统会把对应订单迁到目标发票下，避免一直停留在未匹配池。
+- 上一版本：`Receipt Management` 的未登记订单收据匹配规则收紧，只保留精确 `ORDER NO` 与 `/` 复合订单分段匹配；未登记订单不再误挂到同前缀旧订单，非定金进入 `Un_Associated`，定金进入 `DEPOSIT_POOL`。
+- 同批修复：未登记订单创建收据时，即使 OCR 识别出 `INV NO` 也会留空等待管理员后续补录；`PAYER` 统一按 `COMPANY_NAME + "MARK"`，没有公司名时按 `NAME + "MARK"` 显示。
+- 同批优化：收据图片预览不再显示上传文件名；顶部 `Status Filter` 改为下拉菜单，并通过“查询”按钮应用筛选结果。
+- 上一版本：继续修正 `Payment Detail -> Export Pic` 的 `TYPE` 计算规则：所属 detail 的 SWIFT 进入 `Bank_Transfer / RECEIVED` 且订单余额 `<= 5` 时显示 `Final`，并且“第一笔也是最后一笔”优先显示 `Final` 而不是 `Initial`。
 - 同批修复：`Edit Payment Detail` 在 `Bank_Transfer` 状态下也可修改，直到 `RECEIVED` 才禁止；修改订单时会优先匹配已有流程内收据，不再误提示“保存后将创建新收据”。
 - 同批优化：`Payment Agent Management` 弹窗已改为桌面和手机都能完整显示，内容区滚动、底部操作固定可见。
 - 同批更新：`Payment Detail -> Export Pic` 改为更适合手机竖屏查看的 720px 宽模板，字号和列距同步放大；`Edit Payment Detail` 现在可修改 `AGENT`，导出图片底部的代理名称会跟随更新。

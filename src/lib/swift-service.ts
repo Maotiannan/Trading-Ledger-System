@@ -358,6 +358,111 @@ export async function updateSwiftRecord(params: {
   return { data: updated.swift, validation: updated.validation };
 }
 
+export async function markSwiftReceived(params: {
+  currentUser: CurrentUser;
+  swiftId: string;
+}) {
+  const { currentUser, swiftId } = params;
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw createForbiddenError('只有管理员可以签收SWIFT', {
+      role: currentUser.role,
+    });
+  }
+  if (!swiftId) {
+    throw createBadRequestError('缺少SWIFT ID');
+  }
+
+  const existingSwift = await db.swift.findUnique({
+    where: { id: swiftId },
+    include: {
+      detail: {
+        include: {
+          items: {
+            include: {
+              receipt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!existingSwift) {
+    throw createApiError({
+      code: 'RESOURCE_NOT_FOUND',
+      status: 400,
+      message: 'SWIFT不存在',
+      detail: { swiftId },
+    });
+  }
+  if (!(await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser))) {
+    throw createForbiddenError('无权签收该SWIFT记录', {
+      swiftId,
+      swiftCreatedBy: existingSwift.createdBy,
+    });
+  }
+  if (existingSwift.status === SwiftStatus.RECEIVED) {
+    throw createBadRequestError('SWIFT已签收，无需重复确认', {
+      swiftId,
+      status: existingSwift.status,
+    });
+  }
+  if (existingSwift.status === SwiftStatus.ERROR || existingSwift.hasError) {
+    throw createBadRequestError('异常SWIFT不能签收，请先修复', {
+      swiftId,
+      status: existingSwift.status,
+      hasError: existingSwift.hasError,
+    });
+  }
+  if (!existingSwift.detail) {
+    throw createBadRequestError('SWIFT未关联付款明细，无法签收', {
+      swiftId,
+      detailId: existingSwift.detailId,
+    });
+  }
+
+  const receiptIds = existingSwift.detail.items
+    .map((item) => item.receiptId)
+    .filter((receiptId): receiptId is string => Boolean(receiptId));
+
+  const updated = await runInTransaction(async (tx) => {
+    const swift = await tx.swift.update({
+      where: { id: swiftId },
+      data: { status: SwiftStatus.RECEIVED },
+    });
+
+    if (receiptIds.length > 0) {
+      await tx.receipt.updateMany({
+        where: { id: { in: receiptIds } },
+        data: { status: ReceiptStatus.RECEIVED },
+      });
+    }
+
+    await tx.detail.update({
+      where: { id: existingSwift.detail.id },
+      data: { status: DetailStatus.RECEIVED },
+    });
+    await tx.swift.updateMany({
+      where: { detailId: existingSwift.detail.id },
+      data: { status: SwiftStatus.RECEIVED },
+    });
+
+    return swift;
+  });
+
+  await recordAuditEvent({
+    action: auditActions.SWIFT_MARK_RECEIVED,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.SWIFT,
+    targetId: swiftId,
+    metadata: {
+      detailId: existingSwift.detail.id,
+      receiptIds,
+    },
+  });
+
+  return { data: updated };
+}
+
 export async function deleteSwiftRecord(params: {
   currentUser: CurrentUser;
   swiftId: string;

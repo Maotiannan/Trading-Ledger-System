@@ -5,19 +5,21 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle, Eye, Pencil, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, Eye, Pencil, Trash2 } from 'lucide-react';
 
 export type SwiftListProps = {
   swifts: Swift[];
+  isAdmin: boolean;
   canEdit: boolean;
   tx: (zh: string, en: string) => string;
   getSwiftStatus: (swift: Swift) => string;
   onViewImage: (swift: Swift) => void;
   onEditSwift: (swift: Swift) => void;
+  onMarkReceived: (swiftId: string) => void;
   onDeleteSwift: (swift: Swift) => void;
 };
 
-export function SwiftList({ swifts, canEdit, tx, getSwiftStatus, onViewImage, onEditSwift, onDeleteSwift }: SwiftListProps) {
+export function SwiftList({ swifts, isAdmin, canEdit, tx, getSwiftStatus, onViewImage, onEditSwift, onMarkReceived, onDeleteSwift }: SwiftListProps) {
   if (swifts.length === 0) {
     return (
       <Card>
@@ -57,6 +59,17 @@ export function SwiftList({ swifts, canEdit, tx, getSwiftStatus, onViewImage, on
                   {canEdit && (
                     <Button size="sm" variant="ghost" onClick={() => onEditSwift(swift)} title={tx('修改SWIFT', 'Edit SWIFT')}>
                       <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {isAdmin && status === 'Bank_Transfer' && !swift.hasError && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onMarkReceived(swift.id)}
+                      title={tx('签收SWIFT', 'Confirm SWIFT received')}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <Check className="h-4 w-4" />
                     </Button>
                   )}
                   <Button

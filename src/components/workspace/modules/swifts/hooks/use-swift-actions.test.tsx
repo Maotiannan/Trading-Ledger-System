@@ -600,6 +600,24 @@ describe('useSwiftActions', () => {
     expect(loadSwifts).toHaveBeenCalled();
   });
 
+  it('marks a swift received and reloads swifts after admin confirmation', async () => {
+    mockApiCall.mockResolvedValue({ success: true, message: 'SWIFT已签收' });
+    const { result } = renderHook(() => useSwiftActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleMarkSwiftReceived('swift-1');
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('swift', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'mark-received',
+        swiftId: 'swift-1',
+      }),
+    }));
+    expect(loadSwifts).toHaveBeenCalled();
+  });
+
   it('alerts when normal swift deletion request fails', async () => {
     mockApiCall.mockResolvedValue({ success: false, message: 'delete request failed' });
     const { result } = renderHook(() => useSwiftActions(createDeps()));

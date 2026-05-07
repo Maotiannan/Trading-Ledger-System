@@ -53,10 +53,46 @@ describe('ReceiptList', () => {
         onResumeSigning={() => undefined}
         onPreviousPage={() => undefined}
         onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
       />,
     );
 
     expect(screen.getByText('$350.00')).toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
+
+  it('shows rows-per-page control next to bottom pagination controls', () => {
+    render(
+      <ReceiptList
+        receipts={Array.from({ length: 31 }, (_, index) => ({
+          ...baseReceipt,
+          id: `receipt-${index}`,
+          receiptNo: `0001${String(index).padStart(3, '0')}`,
+        }))}
+        paginatedReceipts={[baseReceipt]}
+        currentPage={1}
+        totalPages={2}
+        isAdmin
+        canEdit
+        canResumeSigning
+        tx={tx}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    const pagination = screen.getByTestId('receipt-pagination-controls');
+    expect(pagination).toContainElement(screen.getByLabelText('每页条数'));
   });
 });

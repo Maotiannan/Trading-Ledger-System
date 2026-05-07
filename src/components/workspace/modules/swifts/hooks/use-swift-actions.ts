@@ -339,6 +339,27 @@ export function useSwiftActions({
     }
   };
 
+  const handleMarkSwiftReceived = async (swiftId: string) => {
+    if (!confirm(tx('确定要签收这条SWIFT并完成对应付款明细和收据吗？', 'Confirm this SWIFT and complete linked payment details and receipts?'))) return;
+
+    try {
+      const result = await apiCall('swift', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'mark-received',
+          swiftId,
+        }),
+      });
+      if (!result.success) {
+        alert(getErrorMessage(result, tx('操作失败', 'Operation failed')));
+        return;
+      }
+      await loadSwifts();
+    } catch (err) {
+      alert(getErrorMessage(err, tx('网络错误，请重试', 'Network error, please retry.')));
+    }
+  };
+
   const handleDirectCreate = async () => {
     setError(null);
     try {
@@ -448,6 +469,7 @@ export function useSwiftActions({
     handleFileSelect,
     handleConfirm,
     handleDeleteSwift,
+    handleMarkSwiftReceived,
     handleDirectCreate,
     handleSubmitSwiftEdit,
     handleReviewSwiftEdit,

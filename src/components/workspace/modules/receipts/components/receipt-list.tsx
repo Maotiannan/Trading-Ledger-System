@@ -3,6 +3,7 @@
 import type { Receipt } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Check, Eye, PenSquare, Pencil, Trash2 } from 'lucide-react';
 
@@ -23,6 +24,9 @@ export type ReceiptListProps = {
   onResumeSigning: (receiptId: string) => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
+  pageSize: number;
+  pageSizeOptions: readonly number[];
+  onPageSizeChange: (nextPageSize: number) => void;
 };
 
 export function ReceiptList({
@@ -42,6 +46,9 @@ export function ReceiptList({
   onResumeSigning,
   onPreviousPage,
   onNextPage,
+  pageSize,
+  pageSizeOptions,
+  onPageSizeChange,
 }: ReceiptListProps) {
   return (
     <Card>
@@ -131,17 +138,36 @@ export function ReceiptList({
         </Table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="flex justify-center items-center gap-2 py-4 border-t">
-            <Button variant="outline" size="sm" onClick={onPreviousPage} disabled={currentPage === 1}>
-              {tx('上一页', 'Previous')}
-            </Button>
-            <span className="text-sm text-gray-600">
-              {tx(`第 ${currentPage} / ${totalPages} 页 (共 ${receipts.length} 条)`, `Page ${currentPage} / ${totalPages} (Total ${receipts.length})`)}
-            </span>
-            <Button variant="outline" size="sm" onClick={onNextPage} disabled={currentPage === totalPages}>
-              {tx('下一页', 'Next')}
-            </Button>
+        {receipts.length > 0 && (
+          <div
+            data-testid="receipt-pagination-controls"
+            className="flex flex-col items-center justify-between gap-3 border-t px-4 py-4 sm:flex-row"
+          >
+            <div className="flex items-center gap-2">
+              <Label htmlFor="receipt-page-size">{tx('每页条数', 'Rows per page')}</Label>
+              <select
+                id="receipt-page-size"
+                aria-label={tx('每页条数', 'Rows per page')}
+                className="border rounded-md px-3 py-2 text-sm"
+                value={String(pageSize)}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              >
+                {pageSizeOptions.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={onPreviousPage} disabled={currentPage === 1}>
+                {tx('上一页', 'Previous')}
+              </Button>
+              <span className="text-sm text-gray-600">
+                {tx(`第 ${currentPage} / ${totalPages} 页 (共 ${receipts.length} 条)`, `Page ${currentPage} / ${totalPages} (Total ${receipts.length})`)}
+              </span>
+              <Button variant="outline" size="sm" onClick={onNextPage} disabled={currentPage === totalPages}>
+                {tx('下一页', 'Next')}
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

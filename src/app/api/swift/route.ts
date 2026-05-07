@@ -16,7 +16,7 @@ import { createApiError } from '@/lib/api-error';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
-import { createSwiftRecord, deleteSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, deleteSwiftRecord, markSwiftReceived, updateSwiftRecord } from '@/lib/swift-service';
 import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
 import { normalizeSwiftOcrResult } from '@/lib/swift-normalization';
 
@@ -237,6 +237,18 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         comment: typeof requestData.comment === 'string' ? requestData.comment : null,
       });
       return createApiSuccessResponse({ message: result.message }, request);
+    }
+
+    if (action === 'mark-received') {
+      const swiftId = typeof requestData.swiftId === 'string' ? requestData.swiftId : '';
+      const result = await markSwiftReceived({
+        currentUser,
+        swiftId,
+      });
+      return createApiSuccessResponse({
+        data: result.data,
+        message: 'SWIFT已签收',
+      }, request);
     }
 
     if (action === 'list-edit-requests') {

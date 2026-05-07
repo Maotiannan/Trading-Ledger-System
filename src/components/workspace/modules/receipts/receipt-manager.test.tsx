@@ -47,7 +47,17 @@ jest.mock('./components', () => ({
   ReceiptImagePreviewDialog: () => null,
   ReceiptList: (props: ReceiptListProps) => {
     (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps = props;
-    return null;
+    return (
+      <select
+        aria-label="每页条数"
+        value={String(props.pageSize)}
+        onChange={(event) => props.onPageSizeChange(Number(event.target.value))}
+      >
+        {props.pageSizeOptions.map((size) => (
+          <option key={size} value={size}>{size}</option>
+        ))}
+      </select>
+    );
   },
   ReceiptUploadDialog: () => null,
 }));
@@ -258,6 +268,8 @@ describe('ReceiptManager', () => {
     fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '100' } });
 
     expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.currentPage).toBe(1);
+    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSize).toBe(100);
+    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSizeOptions).toEqual([30, 50, 100, 200]);
   });
 
   it('wires receipt edit affordances for sales-visible receipts and normalizes existing ISO dates', async () => {

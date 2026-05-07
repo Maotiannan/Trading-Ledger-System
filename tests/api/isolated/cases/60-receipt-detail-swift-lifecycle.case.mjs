@@ -316,6 +316,15 @@ export default async function run(t) {
   const bankDetail = findDetailByOrder(detailAfterSwift.data?.data, orderNo);
   t.assertEqual(bankDetail?.status, 'Bank_Transfer', 'detail enters Bank_Transfer after swift');
 
+  const salesSwiftReceiveForbidden = await t.request('POST', '/api/swift', {
+    json: {
+      action: 'mark-received',
+      swiftId: createdSwift.id,
+    },
+    expectedStatus: 403,
+  });
+  t.assertMatch(salesSwiftReceiveForbidden.data?.code || salesSwiftReceiveForbidden.text, /FORBIDDEN/, 'sales cannot sign off swift received state');
+
   const swiftDeletionRequest = await t.request('POST', '/api/deletion', {
     json: {
       action: 'request',
@@ -355,26 +364,26 @@ export default async function run(t) {
   const stillBankDetail = findDetailByOrder(detailAfterReject.data?.data, orderNo);
   t.assertEqual(stillBankDetail?.status, 'Bank_Transfer', 'detail remains Bank_Transfer after rejection');
 
-  await t.request('POST', '/api/receipt', {
+  await t.request('POST', '/api/swift', {
     json: {
       action: 'mark-received',
-      receiptId: linkedReceipt.id,
+      swiftId: createdSwift.id,
     },
     expectedStatus: 200,
   });
-  t.step('receipt marked as received after bank transfer');
+  t.step('swift signed off as received after bank transfer');
 
   const receiptAfterReceive = await t.request('GET', `/api/receipt?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
   const receivedReceipt = findReceiptByOrder(receiptAfterReceive.data?.data, orderNo);
-  t.assertEqual(receivedReceipt?.status, 'RECEIVED', 'receipt enters RECEIVED after mark-received');
+  t.assertEqual(receivedReceipt?.status, 'RECEIVED', 'receipt enters RECEIVED after swift sign-off');
 
   const detailAfterReceive = await t.request('GET', `/api/detail?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
   const receivedDetail = findDetailByOrder(detailAfterReceive.data?.data, orderNo);
-  t.assertEqual(receivedDetail?.status, 'RECEIVED', 'detail enters RECEIVED after linked receipts are received');
+  t.assertEqual(receivedDetail?.status, 'RECEIVED', 'detail enters RECEIVED after swift sign-off');
 
   const swiftAfterReceive = await t.request('GET', `/api/swift?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
   const receivedSwift = findSwiftByDetail(swiftAfterReceive.data?.data, linkedDetail.id);
-  t.assertEqual(receivedSwift?.status, 'RECEIVED', 'swift enters RECEIVED after receipt sign-off');
+  t.assertEqual(receivedSwift?.status, 'RECEIVED', 'swift enters RECEIVED after swift sign-off');
 
   const receiptDeleteForbidden = await t.request('POST', '/api/deletion', {
     json: {

@@ -95,4 +95,16 @@ describe('ReceiptUploadDialog', () => {
     expect(dialog.className).toContain('max-h-[90vh]');
     expect(screen.getByRole('button', { name: '确认创建' })).toBeInTheDocument();
   });
+
+  it('leaves deposit unchecked by default when OCR does not explicitly mark deposit', () => {
+    render(
+      <ReceiptUploadDialog
+        {...defaultProps}
+        ocrResult={{ receiptNo: 'OCR-1', orderNo: 'AB-13B' }}
+        ocrCustomerMark="AB"
+      />
+    );
+
+    expect(screen.getByLabelText('这是定金 (DEPOSIT)')).not.toBeChecked();
+  });
 });

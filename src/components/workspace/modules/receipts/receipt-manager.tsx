@@ -410,20 +410,6 @@ export function ReceiptManager() {
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
           <Input type="number" placeholder={tx('最小金额', 'Min amount')} value={minUsd} onChange={(e) => { setMinUsd(e.target.value); resetToFirstPage(); }} />
           <Input type="number" placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onChange={(e) => { setMaxUsd(e.target.value); resetToFirstPage(); }} />
-          <div className="flex items-center gap-2">
-            <Label htmlFor="receipt-page-size">{tx('每页条数', 'Rows per page')}</Label>
-            <select
-              id="receipt-page-size"
-              aria-label={tx('每页条数', 'Rows per page')}
-              className="border rounded-md px-3 py-2 text-sm"
-              value={String(pageSize)}
-              onChange={(event) => handlePageSizeChange(Number(event.target.value))}
-            >
-              {receiptPageSizeOptions.map((size) => (
-                <option key={size} value={size}>{size}</option>
-              ))}
-            </select>
-          </div>
           <div className="md:col-span-3 lg:col-span-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
@@ -462,6 +448,9 @@ export function ReceiptManager() {
         onResumeSigning={resumeGeneratorSession}
         onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
         onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+        pageSize={pageSize}
+        pageSizeOptions={receiptPageSizeOptions}
+        onPageSizeChange={handlePageSizeChange}
       />
 
       <ReceiptGeneratorLaunchDialog

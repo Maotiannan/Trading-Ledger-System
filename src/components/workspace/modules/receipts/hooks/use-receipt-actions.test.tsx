@@ -47,6 +47,18 @@ const mockGetErrorMessage = getErrorMessage as jest.Mock;
 const mockUploadBusinessImage = uploadBusinessImage as jest.Mock;
 const mockCompressReceiptDirectImage = compressReceiptDirectImage as jest.Mock;
 
+const normalizedOcr = (overrides: Record<string, unknown> = {}) => ({
+  receiptNo: null,
+  date: null,
+  tel: null,
+  usd: null,
+  invNo: null,
+  orderNo: null,
+  payer: null,
+  isDeposit: false,
+  ...overrides,
+});
+
 describe('useReceiptActions', () => {
   const tx = (zh: string, _en: string) => zh;
   const mockFetch = jest.fn();
@@ -347,11 +359,64 @@ describe('useReceiptActions', () => {
     const formData = buildFormData(file);
     expect(formData.get('action')).toBe('recognize');
     expect(formData.get('file')).toBe(file);
-    expect(setOcrResult).toHaveBeenCalledWith({ receiptNo: 'OCR-1' });
+    expect(setOcrResult).toHaveBeenCalledWith(normalizedOcr({ receiptNo: 'OCR-1' }));
     expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/receipt.png', name: 'receipt.png' });
     expect(setOcrCustomerMark).toHaveBeenCalledWith('');
     expect(setOcrCustomerCandidates).toHaveBeenCalledWith([]);
     expect(result.current.uploading).toBe(false);
+  });
+
+  it('normalizes OCR aliases so recognized ORDER NO is kept and deposit defaults unchecked', async () => {
+    const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      data: {
+        imageCompressionEnabled: false,
+      },
+    });
+    mockUploadBusinessImage.mockResolvedValueOnce({
+      prepared: {
+        file,
+        compressed: false,
+        qualityUsed: null,
+        originalSize: file.size,
+        outputSize: file.size,
+        targetMaxBytes: 500 * 1024,
+      },
+      response: {
+        success: true,
+        data: {
+          ocrResult: {
+            receipt_no: 'OCR-990',
+            payment_date: '2026-05-07',
+            phone: '+224 664 51 79 52',
+            amount: '4000',
+            inv_no: 'L25MH060992C',
+            order_no: 'AB-13B',
+            client_name: 'AB',
+          },
+          image: { path: '/uploads/receipt-990.png', name: 'receipt-990.png' },
+        },
+      },
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      await result.current.handleFileSelect({
+        target: { files: [file] },
+      } as unknown as React.ChangeEvent<HTMLInputElement>);
+    });
+
+    expect(setOcrResult).toHaveBeenCalledWith({
+      receiptNo: 'OCR-990',
+      date: '2026-05-07',
+      tel: '+224 664 51 79 52',
+      usd: 4000,
+      invNo: 'L25MH060992C',
+      orderNo: 'AB-13B',
+      payer: 'AB',
+      isDeposit: false,
+    });
   });
 
   it('continues OCR upload with default compression behavior when loading preferences fails', async () => {
@@ -396,7 +461,7 @@ describe('useReceiptActions', () => {
         preference: undefined,
       }),
     }));
-    expect(setOcrResult).toHaveBeenCalledWith({ receiptNo: 'OCR-FALLBACK' });
+    expect(setOcrResult).toHaveBeenCalledWith(normalizedOcr({ receiptNo: 'OCR-FALLBACK' }));
     expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/receipt-fallback.png', name: 'receipt-fallback.png' });
     expect(setOcrUploadStatus).toHaveBeenLastCalledWith('success');
     expect(setOcrUploadProgress).toHaveBeenLastCalledWith(100);
@@ -448,7 +513,7 @@ describe('useReceiptActions', () => {
         preference: undefined,
       }),
     }));
-    expect(setOcrResult).toHaveBeenCalledWith({ receiptNo: 'OCR-STALL' });
+    expect(setOcrResult).toHaveBeenCalledWith(normalizedOcr({ receiptNo: 'OCR-STALL' }));
     expect(setSavedImagePath).toHaveBeenCalledWith({ path: '/uploads/receipt-stall.png', name: 'receipt-stall.png' });
     expect(result.current.uploading).toBe(false);
   });
@@ -598,7 +663,7 @@ describe('useReceiptActions', () => {
     expect(result.current.ocrUploadStatus).toBe('success');
     expect(result.current.ocrUploadMessage).toBe('AI识别完成');
     expect(result.current.ocrUploadProgress).toBe(100);
-    expect(result.current.ocrResult).toEqual({ receiptNo: 'OCR-1', usd: null });
+    expect(result.current.ocrResult).toEqual(normalizedOcr({ receiptNo: 'OCR-1' }));
     expect(result.current.savedImagePath).toEqual({ path: '/uploads/partial-receipt.png', name: 'partial-receipt.png' });
     expect(history.ocrUploadStatusHistory).toEqual([
       'compressing',
@@ -812,7 +877,7 @@ describe('useReceiptActions', () => {
     expect(result.current.ocrUploadStatus).toBe('success');
     expect(result.current.ocrUploadMessage).toBe('AI识别完成');
     expect(result.current.ocrUploadProgress).toBe(100);
-    expect(result.current.ocrResult).toEqual({ receiptNo: 'OCR-RETRY-SUCCESS' });
+    expect(result.current.ocrResult).toEqual(normalizedOcr({ receiptNo: 'OCR-RETRY-SUCCESS' }));
     expect(result.current.savedImagePath).toEqual({ path: '/uploads/retry-success.png', name: 'retry-success.png' });
     expect(result.current.selectedFile).toBe(secondFile);
     expect(history.errorHistory).toEqual([null, '上传中断，请在更稳定的网络下重试', null]);

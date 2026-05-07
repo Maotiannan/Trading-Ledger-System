@@ -34,8 +34,12 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.125`
-- 本次更新：`Receipt Management` 的收据图片预览改为显示已绑定 `ORDER NO`、已绑定 `INV NO` 和创建者，不再误把收据号当成订单绑定信息。
+- 当前版本：`1.0.126`
+- 本次更新：`Upload Receipt` 的 AI 识别结果会继续保留识别出的 `ORDER NO`；只有当系统找不到对应订单时，识别出的 `INV NO` 才会留空等待管理员补录。
+- 同批更新：`Upload Receipt` 的 `DEPOSIT` 默认不再勾选；`Receipt Management` 的 `Rows per page` 已移到底部分页区旁边。
+- 同批更新：`SWIFT Management` 为管理员恢复/新增 `SWIFT` 签收入口，签收后会把关联 `Payment Detail / Receipt / SWIFT` 一起推进到 `RECEIVED`；`SALES` 无权签收。
+- 同批优化：`Approval` 页面中删除申请、收据修改申请、付款明细修改申请、SWIFT 修改申请都改为每页 `20` 条分页展示。
+- 上一版本：`Receipt Management` 的收据图片预览改为显示已绑定 `ORDER NO`、已绑定 `INV NO` 和创建者，不再误把收据号当成订单绑定信息。
 - 同批更新：收据修改现在可修改 `ORDER NO`；`SALES` 提交后继续走上级可见管理员审批，`ADMIN` 及以上直接生效。保存或审批通过时会重新绑定到正确订单和发票。
 - 同批修复：如果收据原来落在 `Un_Associated / DEPOSIT_POOL` 临时池，管理员补录真实 `INV NO` 后，系统会把对应订单迁到目标发票下，避免一直停留在未匹配池。
 - 上一版本：`Receipt Management` 的未登记订单收据匹配规则收紧，只保留精确 `ORDER NO` 与 `/` 复合订单分段匹配；未登记订单不再误挂到同前缀旧订单，非定金进入 `Un_Associated`，定金进入 `DEPOSIT_POOL`。

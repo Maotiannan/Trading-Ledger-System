@@ -38,6 +38,7 @@ jest.mock('@/lib/route-auth', () => ({
 jest.mock('@/lib/swift-service', () => ({
   createSwiftRecord: jest.fn(),
   deleteSwiftRecord: jest.fn(),
+  markSwiftReceived: jest.fn(),
   updateSwiftRecord: jest.fn(),
 }));
 
@@ -49,13 +50,14 @@ jest.mock('@/lib/swift-edit-request-service', () => ({
 
 import { POST } from '@/app/api/swift/route';
 import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
-import { createSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, markSwiftReceived, updateSwiftRecord } from '@/lib/swift-service';
 
 const mockCreateSwiftRecord = createSwiftRecord as jest.Mock;
 const mockRequestSwiftEdit = requestSwiftEdit as jest.Mock;
 const mockReviewSwiftEdit = reviewSwiftEdit as jest.Mock;
 const mockListSwiftEditRequests = listSwiftEditRequests as jest.Mock;
 const mockUpdateSwiftRecord = updateSwiftRecord as jest.Mock;
+const mockMarkSwiftReceived = markSwiftReceived as jest.Mock;
 
 function buildJsonRequest(payload: Record<string, unknown>) {
   return {
@@ -171,6 +173,26 @@ describe('swift route edit-approval actions', () => {
       },
     });
     expect(json.success).toBe(true);
+  });
+
+  it('routes admin mark-received through markSwiftReceived', async () => {
+    mockMarkSwiftReceived.mockResolvedValueOnce({
+      data: { id: 'swift-1', status: 'RECEIVED' },
+    });
+
+    const response = await POST(buildJsonRequest({
+      action: 'mark-received',
+      swiftId: 'swift-1',
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockMarkSwiftReceived).toHaveBeenCalledWith({
+      currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
+      swiftId: 'swift-1',
+    });
+    expect(json.success).toBe(true);
+    expect(json.message).toBe('SWIFT已签收');
   });
 
   it('accepts nested confirm payloads used by OCR confirm flow', async () => {

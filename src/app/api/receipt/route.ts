@@ -17,6 +17,7 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { buildReceiptBalanceAfterMap } from '@/lib/receipt-balance';
+import { normalizeReceiptOcrResult } from '@/lib/receipt-normalization';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import {
   createReceiptRecord,
@@ -202,7 +203,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
       try {
         const base64 = await toOcrDataUrl(file);
-        const ocrResult = await recognizeReceipt(base64);
+        const ocrResult = normalizeReceiptOcrResult(await recognizeReceipt(base64) as unknown as Record<string, unknown>);
         const imagePath = await stageUploadedAsset({
           file,
           category: UploadedAssetCategory.RECEIPT_OCR,

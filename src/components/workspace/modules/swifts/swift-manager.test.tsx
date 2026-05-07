@@ -108,6 +108,7 @@ describe('SwiftManager', () => {
       handleFileSelect: jest.fn(),
       handleConfirm: jest.fn(),
       handleDeleteSwift: jest.fn(),
+      handleMarkSwiftReceived: jest.fn(),
       handleDirectCreate: jest.fn(),
       handleSubmitSwiftEdit: jest.fn(),
     });
@@ -172,5 +173,27 @@ describe('SwiftManager', () => {
     expect(openedEditDialogProps?.form.amount).toBe(330);
     expect(openedEditDialogProps?.form.senderName).toBe('Sender A');
     expect(openedEditDialogProps?.form.receiverAccount).toBe('ACC-1');
+  });
+
+  it('wires swift received confirmation only for admin accounts', async () => {
+    const handleMarkSwiftReceived = jest.fn();
+    mockUseSwiftActions.mockReturnValue({
+      uploading: false,
+      submitting: false,
+      handleFileSelect: jest.fn(),
+      handleConfirm: jest.fn(),
+      handleDeleteSwift: jest.fn(),
+      handleMarkSwiftReceived,
+      handleDirectCreate: jest.fn(),
+      handleSubmitSwiftEdit: jest.fn(),
+    });
+
+    await act(async () => {
+      render(<SwiftManager />);
+    });
+
+    const swiftListProps = (globalThis as { __swiftListProps?: SwiftListProps }).__swiftListProps;
+    expect(swiftListProps?.isAdmin).toBe(true);
+    expect(swiftListProps?.onMarkReceived).toBe(handleMarkSwiftReceived);
   });
 });

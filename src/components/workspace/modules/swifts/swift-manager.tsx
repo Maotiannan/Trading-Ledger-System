@@ -112,6 +112,7 @@ export function SwiftManager() {
     handleFileSelect,
     handleConfirm,
     handleDeleteSwift,
+    handleMarkSwiftReceived,
     handleDirectCreate,
     handleSubmitSwiftEdit,
   } = useSwiftActions({
@@ -269,6 +270,7 @@ export function SwiftManager() {
 
       <SwiftList
         swifts={swifts}
+        isAdmin={isAdmin}
         canEdit={canEditSwifts}
         tx={tx}
         getSwiftStatus={getSwiftStatus}
@@ -280,6 +282,7 @@ export function SwiftManager() {
           });
         }}
         onEditSwift={openEditDialog}
+        onMarkReceived={handleMarkSwiftReceived}
         onDeleteSwift={handleDeleteSwift}
       />
 

@@ -5,6 +5,7 @@ import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/c
 import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
 import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
+import { normalizeReceiptOcrResult } from '@/lib/receipt-normalization';
 import { compressReceiptDirectImage } from '../utils/image-compression';
 import type { PendingDirectImageSelection, ReceiptDirectForm } from '../types';
 
@@ -219,12 +220,15 @@ export function useReceiptActions({
     },
     invalidPayloadMessage: string
   ) => {
-    if (!response.success || !isReceiptOcrResult(response.data?.ocrResult)) {
+    const normalized = response.data?.ocrResult
+      ? normalizeReceiptOcrResult(response.data.ocrResult)
+      : null;
+    if (!response.success || !isReceiptOcrResult(normalized)) {
       throw new Error(invalidPayloadMessage);
     }
 
     return {
-      ocrResult: response.data.ocrResult,
+      ocrResult: normalized,
       image: response.data?.image ?? null,
     };
   };

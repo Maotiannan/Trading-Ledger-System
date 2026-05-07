@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { getNumericSystemSetting } from '@/lib/system-settings';
-import { createSwiftRecord, deleteSwiftRecord, updateSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, deleteSwiftRecord, markSwiftReceived, updateSwiftRecord } from '@/lib/swift-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -18,6 +18,7 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     receipt: {
@@ -58,7 +59,7 @@ function makeUser(overrides: Partial<{
 const mockDb = db as unknown as {
   uploadedAsset: { updateMany: jest.Mock };
   detail: { findUnique: jest.Mock; update: jest.Mock };
-  swift: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; delete: jest.Mock };
+  swift: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; delete: jest.Mock };
   receipt: { updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
@@ -440,5 +441,59 @@ describe('swift-service', () => {
         receiverAccount: null,
       },
     })).rejects.toThrow('RECEIVED状态下禁止修改SWIFT');
+  });
+
+  it('lets admin mark a bank-transfer swift received and completes linked detail and receipts', async () => {
+    mockDb.swift.findUnique.mockResolvedValueOnce({
+      id: 'swift-receive',
+      detailId: 'detail-receive',
+      createdBy: 'sales-1',
+      status: SwiftStatus.Bank_Transfer,
+      hasError: false,
+      detail: {
+        id: 'detail-receive',
+        items: [
+          { receiptId: 'receipt-a', receipt: { status: ReceiptStatus.Bank_Transfer } },
+          { receiptId: 'receipt-b', receipt: { status: ReceiptStatus.Waiting_SWIFT } },
+          { receiptId: null, receipt: null },
+        ],
+      },
+    });
+    mockDb.swift.update.mockResolvedValueOnce({
+      id: 'swift-receive',
+      status: SwiftStatus.RECEIVED,
+    });
+
+    const result = await markSwiftReceived({
+      currentUser: makeUser({ id: 'admin-1', role: UserRole.ADMIN }),
+      swiftId: 'swift-receive',
+    });
+
+    expect(result.data.status).toBe(SwiftStatus.RECEIVED);
+    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['receipt-a', 'receipt-b'] } },
+      data: { status: ReceiptStatus.RECEIVED },
+    });
+    expect(mockDb.detail.update).toHaveBeenCalledWith({
+      where: { id: 'detail-receive' },
+      data: { status: DetailStatus.RECEIVED },
+    });
+    expect(mockDb.swift.updateMany).toHaveBeenCalledWith({
+      where: { detailId: 'detail-receive' },
+      data: { status: SwiftStatus.RECEIVED },
+    });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SWIFT_MARK_RECEIVED',
+      targetId: 'swift-receive',
+    }));
+  });
+
+  it('rejects swift received confirmation for sales users', async () => {
+    await expect(markSwiftReceived({
+      currentUser: makeUser({ role: UserRole.SALES }),
+      swiftId: 'swift-receive',
+    })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 });

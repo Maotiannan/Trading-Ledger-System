@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.125
+> 当前版本：v1.0.126
 > 最后更新：2026-05-07
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 收据 OCR / SWIFT 签收 / 审批分页收口：新增 `receipt-normalization`，前后端统一把 `receipt_no/payment_date/phone/amount/inv_no/order_no/client_name/is_deposit` 等 OCR alias 标准化为 `ReceiptOcrResult`，确保 `ORDER NO` 不会因未命中发票被误清空且 `DEPOSIT` 默认 false；`ReceiptList` 把 rows-per-page 控件下沉到底部分页区；`swift-service` 新增 `markSwiftReceived`，管理员可事务化签收 SWIFT 并联动同 detail 下 `Receipt/Detail/Swift -> RECEIVED`，SALES 403；统一 `Approval` 四个待审批区块为 20 条分页展示；补齐 hook/component/service/route/API isolated 回归 ✅ 2026-05-07
 
 - [x] `Receipt Management` 修改绑定链路补齐：图片预览元信息改为展示绑定 `ORDER NO / INV NO / creator`；`ReceiptEditablePatch`、`receipt-edit-request-service`、`receipt-service` 与 `/api/receipt` schema 新增 `orderNo`，`ReceiptEditDialog` 支持修改订单号；新增 `receipt-edit-binding` 统一处理“现有订单命中 / 临时池订单迁移到目标发票 / 未登记订单创建零金额订单 / 无法匹配回退系统池”，审批通过与管理员直接保存均在事务内重新绑定 `orderId/orderNo/invNo`，并在订单迁移后重算旧/新订单余额；补齐 binding/service/request/route/UI/API isolated 回归 ✅ 2026-05-07
 

@@ -12,6 +12,9 @@ import type { DetailEditRequestRow } from '@/lib/detail-edit-types';
 import type { SwiftEditRequestRow } from '@/lib/swift-edit-types';
 import { Check, Loader2, X } from 'lucide-react';
 
+const APPROVAL_PAGE_SIZE = 20;
+type ApprovalSectionKey = 'deletions' | 'receiptEdits' | 'detailEdits' | 'swiftEdits';
+
 export function DeletionManager() {
   const tx = useUiText();
   const { deletionRequests, setDeletionRequests, user } = useStore();
@@ -20,6 +23,12 @@ export function DeletionManager() {
   const [receiptEditRequests, setReceiptEditRequests] = useState<ReceiptEditRequestRow[]>([]);
   const [detailEditRequests, setDetailEditRequests] = useState<DetailEditRequestRow[]>([]);
   const [swiftEditRequests, setSwiftEditRequests] = useState<SwiftEditRequestRow[]>([]);
+  const [approvalPages, setApprovalPages] = useState<Record<ApprovalSectionKey, number>>({
+    deletions: 1,
+    receiptEdits: 1,
+    detailEdits: 1,
+    swiftEdits: 1,
+  });
 
   const loadApprovalData = useCallback(async () => {
     setLoading(true);
@@ -92,6 +101,60 @@ export function DeletionManager() {
     return <Badge variant={variants[status] || 'default'}>{status}</Badge>;
   };
 
+  const getApprovalPageInfo = (section: ApprovalSectionKey, total: number) => {
+    const totalPages = Math.max(1, Math.ceil(total / APPROVAL_PAGE_SIZE));
+    const currentPage = Math.min(Math.max(approvalPages[section], 1), totalPages);
+    return { currentPage, totalPages };
+  };
+
+  const paginateRows = <T,>(rows: T[], section: ApprovalSectionKey) => {
+    const { currentPage } = getApprovalPageInfo(section, rows.length);
+    return rows.slice((currentPage - 1) * APPROVAL_PAGE_SIZE, currentPage * APPROVAL_PAGE_SIZE);
+  };
+
+  const renderSectionPagination = (section: ApprovalSectionKey, total: number, label: string) => {
+    const { currentPage, totalPages } = getApprovalPageInfo(section, total);
+    if (total <= APPROVAL_PAGE_SIZE) return null;
+
+    const setPage = (nextPage: number) => {
+      setApprovalPages((prev) => ({
+        ...prev,
+        [section]: Math.min(totalPages, Math.max(1, nextPage)),
+      }));
+    };
+
+    return (
+      <div className="flex flex-col items-center justify-between gap-2 border-t px-4 py-3 text-sm text-muted-foreground sm:flex-row">
+        <span>{tx(`第 ${currentPage} / ${totalPages} 页（共 ${total} 条）`, `Page ${currentPage} / ${totalPages} (${total} total)`)}</span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={`${tx('上一页', 'Previous page')} ${label}`}
+            onClick={() => setPage(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            {tx('上一页', 'Previous')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={`${tx('下一页', 'Next page')} ${label}`}
+            onClick={() => setPage(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            {tx('下一页', 'Next')}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const paginatedDeletionRequests = paginateRows(deletionRequests, 'deletions');
+  const paginatedReceiptEditRequests = paginateRows(receiptEditRequests, 'receiptEdits');
+  const paginatedDetailEditRequests = paginateRows(detailEditRequests, 'detailEdits');
+  const paginatedSwiftEditRequests = paginateRows(swiftEditRequests, 'swiftEdits');
+
   const renderPendingActions = (requestId: string, onDecision: (requestId: string, decision: 'approve' | 'reject') => Promise<void>) => {
     if (!canApprove) {
       return <span className="text-xs text-muted-foreground">{tx('等待审批', 'Pending review')}</span>;
@@ -133,7 +196,7 @@ export function DeletionManager() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {deletionRequests.map((request) => (
+              {paginatedDeletionRequests.map((request) => (
                 <TableRow key={request.id}>
                   <TableCell>{request.targetType}</TableCell>
                   <TableCell>{request.requester?.name || request.requester?.email}</TableCell>
@@ -155,6 +218,7 @@ export function DeletionManager() {
             </TableBody>
           </Table>
           </div>
+          {renderSectionPagination('deletions', deletionRequests.length, tx('删除申请', 'Deletion Requests'))}
         </CardContent>
       </Card>
 
@@ -176,7 +240,7 @@ export function DeletionManager() {
                 </tr>
               </thead>
               <tbody>
-                {receiptEditRequests.map((request) => (
+                {paginatedReceiptEditRequests.map((request) => (
                   <tr key={request.id} className="border-b align-top">
                     <td className="px-4 py-3">{request.afterSnapshot.receiptNo || request.beforeSnapshot.receiptNo || '-'}</td>
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
@@ -205,6 +269,7 @@ export function DeletionManager() {
               </tbody>
             </table>
           </div>
+          {renderSectionPagination('receiptEdits', receiptEditRequests.length, tx('收据修改申请', 'Receipt Edit Requests'))}
         </CardContent>
       </Card>
 
@@ -226,7 +291,7 @@ export function DeletionManager() {
                 </tr>
               </thead>
               <tbody>
-                {detailEditRequests.map((request) => (
+                {paginatedDetailEditRequests.map((request) => (
                   <tr key={request.id} className="border-b align-top">
                     <td className="px-4 py-3">{request.afterSnapshot.date || request.beforeSnapshot.date || '-'}</td>
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
@@ -253,6 +318,7 @@ export function DeletionManager() {
               </tbody>
             </table>
           </div>
+          {renderSectionPagination('detailEdits', detailEditRequests.length, tx('付款明细修改申请', 'Payment Detail Edit Requests'))}
         </CardContent>
       </Card>
 
@@ -274,7 +340,7 @@ export function DeletionManager() {
                 </tr>
               </thead>
               <tbody>
-                {swiftEditRequests.map((request) => (
+                {paginatedSwiftEditRequests.map((request) => (
                   <tr key={request.id} className="border-b align-top">
                     <td className="px-4 py-3">{request.afterSnapshot.date || request.beforeSnapshot.date || '-'}</td>
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
@@ -303,6 +369,7 @@ export function DeletionManager() {
               </tbody>
             </table>
           </div>
+          {renderSectionPagination('swiftEdits', swiftEditRequests.length, tx('SWIFT修改申请', 'SWIFT Edit Requests'))}
         </CardContent>
       </Card>
     </div>

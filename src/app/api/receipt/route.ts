@@ -204,6 +204,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       try {
         const base64 = await toOcrDataUrl(file);
         const ocrResult = normalizeReceiptOcrResult(await recognizeReceipt(base64) as unknown as Record<string, unknown>);
+        console.info('[OCR:receipt] normalized fields', {
+          receiptNo: ocrResult.receiptNo,
+          orderNo: ocrResult.orderNo,
+          invNo: ocrResult.invNo,
+          usd: ocrResult.usd,
+          isDeposit: ocrResult.isDeposit,
+          hasPayer: Boolean(ocrResult.payer),
+          hasTel: Boolean(ocrResult.tel),
+        });
         const imagePath = await stageUploadedAsset({
           file,
           category: UploadedAssetCategory.RECEIPT_OCR,

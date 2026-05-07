@@ -414,13 +414,14 @@ export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrR
   "invNo": "账单号(L**MH开头的编码，如果是定金DEPOSIT则为null)",
   "orderNo": "客户单号(ORDER)",
   "payer": "付款人(recu de M./Mme后面的名字)",
-  "isDeposit": 是否为定金(boolean)
+  "isDeposit": 是否为定金(boolean),
+  "motif": "Motif整行文字，用于从Payment for/Initial payment for/Final payment for后提取ORDER NO"
 }
 
 注意：
-1. 如果图片上显示DEPOSIT字样，isDeposit为true
+1. isDeposit只有图片明确写有DEPOSIT/Deposit/Acompte/Advance deposit这类定金字样时才为true；Initial payment不是DEPOSIT
 2. 账单号通常是L开头MH结尾的编码
-3. 客户单号格式类似XXX-XX，如ROI-25、MAB-1-12等
+3. 客户单号经常写在Motif行，例如Payment for Rahim-11、Initial payment for MAB-1-10、Final payment for PIKIN-23/PIKIN-19C；请优先从Motif行的for后面提取orderNo
 4. 如果某个字段无法识别，返回null
 5. 只返回JSON，不要其他文字`;
 

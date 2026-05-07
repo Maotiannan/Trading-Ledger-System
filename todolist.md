@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.126
+> 当前版本：v1.0.127
 > 最后更新：2026-05-07
 
 ## 当前状态
@@ -45,6 +45,11 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.127
+- 修复手写收据 `Initial payment for Rahim-11` 这类场景：`Upload Receipt` 会从 `Motif / Payment for ...` 兜底提取 `ORDER NO`。
+- `Initial payment` 不再被当成 `DEPOSIT`；上传识别后的 `DEPOSIT` 默认保持不勾选，必须由用户手动确认。
+- 收据 OCR 日志新增标准化字段摘要，后续可直接在容器日志中查看 `receiptNo / orderNo / invNo / usd / isDeposit` 等排查信息。
 
 ### v1.0.126
 - `Upload Receipt` 的 OCR 识别会保留识别出的 `ORDER NO`，避免未匹配发票时把订单号也一起清空；`INV NO` 仍按现有规则在无系统命中时留空等待管理员补录。

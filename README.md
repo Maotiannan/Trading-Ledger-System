@@ -34,8 +34,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.126`
-- 本次更新：`Upload Receipt` 的 AI 识别结果会继续保留识别出的 `ORDER NO`；只有当系统找不到对应订单时，识别出的 `INV NO` 才会留空等待管理员补录。
+- 当前版本：`1.0.127`
+- 本次更新：修复 `Upload Receipt` 对手写 `Initial payment for Rahim-11` 这类收据的识别：系统会从 `Motif / Payment for ...` 兜底提取 `ORDER NO`，并且 `Initial payment` 不再被误判为 `DEPOSIT`。
+- 同批更新：`Upload Receipt` 的 `DEPOSIT` 始终默认不勾选，需要用户手动确认；OCR 日志新增标准化字段摘要，便于后续排查。
+- 上一版本：`Upload Receipt` 的 AI 识别结果会继续保留识别出的 `ORDER NO`；只有当系统找不到对应订单时，`INV NO` 才会留空等待管理员补录。
 - 同批更新：`Upload Receipt` 的 `DEPOSIT` 默认不再勾选；`Receipt Management` 的 `Rows per page` 已移到底部分页区旁边。
 - 同批更新：`SWIFT Management` 为管理员恢复/新增 `SWIFT` 签收入口，签收后会把关联 `Payment Detail / Receipt / SWIFT` 一起推进到 `RECEIVED`；`SALES` 无权签收。
 - 同批优化：`Approval` 页面中删除申请、收据修改申请、付款明细修改申请、SWIFT 修改申请都改为每页 `20` 条分页展示。

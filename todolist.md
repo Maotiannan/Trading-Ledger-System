@@ -1,7 +1,7 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.127
+> 当前版本：v1.0.128
 > 最后更新：2026-05-07
 
 ## 当前状态
@@ -45,6 +45,10 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.128
+- `Upload Receipt` 在数据库没有发票建议时，不再清空 OCR 已识别出的 `INV NO`，避免 `Motif` 同时包含发票号和订单号时只剩 `ORDER NO`。
+- OCR 识别提示与标准化解析补强：`Payment for L25MH060523 Big Alpha-07` 会拆成 `INV NO=L25MH060523` 和 `ORDER NO=Big Alpha-07`；只有订单号的场景继续只回填订单号。
 
 ### v1.0.127
 - 修复手写收据 `Initial payment for Rahim-11` 这类场景：`Upload Receipt` 会从 `Motif / Payment for ...` 兜底提取 `ORDER NO`。

@@ -123,7 +123,6 @@ export function useReceiptForms(loadCustomerCandidates: LoadReceiptCustomerCandi
           setOcrInvConflict(Boolean(context.invoiceSuggestion.conflict));
           setOcrInvConflictCount(context.invoiceSuggestion.count);
         } else {
-          setOcrResult((prev) => prev ? ({ ...prev, invNo: '' }) : prev);
           setOcrInvConflict(false);
           setOcrInvConflictCount(0);
         }

@@ -411,7 +411,7 @@ export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrR
   "date": "日期(格式: YYYY-MM-DD)",
   "tel": "电话号码(Tel)",
   "usd": 付款金额(数字，不含货币符号),
-  "invNo": "账单号(L**MH开头的编码，如果是定金DEPOSIT则为null)",
+  "invNo": "账单号(通常是L25MH...这类L+年份+MH开头的编码；如果是定金DEPOSIT或图片没有发票号则为null)",
   "orderNo": "客户单号(ORDER)",
   "payer": "付款人(recu de M./Mme后面的名字)",
   "isDeposit": 是否为定金(boolean),
@@ -420,10 +420,11 @@ export async function recognizeReceipt(imageBase64: string): Promise<ReceiptOcrR
 
 注意：
 1. isDeposit只有图片明确写有DEPOSIT/Deposit/Acompte/Advance deposit这类定金字样时才为true；Initial payment不是DEPOSIT
-2. 账单号通常是L开头MH结尾的编码
+2. 账单号通常是L25MH...这类编码
 3. 客户单号经常写在Motif行，例如Payment for Rahim-11、Initial payment for MAB-1-10、Final payment for PIKIN-23/PIKIN-19C；请优先从Motif行的for后面提取orderNo
-4. 如果某个字段无法识别，返回null
-5. 只返回JSON，不要其他文字`;
+4. 如果Motif行同时包含账单号和客户单号，例如Payment for L25MH060523 Big Alpha-07，必须返回invNo=L25MH060523且orderNo=Big Alpha-07；如果Motif行只有客户单号，则invNo返回null
+5. 如果某个字段无法识别，返回null
+6. 只返回JSON，不要其他文字`;
 
   const fallback: ReceiptOcrResult = {
     receiptNo: null,

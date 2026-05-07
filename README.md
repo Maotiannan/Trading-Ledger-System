@@ -34,8 +34,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.127`
-- 本次更新：修复 `Upload Receipt` 对手写 `Initial payment for Rahim-11` 这类收据的识别：系统会从 `Motif / Payment for ...` 兜底提取 `ORDER NO`，并且 `Initial payment` 不再被误判为 `DEPOSIT`。
+- 当前版本：`1.0.128`
+- 本次更新：修复 `Upload Receipt` 在 OCR / `Motif` 同时包含 `INV NO + ORDER NO` 时只回填 `ORDER NO` 的问题；数据库没有发票建议时，不再清空 OCR 已识别出的 `INV NO`。
+- 同批更新：OCR 识别提示和标准化解析补强，可从 `Payment for L25MH060523 Big Alpha-07` 这类 `Motif` 中分别拆出 `INV NO=L25MH060523` 与 `ORDER NO=Big Alpha-07`；如果只有订单号则继续只回填订单号。
+- 上一版本：修复 `Upload Receipt` 对手写 `Initial payment for Rahim-11` 这类收据的识别：系统会从 `Motif / Payment for ...` 兜底提取 `ORDER NO`，并且 `Initial payment` 不再被误判为 `DEPOSIT`。
 - 同批更新：`Upload Receipt` 的 `DEPOSIT` 始终默认不勾选，需要用户手动确认；OCR 日志新增标准化字段摘要，便于后续排查。
 - 上一版本：`Upload Receipt` 的 AI 识别结果会继续保留识别出的 `ORDER NO`；只有当系统找不到对应订单时，`INV NO` 才会留空等待管理员补录。
 - 同批更新：`Upload Receipt` 的 `DEPOSIT` 默认不再勾选；`Receipt Management` 的 `Rows per page` 已移到底部分页区旁边。

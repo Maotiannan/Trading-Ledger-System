@@ -22,4 +22,13 @@ describe('normalizeReceiptOcrResult', () => {
       isDeposit: false,
     }));
   });
+
+  it('extracts invoice and order separately when motif contains both values', () => {
+    expect(normalizeReceiptOcrResult({
+      motif: 'Payment for L25MH060523 Big Alpha-07',
+    })).toEqual(expect.objectContaining({
+      invNo: 'L25MH060523',
+      orderNo: 'Big Alpha-07',
+    }));
+  });
 });

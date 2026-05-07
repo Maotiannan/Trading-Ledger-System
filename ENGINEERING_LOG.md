@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.127
+> 当前版本：v1.0.128
 > 最后更新：2026-05-07
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 收据 OCR Motif 发票号保留二次修复：确认根因在 `use-receipt-forms` 的上传回填层，订单匹配成功但无 `invoiceSuggestion` 时会把 OCR 已识别的 `invNo` 强制清空；现改为“数据库发票建议优先，否则保留 OCR `INV NO`”，并补强 `receipt-normalization` 从 `Payment for L25MH060523 Big Alpha-07` 这类 Motif 中分别拆出 `INV NO` 与 `ORDER NO`；同步更新 OCR prompt 与 hook/normalizer 回归 ✅ 2026-05-07
 
 - [x] 收据 OCR 手写 Motif 二次修复：复现用户上传图片 `/upload/images/receipts/ocr/1778125156912_jimd6z.jpg`，当前运行 API 返回 `orderNo=null/isDeposit=true`；根因是 prompt 未明确订单号常位于 `Motif: Initial payment for ...`，且模型把 `Initial payment` 误判为定金。现扩展 OCR prompt 返回 `motif`，`receipt-normalization` 新增从 `payment for / initial payment for / final payment for` 后兜底抽取 `ORDER NO`，并强制 Upload Receipt 的 `isDeposit=false` 默认值；`/api/receipt recognize` 增加标准化字段摘要日志；补齐 normalizer 与 receipt OCR 回归 ✅ 2026-05-07
 

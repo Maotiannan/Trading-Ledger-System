@@ -178,7 +178,7 @@ describe('useReceiptForms', () => {
     expect(result.current.directForm.payer).toBe('Thierno Oumar Barry "AB"');
   });
 
-  it('clears OCR INV NO when the recognized order has no invoice match', async () => {
+  it('keeps OCR INV NO when the recognized order has no invoice match', async () => {
     mockLookupOrderContextByOrderNo.mockResolvedValue({
       matchedCustomer: {
         mark: 'AB',
@@ -209,7 +209,7 @@ describe('useReceiptForms', () => {
 
     expect(result.current.ocrResult).toEqual(expect.objectContaining({
       orderNo: 'AB-13B',
-      invNo: '',
+      invNo: 'L25MH060992C',
       payer: 'Thierno Oumar Barry "AB"',
     }));
   });

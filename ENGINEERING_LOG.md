@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.133
+> 当前版本：v1.0.134
 > 最后更新：2026-05-08
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 登录页凭据默认填充修复：确认 `LoginPage` React state 已为空，用户看到管理员账号密码的主要来源是页面示例占位与浏览器凭据自动填充；现移除登录框中的 `admin@example.com / ••••••` 占位提示，并在 form、email、password 字段上显式关闭/规避 credential autofill；补齐登录页回归测试 ✅ 2026-05-08
 
 - [x] SWIFT PDF 文件预览收口：新增共享 `PdfPreview` 组件，基于 `pdfjs-dist@4.10.38` 在前端按页渲染 PDF 到 canvas；`SwiftUploadDialog` 的 PDF 上传预览从静态文件卡片升级为多页预览，`SwiftImagePreviewDialog` 升级为图片/PDF 通用文件预览弹窗，SWIFT 列表“小眼睛”对已上传 PDF 走同一预览链路，图片仍保留原 `<img>` 逻辑；补齐 PDF 类型识别、上传弹窗和已上传附件弹窗回归，并验证 `typecheck / lint / build` ✅ 2026-05-08
 

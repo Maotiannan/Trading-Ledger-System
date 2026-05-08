@@ -55,26 +55,30 @@ export function LoginPage() {
           <CardDescription>{t('subtitle')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
             <div className="space-y-2">
-              <Label htmlFor="email">{t('email')}</Label>
+              <Label htmlFor="ledger-login-email-field">{t('email')}</Label>
               <Input
-                id="email"
+                id="ledger-login-email-field"
+                name="ledger-login-email-field"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@example.com"
+                placeholder=""
+                autoComplete="new-password"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">{t('password')}</Label>
+              <Label htmlFor="ledger-login-passcode-field">{t('password')}</Label>
               <Input
-                id="password"
+                id="ledger-login-passcode-field"
+                name="ledger-login-passcode-field"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••"
+                placeholder=""
+                autoComplete="new-password"
                 required
               />
             </div>

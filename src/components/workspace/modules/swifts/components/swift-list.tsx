@@ -52,7 +52,7 @@ export function SwiftList({ swifts, isAdmin, canEdit, tx, getSwiftStatus, onView
                   </Badge>
                   {swift.hasError && <AlertTriangle className="h-5 w-5 text-red-500" />}
                   {swift.imageUrl && (
-                    <Button size="sm" variant="ghost" onClick={() => onViewImage(swift)} title={tx('查看图片', 'View image')}>
+                    <Button size="sm" variant="ghost" onClick={() => onViewImage(swift)} title={tx('查看文件', 'View file')}>
                       <Eye className="h-4 w-4" />
                     </Button>
                   )}

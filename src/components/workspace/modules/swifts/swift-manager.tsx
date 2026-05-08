@@ -328,6 +328,7 @@ export function SwiftManager() {
 
       <SwiftImagePreviewDialog
         image={viewingImage}
+        tx={tx}
         onOpenChange={(open) => {
           if (!open) setViewingImage(null);
         }}

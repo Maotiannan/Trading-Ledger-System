@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.132
-> 最后更新：2026-05-07
+> 当前版本：v1.0.133
+> 最后更新：2026-05-08
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] SWIFT PDF 文件预览收口：新增共享 `PdfPreview` 组件，基于 `pdfjs-dist@4.10.38` 在前端按页渲染 PDF 到 canvas；`SwiftUploadDialog` 的 PDF 上传预览从静态文件卡片升级为多页预览，`SwiftImagePreviewDialog` 升级为图片/PDF 通用文件预览弹窗，SWIFT 列表“小眼睛”对已上传 PDF 走同一预览链路，图片仍保留原 `<img>` 逻辑；补齐 PDF 类型识别、上传弹窗和已上传附件弹窗回归，并验证 `typecheck / lint / build` ✅ 2026-05-08
 
 - [x] 移动端筛选与客户历史弹窗收口：新增 `ResponsiveFilterCard`，`Receipt / Detail / SWIFT` 三页手机端只展示搜索框和筛选收纳按钮，`Receipt` 额外保留外部查询按钮，桌面端仍走完整筛选网格；`Customer Management` 的 `ORDER_NAME` 改为可点击 alias chip，新增 `customer?action=order-history` 和 `getCustomerOrderNameHistory()`，按可见客户与选中 `ORDER_NAME` 返回历史订单/发票/金额/未收金额，并在桌面弹窗右侧展示该客户最近收据状态；`Create Invoice` 弹窗将 `Add Order / Cancel / Create` 统一放到底部操作区并修复手机端输入行遮挡问题；补齐 manager/component/service 回归 ✅ 2026-05-07
 

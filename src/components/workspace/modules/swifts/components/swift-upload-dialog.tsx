@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Check, FileText, Loader2 } from 'lucide-react';
+import { PdfPreview } from '@/components/workspace/modules/shared/pdf-preview';
+import { Check, Loader2 } from 'lucide-react';
 import type { SwiftDetailOption, SwiftOcrResult, SwiftOcrUploadStatus } from '../types';
 import { normalizeSwiftAmount, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
 
@@ -105,10 +106,7 @@ export function SwiftUploadDialog({
               {imagePreview && (
                 <div className="border rounded-lg p-2">
                   {isPdfPreview ? (
-                    <div className="flex items-center justify-center gap-3 rounded bg-muted/40 px-4 py-8 text-sm text-muted-foreground">
-                      <FileText className="h-8 w-8" />
-                      <span>{tx('已选择PDF文件', 'PDF file selected')}</span>
-                    </div>
+                    <PdfPreview src={imagePreview} fileName={tx('已选择PDF文件', 'Selected PDF file')} className="max-h-80" tx={tx} />
                   ) : (
                     <img src={imagePreview} alt="Preview" className="max-h-64 mx-auto rounded" />
                   )}

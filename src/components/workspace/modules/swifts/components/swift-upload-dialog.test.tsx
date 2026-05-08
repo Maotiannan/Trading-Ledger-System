@@ -1,6 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import { SwiftUploadDialog } from './swift-upload-dialog';
 
+jest.mock('@/components/workspace/modules/shared/pdf-preview', () => ({
+  PdfPreview: ({ src, fileName }: { src: string; fileName?: string }) => (
+    <div data-testid="pdf-preview" data-src={src}>{fileName}</div>
+  ),
+}));
+
 describe('SwiftUploadDialog', () => {
   const tx = (zh: string) => zh;
   const defaultProps = {
@@ -30,7 +36,7 @@ describe('SwiftUploadDialog', () => {
     expect(document.querySelector('input[type="file"]')).toHaveAttribute('accept', 'image/*,application/pdf');
   });
 
-  it('renders a PDF preview card instead of an image tag for PDF uploads', () => {
+  it('renders a PDF preview surface instead of a static file card for PDF uploads', () => {
     const { container } = render(
       <SwiftUploadDialog
         {...defaultProps}
@@ -38,7 +44,7 @@ describe('SwiftUploadDialog', () => {
       />
     );
 
-    expect(screen.getByText('已选择PDF文件')).toBeInTheDocument();
+    expect(screen.getByTestId('pdf-preview')).toBeInTheDocument();
     expect(container.querySelector('img')).toBeNull();
   });
 });

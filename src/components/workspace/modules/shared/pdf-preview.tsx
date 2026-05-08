@@ -131,7 +131,11 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70vh]', tx = def
   }, [src, tx]);
 
   return (
-    <div data-testid="pdf-preview" className={`min-w-0 max-w-full overflow-x-hidden overflow-y-auto rounded border bg-muted/20 ${className}`}>
+    <div
+      data-testid="pdf-preview"
+      className={`min-h-0 min-w-0 max-w-full touch-pan-y overscroll-contain overflow-x-hidden overflow-y-auto rounded border bg-muted/20 ${className}`}
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-background/95 px-3 py-2 backdrop-blur">
         <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
           <FileText className="h-4 w-4 shrink-0" />

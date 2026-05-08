@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import { SwiftImagePreviewDialog } from './swift-image-preview-dialog';
 
 jest.mock('@/components/workspace/modules/shared/pdf-preview', () => ({
-  PdfPreview: ({ src, fileName }: { src: string; fileName?: string }) => (
-    <div data-testid="pdf-preview" data-src={src}>{fileName}</div>
+  PdfPreview: ({ src, fileName, className }: { src: string; fileName?: string; className?: string }) => (
+    <div data-testid="pdf-preview" data-src={src} className={className}>{fileName}</div>
   ),
   isPdfPreviewSource: (src: string | null | undefined, fileName?: string | null) => {
     const raw = `${src || ''} ${fileName || ''}`.toLowerCase();
@@ -49,5 +49,7 @@ describe('SwiftImagePreviewDialog', () => {
 
     expect(screen.getAllByText(longName)[0]).toHaveClass('break-all');
     expect(screen.getByTestId('pdf-preview').parentElement).toHaveClass('overflow-hidden');
+    expect(screen.getByRole('dialog')).toHaveClass('h-[calc(100dvh-1rem)]');
+    expect(screen.getByTestId('pdf-preview')).toHaveClass('h-full');
   });
 });

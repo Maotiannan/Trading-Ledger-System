@@ -18,7 +18,7 @@ export function SwiftImagePreviewDialog({ image, tx = defaultTx, onOpenChange }:
 
   return (
     <Dialog open={!!image} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0 sm:h-[90vh] sm:max-w-5xl">
         <DialogHeader className="min-w-0 shrink-0 border-b px-4 py-3 sm:px-6 sm:py-4">
           <DialogTitle className="min-w-0 break-all text-base sm:text-lg">{image?.name}</DialogTitle>
           <DialogDescription>

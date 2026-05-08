@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.135
+> 当前版本：v1.0.136
 > 最后更新：2026-05-08
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] SWIFT PDF 手机端多页滚动修复：确认根因是 `SwiftImagePreviewDialog` 只有 `max-height`，移动端没有稳定的确定高度，导致 PDF 内容被外层弹窗裁切而滚动区域没有接管触摸滚动；现把 SWIFT 文件预览弹窗改为手机端固定视口高度，`PdfPreview` 根容器增加 `min-h-0 / touch-pan-y / overscroll-contain / -webkit-overflow-scrolling: touch`，让多页 PDF 在弹窗内纵向滚动；补齐 SWIFT preview 回归并验证 `typecheck / lint` ✅ 2026-05-08
 
 - [x] 金额显示、dashboard 汇总与 SWIFT PDF 移动端预览收口：新增 `src/lib/display-format.ts` 作为金额和 ORDER_NAME 展示单一格式化入口，前端金额输入新增 `MoneyInput`，统一美元金额为英文千分位、四舍五入、无小数显示；`Invoice / Receipt / Detail / SWIFT / Dashboard / Customer history / Approval` 等页面替换散落的 `toFixed(2)` 展示；`dashboard-summary-service` 扩展首屏汇总，新增已放单未结清发票列表和客户 ORDER_NAME 欠款汇总列表；`PdfPreview / SwiftImagePreviewDialog` 优化手机端长文件名、多页 PDF 宽度和滚动边界；补齐 formatter、dashboard service、receipt layout、SWIFT preview、invoice transfer、matching 等回归，并验证 `typecheck` ✅ 2026-05-08
 

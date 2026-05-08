@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { Check, Plus } from 'lucide-react';
 import type { DetailDirectItemForm } from '../types';
 
@@ -40,11 +41,10 @@ export function DetailDirectCreateDialog({ open, locale, directDate, directItems
                 value={item.orderNo}
                 onChange={(e) => onDirectItemsChange(directItems.map((row, idx) => (idx === index ? { ...row, orderNo: e.target.value } : row)))}
               />
-              <Input
-                type="number"
+              <MoneyInput
                 placeholder={tx('金额', 'Amount')}
                 value={item.amount}
-                onChange={(e) => onDirectItemsChange(directItems.map((row, idx) => (idx === index ? { ...row, amount: e.target.value } : row)))}
+                onValueChange={(value) => onDirectItemsChange(directItems.map((row, idx) => (idx === index ? { ...row, amount: value } : row)))}
               />
             </div>
           ))}

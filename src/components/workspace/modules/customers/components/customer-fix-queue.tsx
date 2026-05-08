@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 
 export type CustomerFixQueueProps = {
   fixOrders: Array<Record<string, unknown>>;
@@ -21,7 +22,7 @@ export function CustomerFixQueue({ fixOrders, fixReceipts, tx, onOpenFix }: Cust
           {fixOrders.map((row) => (
             <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
               <div>
-                <div className="font-medium">{String(row.orderNo || '-')}</div>
+                <div className="font-medium">{formatOrderNameDisplay(row.orderNo)}</div>
                 <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
               </div>
               <Button size="sm" onClick={() => onOpenFix('order', row)}>{tx('修复', 'Fix')}</Button>
@@ -39,7 +40,7 @@ export function CustomerFixQueue({ fixOrders, fixReceipts, tx, onOpenFix }: Cust
           {fixReceipts.map((row) => (
             <div key={String(row.id)} className="flex justify-between items-center border rounded-md p-2">
               <div>
-                <div className="font-medium">{String(row.receiptNo || row.orderNo || '-')}</div>
+                <div className="font-medium">{row.receiptNo ? String(row.receiptNo) : formatOrderNameDisplay(row.orderNo)}</div>
                 <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
               </div>
               <Button size="sm" onClick={() => onOpenFix('receipt', row)}>{tx('修复', 'Fix')}</Button>

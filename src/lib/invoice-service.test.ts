@@ -1062,7 +1062,7 @@ describe('invoice-service', () => {
       transferAmount: 30,
     });
 
-    expect(result.message).toContain('成功转移 $30.00 到订单 IB-02');
+    expect(result.message).toContain('成功转移 $30 到订单 IB-02');
     expect(mockDb.balanceTransfer.create).toHaveBeenCalledWith({
       data: {
         fromOrderId: 'order-from',

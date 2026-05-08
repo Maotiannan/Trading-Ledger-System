@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 import type { PaymentAgentSummary } from '../types';
 
@@ -87,13 +88,11 @@ export function DetailEditDialog({
                       value={item.orderNo ?? ''}
                       onChange={(e) => onItemChange(index, { orderNo: e.target.value || null })}
                     />
-                    <Input
-                      type="number"
-                      step="0.01"
+                    <MoneyInput
                       placeholder={tx('金额', 'Amount')}
                       value={Number.isFinite(item.amount) ? String(item.amount) : ''}
-                      onChange={(e) => {
-                        const nextAmount = Number(e.target.value);
+                      onValueChange={(value) => {
+                        const nextAmount = Number(value);
                         onItemChange(index, { amount: Number.isFinite(nextAmount) ? nextAmount : 0 });
                       }}
                     />

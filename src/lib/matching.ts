@@ -3,6 +3,7 @@ import { ReceiptStatus } from '@prisma/client';
 import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
 import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
 import { findOrderIdByNoOrAlias, mapOrderIdsByOrderNos, syncOrderAliases } from '@/lib/order-alias-db';
+import { formatUsdAmount } from '@/lib/display-format';
 import type { DbTransactionClient } from '@/lib/transaction';
 import { runInTransaction } from '@/lib/transaction';
 
@@ -362,7 +363,7 @@ export function validateAmountTolerance(
     return {
       valid: false,
       hasWarning: true,
-      message: `金额差异 ${difference.toFixed(2)} 超过允许范围(±${rejectTolerance})，无法通过验证`
+      message: `金额差异 ${formatUsdAmount(difference)} 超过允许范围(±${rejectTolerance})，无法通过验证`
     };
   }
 
@@ -370,7 +371,7 @@ export function validateAmountTolerance(
     return {
       valid: true,
       hasWarning: true,
-      message: `金额差异 ${difference.toFixed(2)} 超出正常容差(±${warningTolerance})，已标红但允许通过`
+      message: `金额差异 ${formatUsdAmount(difference)} 超出正常容差(±${warningTolerance})，已标红但允许通过`
     };
   }
 

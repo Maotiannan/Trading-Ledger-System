@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import { Loader2 } from 'lucide-react';
 import type { CustomerCandidate } from '@/components/workspace/shared';
 import type { EditingInvoiceOrder } from '../types';
@@ -65,10 +67,9 @@ export function EditOrderDialog({
           </div>
           <div className="space-y-2">
             <Label>{tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}</Label>
-            <Input
-              type="number"
+            <MoneyInput
               value={order?.amount || ''}
-              onChange={(e) => order && onOrderChange({ ...order, amount: parseFloat(e.target.value) || 0 })}
+              onValueChange={(value) => order && onOrderChange({ ...order, amount: parseFloat(value) || 0 })}
             />
           </div>
           <div className="space-y-2">
@@ -85,14 +86,14 @@ export function EditOrderDialog({
               >
                 <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
                 {candidates.map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
+                  <option key={candidate.id} value={candidate.id}>{candidate.mark} / {formatOrderNameDisplay(candidate.orderName)}</option>
                 ))}
               </select>
             </div>
           )}
           <div className="space-y-2">
             <Label>{tx('客户ORDER_NAME', 'Customer ORDER_NAME')}</Label>
-            <Input value={order?.customerName || ''} onChange={(e) => order && onOrderChange({ ...order, customerName: e.target.value })} />
+            <Input value={order?.customerName || ''} onChange={(e) => order && onOrderChange({ ...order, customerName: e.target.value.toUpperCase() })} />
           </div>
           <div className="space-y-2">
             <Label>{tx('客户PHONE', 'Customer PHONE')}</Label>

@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import { Pencil, Trash2 } from 'lucide-react';
 
 export type CustomerListProps = {
@@ -78,7 +79,7 @@ export function CustomerList({
                           className="rounded-full border px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:underline"
                           onClick={() => onOpenOrderNameHistory(row, orderName)}
                         >
-                          {orderName}
+                          {formatOrderNameDisplay(orderName)}
                         </button>
                       )) : '-'}
                     </div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Loader2 } from 'lucide-react';
 import type { RematchPreviewGroup, RematchSelection } from '../types';
 
@@ -52,7 +53,7 @@ export function RematchDialog({
                   >
                     {group.orders.map((order) => (
                       <option key={order.id} value={order.id}>
-                        {order.invNo} / {order.orderNo} / ${order.amount.toFixed(2)}
+                        {order.invNo} / {formatOrderNameDisplay(order.orderNo)} / {formatUsdAmount(order.amount)}
                       </option>
                     ))}
                   </select>
@@ -79,9 +80,9 @@ export function RematchDialog({
                     {group.orders.map((order) => (
                       <TableRow key={order.id}>
                         <TableCell>{order.invNo}</TableCell>
-                        <TableCell>{order.orderNo}</TableCell>
-                        <TableCell>${order.amount.toFixed(2)}</TableCell>
-                        <TableCell>${order.orderBalance.toFixed(2)}</TableCell>
+                        <TableCell>{formatOrderNameDisplay(order.orderNo)}</TableCell>
+                        <TableCell>{formatUsdAmount(order.amount)}</TableCell>
+                        <TableCell>{formatUsdAmount(order.orderBalance)}</TableCell>
                         <TableCell>{order.receiptCount}</TableCell>
                       </TableRow>
                     ))}

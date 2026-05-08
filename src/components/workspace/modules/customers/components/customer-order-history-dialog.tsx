@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Loader2 } from 'lucide-react';
 
 export type CustomerOrderHistoryOrder = {
@@ -40,7 +41,7 @@ export type CustomerOrderHistoryDialogProps = {
 };
 
 function money(value: number) {
-  return `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return formatUsdAmount(value || 0);
 }
 
 export function CustomerOrderHistoryDialog({
@@ -93,7 +94,7 @@ export function CustomerOrderHistoryDialog({
                     <TableBody>
                       {(history?.orders || []).map((order) => (
                         <TableRow key={order.id}>
-                          <TableCell className="font-medium">{order.orderNo || '-'}</TableCell>
+                          <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
                           <TableCell>{order.invNo || '-'}</TableCell>
                           <TableCell>{money(order.amount)}</TableCell>
                           <TableCell className={order.outstanding > 0 ? 'text-red-600' : undefined}>{money(order.outstanding)}</TableCell>
@@ -127,7 +128,7 @@ export function CustomerOrderHistoryDialog({
                       {(history?.receipts || []).map((receipt) => (
                         <TableRow key={receipt.id}>
                           <TableCell className="font-medium">{receipt.receiptNo || '-'}</TableCell>
-                          <TableCell>{receipt.orderNo || '-'}</TableCell>
+                          <TableCell>{formatOrderNameDisplay(receipt.orderNo)}</TableCell>
                           <TableCell>{money(receipt.usd)}</TableCell>
                           <TableCell><Badge variant="outline">{receipt.status || '-'}</Badge></TableCell>
                         </TableRow>

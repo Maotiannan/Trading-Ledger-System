@@ -3,6 +3,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 
 type DetailExportSourceItem = {
@@ -124,10 +125,7 @@ function toNumber(value: number | { toString(): string } | null | undefined) {
 }
 
 function formatAmount(value: number) {
-  return value.toLocaleString('en-US', {
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
+  return Math.round(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
 function formatSheetDate(date: string | Date | null | undefined) {
@@ -250,8 +248,8 @@ export async function buildDetailExportViewModel(detail: DetailExportSource): Pr
     const analysis = rowsAnalysis[index] ?? { orderId: null, orderBalance: null, isFirstPayment: false };
     return {
       index: index + 1,
-      mark: normalizeText(item.mark),
-      orderNo: normalizeText(item.orderNo || item.receipt?.orderNo),
+      mark: normalizeText(item.mark).toUpperCase(),
+      orderNo: formatOrderNameDisplay(item.orderNo || item.receipt?.orderNo),
       type: determineType(detail, analysis),
       amount,
     } satisfies DetailExportRow;

@@ -44,10 +44,8 @@ function ptToPx(pt: number) {
 const RECEIPT_META_PHONE_LINE_HEIGHT = Math.ceil(ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt) * 1.35);
 
 function formatTemplateMoney(value: number) {
-  const num = Number(value) || 0;
-  return num.toLocaleString('en-US', {
-    minimumFractionDigits: Number.isInteger(num) ? 0 : 2,
-    maximumFractionDigits: 2,
+  return Math.round(Number(value) || 0).toLocaleString('en-US', {
+    maximumFractionDigits: 0,
   });
 }
 

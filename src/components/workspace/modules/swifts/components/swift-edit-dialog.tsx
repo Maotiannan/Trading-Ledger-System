@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import type { SwiftEditablePatch } from '@/lib/swift-edit-types';
 
 export type SwiftEditDialogProps = {
@@ -47,13 +48,11 @@ export function SwiftEditDialog({
             value={form.date ?? ''}
             onChange={(e) => onFormChange({ ...form, date: e.target.value || null })}
           />
-          <Input
-            type="number"
-            step="0.01"
+          <MoneyInput
             placeholder={tx('金额', 'Amount')}
             value={Number.isFinite(form.amount) ? String(form.amount) : ''}
-            onChange={(e) => {
-              const amount = Number(e.target.value);
+            onValueChange={(value) => {
+              const amount = Number(value);
               onFormChange({ ...form, amount: Number.isFinite(amount) ? amount : 0 });
             }}
           />

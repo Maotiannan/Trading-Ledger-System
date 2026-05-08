@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import { Loader2, Plus, X } from 'lucide-react';
 import type { InvoiceDraftOrder } from '../types';
 
@@ -85,11 +87,10 @@ export function CreateInvoiceDialog({
                     onChange={(e) => onOrderChange(index, 'orderNo', e.target.value)}
                     className="flex-1"
                   />
-                  <Input
+                  <MoneyInput
                     placeholder={tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}
-                    type="number"
                     value={order.amount}
-                    onChange={(e) => onOrderChange(index, 'amount', e.target.value)}
+                    onValueChange={(value) => onOrderChange(index, 'amount', value)}
                     className="sm:w-32"
                   />
                   <Input
@@ -112,7 +113,7 @@ export function CreateInvoiceDialog({
                   >
                     <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
                     {order.customerCandidates.map((candidate) => (
-                      <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
+                      <option key={candidate.id} value={candidate.id}>{candidate.mark} / {formatOrderNameDisplay(candidate.orderName)}</option>
                     ))}
                   </select>
                 )}

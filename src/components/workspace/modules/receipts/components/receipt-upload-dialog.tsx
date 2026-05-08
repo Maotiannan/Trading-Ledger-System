@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import { Check, Loader2 } from 'lucide-react';
 import type { CustomerCandidate } from '@/components/workspace/shared';
 import type { ReceiptOcrUploadStatus } from '../types';
@@ -110,7 +112,7 @@ export function ReceiptUploadDialog({
                 </div>
                 <div>
                   <Label className="text-sm text-gray-500">{tx('付款金额 (USD)', 'Amount (USD)')}</Label>
-                  <Input type="number" value={(ocrResult.usd as number) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, usd: parseFloat(e.target.value) })} />
+                  <MoneyInput value={(ocrResult.usd as number) || ''} onValueChange={(value) => onOcrResultChange({ ...ocrResult, usd: parseFloat(value) })} />
                 </div>
                 <div>
                   <Label className="text-sm text-gray-500">{tx('客户单号', 'Order No.')}</Label>
@@ -143,7 +145,7 @@ export function ReceiptUploadDialog({
                     <select className="w-full border rounded-md px-3 py-2 text-sm" value={ocrCustomerId} onChange={(e) => onOcrCustomerSelect(e.target.value)}>
                       <option value="">{tx('请选择', 'Please select')}</option>
                       {ocrCustomerCandidates.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
+                        <option key={candidate.id} value={candidate.id}>{candidate.mark} / {formatOrderNameDisplay(candidate.orderName)}</option>
                       ))}
                     </select>
                   </div>

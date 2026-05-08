@@ -4,7 +4,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
+import { formatUsdAmount } from '@/lib/display-format';
 
 type OrderContext = {
   invNo: string | null;
@@ -40,8 +42,7 @@ export type ReceiptGeneratorLaunchDialogProps = {
 };
 
 function money(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return '-';
-  return `$${Number(value).toFixed(2)}`;
+  return formatUsdAmount(value);
 }
 
 export function ReceiptGeneratorLaunchDialog({
@@ -91,13 +92,12 @@ export function ReceiptGeneratorLaunchDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="receipt-generator-usd-amount">{tx('收款金额 USD', 'USD Amount')}</Label>
-            <Input
+            <MoneyInput
               id="receipt-generator-usd-amount"
-              type="number"
               min="0"
               step="0.01"
               value={usdAmount}
-              onChange={(event) => onUsdAmountChange(event.target.value)}
+              onValueChange={onUsdAmountChange}
               placeholder="2500"
             />
           </div>

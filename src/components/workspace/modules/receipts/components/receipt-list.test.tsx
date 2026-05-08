@@ -59,7 +59,7 @@ describe('ReceiptList', () => {
       />,
     );
 
-    expect(screen.getByText('$350.00')).toBeInTheDocument();
+    expect(screen.getByText('$350')).toBeInTheDocument();
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 

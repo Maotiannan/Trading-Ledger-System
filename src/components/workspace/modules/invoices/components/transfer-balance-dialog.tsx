@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatUsdAmount } from '@/lib/display-format';
 import { Loader2 } from 'lucide-react';
 import type { TransferFromOrder } from '../types';
 
@@ -52,7 +54,7 @@ export function TransferBalanceDialog({
           )}
           <div className="space-y-2">
             <Label>{tx('当前多付金额', 'Current overpayment')}</Label>
-            <div className="text-green-600 font-bold text-lg">${Math.abs(transferFromOrder?.balance || 0).toFixed(2)}</div>
+            <div className="text-green-600 font-bold text-lg">{formatUsdAmount(Math.abs(transferFromOrder?.balance || 0))}</div>
           </div>
           <div className="space-y-2">
             <Label>{tx('目标订单号', 'Target order number')}</Label>
@@ -65,7 +67,7 @@ export function TransferBalanceDialog({
           </div>
           <div className="space-y-2">
             <Label>{tx('转移金额', 'Transfer amount')}</Label>
-            <Input type="number" step="0.01" value={transferAmount} onChange={(e) => onTransferAmountChange(e.target.value)} />
+            <MoneyInput value={transferAmount} onValueChange={onTransferAmountChange} />
           </div>
         </div>
         <DialogFooter>

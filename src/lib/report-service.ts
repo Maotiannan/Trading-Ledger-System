@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildDetailVisibilityWhere,
@@ -76,7 +77,7 @@ async function exportExcel(currentUser: CurrentUser) {
   for (const receipt of receipts) {
     receiptSheet.addRow([
       receipt.receiptNo || '',
-      receipt.orderNo || '',
+      formatOrderNameDisplay(receipt.orderNo, ''),
       receipt.usd,
       receipt.status,
       receipt.date ? receipt.date.toISOString().slice(0, 10) : '',
@@ -149,7 +150,7 @@ async function exportPdf(currentUser: CurrentUser) {
     if (y < 40) break;
     const date = receipt.createdAt.toISOString().slice(0, 10);
     page.drawText(
-      `${date} | ${receipt.orderNo || '-'} | ${receipt.status} | USD ${Number(receipt.usd).toFixed(2)}`,
+      `${date} | ${formatOrderNameDisplay(receipt.orderNo)} | ${receipt.status} | USD ${formatUsdAmount(receipt.usd)}`,
       { x: 52, y, size: 10.5, font },
     );
     y -= 14;

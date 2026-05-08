@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Loader2, Plus, Trash2, ArrowRight, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import type { BranchAdminOption, TransferFromOrder } from '../types';
 
@@ -179,12 +181,12 @@ export function InvoiceList({
               <div className="flex flex-wrap items-center gap-4 text-sm sm:justify-end">
                 <div className="text-right">
                   <div className="text-gray-500">{tx('总金额', 'Total Amount')}</div>
-                  <div className="font-semibold">${invoice.invAmount.toFixed(2)}</div>
+                  <div className="font-semibold">{formatUsdAmount(invoice.invAmount)}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-gray-500">{tx('未收金额', 'Outstanding')}</div>
                   <div className={`font-semibold ${invoice.invBalance > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                    ${invoice.invBalance.toFixed(2)}
+                    {formatUsdAmount(invoice.invBalance)}
                   </div>
                 </div>
               </div>
@@ -260,16 +262,16 @@ export function InvoiceList({
                           className={`underline ${order.needsCustomerFix ? 'text-red-600' : 'text-blue-600'}`}
                           onClick={() => onOpenOrderHistory(order.id, order.orderNo)}
                         >
-                          {order.orderNo}
+                          {formatOrderNameDisplay(order.orderNo)}
                         </button>
                         {order.needsCustomerFix && (
                           <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>
                         )}
                       </TableCell>
                       <TableCell>{order.customerMark || '-'}</TableCell>
-                      <TableCell>${order.amount.toFixed(2)}</TableCell>
+                      <TableCell>{formatUsdAmount(order.amount)}</TableCell>
                       <TableCell className={order.orderBalance > 0 ? 'text-red-500' : 'text-green-500'}>
-                        ${Math.abs(order.orderBalance).toFixed(2)}
+                        {formatUsdAmount(Math.abs(order.orderBalance))}
                         {order.orderBalance < 0 && <span className="ml-1 text-xs">{tx('(多付)', '(Overpaid)')}</span>}
                       </TableCell>
                       {isManager && (
@@ -321,11 +323,10 @@ export function InvoiceList({
                       onChange={(e) => onNewOrderNoChange(e.target.value)}
                       className="flex-1"
                     />
-                    <Input
+                    <MoneyInput
                       placeholder={tx('金额', 'Amount')}
-                      type="number"
                       value={newOrderAmount}
-                      onChange={(e) => onNewOrderAmountChange(e.target.value)}
+                      onValueChange={onNewOrderAmountChange}
                       className="w-full sm:w-32"
                     />
                     <Input
@@ -342,7 +343,7 @@ export function InvoiceList({
                       >
                         <option value="">{tx('选择客户', 'Select customer')}</option>
                         {newOrderCustomerCandidates.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>{candidate.mark}/{candidate.orderName}</option>
+                          <option key={candidate.id} value={candidate.id}>{candidate.mark}/{formatOrderNameDisplay(candidate.orderName)}</option>
                         ))}
                       </select>
                     )}

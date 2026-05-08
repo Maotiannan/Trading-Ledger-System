@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { Check, Loader2 } from 'lucide-react';
 import type { DetailOcrResult, DetailOcrUploadStatus, PaymentAgentSummary } from '../types';
 
@@ -135,12 +136,11 @@ export function DetailUploadDialog({
                             onOcrResultChange({ ...ocrResult, items: newItems });
                           }}
                         />
-                        <Input
+                        <MoneyInput
                           placeholder={tx('金额', 'Amount')}
-                          type="number"
                           value={item.amount || ''}
-                          onChange={(e) => {
-                            const trimmed = e.target.value.trim();
+                          onValueChange={(value) => {
+                            const trimmed = value.trim();
                             const newItems = [...ocrResult.items];
                             newItems[index] = { ...item, amount: trimmed ? Number(trimmed) : 0 };
                             onOcrResultChange({ ...ocrResult, items: newItems });

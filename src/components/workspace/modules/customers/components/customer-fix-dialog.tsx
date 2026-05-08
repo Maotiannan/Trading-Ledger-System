@@ -34,7 +34,7 @@ export function CustomerFixDialog({
         </DialogHeader>
         <div className="space-y-3">
           <Input placeholder="MARK*" value={form.mark} onChange={(e) => onFormChange((prev) => ({ ...prev, mark: e.target.value }))} />
-          <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => onFormChange((prev) => ({ ...prev, orderName: e.target.value }))} />
+          <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => onFormChange((prev) => ({ ...prev, orderName: e.target.value.toUpperCase() }))} />
           <Input placeholder="NAME*" value={form.name} onChange={(e) => onFormChange((prev) => ({ ...prev, name: e.target.value }))} />
           <Input placeholder="PHONE*" value={form.phone} onChange={(e) => onFormChange((prev) => ({ ...prev, phone: e.target.value }))} />
           <Input placeholder="CITY*" value={form.city} onChange={(e) => onFormChange((prev) => ({ ...prev, city: e.target.value }))} />

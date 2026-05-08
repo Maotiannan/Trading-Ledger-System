@@ -44,7 +44,7 @@ export function CustomerFormDialog({
         </DialogHeader>
         <div className="space-y-3">
           <Input placeholder="MARK*" value={form.mark} onChange={(e) => onFormChange((prev) => ({ ...prev, mark: e.target.value }))} />
-          <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => onFormChange((prev) => ({ ...prev, orderName: e.target.value }))} />
+          <Input placeholder="ORDER_NAME*" value={form.orderName} onChange={(e) => onFormChange((prev) => ({ ...prev, orderName: e.target.value.toUpperCase() }))} />
           {editing && (
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between">
@@ -68,7 +68,7 @@ export function CustomerFormDialog({
                       value={value}
                       onChange={(e) => onFormChange((prev) => ({
                         ...prev,
-                        orderNames: prev.orderNames.map((item, itemIndex) => (itemIndex === index ? e.target.value : item)),
+                        orderNames: prev.orderNames.map((item, itemIndex) => (itemIndex === index ? e.target.value.toUpperCase() : item)),
                       }))}
                     />
                     <Button

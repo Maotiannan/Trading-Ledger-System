@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Check, Eye, PenSquare, Pencil, Trash2 } from 'lucide-react';
 
 export type ReceiptListProps = {
@@ -73,13 +74,13 @@ export function ReceiptList({
               <TableRow key={receipt.id} className={receipt.needsCustomerFix ? 'bg-red-50' : ''}>
                 <TableCell>{receipt.receiptNo || '-'}</TableCell>
                 <TableCell>
-                  {receipt.orderNo || '-'}
+                  {formatOrderNameDisplay(receipt.orderNo)}
                   {receipt.needsCustomerFix && <div className="text-xs text-red-500">{tx('请修复客户信息', 'Please fix customer information')}</div>}
                 </TableCell>
                 <TableCell>{receipt.customerMark || '-'}</TableCell>
-                <TableCell className="font-medium">${receipt.usd.toFixed(2)}</TableCell>
+                <TableCell className="font-medium">{formatUsdAmount(receipt.usd)}</TableCell>
                 <TableCell className="font-medium">
-                  {typeof receipt.balanceAfter === 'number' ? `$${receipt.balanceAfter.toFixed(2)}` : '-'}
+                  {typeof receipt.balanceAfter === 'number' ? formatUsdAmount(receipt.balanceAfter) : '-'}
                 </TableCell>
                 <TableCell>{receipt.payer || '-'}</TableCell>
                 <TableCell>{getStatusBadge(receipt.status)}</TableCell>

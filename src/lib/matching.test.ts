@@ -105,12 +105,12 @@ describe('matching.validateAmountTolerance', () => {
     expect(validateAmountTolerance(100, 106)).toEqual({
       valid: true,
       hasWarning: true,
-      message: '金额差异 6.00 超出正常容差(±5)，已标红但允许通过',
+      message: '金额差异 $6 超出正常容差(±5)，已标红但允许通过',
     });
     expect(validateAmountTolerance(100, 150)).toEqual({
       valid: true,
       hasWarning: true,
-      message: '金额差异 50.00 超出正常容差(±5)，已标红但允许通过',
+      message: '金额差异 $50 超出正常容差(±5)，已标红但允许通过',
     });
   });
 
@@ -118,7 +118,7 @@ describe('matching.validateAmountTolerance', () => {
     expect(validateAmountTolerance(100, 151)).toEqual({
       valid: false,
       hasWarning: true,
-      message: '金额差异 51.00 超过允许范围(±50)，无法通过验证',
+      message: '金额差异 $51 超过允许范围(±50)，无法通过验证',
     });
   });
 
@@ -126,12 +126,12 @@ describe('matching.validateAmountTolerance', () => {
     expect(validateAmountTolerance(100, 103, { warningTolerance: 2, rejectTolerance: 4 })).toEqual({
       valid: true,
       hasWarning: true,
-      message: '金额差异 3.00 超出正常容差(±2)，已标红但允许通过',
+      message: '金额差异 $3 超出正常容差(±2)，已标红但允许通过',
     });
     expect(validateAmountTolerance(100, 105, { warningTolerance: 2, rejectTolerance: 4 })).toEqual({
       valid: false,
       hasWarning: true,
-      message: '金额差异 5.00 超过允许范围(±4)，无法通过验证',
+      message: '金额差异 $5 超过允许范围(±4)，无法通过验证',
     });
   });
 });

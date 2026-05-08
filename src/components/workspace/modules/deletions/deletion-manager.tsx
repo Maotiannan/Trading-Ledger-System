@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiCall, useUiText } from '@/components/workspace/shared';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import type { ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
 import type { DetailEditRequestRow } from '@/lib/detail-edit-types';
 import type { SwiftEditRequestRow } from '@/lib/swift-edit-types';
@@ -298,7 +299,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
                       <div>{`Date: ${request.afterSnapshot.date ?? '-'}`}</div>
                       {request.afterSnapshot.items.map((item, index) => (
-                        <div key={`${request.id}-${index}`}>{`${index + 1}. ${item.mark ?? '-'} | ${item.orderNo ?? '-'} | $${item.amount.toFixed(2)} | ${item.receiptId ?? '-'}`}</div>
+                        <div key={`${request.id}-${index}`}>{`${index + 1}. ${item.mark ?? '-'} | ${formatOrderNameDisplay(item.orderNo)} | ${formatUsdAmount(item.amount)} | ${item.receiptId ?? '-'}`}</div>
                       ))}
                     </td>
                     <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
@@ -346,7 +347,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
                     <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">
                       <div>{`Date: ${request.afterSnapshot.date ?? '-'}`}</div>
-                      <div>{`Amount: $${request.afterSnapshot.amount.toFixed(2)}`}</div>
+                      <div>{`Amount: ${formatUsdAmount(request.afterSnapshot.amount)}`}</div>
                       <div>{`Sender: ${request.afterSnapshot.senderName ?? '-'}`}</div>
                       <div>{`Sender Address: ${request.afterSnapshot.senderAddress ?? '-'}`}</div>
                       <div>{`Receiver: ${request.afterSnapshot.receiverName ?? '-'}`}</div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 
 export type ReceiptImagePreviewInfo = {
   url: string;
@@ -29,7 +30,7 @@ export function ReceiptImagePreviewDialog({ image, onOpenChange, tx }: ReceiptIm
         </DialogHeader>
         {image && (
           <div className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
-            <div>{`${text('已绑定ORDER NO：', 'Bound ORDER NO: ')}${image.orderNo}`}</div>
+            <div>{`${text('已绑定ORDER NO：', 'Bound ORDER NO: ')}${formatOrderNameDisplay(image.orderNo)}`}</div>
             <div>{`${text('已绑定发票号：', 'Bound invoice: ')}${image.invNo}`}</div>
             <div>{`${text('创建者：', 'Creator: ')}${image.creator}`}</div>
           </div>

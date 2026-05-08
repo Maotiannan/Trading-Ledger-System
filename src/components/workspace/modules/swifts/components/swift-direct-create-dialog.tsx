@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatUsdAmount } from '@/lib/display-format';
 import { Check } from 'lucide-react';
 import type { SwiftDetailOption, SwiftDirectForm } from '../types';
 
@@ -39,12 +41,12 @@ export function SwiftDirectCreateDialog({ open, waitingDetails, waitingDetailsLo
                   <option value="">{waitingDetailsLoading ? tx('加载中...', 'Loading...') : tx('请选择...', 'Please select...')}</option>
                   {waitingDetails.map((detail) => (
                     <option key={detail.id} value={detail.id}>
-                      {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - ${detail.totalAmount.toFixed(2)}
+                      {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - {formatUsdAmount(detail.totalAmount)}
                     </option>
                   ))}
                 </select>
               </div>
-              <Input type="number" placeholder={tx('汇款金额', 'Amount')} value={form.amount} onChange={(e) => onFormChange((prev) => ({ ...prev, amount: e.target.value }))} />
+              <MoneyInput placeholder={tx('汇款金额', 'Amount')} value={form.amount} onValueChange={(value) => onFormChange((prev) => ({ ...prev, amount: value }))} />
               <Input type="date" placeholder={tx('汇款日期', 'Transfer Date')} value={form.date} onChange={(e) => onFormChange((prev) => ({ ...prev, date: e.target.value }))} />
               <Input placeholder={tx('付款人姓名', 'Sender Name')} value={form.senderName} onChange={(e) => onFormChange((prev) => ({ ...prev, senderName: e.target.value }))} />
               <Input placeholder={tx('付款人地址', 'Sender Address')} value={form.senderAddress} onChange={(e) => onFormChange((prev) => ({ ...prev, senderAddress: e.target.value }))} />

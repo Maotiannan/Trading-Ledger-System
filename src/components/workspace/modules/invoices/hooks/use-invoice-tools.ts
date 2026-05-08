@@ -137,7 +137,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
 
   const openTransferDialog = (order: TransferFromOrder) => {
     setTransferFromOrder(order);
-    setTransferAmount(Math.abs(order.balance).toFixed(2));
+    setTransferAmount(String(Math.round(Math.abs(order.balance))));
     setShowTransferDialog(true);
   };
 

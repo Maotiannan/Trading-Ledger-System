@@ -13,6 +13,7 @@ import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/
 import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } from '@/lib/order-alias-db';
 import { customerAccessWhere } from '@/lib/customer-scope';
 import { extractOrderNamePrefix, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { formatUsdAmount } from '@/lib/display-format';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildInvoiceVisibilityWhere as buildInvoiceVisibilityWhereShared,
@@ -1477,7 +1478,7 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
     throw badRequest('该订单没有多付余额可转移', { fromOrderId, fromBalance });
   }
   if (transferAmount > Math.abs(fromBalance)) {
-    throw badRequest(`转移金额不能超过多付金额 $${Math.abs(fromBalance).toFixed(2)}`, {
+    throw badRequest(`转移金额不能超过多付金额 ${formatUsdAmount(Math.abs(fromBalance))}`, {
       fromOrderId,
       transferAmount,
       available: Math.abs(fromBalance),
@@ -1565,5 +1566,5 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
       transferAmount,
     },
   });
-  return { message: `成功转移 $${transferAmount.toFixed(2)} 到订单 ${canonicalToOrderNo}` };
+  return { message: `成功转移 ${formatUsdAmount(transferAmount)} 到订单 ${canonicalToOrderNo}` };
 }

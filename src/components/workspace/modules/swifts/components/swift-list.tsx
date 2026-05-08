@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { formatUsdAmount } from '@/lib/display-format';
 import { AlertTriangle, Check, Eye, Pencil, Trash2 } from 'lucide-react';
 
 export type SwiftListProps = {
@@ -43,7 +44,7 @@ export function SwiftList({ swifts, isAdmin, canEdit, tx, getSwiftStatus, onView
                     SWIFT - {swift.date ? new Date(swift.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
                   </CardTitle>
                   <CardDescription>
-                    {tx(`汇款金额: $${swift.amount.toFixed(2)} | 汇款人: ${swift.senderName || '-'}`, `Amount: $${swift.amount.toFixed(2)} | Sender: ${swift.senderName || '-'}`)}
+                    {tx(`汇款金额: ${formatUsdAmount(swift.amount)} | 汇款人: ${swift.senderName || '-'}`, `Amount: ${formatUsdAmount(swift.amount)} | Sender: ${swift.senderName || '-'}`)}
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">

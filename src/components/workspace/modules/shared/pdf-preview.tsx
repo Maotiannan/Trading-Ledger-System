@@ -84,7 +84,7 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70vh]', tx = def
             };
           };
           const baseViewport = page.getViewport({ scale: 1 });
-          const availableWidth = Math.max(280, Math.min(pagesContainer.clientWidth || 760, 900));
+          const availableWidth = Math.max(240, Math.min(pagesContainer.clientWidth || 760, 900));
           const scale = Math.min(Math.max(availableWidth / baseViewport.width, 0.6), 2);
           const viewport = page.getViewport({ scale });
           const canvas = document.createElement('canvas');
@@ -95,10 +95,10 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70vh]', tx = def
           canvas.height = Math.ceil(viewport.height);
           canvas.style.width = '100%';
           canvas.style.height = 'auto';
-          canvas.className = 'rounded border bg-white shadow-sm';
+          canvas.className = 'max-w-full rounded border bg-white shadow-sm';
 
           const pageShell = document.createElement('div');
-          pageShell.className = 'space-y-2';
+          pageShell.className = 'min-w-0 space-y-2';
           const pageLabel = document.createElement('div');
           pageLabel.className = 'text-xs text-muted-foreground';
           pageLabel.textContent = tx(`第 ${pageNumber} 页`, `Page ${pageNumber}`);
@@ -131,11 +131,11 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70vh]', tx = def
   }, [src, tx]);
 
   return (
-    <div data-testid="pdf-preview" className={`overflow-y-auto rounded border bg-muted/20 ${className}`}>
+    <div data-testid="pdf-preview" className={`min-w-0 max-w-full overflow-x-hidden overflow-y-auto rounded border bg-muted/20 ${className}`}>
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-background/95 px-3 py-2 backdrop-blur">
         <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
           <FileText className="h-4 w-4 shrink-0" />
-          <span className="truncate">{fileName || tx('PDF预览', 'PDF preview')}</span>
+          <span className="min-w-0 break-all">{fileName || tx('PDF预览', 'PDF preview')}</span>
           {pageCount > 0 && <span className="shrink-0 text-xs text-muted-foreground">({pageCount})</span>}
         </div>
         <Button asChild size="sm" variant="outline" className="h-8 shrink-0">

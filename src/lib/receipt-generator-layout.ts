@@ -1,4 +1,5 @@
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
+import { formatUsdAmount } from '@/lib/display-format';
 
 export const RECEIPT_GENERATOR_RECEIVED_BY = 'Mamadou Dian Diallo';
 
@@ -89,18 +90,13 @@ function toEnglishWords(value: number): string {
 
 export function amountToWordsUsd(value: number): string {
   const normalized = Number.isFinite(value) ? Number(value) : 0;
-  const whole = Math.floor(normalized);
-  const cents = Math.round((normalized - whole) * 100);
+  const whole = Math.round(normalized);
   const wholeWords = toEnglishWords(whole);
-  if (cents === 0) {
-    return `${wholeWords} US dollars only`;
-  }
-  return `${wholeWords} US dollars and ${toEnglishWords(cents)} cents`;
+  return `${wholeWords} US dollars only`;
 }
 
 function formatMoney(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return '-';
-  return `$${Number(value).toFixed(2)}`;
+  return formatUsdAmount(value);
 }
 
 export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput): ReceiptGeneratorLayoutData {

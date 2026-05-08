@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { ChevronDown, ChevronRight, Download, Eye, Pencil, Trash2 } from 'lucide-react';
 
 export type DetailListProps = {
@@ -47,7 +48,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                     {tx('付款明细', 'Payment Detail')} - {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
                   </CardTitle>
                   <CardDescription>
-                    {tx(`${detail.items.length} 笔 | 总计: $${detail.totalAmount.toFixed(2)}`, `${detail.items.length} items | Total: $${detail.totalAmount.toFixed(2)}`)}
+                    {tx(`${detail.items.length} 笔 | 总计: ${formatUsdAmount(detail.totalAmount)}`, `${detail.items.length} items | Total: ${formatUsdAmount(detail.totalAmount)}`)}
                   </CardDescription>
                 </div>
               </div>
@@ -123,10 +124,10 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                   {detail.items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>{item.mark || '-'}</TableCell>
-                      <TableCell>{item.orderNo || '-'}</TableCell>
-                      <TableCell>${item.amount.toFixed(2)}</TableCell>
+                      <TableCell>{formatOrderNameDisplay(item.orderNo)}</TableCell>
+                      <TableCell>{formatUsdAmount(item.amount)}</TableCell>
                       <TableCell>
-                        {item.receipt ? <Badge variant="outline">{item.receipt.orderNo}</Badge> : <span className="text-gray-400">{tx('未匹配', 'Unmatched')}</span>}
+                        {item.receipt ? <Badge variant="outline">{formatOrderNameDisplay(item.receipt.orderNo)}</Badge> : <span className="text-gray-400">{tx('未匹配', 'Unmatched')}</span>}
                       </TableCell>
                     </TableRow>
                   ))}

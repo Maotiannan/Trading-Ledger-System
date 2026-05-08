@@ -37,8 +37,8 @@ describe('CustomerOrderHistoryDialog', () => {
     expect(screen.getByTestId('customer-order-history-grid')).toHaveClass('md:grid-cols-2');
     expect(screen.getAllByText('MAB-1-10')).toHaveLength(2);
     expect(screen.getByText('L25MH090001')).toBeInTheDocument();
-    expect(screen.getByText('$1,000.00')).toBeInTheDocument();
-    expect(screen.getByText('$250.00')).toBeInTheDocument();
+    expect(screen.getByText('$1,000')).toBeInTheDocument();
+    expect(screen.getByText('$250')).toBeInTheDocument();
     expect(screen.getByText('0001001')).toBeInTheDocument();
     expect(screen.getByText('RECEIVED')).toBeInTheDocument();
   });

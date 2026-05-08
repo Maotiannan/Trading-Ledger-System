@@ -2,6 +2,8 @@
 
 import { useMemo, useState, type MutableRefObject } from 'react';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import {
   getApiErrorMessage,
   initInvoiceImportRowViews,
@@ -143,7 +145,7 @@ export function useInvoiceImport(
       header: 'AMOUNT',
       className: 'min-w-[140px]',
       renderCell: (row, canEdit) => (
-        <Input className="min-w-[140px]" value={row.amount} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'amount', e.target.value)} />
+        <MoneyInput className="min-w-[140px]" value={row.amount} disabled={!canEdit} onValueChange={(value) => updateInvoiceImportIssue(row.rowNo, 'amount', value)} />
       ),
     },
     {
@@ -159,7 +161,7 @@ export function useInvoiceImport(
       header: 'CUSTOMER_ORDER_NAME',
       className: 'min-w-[320px]',
       renderCell: (row, canEdit) => (
-        <Input className="min-w-[320px]" value={row.customerName} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerName', e.target.value)} />
+        <Input className="min-w-[320px]" value={formatOrderNameDisplay(row.customerName, '')} disabled={!canEdit} onChange={(e) => updateInvoiceImportIssue(row.rowNo, 'customerName', e.target.value.toUpperCase())} />
       ),
     },
     {

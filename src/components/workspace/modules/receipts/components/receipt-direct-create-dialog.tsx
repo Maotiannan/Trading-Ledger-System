@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { formatOrderNameDisplay } from '@/lib/display-format';
 import { Check, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { DirectImageUploadStatus, ReceiptDirectForm } from '../types';
@@ -78,12 +80,12 @@ export function ReceiptDirectCreateDialog({
             )}
           </div>
           <Input placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')} value={form.customerMark} onChange={(e) => onCustomerMarkChange(e.target.value)} />
-          <Input type="number" placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={form.usd} onChange={(e) => onFormChange({ ...form, usd: e.target.value })} />
+          <MoneyInput placeholder={tx('付款金额(USD)', 'Amount (USD)')} value={form.usd} onValueChange={(value) => onFormChange({ ...form, usd: value })} />
           {customerCandidates.length > 1 && (
             <select className="w-full border rounded-md px-3 py-2 text-sm" value={form.customerId} onChange={(e) => onCustomerSelect(e.target.value)}>
               <option value="">{tx('请选择准确客户(MARK+ORDER_NAME)', 'Please select exact customer (MARK+ORDER_NAME)')}</option>
               {customerCandidates.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>{candidate.mark} / {candidate.orderName}</option>
+                <option key={candidate.id} value={candidate.id}>{candidate.mark} / {formatOrderNameDisplay(candidate.orderName)}</option>
               ))}
             </select>
           )}

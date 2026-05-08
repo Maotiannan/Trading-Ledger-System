@@ -3,7 +3,7 @@ import { amountToWordsUsd, buildReceiptGeneratorLayout } from '@/lib/receipt-gen
 describe('receipt-generator-layout', () => {
   it('formats usd amounts into english words', () => {
     expect(amountToWordsUsd(2500)).toBe('two thousand five hundred US dollars only');
-    expect(amountToWordsUsd(2500.5)).toBe('two thousand five hundred US dollars and fifty cents');
+    expect(amountToWordsUsd(2500.5)).toBe('two thousand five hundred one US dollars only');
   });
 
   it('builds receipt layout with computed balance and motif fields', () => {
@@ -24,7 +24,7 @@ describe('receipt-generator-layout', () => {
     expect(layout.clientName).toBe('Alpha Trading SARL "Big Alpha"');
     expect(layout.motif).toBe('Payment for L25MH060523 Big Alpha-07');
     expect(layout.balanceAfter).toBe(32160);
-    expect(layout.resteAPayer).toBe('$34660.00 - $2500.00 = $32160.00');
+    expect(layout.resteAPayer).toBe('$34,660 - $2,500 = $32,160');
     expect(layout.paymentMode).toBe('Transfer');
     expect(layout.receivedBy).toBe('Mamadou Dian Diallo');
   });

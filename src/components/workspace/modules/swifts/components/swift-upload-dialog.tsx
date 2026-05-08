@@ -6,7 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { PdfPreview } from '@/components/workspace/modules/shared/pdf-preview';
+import { formatUsdAmount } from '@/lib/display-format';
 import { Check, Loader2 } from 'lucide-react';
 import type { SwiftDetailOption, SwiftOcrResult, SwiftOcrUploadStatus } from '../types';
 import { normalizeSwiftAmount, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
@@ -79,7 +81,7 @@ export function SwiftUploadDialog({
                   <option value="">{waitingDetailsLoading ? tx('加载中...', 'Loading...') : tx('请选择...', 'Please select...')}</option>
                   {waitingDetails.map((detail) => (
                     <option key={detail.id} value={detail.id}>
-                      {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - ${detail.totalAmount.toFixed(2)}
+                      {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - {formatUsdAmount(detail.totalAmount)}
                     </option>
                   ))}
                 </select>
@@ -119,10 +121,9 @@ export function SwiftUploadDialog({
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label className="text-sm text-gray-500">{tx('汇款金额', 'Amount')}</Label>
-                      <Input
-                        type="number"
+                      <MoneyInput
                         value={ocrResult.amount ?? ''}
-                        onChange={(e) => updateAmount(e.target.value)}
+                        onValueChange={updateAmount}
                       />
                     </div>
                     <div>

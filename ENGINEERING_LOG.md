@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.134
+> 当前版本：v1.0.135
 > 最后更新：2026-05-08
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 金额显示、dashboard 汇总与 SWIFT PDF 移动端预览收口：新增 `src/lib/display-format.ts` 作为金额和 ORDER_NAME 展示单一格式化入口，前端金额输入新增 `MoneyInput`，统一美元金额为英文千分位、四舍五入、无小数显示；`Invoice / Receipt / Detail / SWIFT / Dashboard / Customer history / Approval` 等页面替换散落的 `toFixed(2)` 展示；`dashboard-summary-service` 扩展首屏汇总，新增已放单未结清发票列表和客户 ORDER_NAME 欠款汇总列表；`PdfPreview / SwiftImagePreviewDialog` 优化手机端长文件名、多页 PDF 宽度和滚动边界；补齐 formatter、dashboard service、receipt layout、SWIFT preview、invoice transfer、matching 等回归，并验证 `typecheck` ✅ 2026-05-08
 
 - [x] 登录页凭据默认填充修复：确认 `LoginPage` React state 已为空，用户看到管理员账号密码的主要来源是页面示例占位与浏览器凭据自动填充；现移除登录框中的 `admin@example.com / ••••••` 占位提示，并在 form、email、password 字段上显式关闭/规避 credential autofill；补齐登录页回归测试 ✅ 2026-05-08
 

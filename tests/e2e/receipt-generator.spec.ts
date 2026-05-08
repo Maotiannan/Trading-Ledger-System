@@ -72,7 +72,7 @@ test('admin can generate a signed receipt and return to receipt list with attach
   await dialog.getByLabel(/收款金额 USD|USD Amount/i).fill('2500');
   await expect(dialog.getByLabel('ORDER NO')).toHaveValue(orderNo);
   await expect(dialog.getByText(invNo)).toBeVisible();
-  await expect(dialog.getByText(/\$2500\.00/).first()).toBeVisible();
+  await expect(dialog.getByText('$2,500').first()).toBeVisible();
   await dialog.getByRole('button', { name: /进入签名|Continue to signing/i }).click();
 
   const popup = await popupPromise;

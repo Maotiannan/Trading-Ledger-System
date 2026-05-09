@@ -160,6 +160,7 @@ describe('detail-export-image', () => {
     expect(svg).toContain('Simagan-07');
     expect(svg).toContain('Final');
     expect(svg).toContain('Initial');
+    expect(svg).toContain('Standard');
     expect(svg).toContain('TOTAL TRANSFERRED');
     expect(svg).toContain('Mitty Group · Disbursement');
     expect(svg).toContain('20 records');
@@ -181,7 +182,14 @@ describe('detail-export-image', () => {
 
     expect(svg).toContain('width="720"');
     expect(svg).toContain('font-size="15" font-weight="700" fill="#000000">Simagan');
+    expect(svg).toContain('font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">MARK');
+    expect(svg).toContain('font-size="13" fill="#000000">Simagan-07');
+    expect(svg).toContain('font-size="12" font-weight="700" fill="#000000">Standard');
     expect(svg).toContain('font-size="24" font-weight="700" fill="#415cc3">$101,326</text>');
+    expect(svg).toContain('font-size="11" font-weight="700" fill="#000000" letter-spacing="1.1">TOTAL');
+    expect(svg).toContain('font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.6">TOTAL TRANSFERRED');
+    expect(svg).toContain('font-size="15" fill="#cccccc">Mitty Group · Disbursement');
+    expect(svg).toContain('font-size="15" text-anchor="end" fill="#cccccc">20 records');
   });
 
   it('uses bundled Arial font files for deterministic server rendering', () => {

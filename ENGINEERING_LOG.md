@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.136
-> 最后更新：2026-05-08
+> 当前版本：v1.0.137
+> 最后更新：2026-05-09
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Payment Detail Export Pic 视觉样式微调：导出模板表头改为黑色加粗并提升到 16px，`ORDER NO` 列内容改为黑色，`Std` 展示文案改为黑色加粗 `Standard`；蓝色总计条左侧 `TOTAL TRANSFERRED` 改为与右侧金额同字号白色加粗；顶部 `TOTAL / TRANSACTIONS` 改为黑色加粗；底部付款公司与 records 字号从 10px 放大到 15px；补齐 SVG 断言与 JPEG 渲染回归 ✅ 2026-05-09
 
 - [x] SWIFT PDF 手机端多页滚动修复：确认根因是 `SwiftImagePreviewDialog` 只有 `max-height`，移动端没有稳定的确定高度，导致 PDF 内容被外层弹窗裁切而滚动区域没有接管触摸滚动；现把 SWIFT 文件预览弹窗改为手机端固定视口高度，`PdfPreview` 根容器增加 `min-h-0 / touch-pan-y / overscroll-contain / -webkit-overflow-scrolling: touch`，让多页 PDF 在弹窗内纵向滚动；补齐 SWIFT preview 回归并验证 `typecheck / lint` ✅ 2026-05-08
 

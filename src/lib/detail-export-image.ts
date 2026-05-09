@@ -53,7 +53,7 @@ const SIDE_PADDING = 24;
 const TOP_BORDER = 8;
 const HEADER_HEIGHT = 92;
 const STATS_HEIGHT = 66;
-const TABLE_HEADER_HEIGHT = 34;
+const TABLE_HEADER_HEIGHT = 42;
 const ROW_HEIGHT = 42;
 const FOOTER_HEIGHT = 50;
 const FOOTNOTE_HEIGHT = 30;
@@ -281,7 +281,7 @@ function buildTypeBadge(type: DetailExportRow['type'], x: number, baseline: numb
       <text class="root" x="${x + 28}" y="${baseline}" font-size="11" font-weight="700" text-anchor="middle" fill="${COLORS.indigo}">Initial</text>
     `;
   }
-  return `<text class="root" x="${x}" y="${baseline}" font-size="12" fill="${COLORS.muted}">Std</text>`;
+  return `<text class="root" x="${x}" y="${baseline}" font-size="12" font-weight="700" fill="#000000">Standard</text>`;
 }
 
 export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
@@ -303,7 +303,7 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
       <line x1="${SIDE_PADDING}" y1="${rowBottom}" x2="${WIDTH - SIDE_PADDING}" y2="${rowBottom}" stroke="${COLORS.row}" stroke-width="1" />
       <text class="root" x="${TABLE_COLUMNS.index}" y="${baseline}" font-size="11" fill="#cccccc">${row.index}</text>
       <text class="root" x="${TABLE_COLUMNS.mark}" y="${baseline}" font-size="15" font-weight="700" fill="#000000">${escapeXml(row.mark)}</text>
-      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${baseline}" font-size="13" fill="${COLORS.muted}">${escapeXml(row.orderNo)}</text>
+      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${baseline}" font-size="13" fill="#000000">${escapeXml(row.orderNo)}</text>
       ${buildTypeBadge(row.type, TABLE_COLUMNS.type, baseline)}
       <text class="root" x="${TABLE_COLUMNS.amount}" y="${baseline}" font-size="15" font-weight="700" text-anchor="end" fill="#000000">$${escapeXml(formatAmount(row.amount))}</text>
     `;
@@ -324,25 +324,25 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
 
       <line x1="${SIDE_PADDING + sheetWidth / 2}" y1="${TOP_BORDER + HEADER_HEIGHT}" x2="${SIDE_PADDING + sheetWidth / 2}" y2="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
       <line x1="${SIDE_PADDING}" y1="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" x2="${WIDTH - SIDE_PADDING}" y2="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
-      <text class="root" x="${SIDE_PADDING + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 21}" font-size="11" fill="#aaaaaa" letter-spacing="1.1">TOTAL</text>
+      <text class="root" x="${SIDE_PADDING + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 21}" font-size="11" font-weight="700" fill="#000000" letter-spacing="1.1">TOTAL</text>
       <text class="root" x="${SIDE_PADDING + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 51}" font-size="24" font-weight="700" fill="${COLORS.blue}">$${escapeXml(formatAmount(viewModel.totalAmount))}</text>
-      <text class="root" x="${SIDE_PADDING + sheetWidth / 2 + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 21}" font-size="11" fill="#aaaaaa" letter-spacing="1.1">TRANSACTIONS</text>
+      <text class="root" x="${SIDE_PADDING + sheetWidth / 2 + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 21}" font-size="11" font-weight="700" fill="#000000" letter-spacing="1.1">TRANSACTIONS</text>
       <text class="root" x="${SIDE_PADDING + sheetWidth / 2 + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 51}" font-size="24" font-weight="700" fill="${COLORS.blue}">${viewModel.transactionCount}</text>
 
-      <text class="root" x="${TABLE_COLUMNS.index}" y="${tableStartY + 22}" font-size="10" fill="${COLORS.lightMuted}" letter-spacing="0.8">#</text>
-      <text class="root" x="${TABLE_COLUMNS.mark}" y="${tableStartY + 22}" font-size="10" fill="${COLORS.lightMuted}" letter-spacing="0.8">MARK</text>
-      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${tableStartY + 22}" font-size="10" fill="${COLORS.lightMuted}" letter-spacing="0.8">ORDER NO</text>
-      <text class="root" x="${TABLE_COLUMNS.type}" y="${tableStartY + 22}" font-size="10" fill="${COLORS.lightMuted}" letter-spacing="0.8">TYPE</text>
-      <text class="root" x="${TABLE_COLUMNS.amount}" y="${tableStartY + 22}" font-size="10" text-anchor="end" fill="${COLORS.lightMuted}" letter-spacing="0.8">AMOUNT</text>
+      <text class="root" x="${TABLE_COLUMNS.index}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">#</text>
+      <text class="root" x="${TABLE_COLUMNS.mark}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">MARK</text>
+      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">ORDER NO</text>
+      <text class="root" x="${TABLE_COLUMNS.type}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">TYPE</text>
+      <text class="root" x="${TABLE_COLUMNS.amount}" y="${tableStartY + 28}" font-size="16" font-weight="700" text-anchor="end" fill="#000000" letter-spacing="0.8">AMOUNT</text>
       <line x1="${SIDE_PADDING}" y1="${bodyStartY}" x2="${WIDTH - SIDE_PADDING}" y2="${bodyStartY}" stroke="${COLORS.border}" stroke-width="1" />
       ${rows}
 
       <rect x="${SIDE_PADDING}" y="${footerY}" width="${sheetWidth}" height="${FOOTER_HEIGHT}" fill="${COLORS.blue}" />
-      <text class="root" x="${SIDE_PADDING + 10}" y="${footerY + 22}" font-size="10" font-weight="700" fill="rgba(255,255,255,0.65)" letter-spacing="1">TOTAL TRANSFERRED</text>
+      <text class="root" x="${SIDE_PADDING + 10}" y="${footerY + 34}" font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.6">TOTAL TRANSFERRED</text>
       <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${footerY + 34}" font-size="22" font-weight="700" text-anchor="end" fill="#ffffff">$${escapeXml(formatAmount(viewModel.totalAmount))}</text>
 
-      <text class="root" x="${SIDE_PADDING + 10}" y="${footnoteY + 20}" font-size="10" fill="#cccccc">${escapeXml(`${viewModel.footerAgentLabel} · Disbursement`)}</text>
-      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${footnoteY + 20}" font-size="10" text-anchor="end" fill="#cccccc">${escapeXml(`${viewModel.transactionCount} records`)}</text>
+      <text class="root" x="${SIDE_PADDING + 10}" y="${footnoteY + 22}" font-size="15" fill="#cccccc">${escapeXml(`${viewModel.footerAgentLabel} · Disbursement`)}</text>
+      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${footnoteY + 22}" font-size="15" text-anchor="end" fill="#cccccc">${escapeXml(`${viewModel.transactionCount} records`)}</text>
     </svg>
   `;
 }

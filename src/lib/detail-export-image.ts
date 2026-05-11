@@ -170,8 +170,11 @@ function resolveResvgConstructor() {
 type ResolvedItemAnalysis = {
   orderId: string | null;
   orderBalance: number | null;
+  isPoolOrder: boolean;
   isFirstPayment: boolean;
 };
+
+const SYSTEM_POOL_INVOICE_NOS = new Set(['DEPOSIT_POOL', 'Un_Associated']);
 
 async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedItemAnalysis[]> {
   const resolvedOrderIds = await Promise.all(detail.items.map(async (item) => {
@@ -183,15 +186,26 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
 
   const uniqueOrderIds = Array.from(new Set(resolvedOrderIds.filter((value): value is string => Boolean(value))));
   const orderBalanceMap = new Map<string, number>();
+  const poolOrderIds = new Set<string>();
   const earliestReceiptIdMap = new Map<string, string>();
 
   if (uniqueOrderIds.length > 0) {
     const orderRows = await db.order.findMany({
       where: { id: { in: uniqueOrderIds } },
-      select: { id: true, orderBalance: true },
+      select: {
+        id: true,
+        orderBalance: true,
+        invoice: {
+          select: { invNo: true },
+        },
+      },
     });
     for (const row of orderRows) {
       orderBalanceMap.set(row.id, Number(row.orderBalance));
+      const invNo = row.invoice?.invNo ?? null;
+      if (invNo && SYSTEM_POOL_INVOICE_NOS.has(invNo)) {
+        poolOrderIds.add(row.id);
+      }
     }
 
     const receiptRows = await db.receipt.findMany({
@@ -222,17 +236,14 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
     return {
       orderId,
       orderBalance: orderId ? (orderBalanceMap.get(orderId) ?? null) : null,
+      isPoolOrder: orderId ? poolOrderIds.has(orderId) : false,
       isFirstPayment: Boolean(orderId && currentReceiptId && earliestReceiptId && currentReceiptId === earliestReceiptId),
     };
   });
 }
 
-function hasEffectiveSwift(status: string | null | undefined): boolean {
-  return status === 'Bank_Transfer' || status === 'RECEIVED';
-}
-
-function determineType(detail: DetailExportSource, analysis: ResolvedItemAnalysis): DetailExportRow['type'] {
-  if (hasEffectiveSwift(detail.swift?.status) && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
+function determineType(analysis: ResolvedItemAnalysis): DetailExportRow['type'] {
+  if (!analysis.isPoolOrder && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
     return 'Final';
   }
   if (analysis.isFirstPayment) {
@@ -245,12 +256,12 @@ export async function buildDetailExportViewModel(detail: DetailExportSource): Pr
   const rowsAnalysis = await analyzeDetailItems(detail);
   const rows = detail.items.map((item, index) => {
     const amount = toNumber(item.amount);
-    const analysis = rowsAnalysis[index] ?? { orderId: null, orderBalance: null, isFirstPayment: false };
+    const analysis = rowsAnalysis[index] ?? { orderId: null, orderBalance: null, isPoolOrder: false, isFirstPayment: false };
     return {
       index: index + 1,
       mark: normalizeText(item.mark).toUpperCase(),
       orderNo: formatOrderNameDisplay(item.orderNo || item.receipt?.orderNo),
-      type: determineType(detail, analysis),
+      type: determineType(analysis),
       amount,
     } satisfies DetailExportRow;
   });

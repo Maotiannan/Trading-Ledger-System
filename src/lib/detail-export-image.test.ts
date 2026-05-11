@@ -127,9 +127,9 @@ describe('detail-export-image', () => {
     expect(model.rows[0].type).toBe('Final');
   });
 
-  it('does not classify a cleared balance as Final before SWIFT is attached', async () => {
+  it('classifies a cleared real invoice balance as Final even before SWIFT is attached', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([
-      { id: 'order-final', orderBalance: 0 },
+      { id: 'order-final', orderBalance: 0, invoice: { invNo: 'INV-001' } },
     ]);
     mockDb.receipt.findMany.mockResolvedValueOnce([
       { id: 'receipt-final-old', orderId: 'order-final', createdAt: new Date('2026-04-01T00:00:00.000Z') },
@@ -147,7 +147,29 @@ describe('detail-export-image', () => {
       ],
     });
 
-    expect(model.rows[0].type).toBe('Std');
+    expect(model.rows[0].type).toBe('Final');
+  });
+
+  it('does not classify pool orders as Final even when their balance is cleared', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([
+      { id: 'order-pool', orderBalance: -1500, invoice: { invNo: 'DEPOSIT_POOL' } },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      { id: 'receipt-pool', orderId: 'order-pool', createdAt: new Date('2026-05-01T00:00:00.000Z') },
+    ]);
+
+    const model = await buildDetailExportViewModel({
+      id: 'detail-1',
+      date: '2026-05-05T00:00:00.000Z',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      totalAmount: 1500,
+      swift: { status: 'RECEIVED' },
+      items: [
+        { mark: 'SOW', orderNo: 'SOW-02', amount: 1500, receipt: { id: 'receipt-pool', orderNo: 'SOW-02', orderId: 'order-pool', createdAt: '2026-05-01T00:00:00.000Z' } },
+      ],
+    });
+
+    expect(model.rows[0].type).toBe('Initial');
   });
 
   it('builds svg content using the payment details export layout', () => {

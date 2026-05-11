@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.137
-> 最后更新：2026-05-09
+> 当前版本：v1.0.138
+> 最后更新：2026-05-11
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Payment Detail Export Pic TYPE 判断修复：确认最新 Detail `cmoxhdg8g0027ro01sm97k47m` 中 `SPK-03B / MSP-06 / THP-04 / FALO-17` 这类真实发票订单余额已为 0，但旧逻辑要求 Detail 必须先关联 `Bank_Transfer / RECEIVED` Swift 才显示 `Final`，导致导出图误显 `Standard`；现改为真实发票订单余额 `<= 5` 即显示 `Final`，`DEPOSIT_POOL / Un_Associated` 池子排除在 Final 判断外；补齐红绿回归测试 ✅ 2026-05-11
 
 - [x] Payment Detail Export Pic 视觉样式微调：导出模板表头改为黑色加粗并提升到 16px，`ORDER NO` 列内容改为黑色，`Std` 展示文案改为黑色加粗 `Standard`；蓝色总计条左侧 `TOTAL TRANSFERRED` 改为与右侧金额同字号白色加粗；顶部 `TOTAL / TRANSACTIONS` 改为黑色加粗；底部付款公司与 records 字号从 10px 放大到 15px；补齐 SVG 断言与 JPEG 渲染回归 ✅ 2026-05-09
 

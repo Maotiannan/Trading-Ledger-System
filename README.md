@@ -35,6 +35,7 @@ README 现在只保留用户应该看的内容。
 ## 最近更新
 
 - 当前版本：`1.0.138`
+- 文档补充：新增“数据文件与存储位置”，集中说明数据库、NAS 上传目录、Docker 卷、模板资源和测试临时数据。
 - 本次修复：`Payment Detail -> Export Pic` 的 TYPE 判断改为按真实发票订单的当前余额判断，余额小于等于 `$5` 的订单直接显示 `Final`；`DEPOSIT_POOL / Un_Associated` 池子不会被误判为 `Final`。
 - 上一版本：`Payment Detail -> Export Pic` 导出图样式调整，表头、订单号、类型、总计蓝条和底部付款公司/笔数文字按最新视觉要求加黑、加粗或放大。
 - 上一版本：`SWIFT Management` 的 PDF 小眼睛预览在手机端可以在弹窗内上下滑动查看多页内容，第二页及后续页面不再被外层弹窗截断。
@@ -241,6 +242,203 @@ docker compose up -d --build
 - 本地 HTTPS：[https://localhost](https://localhost)
 
 如果是线上部署，请先按 `.env.example` 配置环境变量后再启动。
+
+## 数据文件与存储位置
+
+系统的数据分为两类：
+- 业务结构化数据：存在 MySQL 里。
+- 上传或生成的文件：存在 NAS 挂载目录里。
+
+不要把 MySQL 数据目录、NAS 上传目录或 Docker volume 当成临时文件删除。
+
+### 1. MySQL 业务数据库
+
+项目通过 `DATABASE_URL` 连接 MySQL。
+
+默认连接示例：
+
+```bash
+mysql://muledger:replace-with-your-password@192.168.1.3:3306/trading_ledger
+```
+
+这里保存的是核心业务数据：
+- 用户、角色、权限树
+- 客户资料、客户多个 `ORDER_NAME`
+- 发票、订单、订单余额
+- 收据、付款明细、SWIFT 水单
+- 删除审批、修改审批
+- 系统配置、配置审计、操作审计
+- Excel ML token 哈希
+- 上传资产台账 `UploadedAsset`
+- 签名收据会话与收据编号计数器
+- Payment Agent 资料与文件索引
+
+注意：
+- MySQL 数据文件不在本项目 Git 仓库里。
+- MySQL 数据文件也不在本项目 `docker-compose.yml` 里创建的 app 容器里。
+- 备份数据库时应备份 `trading_ledger` 这个业务库，而不是只备份项目代码。
+
+### 2. NAS 上传文件目录
+
+Docker 会把宿主机 NAS 目录挂载到容器内：
+
+```bash
+${UPLOAD_HOST_DIR}:/app/upload
+```
+
+默认宿主机目录：
+
+```bash
+/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload
+```
+
+应用默认把业务文件写到容器内：
+
+```bash
+/app/upload/images
+```
+
+所以默认对应的宿主机真实目录是：
+
+```bash
+/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload/images
+```
+
+网页和数据库里保存的是受保护访问路径：
+
+```bash
+/upload/images/...
+```
+
+文件读取统一走：
+
+```bash
+GET /api/upload-image?path=/upload/images/...
+```
+
+这样可以先检查登录状态和数据可见权限，再返回图片或 PDF。
+
+### 3. NAS 目录结构
+
+当前业务文件主要落在这些目录：
+
+| 目录 | 来源 | 说明 |
+|---|---|---|
+| `/upload/images/receipts/direct` | `Receipt Management -> Create Receipt Directly` | 直接创建收据时上传的收据关联图片 |
+| `/upload/images/receipts/ocr` | `Receipt Management -> Upload Receipt` | 收据 OCR 上传图片 |
+| `/upload/images/details/ocr` | `Payment Detail -> Upload Payment Detail` | 付款明细 OCR 上传图片 |
+| `/upload/images/swifts/ocr` | `SWIFT Management -> Upload SWIFT Record` | SWIFT 图片或 PDF 附件 |
+| `/upload/images/receipts/generated/YYYY/MM` | `Generate Signed Receipt` | 最终生成的签名收据图片 |
+| `/upload/images/receipts/generated/YYYY/MM/signatures` | `Generate Signed Receipt` | 收款方和付款方透明签名图片 |
+| `/upload/images/agents/files` | `Payment Agent Management` | 付款代理公司附件 |
+| `/upload/images/<file>` | 旧入口或未分类上传 | 兼容历史上传路径，不建议新功能继续使用 |
+
+实际宿主机路径是在 `${UPLOAD_HOST_DIR}/images/...` 下。
+
+例如网页路径：
+
+```bash
+/upload/images/swifts/ocr/example.pdf
+```
+
+默认对应宿主机路径：
+
+```bash
+/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload/images/swifts/ocr/example.pdf
+```
+
+### 4. 上传文件支持类型
+
+普通业务图片上传支持：
+- JPG / JPEG
+- PNG
+- WEBP
+- HEIC / HEIF
+
+SWIFT 和 Payment Agent 附件额外支持：
+- PDF
+- DOC / DOCX
+- XLS / XLSX
+- TXT
+
+系统会检查文件扩展名和文件内容是否匹配，避免把错误文件伪装成图片或 PDF。
+
+### 5. 上传资产台账与清理规则
+
+系统用数据库表 `UploadedAsset` 记录上传文件生命周期：
+- `STAGED`：文件已写入 NAS，但还没有被业务记录确认使用。
+- `ATTACHED`：文件已经绑定到收据、付款明细、SWIFT、签名收据或 Payment Agent。
+- `DELETED`：过期暂存文件已被维护任务清理。
+
+默认清理规则：
+- 暂存文件超过 `UPLOADED_ASSET_STAGED_TTL_HOURS`，默认 `24` 小时，会被清理。
+- 未完成签名的 `SIGNING_PENDING` 收据会话超过 `SIGNING_PENDING_TTL_HOURS`，默认 `72` 小时，会被取消并删除占位收据。
+
+维护任务由 Docker 里的 `maintenance` 服务定时调用：
+
+```bash
+POST /api/internal/maintenance/uploaded-assets
+```
+
+鉴权使用：
+
+```bash
+MAINTENANCE_JOB_TOKEN
+```
+
+### 6. Docker 运行卷
+
+项目还使用两个 Docker named volumes 给 Caddy 保存运行状态：
+
+| Docker volume | 用途 |
+|---|---|
+| `caddy_data` | Caddy 证书、TLS、站点运行数据 |
+| `caddy_config` | Caddy 运行配置缓存 |
+
+这两个不是业务收款数据，但线上 HTTPS 访问会依赖它们。
+
+不要随意执行：
+
+```bash
+docker compose down -v
+docker volume rm ...
+```
+
+这些命令可能删除 Caddy 运行卷；如果未来数据库也改成 Docker volume，还可能删除数据库数据。
+
+### 7. 项目内置模板资源
+
+这些文件跟随 Git 和 Docker 镜像发布，不是用户上传数据：
+
+| 文件 | 用途 |
+|---|---|
+| `public/detail-export/payment-detail-logo.png` | `Payment Detail -> Export Pic` 的 MU Group logo |
+| `public/detail-export/arial.ttf` | 导出图片使用的 Arial 字体 |
+| `public/detail-export/arial-bold.ttf` | 导出图片使用的 Arial Bold 字体 |
+| `public/logo.svg` | 项目静态 logo |
+| `public/robots.txt` | 搜索引擎爬虫规则 |
+
+不要把用户业务图片放进 `public/`。业务图片应进入 NAS 上传目录。
+
+### 8. 临时下载文件
+
+这些文件是请求时临时生成并直接下载给浏览器，不会长期落盘：
+- Dashboard 报表 Excel / PDF
+- Invoice 批量导入模板
+- Customer 批量导入模板
+- Settings 审计 CSV
+- Payment Detail `Export Pic` 下载图
+
+如果用户下载后保存在本地，那是用户本机文件，不属于服务器托管数据。
+
+### 9. 测试临时数据
+
+自动化测试不会使用正式业务库：
+- API isolated 测试使用 `trading_ledger_test`
+- E2E isolated 测试使用 `trading_ledger_test`
+- 测试上传目录使用 `/tmp` 下的临时目录
+
+测试脚本结束后会清理自己的临时上传目录，不应影响 NAS 正式目录。
 
 ## 常用操作建议
 

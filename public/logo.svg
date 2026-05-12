@@ -1,9 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="muledger">
-  <rect width="320" height="320" rx="48" fill="#ffffff"/>
-  <circle cx="32" cy="48" r="30" fill="#f53392"/>
-  <circle cx="286" cy="274" r="30" fill="#f53392"/>
-  <path d="M28 198 L126 100" stroke="#3d63c8" stroke-width="46" stroke-linecap="round"/>
-  <path d="M88 274 L240 122" stroke="#f53392" stroke-width="46" stroke-linecap="round"/>
-  <path d="M172 238 L268 142" stroke="#3d63c8" stroke-width="46" stroke-linecap="round"/>
-  <text x="160" y="307" text-anchor="middle" fill="#111111" font-size="26" font-family="Arial, sans-serif">muledger</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 72 72" role="img" aria-label="redrawn diagonal logo">
+  <title>Redrawn diagonal logo</title>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 7 37 L 37 7" stroke="#355EC9" stroke-width="13"/>
+    <path d="M 7 65 L 65 7" stroke="#FA338A" stroke-width="13"/>
+    <path d="M 35 65 L 65 35" stroke="#355EC9" stroke-width="13"/>
+  </g>
+  <circle cx="7.5" cy="7.5" r="7" fill="#FA338A"/>
+  <circle cx="64.5" cy="64.5" r="7" fill="#FA338A"/>
 </svg>

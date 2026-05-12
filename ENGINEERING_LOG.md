@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.138
-> 最后更新：2026-05-11
+> 当前版本：v1.0.139
+> 最后更新：2026-05-12
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 网页标签栏图标替换：将 `public/logo.svg` 替换为用户提供的 MU 红蓝 SVG，并把 Next metadata `icons.icon` 改为带 `image/svg+xml` 类型声明的 favicon 入口，确保浏览器标签栏使用新图标 ✅ 2026-05-12
 
 - [x] Payment Detail Export Pic TYPE 判断修复：确认最新 Detail `cmoxhdg8g0027ro01sm97k47m` 中 `SPK-03B / MSP-06 / THP-04 / FALO-17` 这类真实发票订单余额已为 0，但旧逻辑要求 Detail 必须先关联 `Bank_Transfer / RECEIVED` Swift 才显示 `Final`，导致导出图误显 `Standard`；现改为真实发票订单余额 `<= 5` 即显示 `Final`，`DEPOSIT_POOL / Un_Associated` 池子排除在 Final 判断外；补齐红绿回归测试 ✅ 2026-05-11
 

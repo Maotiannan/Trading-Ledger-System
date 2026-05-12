@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   keywords: ["muledger", "Ledger", "Finance", "Receipts", "SWIFT"],
   authors: [{ name: "muledger" }],
   icons: {
-    icon: "/logo.svg",
+    icon: [{ url: "/logo.svg", type: "image/svg+xml" }],
   },
   openGraph: {
     title: "muledger",

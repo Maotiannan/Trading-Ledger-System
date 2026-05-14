@@ -9,4 +9,9 @@ describe('workspace routes', () => {
     expect(getWorkspacePath('settings')).toBe('/settings');
     expect(getWorkspacePath('users')).toBe('/settings');
   });
+
+  it('maps the independent Orders page route', () => {
+    expect(getWorkspacePath('orders')).toBe('/orders');
+    expect(getWorkspaceViewFromPath('/orders')).toBe('orders');
+  });
 });

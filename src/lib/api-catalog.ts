@@ -43,6 +43,16 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/orders',
+    description: 'Independent Orders page records that do not participate in finance matching',
+    actions: [
+      { action: 'list', method: 'GET', description: 'List visible Orders page records' },
+      { action: 'customer-options', method: 'GET', description: 'List customer candidates for Orders page creation' },
+      { action: 'create', method: 'POST', description: 'Create an Orders page record after strict finance-order duplicate check', bodyExample: { action: 'create', orderNo: 'PIKIN-23', customerId: 'customer-id', remark: 'PI preparing' } },
+      { action: 'update', method: 'POST', description: 'Update status/remark, or PI/system note for upper ADMIN accounts', bodyExample: { action: 'update', orderId: 'order-tracker-id', status: 'Confirmed', piStatus: true, systemNote: 'PI approved' } },
+    ],
+  },
+  {
     endpoint: '/api/receipt',
     description: 'Receipt OCR and lifecycle',
     actions: [

@@ -1,5 +1,6 @@
 export * from '@/components/workspace/modules/dashboard';
 export * from '@/components/workspace/modules/invoices';
+export * from '@/components/workspace/modules/orders';
 export * from '@/components/workspace/modules/receipts';
 export * from '@/components/workspace/modules/details';
 export * from '@/components/workspace/modules/swifts';

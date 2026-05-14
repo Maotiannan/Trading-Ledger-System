@@ -9,6 +9,7 @@ export type WorkspaceRouteItem = {
 export const WORKSPACE_ROUTES: WorkspaceRouteItem[] = [
   { id: 'dashboard', path: '/dashboard' },
   { id: 'invoices', path: '/invoices' },
+  { id: 'orders', path: '/orders' },
   { id: 'receipts', path: '/receipts' },
   { id: 'details', path: '/details' },
   { id: 'swifts', path: '/swifts' },

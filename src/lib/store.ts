@@ -5,6 +5,7 @@ export type UserRole = 'ADMIN' | 'SALES' | 'USER';
 export type WorkspaceView =
   | 'dashboard'
   | 'invoices'
+  | 'orders'
   | 'receipts'
   | 'details'
   | 'swifts'

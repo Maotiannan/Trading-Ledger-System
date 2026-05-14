@@ -6,6 +6,7 @@ import type { WorkspaceView } from '@/lib/store';
 
 const WORKSPACE_DATA_PREFETCHES: Partial<Record<WorkspaceView, string[]>> = {
   invoices: ['invoice'],
+  orders: ['orders'],
   receipts: ['receipt'],
   details: ['detail'],
   swifts: ['swift'],

@@ -26,6 +26,7 @@ export const editableSystemSettingKeys = [
   'SIGNING_PENDING_TTL_HOURS',
   'SETTINGS_AUDIT_MAX_PAGE_SIZE',
   'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
+  'ORDER_TRACKER_STATUS_OPTIONS',
 ] as const;
 
 export type EditableSystemSettingKey = (typeof editableSystemSettingKeys)[number];
@@ -69,6 +70,7 @@ export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   SIGNING_PENDING_TTL_HOURS: process.env.SIGNING_PENDING_TTL_HOURS ?? '72',
   SETTINGS_AUDIT_MAX_PAGE_SIZE: process.env.SETTINGS_AUDIT_MAX_PAGE_SIZE ?? '100',
   SETTINGS_AUDIT_EXPORT_MAX_ROWS: process.env.SETTINGS_AUDIT_EXPORT_MAX_ROWS ?? '5000',
+  ORDER_TRACKER_STATUS_OPTIONS: process.env.ORDER_TRACKER_STATUS_OPTIONS ?? 'In progress,Confirmed,Canceled',
 };
 
 export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingKey, number>> = {

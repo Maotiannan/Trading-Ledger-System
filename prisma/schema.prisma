@@ -150,6 +150,8 @@ model User {
   approvedSwiftEditRequests    SwiftEditRequest[]   @relation("SwiftEditApprover")
   paymentAgents                PaymentAgent[]       @relation("PaymentAgentCreatedBy")
   paymentAgentFiles            PaymentAgentFile[]   @relation("PaymentAgentFileUploadedBy")
+  orderTrackers                OrderTracker[]       @relation("OrderTrackerCreatedBy")
+  updatedOrderTrackers         OrderTracker[]       @relation("OrderTrackerUpdatedBy")
 
   @@index([parentId])
   @@index([createdById])
@@ -274,6 +276,41 @@ model OrderAlias {
 
   @@unique([aliasNo])
   @@index([orderId])
+}
+
+// ==================== 业务订单跟踪表 (Orders 页面独立使用，不参与财务订单匹配) ====================
+model OrderTracker {
+  id                String   @id @default(cuid())
+  orderNo           String
+  normalizedOrderNo String   @unique
+  tokens            String   @default("[]") @db.Text
+  amount            Decimal  @default(0) @db.Decimal(18, 2)
+  orderBalance      Decimal  @default(0) @db.Decimal(18, 2)
+  createdBy         String
+  updatedBy         String?
+  customerId        String?
+  customerMark      String?
+  customerName      String?
+  customerPhone     String?
+  customerCity      String?
+  needsCustomerFix  Boolean  @default(false)
+  status            String   @default("In progress")
+  piStatus          Boolean  @default(false)
+  remark            String?  @db.Text
+  systemNote        String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  creator  User      @relation("OrderTrackerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  updater  User?     @relation("OrderTrackerUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([customerId])
+  @@index([status])
+  @@index([orderNo])
+  @@index([normalizedOrderNo])
 }
 
 // ==================== 收据表 (Receipt) ====================
@@ -570,6 +607,7 @@ model Customer {
   orderNames CustomerOrderName[]
   orders  Order[]
   receipts Receipt[]
+  orderTrackers OrderTracker[]
 
   @@index([mark])
   @@index([normalizedMark])

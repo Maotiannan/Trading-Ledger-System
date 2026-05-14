@@ -14,6 +14,15 @@ const mockLookupOrderContextByOrderNo = lookupOrderContextByOrderNo as jest.Mock
 const mockUseLatestRequestGuard = useLatestRequestGuard as jest.Mock;
 const mockUseUiText = useUiText as jest.Mock;
 
+beforeAll(() => {
+  if (!HTMLElement.prototype.scrollIntoView) {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: jest.fn(),
+    });
+  }
+});
+
 async function renderManager() {
   await act(async () => {
     render(<OrderTrackerManager />);
@@ -72,7 +81,7 @@ describe('OrderTrackerManager', () => {
     await renderManager();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /新增Order/ }));
+      fireEvent.click(screen.getByRole('button', { name: /新增订单/ }));
       await Promise.resolve();
     });
     await act(async () => {
@@ -93,11 +102,72 @@ describe('OrderTrackerManager', () => {
     await renderManager();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /新增Order/ }));
+      fireEvent.click(screen.getByRole('button', { name: /新增订单/ }));
       await Promise.resolve();
     });
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).queryByText('SYSTEM NOTED')).not.toBeInTheDocument();
+  });
+
+  it('removes the technical page description even in english locale', async () => {
+    mockUseUiText.mockReturnValue((_zh: string, en: string) => en);
+
+    await renderManager();
+
+    expect(screen.queryByText('Independent business order tracking; it does not affect finance order balances or matching.')).not.toBeInTheDocument();
+  });
+
+  it('uses Chinese labels and truncates long customer labels in the create dialog', async () => {
+    const longLabel = 'LONGMARK / LONGORDER / ETABLISSEMENTS MAMADOU DIALLO ET FRERES IMPORT EXPORT SARL CONAKRY';
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('orders?action=customer-options')) {
+        return {
+          success: true,
+          data: [{
+            id: 'customer-long',
+            mark: 'LONGMARK',
+            orderName: 'LONGORDER',
+            name: 'ETABLISSEMENTS MAMADOU DIALLO ET FRERES IMPORT EXPORT SARL CONAKRY',
+            companyName: null,
+            phone: '622491286',
+            city: 'Conakry',
+            ownerId: 'sales-1',
+            label: longLabel,
+          }],
+        };
+      }
+      return {
+        success: true,
+        data: [],
+        meta: { statusOptions: ['In progress', 'Confirmed', 'Canceled'], defaultStatus: 'In progress' },
+      };
+    });
+
+    await renderManager();
+
+    expect(screen.getByRole('heading', { name: '订单管理' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /新增订单/ })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '状态' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '备注' })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /新增订单/ }));
+      await Promise.resolve();
+    });
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: '新增订单' })).toBeInTheDocument();
+    const customerTrigger = within(dialog).getByTestId('orders-customer-select-trigger');
+    expect(customerTrigger).toHaveClass('min-w-0', 'overflow-hidden');
+
+    await act(async () => {
+      fireEvent.click(customerTrigger);
+      await Promise.resolve();
+    });
+
+    const longOption = screen.getByTestId('orders-customer-option-customer-long');
+    expect(longOption).toHaveClass('truncate');
+    expect(longOption).toHaveAttribute('title', longLabel);
   });
 });

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.142
+> 当前版本：v1.0.143
 > 最后更新：2026-05-14
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Orders 页面用户侧文案与弹窗适配收口：移除 `Independent business order tracking...` 这类面向工程实现的可见说明；侧边栏入口、页面标题、创建按钮、表头、状态选项、空状态、弹窗字段和保存提示统一走 `useUiText` 中文化；`DialogContent / SelectTrigger / SelectContent / SelectItem / selected customer hint / table customer cell` 增加 `min-w-0 / overflow-hidden / truncate / title` 约束，防止超长客户名称撑宽新建弹窗或表格列；补齐 React 回归测试覆盖英文模式不显示技术说明、中文标签和长客户名截断 ✅ 2026-05-14
 
 - [x] Orders 创建体验补齐：`OrderTrackerManager` 新建弹窗复用 `lookupOrderContextByOrderNo` 的全局订单上下文能力，对输入的 `ORDER` 做防抖匹配并回填/选中客户候选；关闭弹窗会主动失效未完成请求，避免异步回填污染下一次创建。创建模式隐藏管理员字段区，`SYSTEM NOTED` 仅保留在编辑模式并继续受上级 `ADMIN` 权限控制；补齐 React 组件回归测试 ✅ 2026-05-14
 

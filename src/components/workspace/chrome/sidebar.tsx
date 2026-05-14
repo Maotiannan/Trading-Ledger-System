@@ -61,7 +61,7 @@ export function Sidebar() {
   const menuItems = useMemo(() => ([
     { id: 'dashboard' as const, label: t('dashboard'), icon: LayoutDashboard },
     { id: 'invoices' as const, label: t('invoices'), icon: FileText },
-    { id: 'orders' as const, label: 'Orders', icon: ClipboardList },
+    { id: 'orders' as const, label: tx('订单管理', 'Orders'), icon: ClipboardList },
     { id: 'receipts' as const, label: t('receipts'), icon: Receipt },
     { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },

@@ -31,6 +31,11 @@ import { CheckSquare, Loader2, Pencil, Plus, Search } from 'lucide-react';
 import type { OrderTrackerCustomerOption, OrderTrackerRow } from './types';
 
 const MAX_REMARK_LENGTH = 300;
+const DEFAULT_STATUS_LABELS: Record<string, { zh: string; en: string }> = {
+  'In progress': { zh: '进行中', en: 'In progress' },
+  Confirmed: { zh: '已确认', en: 'Confirmed' },
+  Canceled: { zh: '已取消', en: 'Canceled' },
+};
 
 type OrderTrackerApiResult = {
   success?: boolean;
@@ -59,6 +64,10 @@ function emptyForm(defaultStatus: string) {
     remark: '',
     systemNote: '',
   };
+}
+
+function customerOptionLabel(customer: Pick<OrderTrackerCustomerOption, 'label' | 'mark' | 'orderName' | 'companyName' | 'name'>): string {
+  return customer.label || `${customer.mark} / ${customer.orderName} / ${customer.companyName || customer.name || ''}`.trim();
 }
 
 export function OrderTrackerManager() {
@@ -137,6 +146,12 @@ export function OrderTrackerManager() {
     () => customers.find((customer) => customer.id === form.customerId) || null,
     [customers, form.customerId],
   );
+  const selectedCustomerLabel = selectedCustomer ? customerOptionLabel(selectedCustomer) : '';
+
+  const statusLabel = useCallback((status: string) => {
+    const mapped = DEFAULT_STATUS_LABELS[status];
+    return mapped ? tx(mapped.zh, mapped.en) : status;
+  }, [tx]);
 
   const handleOrderNoChange = (value: string) => {
     setForm((prev) => ({ ...prev, orderNo: value.toUpperCase(), customerId: '' }));
@@ -246,8 +261,8 @@ export function OrderTrackerManager() {
     setMessage('');
     try {
       if (dialogMode === 'create') {
-        if (!form.orderNo.trim()) throw new Error(tx('ORDER不能为空', 'ORDER is required'));
-        if (!form.customerId) throw new Error(tx('CUSTOMER不能为空', 'CUSTOMER is required'));
+        if (!form.orderNo.trim()) throw new Error(tx('订单号不能为空', 'ORDER is required'));
+        if (!form.customerId) throw new Error(tx('客户不能为空', 'CUSTOMER is required'));
         const result = await apiCall('orders', {
           method: 'POST',
           body: JSON.stringify({
@@ -258,7 +273,7 @@ export function OrderTrackerManager() {
             remark: form.remark.trim(),
           }),
         });
-        setMessage(result.message || tx('Order已创建', 'Order created'));
+        setMessage(result.message || tx('订单已创建', 'Order created'));
       } else if (editingOrder) {
         const result = await apiCall('orders', {
           method: 'POST',
@@ -271,7 +286,7 @@ export function OrderTrackerManager() {
             systemNote: form.systemNote.trim(),
           }),
         });
-        setMessage(result.message || tx('Order已更新', 'Order updated'));
+        setMessage(result.message || tx('订单已更新', 'Order updated'));
       }
       setDialogOpen(false);
       await loadOrders();
@@ -290,14 +305,11 @@ export function OrderTrackerManager() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold">{tx('Orders', 'Orders')}</h2>
-          <p className="text-sm text-muted-foreground">
-            {tx('独立业务订单跟踪，不参与财务订单余额和匹配逻辑。', 'Independent business order tracking; it does not affect finance order balances or matching.')}
-          </p>
+          <h2 className="text-2xl font-bold">{tx('订单管理', 'Orders')}</h2>
         </div>
         <Button onClick={openCreateDialog}>
           <Plus className="mr-2 h-4 w-4" />
-          {tx('新增Order', 'New Order')}
+          {tx('新增订单', 'New Order')}
         </Button>
       </div>
 
@@ -318,7 +330,7 @@ export function OrderTrackerManager() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder={tx('搜索ORDER / 客户 / 备注', 'Search ORDER / customer / note')}
+              placeholder={tx('搜索订单号 / 客户 / 备注', 'Search ORDER / customer / note')}
             />
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full">
@@ -327,7 +339,7 @@ export function OrderTrackerManager() {
               <SelectContent>
                 <SelectItem value="ALL">{tx('全部状态', 'All status')}</SelectItem>
                 {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>{status}</SelectItem>
+                  <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -345,12 +357,12 @@ export function OrderTrackerManager() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ORDER</TableHead>
-                  <TableHead>STATUS</TableHead>
-                  <TableHead>PI STATUS</TableHead>
-                  <TableHead>REMARK</TableHead>
-                  <TableHead>SYSTEM NOTED</TableHead>
-                  <TableHead>DEPOSIT</TableHead>
+                  <TableHead>{tx('订单号', 'ORDER')}</TableHead>
+                  <TableHead>{tx('状态', 'STATUS')}</TableHead>
+                  <TableHead>{tx('PI状态', 'PI STATUS')}</TableHead>
+                  <TableHead>{tx('备注', 'REMARK')}</TableHead>
+                  <TableHead>{tx('系统备注', 'SYSTEM NOTED')}</TableHead>
+                  <TableHead>{tx('定金', 'DEPOSIT')}</TableHead>
                   <TableHead>{tx('客户', 'Customer')}</TableHead>
                   <TableHead>{tx('操作', 'Actions')}</TableHead>
                 </TableRow>
@@ -359,7 +371,7 @@ export function OrderTrackerManager() {
                 {orders.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-semibold">{formatOrderNameDisplay(row.orderNo)}</TableCell>
-                    <TableCell><Badge variant={statusBadgeVariant(row.status)}>{row.status}</Badge></TableCell>
+                    <TableCell><Badge variant={statusBadgeVariant(row.status)}>{statusLabel(row.status)}</Badge></TableCell>
                     <TableCell>
                       {row.piStatus ? (
                         <Badge variant="default" className="gap-1"><CheckSquare className="h-3 w-3" />PI</Badge>
@@ -369,8 +381,8 @@ export function OrderTrackerManager() {
                     <TableCell className="min-w-[220px] whitespace-pre-wrap">{row.systemNote || '-'}</TableCell>
                     <TableCell className="font-medium">{row.depositAmount ? formatUsdAmount(row.depositAmount) : '-'}</TableCell>
                     <TableCell>
-                      <div className="text-sm font-medium">{row.customerMark || '-'}</div>
-                      <div className="text-xs text-muted-foreground">{row.customerName || row.customerPhone || '-'}</div>
+                      <div className="max-w-[180px] truncate text-sm font-medium" title={row.customerMark || '-'}>{row.customerMark || '-'}</div>
+                      <div className="max-w-[180px] truncate text-xs text-muted-foreground" title={row.customerName || row.customerPhone || '-'}>{row.customerName || row.customerPhone || '-'}</div>
                     </TableCell>
                     <TableCell>
                       {(row.canEdit || row.canEditAdminFields) ? (
@@ -387,7 +399,7 @@ export function OrderTrackerManager() {
                 {orders.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
-                      {loading ? tx('加载中...', 'Loading...') : tx('暂无Orders记录', 'No Orders records')}
+                      {loading ? tx('加载中...', 'Loading...') : tx('暂无订单记录', 'No Orders records')}
                     </TableCell>
                   </TableRow>
                 )}
@@ -398,19 +410,19 @@ export function OrderTrackerManager() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{dialogMode === 'create' ? tx('新增Order', 'New Order') : tx('修改Order', 'Edit Order')}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle>{dialogMode === 'create' ? tx('新增订单', 'New Order') : tx('修改订单', 'Edit Order')}</DialogTitle>
+            <DialogDescription className={dialogMode === 'create' ? 'sr-only' : undefined}>
               {dialogMode === 'create'
-                ? tx('ORDER NO会先严格检查财务订单和别名，已存在则不能创建。', 'ORDER is strictly checked against finance orders and aliases before creation.')
-                : tx('基础字段由可见范围内账号修改；PI STATUS和SYSTEM NOTED仅上级ADMIN可修改。', 'Base fields are editable within the visible scope; PI STATUS and SYSTEM NOTED require an upper ADMIN.')}
+                ? tx('创建订单记录', 'Create order record')
+                : tx('基础字段由可见范围内账号修改；PI状态和系统备注仅上级管理员可修改。', 'Base fields are editable within the visible scope; PI status and system note require an upper ADMIN.')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label>ORDER</Label>
+              <Label>{tx('订单号', 'ORDER')}</Label>
               <Input
                 value={form.orderNo}
                 onChange={(event) => handleOrderNoChange(event.target.value)}
@@ -425,30 +437,41 @@ export function OrderTrackerManager() {
             </div>
 
             <div className="grid gap-2">
-              <Label>CUSTOMER</Label>
+              <Label>{tx('客户', 'Customer')}</Label>
               <Select
                 value={form.customerId}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, customerId: value }))}
                 disabled={dialogMode === 'edit'}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger data-testid="orders-customer-select-trigger" className="w-full min-w-0 overflow-hidden [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate">
                   <SelectValue placeholder={tx('选择客户', 'Select customer')} />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-w-[calc(100vw-3rem)] sm:max-w-[40rem]">
                   {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>{customer.label}</SelectItem>
+                    <SelectItem key={customer.id} value={customer.id} className="max-w-full overflow-hidden">
+                      <span
+                        className="block max-w-[min(34rem,calc(100vw-6rem))] truncate"
+                        data-testid={`orders-customer-option-${customer.id}`}
+                        title={customerOptionLabel(customer)}
+                      >
+                        {customerOptionLabel(customer)}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {selectedCustomer && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedCustomer.phone} · {selectedCustomer.city}
-                </p>
+                <div className="min-w-0 space-y-1 text-xs text-muted-foreground">
+                  <p className="truncate" title={selectedCustomerLabel}>{selectedCustomerLabel}</p>
+                  <p className="truncate" title={`${selectedCustomer.phone} · ${selectedCustomer.city}`}>
+                    {selectedCustomer.phone} · {selectedCustomer.city}
+                  </p>
+                </div>
               )}
             </div>
 
             <div className="grid gap-2">
-              <Label>STATUS</Label>
+              <Label>{tx('状态', 'Status')}</Label>
               <Select
                 value={form.status}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, status: value }))}
@@ -459,7 +482,7 @@ export function OrderTrackerManager() {
                 </SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((status) => (
-                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                    <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -467,7 +490,7 @@ export function OrderTrackerManager() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
-                <Label>REMARK</Label>
+                <Label>{tx('备注', 'Remark')}</Label>
                 <span className="text-xs text-muted-foreground">{form.remark.length}/{MAX_REMARK_LENGTH}</span>
               </div>
               <Textarea
@@ -487,11 +510,11 @@ export function OrderTrackerManager() {
                     disabled={!editingOrder?.canEditAdminFields}
                     id="orders-pi-status"
                   />
-                  <Label htmlFor="orders-pi-status" className="cursor-pointer">PI STATUS</Label>
+                  <Label htmlFor="orders-pi-status" className="cursor-pointer">{tx('PI状态', 'PI STATUS')}</Label>
                 </div>
 
                 <div className="grid gap-2">
-                  <Label>SYSTEM NOTED</Label>
+                  <Label>{tx('系统备注', 'SYSTEM NOTED')}</Label>
                   <Textarea
                     value={form.systemNote}
                     onChange={(event) => setForm((prev) => ({ ...prev, systemNote: event.target.value }))}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,7 +25,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
+import { apiCall, lookupOrderContextByOrderNo, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { CheckSquare, Loader2, Pencil, Plus, Search } from 'lucide-react';
 import type { OrderTrackerCustomerOption, OrderTrackerRow } from './types';
@@ -64,6 +64,7 @@ function emptyForm(defaultStatus: string) {
 export function OrderTrackerManager() {
   const tx = useUiText();
   const requestGuard = useLatestRequestGuard();
+  const orderLookupSequenceRef = useRef(0);
   const [orders, setOrders] = useState<OrderTrackerRow[]>([]);
   const [customers, setCustomers] = useState<OrderTrackerCustomerOption[]>([]);
   const [statusOptions, setStatusOptions] = useState<string[]>(['In progress', 'Confirmed', 'Canceled']);
@@ -76,6 +77,8 @@ export function OrderTrackerManager() {
   const [dialogMode, setDialogMode] = useState<DialogMode>('create');
   const [editingOrder, setEditingOrder] = useState<OrderTrackerRow | null>(null);
   const [form, setForm] = useState(emptyForm(defaultStatus));
+  const [customerLookupLoading, setCustomerLookupLoading] = useState(false);
+  const [customerLookupHint, setCustomerLookupHint] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -106,15 +109,20 @@ export function OrderTrackerManager() {
     }
   }, [requestGuard, search, statusFilter, tx]);
 
-  const loadCustomers = useCallback(async () => {
+  const loadCustomers = useCallback(async (customerSearch = ''): Promise<OrderTrackerCustomerOption[]> => {
     try {
-      const result = await apiCall('orders?action=customer-options');
+      const params = new URLSearchParams({ action: 'customer-options' });
+      if (customerSearch.trim()) params.set('search', customerSearch.trim());
+      const result = await apiCall(`orders?${params.toString()}`);
       if (result.success && Array.isArray(result.data)) {
-        setCustomers(result.data as OrderTrackerCustomerOption[]);
+        const rows = result.data as OrderTrackerCustomerOption[];
+        setCustomers(rows);
+        return rows;
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : tx('客户候选加载失败', 'Failed to load customer options'));
     }
+    return [];
   }, [tx]);
 
   useEffect(() => {
@@ -130,10 +138,17 @@ export function OrderTrackerManager() {
     [customers, form.customerId],
   );
 
+  const handleOrderNoChange = (value: string) => {
+    setForm((prev) => ({ ...prev, orderNo: value.toUpperCase(), customerId: '' }));
+    setCustomerLookupHint('');
+  };
+
   const openCreateDialog = () => {
     setDialogMode('create');
     setEditingOrder(null);
     setForm(emptyForm(defaultStatus));
+    setCustomerLookupLoading(false);
+    setCustomerLookupHint('');
     setError('');
     setMessage('');
     setDialogOpen(true);
@@ -151,10 +166,79 @@ export function OrderTrackerManager() {
       remark: row.remark || '',
       systemNote: row.systemNote || '',
     });
+    setCustomerLookupLoading(false);
+    setCustomerLookupHint('');
     setError('');
     setMessage('');
     setDialogOpen(true);
   };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      orderLookupSequenceRef.current += 1;
+      setCustomerLookupLoading(false);
+      setCustomerLookupHint('');
+    }
+  };
+
+  useEffect(() => {
+    if (!dialogOpen || dialogMode !== 'create') return;
+    const orderNo = form.orderNo.trim();
+    if (!orderNo) {
+      setCustomerLookupHint('');
+      setCustomerLookupLoading(false);
+      return;
+    }
+
+    const sequence = orderLookupSequenceRef.current + 1;
+    orderLookupSequenceRef.current = sequence;
+    setCustomerLookupLoading(true);
+
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const context = await lookupOrderContextByOrderNo(orderNo);
+          if (orderLookupSequenceRef.current !== sequence) return;
+          const matched = context.matchedCustomer;
+          if (!matched?.customerId) {
+            setCustomerLookupHint(tx('未匹配到客户，请手动选择。', 'No customer matched. Please select manually.'));
+            return;
+          }
+
+          const rows = await loadCustomers(matched.mark);
+          if (orderLookupSequenceRef.current !== sequence) return;
+          const matchedOption = rows.find((row) => row.id === matched.customerId) || {
+            id: matched.customerId,
+            mark: matched.mark,
+            orderName: matched.name,
+            name: matched.name,
+            companyName: null,
+            phone: '',
+            city: '',
+            ownerId: '',
+            label: `${matched.mark} / ${matched.name} / ${matched.name}`,
+          };
+          if (!rows.some((row) => row.id === matched.customerId)) {
+            setCustomers((prev) => [matchedOption, ...prev.filter((row) => row.id !== matched.customerId)]);
+          }
+          setForm((prev) => (
+            prev.orderNo.trim() === orderNo
+              ? { ...prev, customerId: matched.customerId }
+              : prev
+          ));
+          setCustomerLookupHint(tx(`已匹配客户：${matchedOption.label}`, `Matched customer: ${matchedOption.label}`));
+        } catch (err) {
+          if (orderLookupSequenceRef.current !== sequence) return;
+          setCustomerLookupHint(err instanceof Error ? err.message : tx('客户匹配失败，请手动选择。', 'Customer match failed. Please select manually.'));
+        } finally {
+          if (orderLookupSequenceRef.current === sequence) setCustomerLookupLoading(false);
+        }
+      })();
+    }, 260);
+
+    return () => clearTimeout(timer);
+  }, [dialogMode, dialogOpen, form.orderNo, loadCustomers, tx]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -313,7 +397,7 @@ export function OrderTrackerManager() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{dialogMode === 'create' ? tx('新增Order', 'New Order') : tx('修改Order', 'Edit Order')}</DialogTitle>
@@ -329,10 +413,15 @@ export function OrderTrackerManager() {
               <Label>ORDER</Label>
               <Input
                 value={form.orderNo}
-                onChange={(event) => setForm((prev) => ({ ...prev, orderNo: event.target.value.toUpperCase() }))}
+                onChange={(event) => handleOrderNoChange(event.target.value)}
                 disabled={dialogMode === 'edit'}
                 placeholder="PIKIN-23"
               />
+              {dialogMode === 'create' && (customerLookupLoading || customerLookupHint) && (
+                <p className="text-xs text-muted-foreground">
+                  {customerLookupLoading ? tx('正在匹配客户...', 'Matching customer...') : customerLookupHint}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-2">
@@ -389,25 +478,29 @@ export function OrderTrackerManager() {
               />
             </div>
 
-            <div className="flex items-center gap-3 rounded-md border p-3">
-              <Checkbox
-                checked={form.piStatus}
-                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, piStatus: checked === true }))}
-                disabled={dialogMode === 'create' || !editingOrder?.canEditAdminFields}
-                id="orders-pi-status"
-              />
-              <Label htmlFor="orders-pi-status" className="cursor-pointer">PI STATUS</Label>
-            </div>
+            {dialogMode === 'edit' && (
+              <>
+                <div className="flex items-center gap-3 rounded-md border p-3">
+                  <Checkbox
+                    checked={form.piStatus}
+                    onCheckedChange={(checked) => setForm((prev) => ({ ...prev, piStatus: checked === true }))}
+                    disabled={!editingOrder?.canEditAdminFields}
+                    id="orders-pi-status"
+                  />
+                  <Label htmlFor="orders-pi-status" className="cursor-pointer">PI STATUS</Label>
+                </div>
 
-            <div className="grid gap-2">
-              <Label>SYSTEM NOTED</Label>
-              <Textarea
-                value={form.systemNote}
-                onChange={(event) => setForm((prev) => ({ ...prev, systemNote: event.target.value }))}
-                disabled={dialogMode === 'create' || !editingOrder?.canEditAdminFields}
-                rows={3}
-              />
-            </div>
+                <div className="grid gap-2">
+                  <Label>SYSTEM NOTED</Label>
+                  <Textarea
+                    value={form.systemNote}
+                    onChange={(event) => setForm((prev) => ({ ...prev, systemNote: event.target.value }))}
+                    disabled={!editingOrder?.canEditAdminFields}
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter className="sticky bottom-0 bg-background pt-3">

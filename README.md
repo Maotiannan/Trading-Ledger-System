@@ -35,10 +35,12 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.141`
-- 本次更新：新增独立 `Orders` 子页面，用于维护业务订单跟踪表：`ORDER / STATUS / PI STATUS / REMARK / SYSTEM NOTED / DEPOSIT`。
-- 同批更新：`Orders` 页面新建 `ORDER` 时会严格检查财务订单和订单别名；如果财务系统中已存在同一订单号，则直接拒绝创建，避免影响收款、发票和余额逻辑。
-- 同批更新：`DEPOSIT` 会自动按对应收据/定金池汇总显示；`PI STATUS / SYSTEM NOTED` 仅上级 `ADMIN` 可维护，普通状态和备注按可见范围维护。
+- 当前版本：`1.0.142`
+- 本次更新：`Orders` 页面新建 `ORDER` 时复用全局订单建议/客户匹配逻辑，输入类似 `PIKIN-23` 会自动回填可见客户信息。
+- 同批修复：`Orders` 创建弹窗不再显示 `SYSTEM NOTED`；该字段只在记录创建后，由有权限的上级 `ADMIN` 在编辑中维护。
+- 上一版本：新增独立 `Orders` 子页面，用于维护业务订单跟踪表：`ORDER / STATUS / PI STATUS / REMARK / SYSTEM NOTED / DEPOSIT`。
+- 上一版本：`Orders` 页面新建 `ORDER` 时会严格检查财务订单和订单别名；如果财务系统中已存在同一订单号，则直接拒绝创建，避免影响收款、发票和余额逻辑。
+- 上一版本：`DEPOSIT` 会自动按对应收据/定金池汇总显示；`PI STATUS / SYSTEM NOTED` 仅上级 `ADMIN` 可维护，普通状态和备注按可见范围维护。
 - 上一版本：`Receipt Management` 中 `RECEIVED` 状态收据现在可以通过修改功能重新绑定 `ORDER NO / INV NO`，用于修正已完成收据误挂订单的情况。
 - 上一版本：完成态收据重绑后会同步更新关联 `Payment Detail` 明细行的 `ORDER NO / MARK`，并重算旧订单与新订单余额；`Detail / SWIFT` 的已完成状态不会被回退。
 - 上一版本：网页标签栏图标已替换为新的 MU 红蓝 SVG 图标，并显式声明为 `image/svg+xml` favicon。

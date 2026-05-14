@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.141
+> 当前版本：v1.0.142
 > 最后更新：2026-05-14
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Orders 创建体验补齐：`OrderTrackerManager` 新建弹窗复用 `lookupOrderContextByOrderNo` 的全局订单上下文能力，对输入的 `ORDER` 做防抖匹配并回填/选中客户候选；关闭弹窗会主动失效未完成请求，避免异步回填污染下一次创建。创建模式隐藏管理员字段区，`SYSTEM NOTED` 仅保留在编辑模式并继续受上级 `ADMIN` 权限控制；补齐 React 组件回归测试 ✅ 2026-05-14
 
 - [x] 独立 `Orders` 页面落地：新增 `OrderTracker` 持久化表和 `/api/orders`，结构复用财务 `Order` 的订单号、tokens、金额/余额快照、客户快照、创建者等连续性字段，并增加 `status / piStatus / remark / systemNote`；该表不参与财务匹配、余额和收据链路。创建前通过 `findOrderIdByNoOrAlias` 严格查重财务订单和别名，命中则 409 拒绝；列表按权限树可见范围读取并按 `Receipt.isDeposit / DEPOSIT_POOL` 汇总 `DEPOSIT`；前端新增 `/orders` 页面、侧边栏入口、状态筛选、客户选择、编辑弹窗与上级 ADMIN 字段权限；补齐 service/api-catalog/routes 回归和 isolated API 真实迁移验证 ✅ 2026-05-14
 

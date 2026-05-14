@@ -23,6 +23,7 @@ jest.mock('@/lib/db', () => ({
       create: jest.fn(),
     },
     detailItem: {
+      updateMany: jest.fn(),
       findMany: jest.fn(),
     },
     detail: {
@@ -63,6 +64,13 @@ jest.mock('@/lib/customer-matching', () => ({
 
 jest.mock('@/lib/receipt-edit-binding', () => ({
   resolveReceiptEditBinding: jest.fn(),
+  syncReceiptDetailItemsForBinding: jest.fn(async (tx, params) => tx.detailItem.updateMany({
+    where: { receiptId: params.receiptId },
+    data: {
+      orderNo: params.orderNo,
+      mark: params.customerMark,
+    },
+  })),
 }));
 
 jest.mock('@/lib/user-hierarchy', () => ({
@@ -90,7 +98,7 @@ const mockDb = db as unknown as {
   uploadedAsset: { updateMany: jest.Mock };
   receipt: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
   receiptHistory: { create: jest.Mock };
-  detailItem: { findMany: jest.Mock };
+  detailItem: { updateMany: jest.Mock; findMany: jest.Mock };
   detail: { update: jest.Mock };
   swift: { updateMany: jest.Mock };
   order: { create: jest.Mock; update: jest.Mock };
@@ -485,6 +493,71 @@ describe('receipt-service', () => {
         invNo: 'INV-NEW',
       }),
     }));
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
+  });
+
+  it('allows direct admin rebinding for a RECEIVED receipt and keeps linked detail item aligned', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-received',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.RECEIVED,
+      receiptNo: 'R-DONE',
+      date: null,
+      tel: null,
+      usd: 2500,
+      invNo: 'INV-OLD',
+      orderNo: 'OLD-01',
+      payer: null,
+      imageUrl: null,
+      imageName: null,
+      isDeposit: false,
+      customerId: 'customer-1',
+      customerMark: 'OLD',
+      customerName: 'Old Customer',
+      customerPhone: '+224',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      orderId: 'order-old',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-received' });
+    mockResolveReceiptEditBinding.mockResolvedValueOnce({
+      orderId: 'order-new',
+      orderNo: 'NEW-02',
+      invNo: 'INV-NEW',
+    });
+    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-received', orderId: 'order-new' });
+    mockDb.detailItem.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-received',
+      payload: {
+        receiptNo: 'R-DONE',
+        date: null,
+        orderNo: 'NEW-02',
+        tel: null,
+        invNo: 'INV-NEW',
+        payer: null,
+        customerMark: 'NEW',
+      },
+    });
+
+    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'receipt-received' },
+      data: expect.objectContaining({
+        orderNo: 'NEW-02',
+        orderId: 'order-new',
+        invNo: 'INV-NEW',
+      }),
+    }));
+    expect(mockDb.detailItem.updateMany).toHaveBeenCalledWith({
+      where: { receiptId: 'receipt-received' },
+      data: {
+        orderNo: 'NEW-02',
+        mark: 'NEW',
+      },
+    });
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
   });

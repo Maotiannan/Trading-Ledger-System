@@ -27,6 +27,23 @@ export type ReceiptEditBindingResult = {
   invNo: string | null;
 };
 
+export async function syncReceiptDetailItemsForBinding(
+  client: ReceiptEditBindingClient,
+  params: {
+    receiptId: string;
+    orderNo: string | null;
+    customerMark: string | null;
+  },
+) {
+  await client.detailItem.updateMany({
+    where: { receiptId: params.receiptId },
+    data: {
+      orderNo: params.orderNo,
+      mark: params.customerMark,
+    },
+  });
+}
+
 function cleanText(value: string | null | undefined): string | null {
   const trimmed = String(value || '').trim();
   return trimmed || null;

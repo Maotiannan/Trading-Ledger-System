@@ -6,7 +6,7 @@ import { db } from '@/lib/db';
 import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { ReceiptEditablePatch, ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
-import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
+import { resolveReceiptEditBinding, syncReceiptDetailItemsForBinding } from '@/lib/receipt-edit-binding';
 import { updateOrderBalance } from '@/lib/matching';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
@@ -404,6 +404,12 @@ export async function reviewReceiptEdit(params: {
           payer: nextSnapshot.payer,
           tel: nextSnapshot.tel,
         },
+      });
+
+      await syncReceiptDetailItemsForBinding(tx, {
+        receiptId: request.receiptId,
+        orderNo: binding.orderNo,
+        customerMark: nextSnapshot.customerMark,
       });
 
       const previousOrderId = request.receipt.orderId || null;

@@ -34,8 +34,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.139`
-- 本次更新：网页标签栏图标已替换为新的 MU 红蓝 SVG 图标，并显式声明为 `image/svg+xml` favicon。
+- 当前版本：`1.0.140`
+- 本次更新：`Receipt Management` 中 `RECEIVED` 状态收据现在可以通过修改功能重新绑定 `ORDER NO / INV NO`，用于修正已完成收据误挂订单的情况。
+- 同批更新：完成态收据重绑后会同步更新关联 `Payment Detail` 明细行的 `ORDER NO / MARK`，并重算旧订单与新订单余额；`Detail / SWIFT` 的已完成状态不会被回退。
+- 上一版本：网页标签栏图标已替换为新的 MU 红蓝 SVG 图标，并显式声明为 `image/svg+xml` favicon。
 - 上一版本：新增“数据文件与存储位置”，集中说明数据库、NAS 上传目录、Docker 卷、模板资源和测试临时数据。
 - 上一版本：`Payment Detail -> Export Pic` 的 TYPE 判断改为按真实发票订单的当前余额判断，余额小于等于 `$5` 的订单直接显示 `Final`；`DEPOSIT_POOL / Un_Associated` 池子不会被误判为 `Final`。
 - 上一版本：`Payment Detail -> Export Pic` 导出图样式调整，表头、订单号、类型、总计蓝条和底部付款公司/笔数文字按最新视觉要求加黑、加粗或放大。

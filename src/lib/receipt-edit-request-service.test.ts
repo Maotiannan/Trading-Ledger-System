@@ -24,6 +24,9 @@ jest.mock('@/lib/db', () => ({
     receiptHistory: {
       create: jest.fn(),
     },
+    detailItem: {
+      updateMany: jest.fn(),
+    },
     receiptEditRequest: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -49,6 +52,13 @@ jest.mock('@/lib/audit', () => ({
 
 jest.mock('@/lib/receipt-edit-binding', () => ({
   resolveReceiptEditBinding: jest.fn(),
+  syncReceiptDetailItemsForBinding: jest.fn(async (tx, params) => tx.detailItem.updateMany({
+    where: { receiptId: params.receiptId },
+    data: {
+      orderNo: params.orderNo,
+      mark: params.customerMark,
+    },
+  })),
 }));
 
 jest.mock('@/lib/matching', () => ({
@@ -107,6 +117,9 @@ const mockDb = db as unknown as {
   receiptHistory: {
     create: jest.Mock;
   };
+  detailItem: {
+    updateMany: jest.Mock;
+  };
   receiptEditRequest: {
     findFirst: jest.Mock;
     findUnique: jest.Mock;
@@ -129,6 +142,9 @@ const mockTx = {
   },
   receiptHistory: {
     create: jest.fn(),
+  },
+  detailItem: {
+    updateMany: jest.fn(),
   },
   receiptEditRequest: {
     findFirst: jest.fn(),
@@ -587,6 +603,13 @@ describe('receipt-edit-request-service', () => {
         tel: '456',
       }),
     }));
+    expect(mockTx.detailItem.updateMany).toHaveBeenCalledWith({
+      where: { receiptId: 'receipt-1' },
+      data: {
+        orderNo: 'ORD-2',
+        mark: 'MAB-2',
+      },
+    });
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-2');
     expectReceiptLookupById(mockTx.receipt.findFirst, 'receipt-1');
@@ -612,6 +635,80 @@ describe('receipt-edit-request-service', () => {
       targetId: 'req-1',
       targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
     }));
+  });
+
+  it('approves a RECEIVED receipt rebinding request and syncs its linked detail item without changing status', async () => {
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-received',
+      receiptId: 'receipt-received',
+      status: ReceiptEditRequestStatus.PENDING,
+      requestedBy: 'sales-1',
+      afterSnapshot: {
+        ...validEditPayload,
+        orderNo: 'NEW-02',
+        invNo: 'INV-NEW',
+        customerMark: 'NEW',
+      },
+      receipt: {
+        id: 'receipt-received',
+        createdBy: 'sales-owner',
+        status: ReceiptStatus.RECEIVED,
+        receiptNo: '0001008',
+        date: null,
+        invNo: 'INV-OLD',
+        customerMark: 'OLD',
+        payer: 'Old Payer',
+        tel: '123',
+        usd: 2500,
+        orderNo: 'OLD-01',
+        orderId: 'order-old',
+        imageUrl: null,
+        imageName: null,
+        isDeposit: false,
+        customerId: 'customer-1',
+        customerName: 'Mamadou',
+        customerPhone: '123',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+      },
+      requester: salesUser,
+    });
+    mockTx.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-received' });
+    mockTx.receiptEditRequest.updateMany.mockResolvedValueOnce({ count: 1 });
+    mockResolveReceiptEditBinding.mockResolvedValueOnce({
+      orderId: 'order-new',
+      orderNo: 'NEW-02',
+      invNo: 'INV-NEW',
+    });
+
+    await reviewReceiptEdit({
+      currentUser: adminUser,
+      requestId: 'req-received',
+      decision: 'approve',
+      comment: 'move payment to correct order',
+    });
+
+    expect(mockTx.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'receipt-received' },
+      data: expect.not.objectContaining({ status: expect.anything() }),
+    }));
+    expect(mockTx.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderNo: 'NEW-02',
+        orderId: 'order-new',
+        invNo: 'INV-NEW',
+        customerMark: 'NEW',
+      }),
+    }));
+    expect(mockTx.detailItem.updateMany).toHaveBeenCalledWith({
+      where: { receiptId: 'receipt-received' },
+      data: {
+        orderNo: 'NEW-02',
+        mark: 'NEW',
+      },
+    });
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
   });
 
   it('rejects a pending request without mutating the receipt', async () => {

@@ -11,7 +11,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
-import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
+import { resolveReceiptEditBinding, syncReceiptDetailItemsForBinding } from '@/lib/receipt-edit-binding';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
@@ -284,9 +284,6 @@ export async function updateReceiptRecord(params: {
       ownerVisibleIds,
     });
   }
-  if (existingReceipt.status === ReceiptStatus.RECEIVED) {
-    throw badRequest('RECEIVED状态下禁止修改', { receiptId, status: existingReceipt.status });
-  }
   if (existingReceipt.status === ReceiptStatus.SIGNING_PENDING) {
     throw badRequest('签名未完成的收据不能直接修改', { receiptId, status: existingReceipt.status });
   }
@@ -328,7 +325,8 @@ export async function updateReceiptRecord(params: {
       },
     });
 
-    return tx.receipt.update({
+    const nextCustomerMark = payload.customerMark || null;
+    const updatedReceipt = await tx.receipt.update({
       where: { id: receiptId },
       data: {
         receiptNo: payload.receiptNo || null,
@@ -337,10 +335,18 @@ export async function updateReceiptRecord(params: {
         invNo: binding.invNo,
         orderNo: binding.orderNo,
         orderId: binding.orderId,
-        customerMark: payload.customerMark || null,
+        customerMark: nextCustomerMark,
         payer: payload.payer || null,
       },
     });
+
+    await syncReceiptDetailItemsForBinding(tx, {
+      receiptId,
+      orderNo: binding.orderNo,
+      customerMark: nextCustomerMark,
+    });
+
+    return updatedReceipt;
   });
 
   const nextOrderId = updated.orderId || null;

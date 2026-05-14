@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.139
-> 最后更新：2026-05-12
+> 当前版本：v1.0.140
+> 最后更新：2026-05-14
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `RECEIVED` 收据重绑订单/发票：移除管理员直改 `RECEIVED` 收据时的后端阻断，复用 `resolveReceiptEditBinding` 在事务内重新绑定 `orderId/orderNo/invNo`；新增 `syncReceiptDetailItemsForBinding`，管理员直接保存和销售审批通过都会同步更新关联 `DetailItem.orderNo/mark`，避免收据已转单但付款明细/导出图仍显示旧订单；旧/新订单余额继续重算，`Receipt/Detail/SWIFT` 完成状态不回退；补齐 service/request/binding 回归 ✅ 2026-05-14
 
 - [x] 网页标签栏图标替换：将 `public/logo.svg` 替换为用户提供的 MU 红蓝 SVG，并把 Next metadata `icons.icon` 改为带 `image/svg+xml` 类型声明的 favicon 入口，确保浏览器标签栏使用新图标 ✅ 2026-05-12
 

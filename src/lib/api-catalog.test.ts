@@ -41,6 +41,10 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/orders', 'update')?.method).toBe('POST');
   });
 
+  it('should expose customer sync endpoint', () => {
+    expect(findAction('/api/sync/customers', 'sync')?.method).toBe('GET');
+  });
+
   it('should expose protected upload-image read and upload actions', () => {
     expect(findAction('/api/upload-image', 'read')?.method).toBe('GET');
     expect(findAction('/api/upload-image', 'upload')?.method).toBe('POST');

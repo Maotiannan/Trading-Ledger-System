@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.143
-> 最后更新：2026-05-14
+> 当前版本：v1.0.144
+> 最后更新：2026-05-15
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 客户增量同步 API：新增 `customer-sync-service` 和 `/api/sync/customers`，接口通过不透明 base64url 游标维护 `Customer.updatedAt` 与 `AuditLog.CUSTOMER_DELETE.createdAt` 两条水位；本次只返回 `since < changedAt <= highWatermark` 的 upsert/tombstone，避免同步过程中新增变更丢失。删除客户因当前系统为硬删除，改从 `CUSTOMER_DELETE` 审计日志读取 `ownerId / mark / orderName` 生成 `DELETED` 标记；当前无停用字段，`disabled` 明确返回空数组。接口复用登录态和客户权限范围，`ADMIN` 全量、`SALES` 仅自有绑定池、`USER` 403；补齐 service、route、api-catalog 单测和 isolated API 真实创建/更新/删除/权限回归 ✅ 2026-05-15
 
 - [x] Orders 页面用户侧文案与弹窗适配收口：移除 `Independent business order tracking...` 这类面向工程实现的可见说明；侧边栏入口、页面标题、创建按钮、表头、状态选项、空状态、弹窗字段和保存提示统一走 `useUiText` 中文化；`DialogContent / SelectTrigger / SelectContent / SelectItem / selected customer hint / table customer cell` 增加 `min-w-0 / overflow-hidden / truncate / title` 约束，防止超长客户名称撑宽新建弹窗或表格列；补齐 React 回归测试覆盖英文模式不显示技术说明、中文标签和长客户名截断 ✅ 2026-05-14
 

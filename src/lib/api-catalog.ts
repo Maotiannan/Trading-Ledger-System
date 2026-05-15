@@ -53,6 +53,18 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/sync/customers',
+    description: 'Incremental customer synchronization for external clients',
+    actions: [
+      {
+        action: 'sync',
+        method: 'GET',
+        description: 'Return customer upserts, delete tombstones, disabled markers, and the next cursor since the last sync',
+        bodyExample: { query: 'since=<opaque-nextCursor>&limit=500' },
+      },
+    ],
+  },
+  {
     endpoint: '/api/receipt',
     description: 'Receipt OCR and lifecycle',
     actions: [

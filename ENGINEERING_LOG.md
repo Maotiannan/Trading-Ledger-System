@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.144
-> 最后更新：2026-05-15
+> 当前版本：v1.0.145
+> 最后更新：2026-05-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Payment Agent 管理弹窗修复：确认根因是 `PaymentAgentManagerDialog` 打开后会在 effect 中自动选择第一条代理，点击 `New` 清空 `selectedAgentId` 后又被同一 effect 选回第一条，导致用户看到“没有任何反应”。新增 `isCreatingDraft` 明确区分新建草稿与已选代理；点击代理列表会退出新建草稿，保存/删除/关闭后重置状态。桌面端弹窗改为固定高度两栏布局，右侧详情面板独立滚动并增加 `minmax(0,1fr)` 防止内容被横向挤出；补齐组件回归测试覆盖 `New` 状态和布局约束 ✅ 2026-05-16
 
 - [x] 客户增量同步 API：新增 `customer-sync-service` 和 `/api/sync/customers`，接口通过不透明 base64url 游标维护 `Customer.updatedAt` 与 `AuditLog.CUSTOMER_DELETE.createdAt` 两条水位；本次只返回 `since < changedAt <= highWatermark` 的 upsert/tombstone，避免同步过程中新增变更丢失。删除客户因当前系统为硬删除，改从 `CUSTOMER_DELETE` 审计日志读取 `ownerId / mark / orderName` 生成 `DELETED` 标记；当前无停用字段，`disabled` 明确返回空数组。接口复用登录态和客户权限范围，`ADMIN` 全量、`SALES` 仅自有绑定池、`USER` 403；补齐 service、route、api-catalog 单测和 isolated API 真实创建/更新/删除/权限回归 ✅ 2026-05-15
 

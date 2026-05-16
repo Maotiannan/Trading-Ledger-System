@@ -52,18 +52,20 @@ export function PaymentAgentManagerDialog({
   onAgentsReload,
 }: PaymentAgentManagerDialogProps) {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
   const [draft, setDraft] = useState<AgentDraft>(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedAgent = useMemo(
-    () => agents.find((agent) => agent.id === selectedAgentId) || null,
-    [agents, selectedAgentId]
+    () => (isCreatingDraft ? null : agents.find((agent) => agent.id === selectedAgentId) || null),
+    [agents, isCreatingDraft, selectedAgentId]
   );
 
   useEffect(() => {
     if (!open) return;
+    if (isCreatingDraft) return;
     if (selectedAgentId && agents.some((agent) => agent.id === selectedAgentId)) {
       setDraft(toDraft(agents.find((agent) => agent.id === selectedAgentId) || null));
       return;
@@ -72,11 +74,20 @@ export function PaymentAgentManagerDialog({
     setSelectedAgentId(first?.id ?? null);
     setDraft(toDraft(first));
     setError(null);
-  }, [agents, open, selectedAgentId]);
+  }, [agents, isCreatingDraft, open, selectedAgentId]);
 
-  const isCreating = !selectedAgent;
+  useEffect(() => {
+    if (open) return;
+    setIsCreatingDraft(false);
+    setSelectedAgentId(null);
+    setDraft({ ...EMPTY_DRAFT });
+    setError(null);
+  }, [open]);
+
+  const isCreating = isCreatingDraft || !selectedAgent;
 
   const handleNew = () => {
+    setIsCreatingDraft(true);
     setSelectedAgentId(null);
     setDraft({ ...EMPTY_DRAFT });
     setError(null);
@@ -103,6 +114,7 @@ export function PaymentAgentManagerDialog({
       }
       await onAgentsReload();
       const nextId = result.data?.id || selectedAgent?.id || null;
+      setIsCreatingDraft(false);
       setSelectedAgentId(nextId);
     } catch (agentError) {
       setError(getApiErrorMessage(agentError, tx('保存付款代理失败', 'Failed to save payment agent.')));
@@ -131,6 +143,7 @@ export function PaymentAgentManagerDialog({
         return;
       }
       await onAgentsReload();
+      setIsCreatingDraft(false);
       setSelectedAgentId(null);
       setDraft({ ...EMPTY_DRAFT });
     } catch (agentError) {
@@ -201,14 +214,20 @@ export function PaymentAgentManagerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-hidden p-0 sm:h-auto sm:max-h-[90vh] sm:w-[min(1100px,calc(100vw-2rem))]">
-        <div className="flex h-full max-h-[calc(100dvh-1rem)] flex-col sm:max-h-[90vh]">
+      <DialogContent
+        data-testid="payment-agent-dialog-content"
+        className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-hidden p-0 sm:h-[min(760px,calc(100vh-2rem))] sm:max-h-[90vh] sm:w-[calc(100vw-2rem)] lg:max-w-[1180px] xl:max-w-[1280px]"
+      >
+        <div className="flex h-full max-h-[calc(100dvh-1rem)] min-w-0 flex-col sm:max-h-[90vh]">
           <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('付款代理管理', 'Payment Agent Management')}</DialogTitle>
             <DialogDescription>{tx('维护付款代理基础信息和附件', 'Maintain payment agent master data and attachments.')}</DialogDescription>
           </DialogHeader>
-          <div className="grid flex-1 min-h-0 grid-cols-1 gap-0 md:grid-cols-[260px_1fr]">
-            <div className="flex min-h-0 flex-col border-b md:border-b-0 md:border-r">
+          <div
+            data-testid="payment-agent-dialog-body"
+            className="grid min-h-0 flex-1 grid-cols-1 gap-0 md:grid-cols-[280px_minmax(0,1fr)] lg:grid-cols-[300px_minmax(0,1fr)]"
+          >
+            <div className="flex min-h-0 min-w-0 flex-col border-b md:border-b-0 md:border-r">
               <div className="flex items-center justify-between px-4 py-3">
                 <div className="text-sm font-medium">{tx('代理列表', 'Agents')}</div>
                 <Button size="sm" variant="outline" onClick={handleNew}>{tx('新增', 'New')}</Button>
@@ -221,20 +240,24 @@ export function PaymentAgentManagerDialog({
                       type="button"
                       className={`w-full rounded-md px-3 py-2 text-left text-sm ${selectedAgentId === agent.id ? 'bg-muted font-medium' : 'hover:bg-muted/60'}`}
                       onClick={() => {
+                        setIsCreatingDraft(false);
                         setSelectedAgentId(agent.id);
                         setDraft(toDraft(agent));
                         setError(null);
                       }}
                     >
-                      <div>{agent.companyName}</div>
+                      <div className="truncate" title={agent.companyName}>{agent.companyName}</div>
                       <div className="text-xs text-muted-foreground">{agent.contactName || tx('未填写联系人', 'No contact name')}</div>
                     </button>
                   ))}
                 </div>
               </ScrollArea>
             </div>
-            <div className="flex min-h-0 flex-col">
-              <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <div
+                data-testid="payment-agent-detail-panel"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
+              >
                 <div className="space-y-4">
                   {error && (
                     <Alert variant="destructive">

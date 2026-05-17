@@ -385,15 +385,15 @@ export default async function run(t) {
   const receivedSwift = findSwiftByDetail(swiftAfterReceive.data?.data, linkedDetail.id);
   t.assertEqual(receivedSwift?.status, 'RECEIVED', 'swift enters RECEIVED after swift sign-off');
 
-  const receiptDeleteForbidden = await t.request('POST', '/api/deletion', {
+  const receivedReceiptDeleteRequest = await t.request('POST', '/api/deletion', {
     json: {
       action: 'request',
       targetType: 'RECEIPT',
       targetId: linkedReceipt.id,
     },
-    expectedStatus: 400,
+    expectedStatus: 200,
   });
-  t.assertMatch(receiptDeleteForbidden.data?.error || receiptDeleteForbidden.text, /RECEIVED/, 'receipt deletion is blocked once received');
+  t.assertEqual(receivedReceiptDeleteRequest.data?.data?.status, 'PENDING', 'admin can request deletion for RECEIVED receipt');
 
   const detailDeleteForbidden = await t.request('POST', '/api/deletion', {
     json: {

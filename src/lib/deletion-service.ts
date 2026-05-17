@@ -83,7 +83,7 @@ async function assertDeletionRequestableTarget(
     }
 
     const blockedMessage = getDeletionBlockedStatusMessage(receipt.status);
-    if (blockedMessage) {
+    if (blockedMessage && !(receipt.status === ReceiptStatus.RECEIVED && currentUser.role === UserRole.ADMIN)) {
       throw createApiError({
         code: 'DELETION_NOT_ALLOWED',
         status: 400,

@@ -14,6 +14,7 @@ import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/resp
 import {
   apiCall,
   getDisplayImageUrl,
+  lookupOrderContextByOrderNo,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
   useLatestRequestGuard,
@@ -28,6 +29,7 @@ import {
   ReceiptList,
   ReceiptUploadDialog,
 } from './components';
+import type { ReceiptEditSuggestion } from './components/receipt-edit-dialog';
 import { useReceiptCustomerLookup, useReceiptForms, useReceiptActions, useReceiptGenerator } from './hooks';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { Plus, Upload, PenSquare } from 'lucide-react';
@@ -77,6 +79,8 @@ export function ReceiptManager() {
     payer: null,
     tel: null,
   });
+  const [editSuggestion, setEditSuggestion] = useState<ReceiptEditSuggestion | null>(null);
+  const [editSuggestionLoading, setEditSuggestionLoading] = useState(false);
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
@@ -315,6 +319,22 @@ export function ReceiptManager() {
     const matched = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
     return matched ? matched[1] : trimmed;
   };
+  const normalizeSuggestionText = (value: string | null | undefined) => String(value || '').trim();
+  const buildEditSuggestion = useCallback((form: ReceiptEditablePatch, context: Awaited<ReturnType<typeof lookupOrderContextByOrderNo>>): ReceiptEditSuggestion | null => {
+    const suggestion: ReceiptEditSuggestion = {
+      orderNo: context.orderSuggestion?.orderNo || null,
+      invNo: context.invoiceSuggestion?.invNo || null,
+      customerMark: context.matchedCustomer?.mark || null,
+      payer: context.payerSuggestion || null,
+      tel: context.phoneSuggestion || null,
+    };
+    const hasChangedValue = (Object.keys(suggestion) as Array<keyof ReceiptEditSuggestion>).some((key) => {
+      const value = normalizeSuggestionText(suggestion[key]);
+      if (!value) return false;
+      return value !== normalizeSuggestionText(form[key]);
+    });
+    return hasChangedValue ? suggestion : null;
+  }, []);
 
   const openEditDialog = (receipt: Receipt) => {
     setEditingReceiptId(receipt.id);
@@ -328,6 +348,8 @@ export function ReceiptManager() {
       tel: receipt.tel ?? null,
     });
     setShowEditDialog(true);
+    setEditSuggestion(null);
+    setEditSuggestionLoading(false);
     setError(null);
   };
 
@@ -335,6 +357,50 @@ export function ReceiptManager() {
     if (submitting) return;
     setShowEditDialog(false);
     setEditingReceiptId(null);
+    setEditSuggestion(null);
+    setEditSuggestionLoading(false);
+  };
+
+  useEffect(() => {
+    if (!showEditDialog) return undefined;
+    const orderNo = editForm.orderNo?.trim() || '';
+    if (!orderNo) {
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setEditSuggestionLoading(true);
+      void lookupOrderContextByOrderNo(orderNo)
+        .then((context) => {
+          if (cancelled) return;
+          setEditSuggestion(buildEditSuggestion(editForm, context));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setEditSuggestion(null);
+        })
+        .finally(() => {
+          if (!cancelled) setEditSuggestionLoading(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [buildEditSuggestion, editForm, showEditDialog]);
+
+  const adoptEditSuggestion = () => {
+    if (!editSuggestion) return;
+    setEditForm((prev) => ({
+      ...prev,
+      orderNo: editSuggestion.orderNo || prev.orderNo,
+      invNo: editSuggestion.invNo || prev.invNo,
+      customerMark: editSuggestion.customerMark || prev.customerMark,
+      payer: editSuggestion.payer || prev.payer,
+      tel: editSuggestion.tel || prev.tel,
+    }));
+    setEditSuggestion(null);
+    setEditSuggestionLoading(false);
   };
 
   const submitReceiptEdit = async () => {
@@ -560,6 +626,8 @@ export function ReceiptManager() {
         open={showEditDialog}
         locale={locale}
         form={editForm}
+        suggestion={editSuggestion}
+        suggestionLoading={Boolean(editForm.orderNo?.trim()) && editSuggestionLoading}
         submitting={submitting}
         isAdmin={isAdmin}
         tx={tx}
@@ -567,7 +635,14 @@ export function ReceiptManager() {
           if (!open) closeEditDialog();
           else setShowEditDialog(true);
         }}
-        onFormChange={setEditForm}
+        onFormChange={(next) => {
+          if ((next.orderNo || '') !== (editForm.orderNo || '')) {
+            setEditSuggestion(null);
+            setEditSuggestionLoading(false);
+          }
+          setEditForm(next);
+        }}
+        onAdoptSuggestion={adoptEditSuggestion}
         onSubmit={() => {
           void submitReceiptEdit();
         }}

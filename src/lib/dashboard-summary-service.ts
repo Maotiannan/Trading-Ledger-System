@@ -15,6 +15,7 @@ export type DashboardSummary = {
   invoiceCount: number;
   unpaidTotal: number;
   pendingReceipts: number;
+  pendingReceiptsAmount: number;
   waitingSwift: number;
   pendingDeletion: number;
   recentReceipts: Array<{
@@ -62,7 +63,7 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
   const detailWhere = buildDetailVisibilityWhere(ownerIds);
   const orderWhere = buildOrderVisibilityWhere(ownerIds);
 
-  const [invoiceCount, visibleInvoices, pendingReceipts, waitingSwift, recentReceipts, recentDetails, deletionRequests] = await Promise.all([
+  const [invoiceCount, visibleInvoices, pendingReceipts, pendingReceiptsAmountAgg, waitingSwift, recentReceipts, recentDetails, deletionRequests] = await Promise.all([
     db.invoice.count({ where: invoiceWhere }),
     db.invoice.findMany({
       where: invoiceWhere,
@@ -96,6 +97,13 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
         ...receiptWhere,
         status: 'SR_Received',
       },
+    }),
+    db.receipt.aggregate({
+      where: {
+        ...receiptWhere,
+        status: 'SR_Received',
+      },
+      _sum: { usd: true },
     }),
     db.detail.count({
       where: {
@@ -202,6 +210,7 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     invoiceCount,
     unpaidTotal,
     pendingReceipts,
+    pendingReceiptsAmount: Number(pendingReceiptsAmountAgg._sum.usd ?? 0),
     waitingSwift,
     pendingDeletion: deletionRequests.filter((request) => request.status === DeletionStatus.PENDING).length,
     recentReceipts: recentReceipts.map((receipt) => ({

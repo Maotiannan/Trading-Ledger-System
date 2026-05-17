@@ -326,6 +326,9 @@ export async function updateReceiptRecord(params: {
     });
 
     const nextCustomerMark = payload.customerMark || null;
+    const matchedCustomer = binding.matchedCustomer && binding.matchedCustomer.customerId && !binding.matchedCustomer.needsCustomerFix
+      ? binding.matchedCustomer
+      : null;
     const updatedReceipt = await tx.receipt.update({
       where: { id: receiptId },
       data: {
@@ -337,6 +340,15 @@ export async function updateReceiptRecord(params: {
         orderId: binding.orderId,
         customerMark: nextCustomerMark,
         payer: payload.payer || null,
+        ...(matchedCustomer
+          ? {
+              customerId: matchedCustomer.customerId,
+              customerName: matchedCustomer.customerName,
+              customerPhone: matchedCustomer.customerPhone,
+              customerCity: matchedCustomer.customerCity,
+              needsCustomerFix: false,
+            }
+          : {}),
       },
     });
 

@@ -5,15 +5,20 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 
+export type ReceiptEditSuggestion = Partial<ReceiptEditablePatch>;
+
 export type ReceiptEditDialogProps = {
   open: boolean;
   locale: string;
   form: ReceiptEditablePatch;
+  suggestion: ReceiptEditSuggestion | null;
+  suggestionLoading: boolean;
   submitting: boolean;
   isAdmin: boolean;
   tx: (zh: string, en: string) => string;
   onOpenChange: (open: boolean) => void;
   onFormChange: (value: ReceiptEditablePatch) => void;
+  onAdoptSuggestion: () => void;
   onSubmit: () => void;
 };
 
@@ -21,13 +26,26 @@ export function ReceiptEditDialog({
   open,
   locale,
   form,
+  suggestion,
+  suggestionLoading,
   submitting,
   isAdmin,
   tx,
   onOpenChange,
   onFormChange,
+  onAdoptSuggestion,
   onSubmit,
 }: ReceiptEditDialogProps) {
+  const suggestionRows = suggestion
+    ? [
+        ['ORDER NO', suggestion.orderNo],
+        ['INV NO', suggestion.invNo],
+        ['MARK', suggestion.customerMark],
+        [tx('付款人', 'Payer'), suggestion.payer],
+        [tx('电话', 'Phone'), suggestion.tel],
+      ].filter((row): row is [string, string] => typeof row[1] === 'string' && row[1].trim().length > 0)
+    : [];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -77,6 +95,32 @@ export function ReceiptEditDialog({
             value={form.tel ?? ''}
             onChange={(e) => onFormChange({ ...form, tel: e.target.value || null })}
           />
+          {(suggestionLoading || suggestionRows.length > 0) && (
+            <div className="rounded-md border bg-amber-50 p-3 text-sm text-amber-950">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="font-medium">
+                  {suggestionLoading
+                    ? tx('正在匹配订单信息...', 'Matching order information...')
+                    : tx('发现可采纳的匹配建议', 'Matching suggestions found')}
+                </div>
+                {suggestionRows.length > 0 && (
+                  <Button type="button" size="sm" variant="outline" onClick={onAdoptSuggestion} disabled={submitting}>
+                    {tx('采纳匹配建议', 'Adopt Suggestion')}
+                  </Button>
+                )}
+              </div>
+              {suggestionRows.length > 0 && (
+                <div className="grid gap-1">
+                  {suggestionRows.map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-3">
+                      <span className="text-amber-700">{label}</span>
+                      <span className="text-right font-medium">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>

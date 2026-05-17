@@ -95,4 +95,60 @@ describe('ReceiptList', () => {
     const pagination = screen.getByTestId('receipt-pagination-controls');
     expect(pagination).toContainElement(screen.getByLabelText('每页条数'));
   });
+
+  it('hides RECEIVED edit/delete actions from sales users and keeps them visible for admins', () => {
+    const { rerender } = render(
+      <ReceiptList
+        receipts={[{ ...baseReceipt, status: 'RECEIVED' }]}
+        paginatedReceipts={[{ ...baseReceipt, status: 'RECEIVED' }]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin={false}
+        canEdit
+        canResumeSigning
+        tx={tx}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByTitle('修改收据')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('申请删除')).not.toBeInTheDocument();
+
+    rerender(
+      <ReceiptList
+        receipts={[{ ...baseReceipt, status: 'RECEIVED' }]}
+        paginatedReceipts={[{ ...baseReceipt, status: 'RECEIVED' }]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin
+        canEdit
+        canResumeSigning
+        tx={tx}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByTitle('修改收据')).toBeInTheDocument();
+    expect(screen.getByTitle('申请删除')).toBeInTheDocument();
+  });
 });

@@ -98,15 +98,15 @@ export default async function run(t) {
   });
   t.step('finance order created for duplicate guard');
 
-  const duplicateResponse = await t.request('POST', '/api/orders', {
+  const financeTrackerResponse = await t.request('POST', '/api/orders', {
     json: {
       action: 'create',
       orderNo: financeOrderNo,
       customerId,
     },
-    expectedStatus: 409,
+    expectedStatus: 200,
   });
-  t.assertMatch(duplicateResponse.data?.error || duplicateResponse.text, /财务订单|finance/i, 'orders page rejects finance order duplicates');
+  t.assertOk(Boolean(financeTrackerResponse.data?.data?.id), 'orders page allows finance order numbers as independent tracking rows');
 
   await t.logout();
 }

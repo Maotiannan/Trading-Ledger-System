@@ -98,19 +98,36 @@ describe('order-tracker-service', () => {
     mockFindOrderIdByNoOrAlias.mockResolvedValue(null);
   });
 
-  it('rejects creating an Orders-page record when the order already exists in finance orders or aliases', async () => {
+  it('allows creating an Orders-page record even when the order already exists in finance orders or aliases', async () => {
     mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('finance-order-1');
-
-    await expect(createOrderTracker(makeUser(), {
+    mockDb.orderTracker.findFirst.mockResolvedValueOnce(null);
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'PIKIN',
+      orderName: 'PIKIN',
+      name: 'Mamadou Dian Diallo',
+      phone: '622491286',
+      city: 'Conakry',
+      ownerId: 'sales-1',
+    });
+    mockDb.orderTracker.create.mockResolvedValueOnce({
+      id: 'tracker-finance-1',
       orderNo: 'PIKIN-20',
-      customerId: 'customer-1',
-    })).rejects.toMatchObject({
-      code: 'CONFLICT',
-      status: 409,
-      message: '该 ORDER NO 已存在于财务订单，不能在 Orders 页面新建',
+      status: 'In progress',
     });
 
-    expect(mockDb.orderTracker.create).not.toHaveBeenCalled();
+    const result = await createOrderTracker(makeUser(), {
+      orderNo: 'PIKIN-20',
+      customerId: 'customer-1',
+    });
+
+    expect(result.data.id).toBe('tracker-finance-1');
+    expect(mockDb.orderTracker.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderNo: 'PIKIN-20',
+        normalizedOrderNo: 'pikin-20',
+      }),
+    }));
   });
 
   it('creates an independent Orders-page record with a customer snapshot and default status', async () => {

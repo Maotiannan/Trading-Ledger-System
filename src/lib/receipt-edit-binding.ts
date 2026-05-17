@@ -25,6 +25,14 @@ export type ReceiptEditBindingResult = {
   orderId: string | null;
   orderNo: string | null;
   invNo: string | null;
+  matchedCustomer?: {
+    customerId: string | null;
+    customerMark: string | null;
+    customerName: string | null;
+    customerPhone: string | null;
+    customerCity: string | null;
+    needsCustomerFix: boolean;
+  };
 };
 
 export async function syncReceiptDetailItemsForBinding(
@@ -100,8 +108,27 @@ export async function resolveReceiptEditBinding(
         orderNo: true,
         invoiceId: true,
         invoice: { select: { id: true, invNo: true } },
+        customerId: true,
+        customerMark: true,
+        customerName: true,
+        customerPhone: true,
+        customerCity: true,
+        needsCustomerFix: true,
       },
     });
+    const hasMatchedCustomer = Boolean(
+      order?.customerId || order?.customerMark || order?.customerName || order?.customerPhone || order?.customerCity
+    );
+    const matchedCustomer = order && hasMatchedCustomer
+      ? {
+          customerId: order.customerId,
+          customerMark: order.customerMark,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          customerCity: order.customerCity,
+          needsCustomerFix: Boolean(order.needsCustomerFix),
+        }
+      : undefined;
     const targetInvoice = isSystemPoolInvoiceNo(order?.invoice?.invNo) && requestedInvNo
       ? await findVisibleInvoiceByNo(client, requestedInvNo, input.ownerIds)
       : null;
@@ -114,12 +141,14 @@ export async function resolveReceiptEditBinding(
         orderId: existingOrderId,
         orderNo: order.orderNo || requestedOrderNo,
         invNo: targetInvoice.invNo,
+        matchedCustomer,
       };
     }
     return {
       orderId: existingOrderId,
       orderNo: order?.orderNo || requestedOrderNo,
       invNo: order?.invoice?.invNo || null,
+      matchedCustomer,
     };
   }
 

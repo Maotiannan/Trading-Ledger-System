@@ -58,6 +58,12 @@ describe('resolveReceiptEditBinding', () => {
       id: 'order-pikin-20',
       orderNo: 'PIKIN-20',
       invoice: { invNo: 'L25MH-PIKIN' },
+      customerId: 'customer-1',
+      customerMark: 'PIKIN',
+      customerName: 'PIKIN',
+      customerPhone: '622491286',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
     });
 
     const result = await resolveReceiptEditBinding(client as never, makeParams());
@@ -66,6 +72,14 @@ describe('resolveReceiptEditBinding', () => {
       orderId: 'order-pikin-20',
       orderNo: 'PIKIN-20',
       invNo: 'L25MH-PIKIN',
+      matchedCustomer: {
+        customerId: 'customer-1',
+        customerMark: 'PIKIN',
+        customerName: 'PIKIN',
+        customerPhone: '622491286',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+      },
     });
     expect(client.order.create).not.toHaveBeenCalled();
   });

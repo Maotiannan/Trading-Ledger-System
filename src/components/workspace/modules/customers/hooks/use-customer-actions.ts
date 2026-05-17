@@ -24,6 +24,7 @@ export type CustomerActionDeps = {
   importOwnerId: string;
   editing: Record<string, unknown> | null;
   fixingTarget: CustomerFixTarget;
+  fixExistingCustomerId?: string;
   form: CustomerFormState;
   latestFailedRows: CustomerImportRowView[];
   loadCustomers: () => Promise<void>;
@@ -34,6 +35,7 @@ export type CustomerActionDeps = {
   setShowCreate: (open: boolean) => void;
   setEditing: (value: Record<string, unknown> | null) => void;
   setFixingTarget: (value: CustomerFixTarget) => void;
+  setFixExistingCustomerId?: (value: string) => void;
   setCustomerImporting: (value: boolean) => void;
   setCustomerImportRows: React.Dispatch<React.SetStateAction<CustomerImportRowView[]>>;
   setShowCustomerImportIssues: (value: boolean) => void;
@@ -51,6 +53,7 @@ export function useCustomerActions({
   importOwnerId,
   editing,
   fixingTarget,
+  fixExistingCustomerId = '',
   form,
   latestFailedRows,
   loadCustomers,
@@ -61,6 +64,7 @@ export function useCustomerActions({
   setShowCreate,
   setEditing,
   setFixingTarget,
+  setFixExistingCustomerId = () => undefined,
   setCustomerImporting,
   setCustomerImportRows,
   setShowCustomerImportIssues,
@@ -138,33 +142,40 @@ export function useCustomerActions({
   const submitFix = useCallback(async () => {
     if (!fixingTarget) return;
     try {
-      const payload = {
-        action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
-        ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
-        mark: form.mark,
-        orderName: form.orderName,
-        name: form.name,
-        phone: form.phone,
-        city: form.city,
-        consignee: form.consignee,
-        companyName: form.companyName || null,
-        companyAddress: form.companyAddress || null,
-        credit: form.credit === '' ? null : Number(form.credit),
-        ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
-      };
+      const payload = fixExistingCustomerId
+        ? {
+            action: fixingTarget.type === 'order' ? 'link-order-customer' : 'link-receipt-customer',
+            ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
+            customerId: fixExistingCustomerId,
+          }
+        : {
+            action: fixingTarget.type === 'order' ? 'resolve-order' : 'resolve-receipt',
+            ...(fixingTarget.type === 'order' ? { orderId: fixingTarget.id } : { receiptId: fixingTarget.id }),
+            mark: form.mark,
+            orderName: form.orderName,
+            name: form.name,
+            phone: form.phone,
+            city: form.city,
+            consignee: form.consignee,
+            companyName: form.companyName || null,
+            companyAddress: form.companyAddress || null,
+            credit: form.credit === '' ? null : Number(form.credit),
+            ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
+          };
       const result = await apiCall('customer/fixes', { method: 'POST', body: JSON.stringify(payload) });
       if (!result.success) {
         alert(getErrorMessage(result, tx('修复失败', 'Fix failed')));
         return;
       }
       setFixingTarget(null);
+      setFixExistingCustomerId('');
       resetForm();
       await loadCustomers();
       await loadFixes();
     } catch (error) {
       alert(getErrorMessage(error, tx('修复失败', 'Fix failed')));
     }
-  }, [defaultOwnerId, fixingTarget, form, importOwnerId, isAdmin, loadCustomers, loadFixes, resetForm, setFixingTarget, tx]);
+  }, [defaultOwnerId, fixExistingCustomerId, fixingTarget, form, importOwnerId, isAdmin, loadCustomers, loadFixes, resetForm, setFixExistingCustomerId, setFixingTarget, tx]);
 
   const downloadCustomerImportTemplate = useCallback(async () => {
     try {

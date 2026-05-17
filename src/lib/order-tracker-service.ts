@@ -4,7 +4,6 @@ import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
-import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
@@ -79,16 +78,6 @@ function buildCustomerVisibilityWhere(ownerIds: string[]): Prisma.CustomerWhereI
 
 async function loadHierarchy(currentUser: CurrentUser) {
   return getHierarchyScope(currentUser);
-}
-
-async function assertNoFinanceOrderExists(orderNo: string): Promise<void> {
-  const existingOrderId = await findOrderIdByNoOrAlias(orderNo);
-  if (existingOrderId) {
-    conflict('该 ORDER NO 已存在于财务订单，不能在 Orders 页面新建', {
-      orderNo,
-      financeOrderId: existingOrderId,
-    });
-  }
 }
 
 function assertRemark(value: string): void {
@@ -343,8 +332,6 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
 
   const normalizedOrderNo = normalizeTrackerOrderNo(orderNo);
   if (!normalizedOrderNo) badRequest('ORDER NO无效');
-
-  await assertNoFinanceOrderExists(orderNo);
 
   const existingTracker = await db.orderTracker.findFirst({
     where: { normalizedOrderNo },

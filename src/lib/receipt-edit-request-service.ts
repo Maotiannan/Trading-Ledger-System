@@ -392,6 +392,9 @@ export async function reviewReceiptEdit(params: {
         },
       });
 
+      const matchedCustomer = binding.matchedCustomer && binding.matchedCustomer.customerId && !binding.matchedCustomer.needsCustomerFix
+        ? binding.matchedCustomer
+        : null;
       await tx.receipt.update({
         where: { id: request.receiptId },
         data: {
@@ -403,6 +406,15 @@ export async function reviewReceiptEdit(params: {
           customerMark: nextSnapshot.customerMark,
           payer: nextSnapshot.payer,
           tel: nextSnapshot.tel,
+          ...(matchedCustomer
+            ? {
+                customerId: matchedCustomer.customerId,
+                customerName: matchedCustomer.customerName,
+                customerPhone: matchedCustomer.customerPhone,
+                customerCity: matchedCustomer.customerCity,
+                needsCustomerFix: false,
+              }
+            : {}),
         },
       });
 

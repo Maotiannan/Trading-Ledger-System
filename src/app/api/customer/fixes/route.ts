@@ -7,6 +7,8 @@ import { parseJsonRequest } from '@/lib/http-body';
 import { withAuth } from '@/lib/route-auth';
 import { listCustomerFixQueue } from '@/lib/customer-fix-read-service';
 import {
+  linkOrderCustomerFix,
+  linkReceiptCustomerFix,
   parseFixCustomerPayload,
   resolveOrderCustomerFix,
   resolveReceiptCustomerFix,
@@ -36,13 +38,29 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     const body = await parseJsonRequest<Record<string, unknown>>(request).catch(() => ({} as Record<string, unknown>));
     const action = trimStr(body.action);
 
-    if (action !== 'resolve-order' && action !== 'resolve-receipt') {
+    if (!['resolve-order', 'resolve-receipt', 'link-order-customer', 'link-receipt-customer'].includes(action)) {
       return createApiErrorResponse({
         code: apiErrorCodes.INVALID_ACTION,
         status: 400,
         message: '未知操作',
         detail: { action },
       }, request);
+    }
+
+    if (action === 'link-order-customer') {
+      const result = await linkOrderCustomerFix(currentUser, {
+        orderId: trimStr(body.orderId),
+        customerId: trimStr(body.customerId),
+      });
+      return createApiSuccessResponse(result, request);
+    }
+
+    if (action === 'link-receipt-customer') {
+      const result = await linkReceiptCustomerFix(currentUser, {
+        receiptId: trimStr(body.receiptId),
+        customerId: trimStr(body.customerId),
+      });
+      return createApiSuccessResponse(result, request);
     }
 
     const parsed = parseFixCustomerPayload(body);

@@ -48,7 +48,7 @@ export const apiCatalog: ApiModule[] = [
     actions: [
       { action: 'list', method: 'GET', description: 'List visible Orders page records' },
       { action: 'customer-options', method: 'GET', description: 'List customer candidates for Orders page creation' },
-      { action: 'create', method: 'POST', description: 'Create an Orders page record after strict finance-order duplicate check', bodyExample: { action: 'create', orderNo: 'PIKIN-23', customerId: 'customer-id', remark: 'PI preparing' } },
+      { action: 'create', method: 'POST', description: 'Create an independent Orders page record; finance-order duplicates are allowed, while Orders-page duplicates are still rejected', bodyExample: { action: 'create', orderNo: 'PIKIN-23', customerId: 'customer-id', remark: 'PI preparing' } },
       { action: 'update', method: 'POST', description: 'Update status/remark, or PI/system note for upper ADMIN accounts', bodyExample: { action: 'update', orderId: 'order-tracker-id', status: 'Confirmed', piStatus: true, systemNote: 'PI approved' } },
     ],
   },
@@ -62,6 +62,17 @@ export const apiCatalog: ApiModule[] = [
         description: 'Return customer upserts, delete tombstones, disabled markers, and the next cursor since the last sync',
         bodyExample: { query: 'since=<opaque-nextCursor>&limit=500' },
       },
+    ],
+  },
+  {
+    endpoint: '/api/customer/fixes',
+    description: 'Customer fix queue and repair actions',
+    actions: [
+      { action: 'list', method: 'GET', description: 'List visible order/receipt records that still need customer repair; stale repair flags are self-cleared when the source now matches a visible customer' },
+      { action: 'resolve-order', method: 'POST', description: 'Repair an order by saving corrected customer fields', bodyExample: { action: 'resolve-order', orderId: 'order-id', customerMark: 'MAB-1', customerName: 'Customer', customerPhone: '224...' } },
+      { action: 'resolve-receipt', method: 'POST', description: 'Repair an SR_Receipts record by saving corrected customer fields and syncing the linked order when present', bodyExample: { action: 'resolve-receipt', receiptId: 'receipt-id', customerMark: 'MAB-1', customerName: 'Customer', customerPhone: '224...' } },
+      { action: 'link-order-customer', method: 'POST', description: 'Repair an order by linking it to an existing visible customer', bodyExample: { action: 'link-order-customer', orderId: 'order-id', customerId: 'customer-id' } },
+      { action: 'link-receipt-customer', method: 'POST', description: 'Repair an SR_Receipts record by linking it to an existing visible customer and syncing the linked order when present', bodyExample: { action: 'link-receipt-customer', receiptId: 'receipt-id', customerId: 'customer-id' } },
     ],
   },
   {

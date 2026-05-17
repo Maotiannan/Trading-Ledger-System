@@ -70,7 +70,13 @@ export function ReceiptList({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedReceipts.map((receipt) => (
+            {paginatedReceipts.map((receipt) => {
+              const canEditThisReceipt = canEdit && (receipt.status !== 'RECEIVED' || isAdmin);
+              const canDeleteThisReceipt =
+                receipt.status !== 'Bank_Transfer'
+                && receipt.status !== 'SIGNING_PENDING'
+                && (receipt.status !== 'RECEIVED' || isAdmin);
+              return (
               <TableRow key={receipt.id} className={receipt.needsCustomerFix ? 'bg-red-50' : ''}>
                 <TableCell>{receipt.receiptNo || '-'}</TableCell>
                 <TableCell>
@@ -92,7 +98,7 @@ export function ReceiptList({
                         <Eye className="h-4 w-4" />
                       </Button>
                     )}
-                    {canEdit && (
+                    {canEditThisReceipt && (
                       <Button size="sm" variant="ghost" onClick={() => onEditReceipt(receipt)} title={tx('修改收据', 'Edit receipt')}>
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -119,7 +125,7 @@ export function ReceiptList({
                         <Check className="h-4 w-4" />
                       </Button>
                     )}
-                    {receipt.status !== 'RECEIVED' && receipt.status !== 'Bank_Transfer' && receipt.status !== 'SIGNING_PENDING' && (
+                    {canDeleteThisReceipt && (
                       <Button size="sm" variant="ghost" onClick={() => onDeleteReceipt(receipt.id)} title={tx('申请删除', 'Request deletion')}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -127,7 +133,8 @@ export function ReceiptList({
                   </div>
                 </TableCell>
               </TableRow>
-            ))}
+            );
+            })}
             {receipts.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-8 text-gray-500">

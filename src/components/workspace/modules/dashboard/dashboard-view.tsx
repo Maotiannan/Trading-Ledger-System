@@ -81,6 +81,7 @@ export function Dashboard() {
     invoiceCount: number;
     unpaidTotal: number;
     pendingReceipts: number;
+    pendingReceiptsAmount: number;
     waitingSwift: number;
     pendingDeletion: number;
     recentReceipts: Array<{
@@ -121,6 +122,8 @@ export function Dashboard() {
   const unpaidTotal = normalInvoices.reduce((sum, inv) => sum + Math.max(inv.invBalance, 0), 0);
   const invoiceCount = summary?.invoiceCount ?? normalInvoices.length;
   const pendingReceipts = summary?.pendingReceipts ?? receipts.filter(r => r.status === 'SR_Received').length;
+  const pendingReceiptsAmount = summary?.pendingReceiptsAmount
+    ?? receipts.filter(r => r.status === 'SR_Received').reduce((sum, receipt) => sum + Number(receipt.usd || 0), 0);
   const waitingSwift = summary?.waitingSwift ?? details.filter(d => d.status === 'Waiting_SWIFT').length;
   const pendingDeletion = summary?.pendingDeletion ?? deletionRequests.filter(d => d.status === 'PENDING').length;
   const recentReceipts = summary?.recentReceipts ?? receipts.slice(0, 5).map((receipt) => ({
@@ -169,7 +172,7 @@ export function Dashboard() {
   
   const stats = [
     { label: tx(`账单总数 (${invoiceCount})`, `Invoice Balance (${invoiceCount})`), value: formatUsdAmount(summary?.unpaidTotal ?? unpaidTotal), color: 'text-blue-600' },
-    { label: t('pendingReceipts'), value: pendingReceipts, color: 'text-yellow-600' },
+    { label: t('pendingReceipts'), value: pendingReceipts, subValue: formatUsdAmount(pendingReceiptsAmount), color: 'text-yellow-600' },
     { label: t('waitingSwift'), value: waitingSwift, color: 'text-orange-600' },
     { label: t('pendingDeletion'), value: pendingDeletion, color: 'text-red-600' },
   ];
@@ -242,8 +245,11 @@ export function Dashboard() {
             <CardHeader className="pb-2">
               <CardDescription>{stat.label}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className={stat.subValue ? 'flex items-end justify-between gap-3' : undefined}>
               <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
+              {stat.subValue && (
+                <p className="text-right text-lg font-semibold text-gray-900">{stat.subValue}</p>
+              )}
             </CardContent>
           </Card>
         ))}

@@ -9,6 +9,8 @@ import {
   resolveCustomerUpsertTargetId,
 } from '@/lib/customer-scope';
 import {
+  linkOrderCustomerFix,
+  linkReceiptCustomerFix,
   parseFixCustomerPayload,
   resolveOrderCustomerFix,
   resolveReceiptCustomerFix,
@@ -19,6 +21,7 @@ jest.mock('@/lib/db', () => ({
     customer: {
       create: jest.fn(),
       update: jest.fn(),
+      findFirst: jest.fn(),
     },
     customerOrderName: {
       deleteMany: jest.fn(),
@@ -50,6 +53,9 @@ jest.mock('@/lib/system-settings', () => ({
 
 jest.mock('@/lib/customer-scope', () => ({
   assertNoCustomerScopeConflict: jest.fn(),
+  customerAccessWhere: jest.fn((currentUser: { role: UserRole; id: string }) => (
+    currentUser.role === UserRole.ADMIN ? {} : { ownerId: currentUser.id }
+  )),
   mapPrismaWriteError: jest.fn((error: unknown) => error instanceof Error ? error.message : '数据库错误'),
   resolveCustomerOwnerId: jest.fn(),
   resolveCustomerUpsertTargetId: jest.fn(),
@@ -72,7 +78,7 @@ function makeUser(overrides: Partial<{
 }
 
 const mockDb = db as unknown as {
-  customer: { create: jest.Mock; update: jest.Mock };
+  customer: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock };
   customerOrderName: { deleteMany: jest.Mock; createMany: jest.Mock };
   order: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findMany: jest.Mock };
   receipt: { findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock; findMany: jest.Mock };
@@ -310,5 +316,72 @@ describe('customer-fix-service', () => {
       status: 400,
       message: 'db fail',
     });
+  });
+
+  it('links an unresolved order fix target to an existing customer and syncs the same group', async () => {
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'IB',
+      name: 'Ibrahima',
+      orderName: 'IB',
+      phone: '622443103',
+      city: 'Conakry',
+      ownerId: 'sales-1',
+    });
+    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'IB-01' });
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
+    mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 0 });
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    const result = await linkOrderCustomerFix(makeUser({ role: UserRole.SALES, id: 'sales-1' }), {
+      orderId: 'order-1',
+      customerId: 'customer-1',
+    });
+
+    expect(result.message).toBe('订单已关联到已有客户');
+    expect(mockDb.order.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'order-1' },
+      data: expect.objectContaining({
+        customerId: 'customer-1',
+        customerMark: 'IB',
+        needsCustomerFix: false,
+      }),
+    }));
+  });
+
+  it('links an unresolved receipt fix target to an existing customer and syncs the linked order', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({ id: 'receipt-1', createdBy: 'sales-1', orderId: 'order-1', orderNo: 'IB-01' });
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'IB',
+      name: 'Ibrahima',
+      orderName: 'IB',
+      phone: '622443103',
+      city: 'Conakry',
+      ownerId: 'sales-1',
+    });
+    mockDb.receipt.update.mockResolvedValueOnce({ orderId: 'order-1', orderNo: 'IB-01' });
+    mockDb.order.update.mockResolvedValueOnce({ id: 'order-1' });
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
+    mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    const result = await linkReceiptCustomerFix(makeUser({ role: UserRole.SALES, id: 'sales-1' }), {
+      receiptId: 'receipt-1',
+      customerId: 'customer-1',
+    });
+
+    expect(result.message).toBe('收据已关联到已有客户');
+    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'receipt-1' },
+      data: expect.objectContaining({
+        customerId: 'customer-1',
+        customerMark: 'IB',
+        needsCustomerFix: false,
+      }),
+    }));
   });
 });

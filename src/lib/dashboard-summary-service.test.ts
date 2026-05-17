@@ -11,6 +11,7 @@ jest.mock('@/lib/db', () => ({
     },
     receipt: {
       count: jest.fn(),
+      aggregate: jest.fn(),
       findMany: jest.fn(),
     },
     detail: {
@@ -34,7 +35,7 @@ jest.mock('@/lib/resource-visibility', () => ({
 
 const mockDb = db as unknown as {
   invoice: { count: jest.Mock; findMany: jest.Mock };
-  receipt: { count: jest.Mock; findMany: jest.Mock };
+  receipt: { count: jest.Mock; aggregate: jest.Mock; findMany: jest.Mock };
   detail: { count: jest.Mock; findMany: jest.Mock };
 };
 const mockListDeletionRequests = listDeletionRequests as jest.Mock;
@@ -59,6 +60,7 @@ describe('dashboard-summary-service', () => {
     mockGetOwnerVisibleIds.mockResolvedValue(['admin-1']);
     mockDb.invoice.count.mockResolvedValue(2);
     mockDb.receipt.count.mockResolvedValue(1);
+    mockDb.receipt.aggregate.mockResolvedValue({ _sum: { usd: 9876.5 } });
     mockDb.detail.count.mockResolvedValue(1);
     mockDb.receipt.findMany.mockResolvedValue([]);
     mockDb.detail.findMany.mockResolvedValue([]);
@@ -106,6 +108,13 @@ describe('dashboard-summary-service', () => {
     const summary = await getDashboardSummary(makeUser() as never);
 
     expect(summary.unpaidTotal).toBe(750);
+    expect(summary.pendingReceiptsAmount).toBe(9876.5);
+    expect(mockDb.receipt.aggregate).toHaveBeenCalledWith({
+      where: {
+        status: 'SR_Received',
+      },
+      _sum: { usd: true },
+    });
     expect(summary.pendingDeletion).toBe(1);
     expect(summary.releasedInvoices).toEqual([
       {

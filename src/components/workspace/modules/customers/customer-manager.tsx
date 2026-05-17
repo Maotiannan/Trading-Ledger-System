@@ -45,6 +45,10 @@ export function CustomerManager() {
   const [importOwnerId, setImportOwnerId] = useState('');
   const [fixOrders, setFixOrders] = useState<Array<Record<string, unknown>>>([]);
   const [fixReceipts, setFixReceipts] = useState<Array<Record<string, unknown>>>([]);
+  const [fixCustomerSearch, setFixCustomerSearch] = useState('');
+  const [fixCustomerOptions, setFixCustomerOptions] = useState<Array<Record<string, unknown>>>([]);
+  const [fixExistingCustomerId, setFixExistingCustomerId] = useState('');
+  const [fixCustomerSearching, setFixCustomerSearching] = useState(false);
   const [search, setSearch] = useState('');
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [orderHistoryLoading, setOrderHistoryLoading] = useState(false);
@@ -131,6 +135,7 @@ export function CustomerManager() {
     importOwnerId,
     editing,
     fixingTarget,
+    fixExistingCustomerId,
     form,
     latestFailedRows: customerImportTable.latestFailedRows,
     loadCustomers,
@@ -141,6 +146,7 @@ export function CustomerManager() {
     setShowCreate,
     setEditing,
     setFixingTarget,
+    setFixExistingCustomerId,
     setCustomerImporting,
     setCustomerImportRows,
     setShowCustomerImportIssues,
@@ -158,6 +164,35 @@ export function CustomerManager() {
       void loadOwnerOptions();
     });
   }, [loadCustomers, loadFixes, loadOwnerOptions]);
+
+  useEffect(() => {
+    if (!fixingTarget) {
+      return undefined;
+    }
+    const query = fixCustomerSearch.trim();
+    if (!query) {
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setFixCustomerSearching(true);
+      void apiCall(`customer?search=${encodeURIComponent(query)}`)
+        .then((result) => {
+          if (cancelled) return;
+          setFixCustomerOptions(result.success && Array.isArray(result.data) ? result.data.slice(0, 10) : []);
+        })
+        .catch(() => {
+          if (!cancelled) setFixCustomerOptions([]);
+        })
+        .finally(() => {
+          if (!cancelled) setFixCustomerSearching(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [fixCustomerSearch, fixingTarget]);
 
   const canSeeExtended = isAdmin || customers.some((row) => row.companyName !== null || row.companyAddress !== null || row.credit !== null);
   const phoneConflictMessage = tx('手机号冲突，请修改', 'Phone number conflict, please update it.');
@@ -281,9 +316,37 @@ export function CustomerManager() {
         form={form}
         isAdmin={isAdmin}
         ownerOptions={ownerOptions}
+        existingCustomerSearch={fixCustomerSearch}
+        existingCustomerOptions={fixCustomerSearch.trim() ? fixCustomerOptions : []}
+        existingCustomerId={fixExistingCustomerId}
+        existingCustomerSearching={Boolean(fixCustomerSearch.trim()) && fixCustomerSearching}
         tx={tx}
-        onOpenChange={(open) => { if (!open) setFixingTarget(null); }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFixingTarget(null);
+            setFixExistingCustomerId('');
+            setFixCustomerSearch('');
+            setFixCustomerOptions([]);
+            setFixCustomerSearching(false);
+          }
+        }}
         onFormChange={(updater) => setForm(updater)}
+        onExistingCustomerSearchChange={setFixCustomerSearch}
+        onExistingCustomerSelect={(row) => {
+          setFixExistingCustomerId(String(row.id || ''));
+          setForm((prev) => ({
+            ...prev,
+            mark: String(row.mark || prev.mark || ''),
+            orderName: String(row.orderName || prev.orderName || '').toUpperCase(),
+            name: String(row.name || prev.name || ''),
+            phone: String(row.phone || prev.phone || ''),
+            city: String(row.city || prev.city || ''),
+            companyName: String(row.companyName || prev.companyName || ''),
+            companyAddress: String(row.companyAddress || prev.companyAddress || ''),
+            credit: row.credit === null || row.credit === undefined ? prev.credit : String(row.credit),
+            ownerId: String(row.ownerId || prev.ownerId || ''),
+          }));
+        }}
         onSubmit={submitFix}
       />
 

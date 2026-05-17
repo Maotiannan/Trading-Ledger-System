@@ -35,9 +35,14 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.145`
-- 本次更新：修复 `Payment Detail Management -> Payment Agent Management` 中点击 `New / 新增` 后没有进入新建状态的问题。
-- 同批更新：付款代理管理弹窗桌面端改为稳定两栏布局，右侧信息区独立滚动，避免公司信息和附件区域显示不完整。
+- 当前版本：`1.0.146`
+- 本次更新：`Orders / 订单管理` 允许创建与 `Invoice Management` 已有财务订单号相同的独立业务跟踪记录；但 `Orders` 页面内部仍会阻止重复 `ORDER NO`。
+- 同批更新：`Receipt Management` 修改收据时不再自动覆盖已有 `ORDER NO / INV NO / MARK / PAYER / PHONE`，只有匹配到可采纳建议且当前内容不一致时，才显示“采纳匹配建议”按钮供用户主动套用。
+- 同批更新：`RECEIVED` 状态收据的修改和删除入口只对 `ADMIN` 及以上账户显示，低权限账号不再看到相关按钮。
+- 同批更新：`Customer Fix Queue` 支持在修复弹窗内搜索并关联已有客户；如果报错源已经能按现有规则正确匹配，系统会自动清除过期的“请修复客户信息”状态。
+- 同批更新：`Dashboard` 的 `Pending Receipts` 卡片右侧新增待处理收据总金额，统计口径固定为 `SR_Received` 状态。
+- 上一版本：修复 `Payment Detail Management -> Payment Agent Management` 中点击 `New / 新增` 后没有进入新建状态的问题。
+- 上一版本：付款代理管理弹窗桌面端改为稳定两栏布局，右侧信息区独立滚动，避免公司信息和附件区域显示不完整。
 - 上一版本：新增 `GET /api/sync/customers?since=<cursor>` 客户增量同步接口，返回可见范围内新增/修改客户、删除标记、停用标记占位和下一次同步游标。
 - 上一版本：客户同步接口使用不透明 `nextCursor`，外部系统只需要保存并在下次请求原样传回；`USER` 角色不可调用，`ADMIN / SALES` 仍按现有客户可见范围隔离。
 - 上一版本：`Orders / 订单管理` 页面移除了面向工程说明的提示文字，用户进入页面后只看到业务可操作内容。
@@ -45,7 +50,7 @@ README 现在只保留用户应该看的内容。
 - 上一版本：`Orders` 页面新建 `ORDER` 时复用全局订单建议/客户匹配逻辑，输入类似 `PIKIN-23` 会自动回填可见客户信息。
 - 上一版本：`Orders` 创建弹窗不再显示 `SYSTEM NOTED`；该字段只在记录创建后，由有权限的上级 `ADMIN` 在编辑中维护。
 - 上一版本：新增独立 `Orders` 子页面，用于维护业务订单跟踪表：`ORDER / STATUS / PI STATUS / REMARK / SYSTEM NOTED / DEPOSIT`。
-- 上一版本：`Orders` 页面新建 `ORDER` 时会严格检查财务订单和订单别名；如果财务系统中已存在同一订单号，则直接拒绝创建，避免影响收款、发票和余额逻辑。
+- 上一版本：`Orders` 页面新建 `ORDER` 时独立于财务订单余额逻辑；同一个 `ORDER NO` 可以同时存在于 `Invoice Management` 和 `Orders`，但不能在 `Orders` 页面重复创建。
 - 上一版本：`DEPOSIT` 会自动按对应收据/定金池汇总显示；`PI STATUS / SYSTEM NOTED` 仅上级 `ADMIN` 可维护，普通状态和备注按可见范围维护。
 - 上一版本：`Receipt Management` 中 `RECEIVED` 状态收据现在可以通过修改功能重新绑定 `ORDER NO / INV NO`，用于修正已完成收据误挂订单的情况。
 - 上一版本：完成态收据重绑后会同步更新关联 `Payment Detail` 明细行的 `ORDER NO / MARK`，并重算旧订单与新订单余额；`Detail / SWIFT` 的已完成状态不会被回退。

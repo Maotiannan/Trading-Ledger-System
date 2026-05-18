@@ -48,8 +48,8 @@ export const apiCatalog: ApiModule[] = [
     actions: [
       { action: 'list', method: 'GET', description: 'List visible Orders page records' },
       { action: 'customer-options', method: 'GET', description: 'List customer candidates for Orders page creation' },
-      { action: 'create', method: 'POST', description: 'Create an independent Orders page record; finance-order duplicates are allowed, while Orders-page duplicates are still rejected', bodyExample: { action: 'create', orderNo: 'PIKIN-23', customerId: 'customer-id', remark: 'PI preparing' } },
-      { action: 'update', method: 'POST', description: 'Update status/remark, or PI/system note for upper ADMIN accounts', bodyExample: { action: 'update', orderId: 'order-tracker-id', status: 'Confirmed', piStatus: true, systemNote: 'PI approved' } },
+      { action: 'create', method: 'POST', description: 'Create an independent Orders page record; visible finance-order duplicates are allowed and can infer/link customer data, while Orders-page duplicates are still rejected', bodyExample: { action: 'create', orderNo: 'PIKIN-23', customerId: 'customer-id', remark: 'PI preparing' } },
+      { action: 'update', method: 'POST', description: 'Update status/remark for visible accounts; PI/system note fields require upper ADMIN accounts', bodyExample: { action: 'update', orderId: 'order-tracker-id', status: 'Confirmed', piStatus: true, systemNote: 'PI approved' } },
     ],
   },
   {

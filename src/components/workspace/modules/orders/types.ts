@@ -10,6 +10,9 @@ export type OrderTrackerRow = {
   customerName: string | null;
   customerPhone: string | null;
   customerCity: string | null;
+  financeOrderId?: string | null;
+  financeOrderNo?: string | null;
+  financeInvNo?: string | null;
   depositAmount: number;
   canEdit: boolean;
   canEditAdminFields: boolean;

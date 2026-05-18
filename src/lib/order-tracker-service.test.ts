@@ -16,6 +16,9 @@ jest.mock('@/lib/db', () => ({
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
+    order: {
+      findUnique: jest.fn(),
+    },
     orderTracker: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -67,6 +70,7 @@ function makeUser(overrides: Partial<{
 
 const mockDb = db as unknown as {
   customer: { findFirst: jest.Mock; findMany: jest.Mock };
+  order: { findUnique: jest.Mock };
   orderTracker: {
     findFirst: jest.Mock;
     findMany: jest.Mock;
@@ -171,6 +175,53 @@ describe('order-tracker-service', () => {
     expect(result.data.id).toBe('tracker-1');
   });
 
+  it('infers the customer and links the visible finance order when customerId is not provided', async () => {
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('finance-order-1');
+    mockDb.orderTracker.findFirst.mockResolvedValueOnce(null);
+    mockDb.order.findUnique.mockResolvedValueOnce({
+      id: 'finance-order-1',
+      orderNo: 'FATAKO-01',
+      customerId: 'customer-fatako',
+      customerMark: 'BAL2 FATAKO',
+      customerName: 'FATAKO',
+      customerPhone: '+224 623 63 65 09',
+      customerCity: 'Conakry',
+      customer: {
+        id: 'customer-fatako',
+        mark: 'BAL2 FATAKO',
+        orderName: 'FATAKO',
+        name: 'Mamadou Oury Balde',
+        phone: '+224 623 63 65 09',
+        city: 'Conakry',
+        ownerId: 'sales-1',
+      },
+    });
+    mockDb.orderTracker.create.mockResolvedValueOnce({
+      id: 'tracker-fatako',
+      orderNo: 'FATAKO-01',
+      financeOrderId: 'finance-order-1',
+      customerId: 'customer-fatako',
+      status: 'In progress',
+    });
+
+    const result = await createOrderTracker(makeUser(), {
+      orderNo: 'FATAKO-01',
+    });
+
+    expect(result.data.id).toBe('tracker-fatako');
+    expect(mockDb.customer.findFirst).not.toHaveBeenCalled();
+    expect(mockDb.orderTracker.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderNo: 'FATAKO-01',
+        financeOrderId: 'finance-order-1',
+        customerId: 'customer-fatako',
+        customerMark: 'BAL2 FATAKO',
+        customerName: 'FATAKO',
+        customerPhone: '+224 623 63 65 09',
+      }),
+    }));
+  });
+
   it('sums deposit receipts by exact order and slash-separated composite order segments', async () => {
     mockDb.orderTracker.findMany.mockResolvedValueOnce([
       {
@@ -223,5 +274,33 @@ describe('order-tracker-service', () => {
     });
 
     expect(mockDb.orderTracker.update).not.toHaveBeenCalled();
+  });
+
+  it('allows a sales-visible account to update status and remark without admin fields', async () => {
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'In progress',
+      createdBy: 'admin-1',
+      customer: { ownerId: 'sales-1' },
+    });
+    mockDb.orderTracker.update.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'Confirmed',
+      remark: 'Customer confirmed',
+    });
+
+    await updateOrderTracker(makeUser(), 'tracker-1', {
+      status: 'Confirmed',
+      remark: 'Customer confirmed',
+    });
+
+    expect(mockDb.orderTracker.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'tracker-1' },
+      data: expect.objectContaining({
+        status: 'Confirmed',
+        remark: 'Customer confirmed',
+        updatedBy: 'sales-1',
+      }),
+    }));
   });
 });

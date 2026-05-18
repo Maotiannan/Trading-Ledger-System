@@ -257,6 +257,7 @@ model Order {
   receipts        Receipt[]        @relation("ReceiptOrder")
   mergedReceipts  Receipt[]        @relation("MergedTo")
   aliases         OrderAlias[]
+  orderTrackers   OrderTracker[]     @relation("OrderTrackerFinanceOrder")
   balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
   balanceTransfersTo   BalanceTransfer[] @relation("TransferTo")
 
@@ -286,6 +287,7 @@ model OrderTracker {
   tokens            String   @default("[]") @db.Text
   amount            Decimal  @default(0) @db.Decimal(18, 2)
   orderBalance      Decimal  @default(0) @db.Decimal(18, 2)
+  financeOrderId    String?
   createdBy         String
   updatedBy         String?
   customerId        String?
@@ -304,7 +306,9 @@ model OrderTracker {
   creator  User      @relation("OrderTrackerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
   updater  User?     @relation("OrderTrackerUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  financeOrder Order? @relation("OrderTrackerFinanceOrder", fields: [financeOrderId], references: [id], onDelete: SetNull)
 
+  @@index([financeOrderId])
   @@index([createdBy])
   @@index([updatedBy])
   @@index([customerId])

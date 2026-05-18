@@ -275,16 +275,19 @@ export function OrderTrackerManager() {
         });
         setMessage(result.message || tx('订单已创建', 'Order created'));
       } else if (editingOrder) {
+        const updateBody: Record<string, unknown> = {
+          action: 'update',
+          orderId: editingOrder.id,
+          status: form.status,
+          remark: form.remark.trim(),
+        };
+        if (editingOrder.canEditAdminFields) {
+          updateBody.piStatus = form.piStatus;
+          updateBody.systemNote = form.systemNote.trim();
+        }
         const result = await apiCall('orders', {
           method: 'POST',
-          body: JSON.stringify({
-            action: 'update',
-            orderId: editingOrder.id,
-            status: form.status,
-            remark: form.remark.trim(),
-            piStatus: form.piStatus,
-            systemNote: form.systemNote.trim(),
-          }),
+          body: JSON.stringify(updateBody),
         });
         setMessage(result.message || tx('订单已更新', 'Order updated'));
       }

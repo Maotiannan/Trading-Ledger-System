@@ -170,4 +170,62 @@ describe('OrderTrackerManager', () => {
     expect(longOption).toHaveClass('truncate');
     expect(longOption).toHaveAttribute('title', longLabel);
   });
+
+  it('does not submit admin-only fields when a sales-editable order is saved', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint.startsWith('orders?action=customer-options')) {
+        return {
+          success: true,
+          data: [],
+        };
+      }
+      if (endpoint === 'orders' && options?.method === 'POST') {
+        return { success: true, message: 'Order已更新', data: { id: 'tracker-1' } };
+      }
+      return {
+        success: true,
+        data: [{
+          id: 'tracker-1',
+          orderNo: 'FATAKO-01',
+          status: 'In progress',
+          piStatus: false,
+          remark: '',
+          systemNote: '',
+          customerId: 'customer-fatako',
+          customerMark: 'BAL2 FATAKO',
+          customerName: 'FATAKO',
+          customerPhone: '+224 623 63 65 09',
+          customerCity: 'Conakry',
+          depositAmount: 0,
+          canEdit: true,
+          canEditAdminFields: false,
+          createdAt: '2026-05-18T00:00:00.000Z',
+        }],
+        meta: { statusOptions: ['In progress', 'Confirmed', 'Canceled'], defaultStatus: 'In progress' },
+      };
+    });
+
+    await renderManager();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /修改/ }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /保存/ }));
+      await Promise.resolve();
+    });
+
+    const updateCall = mockApiCall.mock.calls.find(([endpoint, options]) => endpoint === 'orders' && options?.method === 'POST');
+    expect(updateCall).toBeTruthy();
+    const body = JSON.parse(String(updateCall?.[1]?.body || '{}'));
+    expect(body).toEqual(expect.objectContaining({
+      action: 'update',
+      orderId: 'tracker-1',
+      status: 'In progress',
+      remark: '',
+    }));
+    expect(body).not.toHaveProperty('piStatus');
+    expect(body).not.toHaveProperty('systemNote');
+  });
 });

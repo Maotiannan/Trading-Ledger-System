@@ -102,11 +102,12 @@ export default async function run(t) {
     json: {
       action: 'create',
       orderNo: financeOrderNo,
-      customerId,
     },
     expectedStatus: 200,
   });
   t.assertOk(Boolean(financeTrackerResponse.data?.data?.id), 'orders page allows finance order numbers as independent tracking rows');
+  t.assertEqual(financeTrackerResponse.data?.data?.customerId, customerId, 'orders page infers customer from finance order when customer is omitted');
+  t.assertOk(Boolean(financeTrackerResponse.data?.data?.financeOrderId), 'orders page links the visible finance order when creating from finance order number');
 
   await t.logout();
 }

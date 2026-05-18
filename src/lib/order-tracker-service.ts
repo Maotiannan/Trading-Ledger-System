@@ -4,7 +4,9 @@ import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
+import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
@@ -118,10 +120,18 @@ function canEditAdminFields(
 }
 
 function serializeTracker(row: Record<string, unknown>, depositAmount: number, currentUser: CurrentUser, baseEditable: boolean, adminEditable: boolean) {
+  const financeOrder = row.financeOrder && typeof row.financeOrder === 'object'
+    ? row.financeOrder as Record<string, unknown>
+    : null;
+  const financeInvoice = financeOrder?.invoice && typeof financeOrder.invoice === 'object'
+    ? financeOrder.invoice as Record<string, unknown>
+    : null;
   return {
     ...row,
     amount: asNumber(row.amount),
     orderBalance: asNumber(row.orderBalance),
+    financeOrderNo: typeof financeOrder?.orderNo === 'string' ? financeOrder.orderNo : null,
+    financeInvNo: typeof financeInvoice?.invNo === 'string' ? financeInvoice.invNo : null,
     depositAmount,
     canEdit: baseEditable,
     canEditAdminFields: adminEditable,
@@ -136,6 +146,72 @@ function orderCandidates(orderNo: string | null | undefined): Set<string> {
     ...candidates.normalizedOrderNos,
     normalizeOrderIdentifier(orderNo),
   ].filter(Boolean));
+}
+
+type TrackerCustomerSnapshot = {
+  id: string;
+  mark: string;
+  orderName: string;
+  phone: string | null;
+  city: string | null;
+};
+
+type VisibleFinanceOrderSnapshot = {
+  id: string;
+  orderNo: string;
+  customerId: string | null;
+  customerMark: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  customerCity: string | null;
+  customer: TrackerCustomerSnapshot | null;
+};
+
+function snapshotFromFinanceOrder(order: VisibleFinanceOrderSnapshot): TrackerCustomerSnapshot | null {
+  if (order.customer?.id) {
+    return {
+      id: order.customer.id,
+      mark: order.customer.mark,
+      orderName: order.customer.orderName,
+      phone: order.customer.phone,
+      city: order.customer.city,
+    };
+  }
+  if (!order.customerId) return null;
+  return {
+    id: order.customerId,
+    mark: order.customerMark || '',
+    orderName: order.customerName || '',
+    phone: order.customerPhone || null,
+    city: order.customerCity || null,
+  };
+}
+
+async function findVisibleFinanceOrder(orderNo: string, ownerIds: string[]): Promise<VisibleFinanceOrderSnapshot | null> {
+  const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
+  const financeOrderId = await findOrderIdByNoOrAlias(orderNo, orderVisibilityWhere);
+  if (!financeOrderId) return null;
+  return db.order.findUnique({
+    where: { id: financeOrderId },
+    select: {
+      id: true,
+      orderNo: true,
+      customerId: true,
+      customerMark: true,
+      customerName: true,
+      customerPhone: true,
+      customerCity: true,
+      customer: {
+        select: {
+          id: true,
+          mark: true,
+          orderName: true,
+          phone: true,
+          city: true,
+        },
+      },
+    },
+  });
 }
 
 function matchesTrackerOrder(trackerCandidates: Set<string>, receipt: { orderNo?: string | null; order?: { orderNo?: string | null } | null }): boolean {
@@ -244,6 +320,7 @@ export async function listOrderTrackers(
       creator: { select: { id: true, email: true, name: true, role: true } },
       updater: { select: { id: true, email: true, name: true, role: true } },
       customer: { select: { id: true, ownerId: true, mark: true, orderName: true, name: true, phone: true, city: true } },
+      financeOrder: { select: { id: true, orderNo: true, invoice: { select: { id: true, invNo: true } } } },
     },
     orderBy: [{ createdAt: 'desc' }],
   });
@@ -328,7 +405,6 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
   const orderNo = trimStr(payload.orderNo);
   const customerId = trimStr(payload.customerId);
   if (!orderNo) badRequest('ORDER NO不能为空');
-  if (!customerId) badRequest('CUSTOMER不能为空');
 
   const normalizedOrderNo = normalizeTrackerOrderNo(orderNo);
   if (!normalizedOrderNo) badRequest('ORDER NO无效');
@@ -343,24 +419,32 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
 
   const scope = await loadHierarchy(currentUser);
   const ownerIds = Array.from(new Set([...scope.ownerVisibleIds, ...scope.ancestorIds]));
-  const customer = await db.customer.findFirst({
-    where: {
-      AND: [
-        { id: customerId },
-        buildCustomerVisibilityWhere(ownerIds),
-      ],
-    },
-    select: {
-      id: true,
-      mark: true,
-      orderName: true,
-      name: true,
-      phone: true,
-      city: true,
-      ownerId: true,
-    },
-  });
-  if (!customer) notFound('客户不存在或无权限');
+  const financeOwnerIds = Array.from(scope.ownerVisibleIds);
+  const visibleFinanceOrder = await findVisibleFinanceOrder(orderNo, financeOwnerIds);
+  const inferredCustomer = visibleFinanceOrder ? snapshotFromFinanceOrder(visibleFinanceOrder) : null;
+  const customer = customerId
+    ? await db.customer.findFirst({
+        where: {
+          AND: [
+            { id: customerId },
+            buildCustomerVisibilityWhere(ownerIds),
+          ],
+        },
+        select: {
+          id: true,
+          mark: true,
+          orderName: true,
+          name: true,
+          phone: true,
+          city: true,
+          ownerId: true,
+        },
+      })
+    : inferredCustomer;
+  if (!customer) {
+    if (customerId) notFound('客户不存在或无权限');
+    badRequest('CUSTOMER不能为空，且未能从可见财务订单自动匹配客户');
+  }
 
   const statusOptions = await getStatusOptions();
   const status = sanitizeStatus(payload.status, statusOptions);
@@ -374,6 +458,7 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
       tokens: serializeOrderTokens(orderNo),
       amount: 0,
       orderBalance: 0,
+      financeOrderId: visibleFinanceOrder?.id || null,
       createdBy: currentUser.id,
       customerId: customer.id,
       customerMark: customer.mark,

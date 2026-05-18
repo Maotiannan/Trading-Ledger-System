@@ -1,6 +1,9 @@
 import { DetailStatus, DeletionStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { listDeletionRequests } from '@/lib/deletion-service';
+import { listDetailEditRequests } from '@/lib/detail-edit-request-service';
+import { listReceiptEditRequests } from '@/lib/receipt-edit-request-service';
+import { listSwiftEditRequests } from '@/lib/swift-edit-request-service';
 import { formatOrderNameDisplay } from '@/lib/display-format';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
@@ -63,7 +66,19 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
   const detailWhere = buildDetailVisibilityWhere(ownerIds);
   const orderWhere = buildOrderVisibilityWhere(ownerIds);
 
-  const [invoiceCount, visibleInvoices, pendingReceipts, pendingReceiptsAmountAgg, waitingSwift, recentReceipts, recentDetails, deletionRequests] = await Promise.all([
+  const [
+    invoiceCount,
+    visibleInvoices,
+    pendingReceipts,
+    pendingReceiptsAmountAgg,
+    waitingSwift,
+    recentReceipts,
+    recentDetails,
+    deletionRequests,
+    receiptEditRequests,
+    detailEditRequests,
+    swiftEditRequests,
+  ] = await Promise.all([
     db.invoice.count({ where: invoiceWhere }),
     db.invoice.findMany({
       where: invoiceWhere,
@@ -135,6 +150,9 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
       },
     }),
     listDeletionRequests(currentUser),
+    listReceiptEditRequests(currentUser),
+    listDetailEditRequests(currentUser),
+    listSwiftEditRequests(currentUser),
   ]);
 
   const unpaidTotal = visibleInvoices.reduce((invoiceSum, invoice) => {
@@ -212,7 +230,12 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     pendingReceipts,
     pendingReceiptsAmount: Number(pendingReceiptsAmountAgg._sum.usd ?? 0),
     waitingSwift,
-    pendingDeletion: deletionRequests.filter((request) => request.status === DeletionStatus.PENDING).length,
+    pendingDeletion: [
+      ...deletionRequests,
+      ...receiptEditRequests,
+      ...detailEditRequests,
+      ...swiftEditRequests,
+    ].filter((request) => request.status === DeletionStatus.PENDING).length,
     recentReceipts: recentReceipts.map((receipt) => ({
       id: receipt.id,
       orderNo: receipt.orderNo,

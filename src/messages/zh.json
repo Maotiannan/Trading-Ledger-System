@@ -38,7 +38,7 @@
     "pendingReceipts": "待处理收据",
     "waitingSwift": "等待SWIFT",
     "bankTransfer": "银行转账中",
-    "pendingDeletion": "待审批删除",
+    "pendingDeletion": "待审批总数",
     "recentReceipts": "最近收据",
     "recentDetails": "最近付款明细",
     "unnamed": "未命名",

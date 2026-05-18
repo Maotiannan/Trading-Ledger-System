@@ -35,10 +35,16 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.147`
-- 本次更新：`Orders / 订单管理` 中 `SALES` 修改普通 `STATUS / REMARK` 时不再误提交 `PI STATUS / SYSTEM NOTED`，避免被上级管理员权限校验拦截。
-- 同批更新：`Orders` 新建时如果输入的是可见财务订单号，即使前端没有传 `CUSTOMER`，后端也会从对应财务 `ORDER NO` 自动推断客户，并保存到 Orders 记录。
-- 同批更新：`Orders` 记录新增可选财务订单关联字段，创建自财务订单号时会持久关联对应财务 `ORDER`，但仍不参与余额查重或财务匹配逻辑。
+- 当前版本：`1.0.148`
+- 本次更新：`Approval / 审批` 页面默认只显示待处理申请，每个审批模块每页 `5` 条；勾选 `ALL` 并点击“查询”后可查看该模块全部历史申请。
+- 同批更新：审批页 `Requested Values` 现在只显示实际被修改字段的“修改前 → 修改后”，不再把未变化字段整块堆出来。
+- 同批修复：`Payment Detail Edit Requests` 审批时如果快照里的旧 `receiptId` 已失效，会自动按 `ORDER NO + AMOUNT` 重新匹配或创建关联收据，避免管理员点击确认返回 `400 Bad Request`。
+- 同批更新：`Dashboard` 的待审批卡片改为统计删除、收据修改、付款明细修改、SWIFT 修改四类待审批总数。
+- 同批更新：`Receipt / Payment Detail / SWIFT` 三个页面的金额筛选由最小/最大范围改为单个准确金额筛选框。
+- 同批优化：`Customer Management` 的 `ORDER_NAME History` 桌面弹窗改为自适应宽度与自动换行；`COMPANY_NAME` 超过 `35` 个字符时与 `CONSIGNEE` 一样截断显示，点击可看完整内容。
+- 上一版本：`Orders / 订单管理` 中 `SALES` 修改普通 `STATUS / REMARK` 时不再误提交 `PI STATUS / SYSTEM NOTED`，避免被上级管理员权限校验拦截。
+- 上一版本：`Orders` 新建时如果输入的是可见财务订单号，即使前端没有传 `CUSTOMER`，后端也会从对应财务 `ORDER NO` 自动推断客户，并保存到 Orders 记录。
+- 上一版本：`Orders` 记录新增可选财务订单关联字段，创建自财务订单号时会持久关联对应财务 `ORDER`，但仍不参与余额查重或财务匹配逻辑。
 - 上一版本：`Orders / 订单管理` 允许创建与 `Invoice Management` 已有财务订单号相同的独立业务跟踪记录；但 `Orders` 页面内部仍会阻止重复 `ORDER NO`。
 - 上一版本：`Receipt Management` 修改收据时不再自动覆盖已有 `ORDER NO / INV NO / MARK / PAYER / PHONE`，只有匹配到可采纳建议且当前内容不一致时，才显示“采纳匹配建议”按钮供用户主动套用。
 - 上一版本：`RECEIVED` 状态收据的修改和删除入口只对 `ADMIN` 及以上账户显示，低权限账号不再看到相关按钮。
@@ -83,7 +89,7 @@ README 现在只保留用户应该看的内容。
 - 上一版本：`Upload Receipt` 的 AI 识别结果会继续保留识别出的 `ORDER NO`；只有当系统找不到对应订单时，`INV NO` 才会留空等待管理员补录。
 - 同批更新：`Upload Receipt` 的 `DEPOSIT` 默认不再勾选；`Receipt Management` 的 `Rows per page` 已移到底部分页区旁边。
 - 同批更新：`SWIFT Management` 为管理员恢复/新增 `SWIFT` 签收入口，签收后会把关联 `Payment Detail / Receipt / SWIFT` 一起推进到 `RECEIVED`；`SALES` 无权签收。
-- 同批优化：`Approval` 页面中删除申请、收据修改申请、付款明细修改申请、SWIFT 修改申请都改为每页 `20` 条分页展示。
+- 同批优化：`Approval` 页面中删除申请、收据修改申请、付款明细修改申请、SWIFT 修改申请都改为每页 `5` 条分页展示。
 - 上一版本：`Receipt Management` 的收据图片预览改为显示已绑定 `ORDER NO`、已绑定 `INV NO` 和创建者，不再误把收据号当成订单绑定信息。
 - 同批更新：收据修改现在可修改 `ORDER NO`；`SALES` 提交后继续走上级可见管理员审批，`ADMIN` 及以上直接生效。保存或审批通过时会重新绑定到正确订单和发票。
 - 同批修复：如果收据原来落在 `Un_Associated / DEPOSIT_POOL` 临时池，管理员补录真实 `INV NO` 后，系统会把对应订单迁到目标发票下，避免一直停留在未匹配池。

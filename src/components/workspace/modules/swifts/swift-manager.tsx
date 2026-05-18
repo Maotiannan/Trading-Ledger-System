@@ -32,8 +32,7 @@ export function SwiftManager() {
   const [search, setSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
+  const [amount, setAmount] = useState('');
   const [hasErrorFilter, setHasErrorFilter] = useState('');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingSwiftId, setEditingSwiftId] = useState<string | null>(null);
@@ -83,12 +82,11 @@ export function SwiftManager() {
     if (trimmedSearch) params.set('search', trimmedSearch);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    if (minAmount) params.set('minAmount', minAmount);
-    if (maxAmount) params.set('maxAmount', maxAmount);
+    if (amount) params.set('amount', amount);
     if (hasErrorFilter) params.set('hasError', hasErrorFilter);
     const query = params.toString();
     const endpoint = `swift${query ? `?${query}` : ''}`;
-    const canUsePrefetch = !trimmedSearch && !dateFrom && !dateTo && !minAmount && !maxAmount && !hasErrorFilter;
+    const canUsePrefetch = !trimmedSearch && !dateFrom && !dateTo && !amount && !hasErrorFilter;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof swifts }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && swiftRequestGuard.isLatest(requestToken)) {
       setSwifts(cachedResult.data);
@@ -101,7 +99,7 @@ export function SwiftManager() {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [dateFrom, dateTo, hasErrorFilter, maxAmount, minAmount, search, setSwifts, swiftRequestGuard, swifts]);
+  }, [amount, dateFrom, dateTo, hasErrorFilter, search, setSwifts, swiftRequestGuard, swifts]);
 
   useEffect(() => {
     loadSwifts();
@@ -254,8 +252,7 @@ export function SwiftManager() {
             </select>
             <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            <MoneyInput placeholder={tx('最小金额', 'Min amount')} value={minAmount} onValueChange={setMinAmount} />
-            <MoneyInput placeholder={tx('最大金额', 'Max amount')} value={maxAmount} onValueChange={setMaxAmount} />
+            <MoneyInput placeholder={tx('准确金额', 'Exact amount')} value={amount} onValueChange={setAmount} />
           </>
         )}
         renderActions={() => (
@@ -266,8 +263,7 @@ export function SwiftManager() {
                 setSearch('');
                 setDateFrom('');
                 setDateTo('');
-                setMinAmount('');
-                setMaxAmount('');
+                setAmount('');
                 setHasErrorFilter('');
               }}
             >

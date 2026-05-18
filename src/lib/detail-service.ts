@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
-import { createApiError } from '@/lib/api-error';
+import { createApiError, isApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance, type FindMatchingReceiptOptions } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
@@ -117,8 +117,16 @@ async function processDetailItems(params: {
     let receiptId = item.receiptId;
 
     if (receiptId) {
-      const receipt = await getAccessibleReceipt(receiptId, params.currentUser, params.tx);
-      await maybeAttachReceiptImage(params.tx, receiptId, receipt, params.imagePath, params.imageName);
+      try {
+        const receipt = await getAccessibleReceipt(receiptId, params.currentUser, params.tx);
+        await maybeAttachReceiptImage(params.tx, receiptId, receipt, params.imagePath, params.imageName);
+      } catch (error) {
+        if (isApiError(error) && error.code === 'RESOURCE_NOT_FOUND' && item.orderNo) {
+          receiptId = null;
+        } else {
+          throw error;
+        }
+      }
     }
 
     if (!receiptId && item.orderNo) {

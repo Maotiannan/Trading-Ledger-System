@@ -55,7 +55,7 @@ export function CustomerOrderHistoryDialog({
 }: CustomerOrderHistoryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-24px)] max-w-5xl flex-col p-4 sm:p-6">
+      <DialogContent className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-6xl flex-col p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{tx('ORDER_NAME 历史', 'ORDER_NAME History')}: {title || '-'}</DialogTitle>
           <DialogDescription>
@@ -81,23 +81,23 @@ export function CustomerOrderHistoryDialog({
             <div data-testid="customer-order-history-grid" className="grid gap-4 md:grid-cols-2">
               <section className="space-y-3">
                 <h3 className="font-semibold">{tx('历史订单', 'Historical Orders')}</h3>
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
+                <div className="rounded-md border">
+                  <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>ORDER</TableHead>
-                        <TableHead>INV NO</TableHead>
-                        <TableHead>AMOUNT</TableHead>
-                        <TableHead>Outstanding</TableHead>
+                        <TableHead className="whitespace-normal break-words">ORDER</TableHead>
+                        <TableHead className="whitespace-normal break-words">INV NO</TableHead>
+                        <TableHead className="whitespace-normal break-words">AMOUNT</TableHead>
+                        <TableHead className="whitespace-normal break-words">Outstanding</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(history?.orders || []).map((order) => (
                         <TableRow key={order.id}>
-                          <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
-                          <TableCell>{order.invNo || '-'}</TableCell>
-                          <TableCell>{money(order.amount)}</TableCell>
-                          <TableCell className={order.outstanding > 0 ? 'text-red-600' : undefined}>{money(order.outstanding)}</TableCell>
+                          <TableCell className="whitespace-normal break-words font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
+                          <TableCell className="whitespace-normal break-words">{order.invNo || '-'}</TableCell>
+                          <TableCell className="whitespace-normal break-words">{money(order.amount)}</TableCell>
+                          <TableCell className={order.outstanding > 0 ? 'whitespace-normal break-words text-red-600' : 'whitespace-normal break-words'}>{money(order.outstanding)}</TableCell>
                         </TableRow>
                       ))}
                       {(!history?.orders || history.orders.length === 0) && (
@@ -114,23 +114,23 @@ export function CustomerOrderHistoryDialog({
 
               <section className="space-y-3">
                 <h3 className="font-semibold">{tx('最近收据', 'Recent Receipts')}</h3>
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
+                <div className="rounded-md border">
+                  <Table className="table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Receipt</TableHead>
-                        <TableHead>ORDER</TableHead>
-                        <TableHead>USD</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead className="whitespace-normal break-words">Receipt</TableHead>
+                        <TableHead className="whitespace-normal break-words">ORDER</TableHead>
+                        <TableHead className="whitespace-normal break-words">USD</TableHead>
+                        <TableHead className="whitespace-normal break-words">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(history?.receipts || []).map((receipt) => (
                         <TableRow key={receipt.id}>
-                          <TableCell className="font-medium">{receipt.receiptNo || '-'}</TableCell>
-                          <TableCell>{formatOrderNameDisplay(receipt.orderNo)}</TableCell>
-                          <TableCell>{money(receipt.usd)}</TableCell>
-                          <TableCell><Badge variant="outline">{receipt.status || '-'}</Badge></TableCell>
+                          <TableCell className="whitespace-normal break-words font-medium">{receipt.receiptNo || '-'}</TableCell>
+                          <TableCell className="whitespace-normal break-words">{formatOrderNameDisplay(receipt.orderNo)}</TableCell>
+                          <TableCell className="whitespace-normal break-words">{money(receipt.usd)}</TableCell>
+                          <TableCell className="whitespace-normal break-words"><Badge variant="outline">{receipt.status || '-'}</Badge></TableCell>
                         </TableRow>
                       ))}
                       {(!history?.receipts || history.receipts.length === 0) && (

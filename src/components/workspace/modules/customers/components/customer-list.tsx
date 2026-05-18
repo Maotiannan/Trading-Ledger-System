@@ -65,6 +65,7 @@ export function CustomerList({
           <TableBody>
             {customers.map((row) => {
               const consigneeFull = String(row.consignee || '').trim();
+              const companyNameFull = String(row.companyName || '').trim();
               const addressFull = String(row.companyAddress || '').trim();
               const orderNames = getOrderNames(row);
               return (
@@ -105,7 +106,20 @@ export function CustomerList({
                     ) : '-'}
                   </TableCell>
                   <TableCell>{formatOwnerLabel(row)}</TableCell>
-                  {canSeeExtended && <TableCell>{String(row.companyName || '-')}</TableCell>}
+                  {canSeeExtended && (
+                    <TableCell>
+                      {companyNameFull ? (
+                        <button
+                          type="button"
+                          className="max-w-[260px] truncate text-left hover:underline"
+                          title={companyNameFull}
+                          onClick={() => onPreviewLongText('COMPANY_NAME', companyNameFull)}
+                        >
+                          {truncateLongText(companyNameFull, 35)}
+                        </button>
+                      ) : '-'}
+                    </TableCell>
+                  )}
                   {canSeeExtended && <TableCell>{row.credit !== null && row.credit !== undefined ? String(row.credit) : '-'}</TableCell>}
                   {canSeeExtended && (
                     <TableCell>

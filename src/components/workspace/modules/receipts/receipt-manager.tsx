@@ -43,8 +43,7 @@ type ReceiptFilterState = {
   statuses: string[];
   dateFrom: string;
   dateTo: string;
-  minUsd: string;
-  maxUsd: string;
+  amount: string;
 };
 
 const defaultAppliedFilters: ReceiptFilterState = {
@@ -52,8 +51,7 @@ const defaultAppliedFilters: ReceiptFilterState = {
   statuses: defaultReceiptStatuses,
   dateFrom: '',
   dateTo: '',
-  minUsd: '',
-  maxUsd: '',
+  amount: '',
 };
 
 export function ReceiptManager() {
@@ -64,8 +62,7 @@ export function ReceiptManager() {
   const [statusFilter, setStatusFilter] = useState<string[]>(defaultReceiptStatuses);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [minUsd, setMinUsd] = useState('');
-  const [maxUsd, setMaxUsd] = useState('');
+  const [amount, setAmount] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<ReceiptFilterState>(defaultAppliedFilters);
   const [filterRequestVersion, setFilterRequestVersion] = useState(0);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -155,8 +152,7 @@ export function ReceiptManager() {
     for (const status of appliedFilters.statuses) params.append('status', status);
     if (appliedFilters.dateFrom) params.set('dateFrom', appliedFilters.dateFrom);
     if (appliedFilters.dateTo) params.set('dateTo', appliedFilters.dateTo);
-    if (appliedFilters.minUsd) params.set('minUsd', appliedFilters.minUsd);
-    if (appliedFilters.maxUsd) params.set('maxUsd', appliedFilters.maxUsd);
+    if (appliedFilters.amount) params.set('amount', appliedFilters.amount);
     const query = params.toString();
     const endpoint = `receipt${query ? `?${query}` : ''}`;
     const canUsePrefetch =
@@ -165,8 +161,7 @@ export function ReceiptManager() {
       appliedFilters.statuses.every((status) => defaultReceiptStatuses.includes(status as typeof defaultReceiptStatuses[number])) &&
       !appliedFilters.dateFrom &&
       !appliedFilters.dateTo &&
-      !appliedFilters.minUsd &&
-      !appliedFilters.maxUsd;
+      !appliedFilters.amount;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: Receipt[] }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && receiptRequestGuard.isLatest(requestToken)) {
       setReceipts(cachedResult.data);
@@ -273,8 +268,7 @@ export function ReceiptManager() {
       statuses: statusFilter,
       dateFrom,
       dateTo,
-      minUsd,
-      maxUsd,
+      amount,
     });
     resetToFirstPage();
     setFilterRequestVersion((version) => version + 1);
@@ -285,8 +279,7 @@ export function ReceiptManager() {
     setStatusFilter(defaultReceiptStatuses);
     setDateFrom('');
     setDateTo('');
-    setMinUsd('');
-    setMaxUsd('');
+    setAmount('');
     setAppliedFilters(defaultAppliedFilters);
     resetToFirstPage();
     setFilterRequestVersion((version) => version + 1);
@@ -487,8 +480,7 @@ export function ReceiptManager() {
             </Popover>
             <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
             <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
-            <MoneyInput placeholder={tx('最小金额', 'Min amount')} value={minUsd} onValueChange={(value) => { setMinUsd(value); resetToFirstPage(); }} />
-            <MoneyInput placeholder={tx('最大金额', 'Max amount')} value={maxUsd} onValueChange={(value) => { setMaxUsd(value); resetToFirstPage(); }} />
+            <MoneyInput placeholder={tx('准确金额', 'Exact amount')} value={amount} onValueChange={(value) => { setAmount(value); resetToFirstPage(); }} />
           </>
         )}
         renderActions={() => (

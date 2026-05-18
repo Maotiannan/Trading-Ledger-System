@@ -84,6 +84,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const orderId = searchParams.get('orderId');
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+    const amount = searchParams.get('amount') || searchParams.get('amountUsd');
     const minUsd = searchParams.get('minUsd');
     const maxUsd = searchParams.get('maxUsd');
 
@@ -108,7 +109,9 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         },
       });
     }
-    if (minUsd || maxUsd) {
+    if (amount) {
+      filters.push({ usd: Number(amount) });
+    } else if (minUsd || maxUsd) {
       filters.push({
         usd: {
           ...(minUsd ? { gte: Number(minUsd) } : {}),

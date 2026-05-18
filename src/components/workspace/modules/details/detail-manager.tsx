@@ -38,8 +38,7 @@ export function DetailManager() {
   const [statusFilter, setStatusFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
+  const [amount, setAmount] = useState('');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showAgentManager, setShowAgentManager] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
@@ -108,11 +107,10 @@ export function DetailManager() {
     if (statusFilter) params.set('status', statusFilter);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
-    if (minAmount) params.set('minAmount', minAmount);
-    if (maxAmount) params.set('maxAmount', maxAmount);
+    if (amount) params.set('amount', amount);
     const query = params.toString();
     const endpoint = `detail${query ? `?${query}` : ''}`;
-    const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !minAmount && !maxAmount;
+    const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !amount;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof details }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && detailRequestGuard.isLatest(requestToken)) {
       setDetails(cachedResult.data);
@@ -125,7 +123,7 @@ export function DetailManager() {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [dateFrom, dateTo, detailRequestGuard, details, maxAmount, minAmount, search, setDetails, statusFilter]);
+  }, [amount, dateFrom, dateTo, detailRequestGuard, details, search, setDetails, statusFilter]);
 
   useEffect(() => {
     loadDetails();
@@ -351,8 +349,7 @@ export function DetailManager() {
             </select>
             <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            <MoneyInput placeholder={tx('最小总金额', 'Min total amount')} value={minAmount} onValueChange={setMinAmount} />
-            <MoneyInput placeholder={tx('最大总金额', 'Max total amount')} value={maxAmount} onValueChange={setMaxAmount} />
+            <MoneyInput placeholder={tx('准确总金额', 'Exact total amount')} value={amount} onValueChange={setAmount} />
           </>
         )}
         renderActions={() => (
@@ -364,8 +361,7 @@ export function DetailManager() {
                 setStatusFilter('');
                 setDateFrom('');
                 setDateTo('');
-                setMinAmount('');
-                setMaxAmount('');
+                setAmount('');
               }}
             >
               {tx('重置筛选', 'Reset Filters')}

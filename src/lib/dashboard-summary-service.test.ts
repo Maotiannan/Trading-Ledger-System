@@ -1,5 +1,8 @@
 import { db } from '@/lib/db';
 import { listDeletionRequests } from '@/lib/deletion-service';
+import { listDetailEditRequests } from '@/lib/detail-edit-request-service';
+import { listReceiptEditRequests } from '@/lib/receipt-edit-request-service';
+import { listSwiftEditRequests } from '@/lib/swift-edit-request-service';
 import { getDashboardSummary } from '@/lib/dashboard-summary-service';
 import { getOwnerVisibleIds } from '@/lib/resource-visibility';
 
@@ -25,6 +28,18 @@ jest.mock('@/lib/deletion-service', () => ({
   listDeletionRequests: jest.fn(),
 }));
 
+jest.mock('@/lib/receipt-edit-request-service', () => ({
+  listReceiptEditRequests: jest.fn(),
+}));
+
+jest.mock('@/lib/detail-edit-request-service', () => ({
+  listDetailEditRequests: jest.fn(),
+}));
+
+jest.mock('@/lib/swift-edit-request-service', () => ({
+  listSwiftEditRequests: jest.fn(),
+}));
+
 jest.mock('@/lib/resource-visibility', () => ({
   buildDetailVisibilityWhere: jest.fn(() => ({})),
   buildInvoiceVisibilityWhere: jest.fn(() => ({})),
@@ -39,6 +54,9 @@ const mockDb = db as unknown as {
   detail: { count: jest.Mock; findMany: jest.Mock };
 };
 const mockListDeletionRequests = listDeletionRequests as jest.Mock;
+const mockListReceiptEditRequests = listReceiptEditRequests as jest.Mock;
+const mockListDetailEditRequests = listDetailEditRequests as jest.Mock;
+const mockListSwiftEditRequests = listSwiftEditRequests as jest.Mock;
 const mockGetOwnerVisibleIds = getOwnerVisibleIds as jest.Mock;
 
 function makeUser() {
@@ -65,6 +83,9 @@ describe('dashboard-summary-service', () => {
     mockDb.receipt.findMany.mockResolvedValue([]);
     mockDb.detail.findMany.mockResolvedValue([]);
     mockListDeletionRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'APPROVED' }]);
+    mockListReceiptEditRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'REJECTED' }]);
+    mockListDetailEditRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'APPROVED' }]);
+    mockListSwiftEditRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'PENDING' }]);
   });
 
   afterEach(() => {
@@ -115,7 +136,7 @@ describe('dashboard-summary-service', () => {
       },
       _sum: { usd: true },
     });
-    expect(summary.pendingDeletion).toBe(1);
+    expect(summary.pendingDeletion).toBe(5);
     expect(summary.releasedInvoices).toEqual([
       {
         id: 'invoice-1',

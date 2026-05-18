@@ -311,4 +311,52 @@ describe('detail-service', () => {
     });
     expect(result.data.id).toBe('detail-edit');
   });
+
+  it('falls back to matching by order and amount when an edit snapshot contains a stale receipt id', async () => {
+    mockDb.detail.findUnique.mockResolvedValueOnce({
+      id: 'detail-edit-stale',
+      createdBy: 'sales-1',
+      status: DetailStatus.Waiting_SWIFT,
+      agentId: 'agent-existing',
+      items: [{ receiptId: 'receipt-old' }],
+      imageUrl: null,
+      imageName: null,
+      date: null,
+    });
+    mockDb.receipt.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'receipt-rematched',
+        createdBy: 'sales-1',
+        imageUrl: null,
+        imageName: null,
+        status: ReceiptStatus.SR_Received,
+      });
+    mockFindMatchingReceipt.mockResolvedValueOnce('receipt-rematched');
+    mockDb.detail.update.mockResolvedValueOnce({
+      id: 'detail-edit-stale',
+      items: [{ receiptId: 'receipt-rematched', receipt: { id: 'receipt-rematched' } }],
+    });
+
+    await updateDetailRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      detailId: 'detail-edit-stale',
+      payload: {
+        agentId: 'agent-1',
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-2', amount: 120, receiptId: 'receipt-stale', matchedReceiptId: null }],
+      },
+    });
+
+    expect(mockFindMatchingReceipt).toHaveBeenCalledWith('IB-2', 120, expect.objectContaining({
+      requireAmountTolerance: false,
+    }));
+    expect(mockDb.detail.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        items: {
+          create: [expect.objectContaining({ receiptId: 'receipt-rematched' })],
+        },
+      }),
+    }));
+  });
 });

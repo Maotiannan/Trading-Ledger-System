@@ -65,6 +65,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const search = searchParams.get('search') || '';
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
+    const amount = searchParams.get('amount');
     const minAmount = searchParams.get('minAmount');
     const maxAmount = searchParams.get('maxAmount');
 
@@ -218,7 +219,9 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         },
       });
     }
-    if (minAmount || maxAmount) {
+    if (amount) {
+      filters.push({ totalAmount: Number(amount) });
+    } else if (minAmount || maxAmount) {
       filters.push({
         totalAmount: {
           ...(minAmount ? { gte: Number(minAmount) } : {}),

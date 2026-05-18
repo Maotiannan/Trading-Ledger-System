@@ -21,18 +21,18 @@ const deletionRequests = Array.from({ length: 25 }, (_, index) => ({
   targetType: 'RECEIPT' as const,
   targetId: `receipt-${index + 1}`,
   reason: `reason-${index + 1}`,
-  status: 'PENDING' as const,
+  status: index < 7 ? 'PENDING' as const : 'APPROVED' as const,
   requestedBy: 'sales-1',
-  approvedBy: null,
+  approvedBy: index < 7 ? null : 'admin-1',
   createdAt: '2026-05-07T00:00:00.000Z',
   requester: { id: 'sales-1', name: `Sales ${index + 1}`, email: 'sales@example.com' },
-  approver: null,
+  approver: index < 7 ? null : { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
 }));
 
 function buildReceiptEditRequests(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     id: `receipt-edit-${index + 1}`,
-    status: 'PENDING',
+    status: index < 7 ? 'PENDING' : 'APPROVED',
     requestedByName: `Sales ${index + 1}`,
     approvedByName: null,
     requestedAt: '2026-05-07T00:00:00.000Z',
@@ -48,7 +48,7 @@ function buildReceiptEditRequests(count: number) {
     afterSnapshot: {
       receiptNo: `R-${index + 1}`,
       date: '2026-05-07',
-      orderNo: `ORD-${index + 1}`,
+      orderNo: index === 0 ? 'ORD-UPDATED-1' : `ORD-${index + 1}`,
       invNo: null,
       customerMark: 'MAB',
       payer: 'Payer',
@@ -60,7 +60,7 @@ function buildReceiptEditRequests(count: number) {
 function buildDetailEditRequests(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     id: `detail-edit-${index + 1}`,
-    status: 'PENDING',
+    status: index < 7 ? 'PENDING' : 'APPROVED',
     requestedByName: `Sales ${index + 1}`,
     approvedByName: null,
     requestedAt: '2026-05-07T00:00:00.000Z',
@@ -78,7 +78,7 @@ function buildDetailEditRequests(count: number) {
 function buildSwiftEditRequests(count: number) {
   return Array.from({ length: count }, (_, index) => ({
     id: `swift-edit-${index + 1}`,
-    status: 'PENDING',
+    status: index < 7 ? 'PENDING' : 'APPROVED',
     requestedByName: `Sales ${index + 1}`,
     approvedByName: null,
     requestedAt: '2026-05-07T00:00:00.000Z',
@@ -129,21 +129,42 @@ describe('DeletionManager approval pagination', () => {
     jest.useRealTimers();
   });
 
-  it('paginates deletion requests at 20 rows per page', async () => {
+  it('shows only pending approval rows by default at 5 rows per page', async () => {
     render(<DeletionManager />);
 
-    expect(screen.getByText('reason-20')).toBeInTheDocument();
-    expect(screen.queryByText('reason-21')).not.toBeInTheDocument();
+    expect(screen.getByText('reason-5')).toBeInTheDocument();
+    expect(screen.queryByText('reason-6')).not.toBeInTheDocument();
+    expect(screen.queryByText('reason-8')).not.toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('下一页 删除申请'));
     });
 
-    expect(screen.getByText('reason-21')).toBeInTheDocument();
-    expect(screen.queryByText('reason-20')).not.toBeInTheDocument();
+    expect(screen.getByText('reason-6')).toBeInTheDocument();
+    expect(screen.queryByText('reason-5')).not.toBeInTheDocument();
   });
 
-  it('paginates each edit approval section at 20 rows per page', async () => {
+  it('shows all approval rows only after checking ALL and searching', async () => {
+    render(<DeletionManager />);
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText('reason-8')).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('ALL 删除申请'));
+      fireEvent.click(screen.getByLabelText('查询 删除申请'));
+    });
+
+    expect(screen.getByText('reason-1')).toBeInTheDocument();
+    expect(screen.queryByText('reason-6')).not.toBeInTheDocument();
+  });
+
+  it('renders only changed requested values as before and after differences', async () => {
     render(<DeletionManager />);
 
     await act(async () => {
@@ -153,10 +174,10 @@ describe('DeletionManager approval pagination', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('R-20')).toBeInTheDocument();
+      expect(screen.getByText(/ORDER NO/)).toBeInTheDocument();
     });
-    expect(screen.queryByText('R-21')).not.toBeInTheDocument();
-    expect(screen.queryByText('ORD-21 | $100.00')).not.toBeInTheDocument();
+    expect(screen.getByText(/ORD-1 → ORD-UPDATED-1/)).toBeInTheDocument();
+    expect(screen.queryByText(/Receipt No: R-1/)).not.toBeInTheDocument();
     expect(screen.getAllByLabelText(/下一页/).length).toBeGreaterThanOrEqual(4);
   });
 });

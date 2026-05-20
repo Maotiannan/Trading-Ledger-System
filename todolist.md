@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.145
-> 最后更新：2026-05-16
+> 当前版本：v1.0.149
+> 最后更新：2026-05-20
 
 ## 当前状态
 
@@ -13,6 +13,7 @@
 - 批量导入、问题行修复、模板下载
 - 设置页版本号、系统配置和分支清库
 - 生成签名收据、签名前临时状态隔离、签名后自动挂图
+- `Receipt Management` 顶部动作顺序已固定为 `Create Directly / Generate Signed Receipt / Upload Receipt`
 - 临时上传图片的 24h 孤儿清理，以及签名收据 `SIGNING_PENDING` 72h 超时清理
 - 收据管理的 `SALES` 修改审批流：销售提交修改申请，管理员在可见范围内审批；管理员可直接修改
 - `RECEIVED` 状态收据支持重新绑定 `ORDER NO / INV NO`，用于修正已完成收据误挂到错误订单的问题
@@ -26,6 +27,7 @@
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- `Receipt Management` 右上角动作按钮顺序调整为 `Create Directly -> Generate Signed Receipt -> Upload Receipt`，仅调整视觉排序，不改变权限或弹窗逻辑
 - `Payment Detail Management -> Payment Agent Management` 中点击 `New / 新增` 会进入空白新建表单
 - 付款代理管理弹窗桌面端使用稳定两栏布局，右侧信息和附件区独立滚动，减少被截断的问题
 

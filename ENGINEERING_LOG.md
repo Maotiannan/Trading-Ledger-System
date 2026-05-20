@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.145
-> 最后更新：2026-05-16
+> 当前版本：v1.0.149
+> 最后更新：2026-05-20
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Receipt Management` 顶部右侧动作按钮顺序收口为 `Create Directly -> Generate Signed Receipt -> Upload Receipt`，仅调整视觉排序，不改变权限、弹窗或数据逻辑 ✅ 2026-05-20
 
 - [x] Payment Agent 管理弹窗修复：确认根因是 `PaymentAgentManagerDialog` 打开后会在 effect 中自动选择第一条代理，点击 `New` 清空 `selectedAgentId` 后又被同一 effect 选回第一条，导致用户看到“没有任何反应”。新增 `isCreatingDraft` 明确区分新建草稿与已选代理；点击代理列表会退出新建草稿，保存/删除/关闭后重置状态。桌面端弹窗改为固定高度两栏布局，右侧详情面板独立滚动并增加 `minmax(0,1fr)` 防止内容被横向挤出；补齐组件回归测试覆盖 `New` 状态和布局约束 ✅ 2026-05-16
 

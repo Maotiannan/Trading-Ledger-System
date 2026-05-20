@@ -35,7 +35,8 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.148`
+- 当前版本：`1.0.149`
+- 同批更新：`Receipt Management` 右上角动作按钮顺序调整为 `Create Directly -> Generate Signed Receipt -> Upload Receipt`，仅调整视觉顺序，不改变权限与布局逻辑。
 - 本次更新：`Approval / 审批` 页面默认只显示待处理申请，每个审批模块每页 `5` 条；勾选 `ALL` 并点击“查询”后可查看该模块全部历史申请。
 - 同批更新：审批页 `Requested Values` 现在只显示实际被修改字段的“修改前 → 修改后”，不再把未变化字段整块堆出来。
 - 同批修复：`Payment Detail Edit Requests` 审批时如果快照里的旧 `receiptId` 已失效，会自动按 `ORDER NO + AMOUNT` 重新匹配或创建关联收据，避免管理员点击确认返回 `400 Bad Request`。

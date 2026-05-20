@@ -198,9 +198,9 @@ describe('ReceiptManager', () => {
 
     expect(actionGroup).toHaveClass('flex-col', 'sm:flex-row', 'sm:flex-wrap');
     expect(actionButtons.map((button) => button.textContent?.trim())).toEqual([
-      '上传收据',
       '直接创建',
       '生成签名收据',
+      '上传收据',
     ]);
   });
 

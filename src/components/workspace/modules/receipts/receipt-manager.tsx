@@ -416,10 +416,6 @@ export function ReceiptManager() {
           data-testid="receipt-manager-primary-actions"
           className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end"
         >
-          <Button onClick={() => handleShowUploadChange(true)}>
-            <Upload className="h-4 w-4 mr-2" />
-            {tx('上传收据', 'Upload Receipt')}
-          </Button>
           <Button variant="outline" onClick={() => handleShowDirectCreateChange(true)}>
             <Plus className="h-4 w-4 mr-2" />
             {tx('直接创建', 'Create Directly')}
@@ -430,6 +426,10 @@ export function ReceiptManager() {
               {tx('生成签名收据', 'Generate Signed Receipt')}
             </Button>
           )}
+          <Button onClick={() => handleShowUploadChange(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            {tx('上传收据', 'Upload Receipt')}
+          </Button>
         </div>
       </div>
 

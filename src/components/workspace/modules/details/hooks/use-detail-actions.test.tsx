@@ -706,6 +706,23 @@ describe('useDetailActions', () => {
     expect(loadDetails).toHaveBeenCalled();
   });
 
+  it('does not create detail directly when no selected receipt or valid manual row exists', async () => {
+    const { result } = renderHook(() => useDetailActions(createDeps({
+      directItems: [{ mark: '', orderNo: '', amount: '' }],
+      directSelectedReceipts: [],
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenCalledWith('请选择收据或填写至少一条有效明细');
+    expect(handleShowDirectCreateChange).not.toHaveBeenCalled();
+    expect(resetDirectForm).not.toHaveBeenCalled();
+    expect(loadDetails).not.toHaveBeenCalled();
+  });
+
   it('surfaces direct-create failures from API', async () => {
     mockApiCall.mockResolvedValue({ success: false, error: '创建失败' });
     const { result } = renderHook(() => useDetailActions(createDeps()));

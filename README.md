@@ -35,9 +35,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.155`
-- 本次更新：`Create Payment Detail Directly` 弹窗新增 `AGENT` 选择，直接创建的付款明细会保存并在卡片右侧显示付款代理公司名。
-- 同批更新：`Manual detail rows` 默认折叠，只有需要手动录入新明细时才展开，减少手机端弹窗高度。
+- 当前版本：`1.0.156`
+- 本次更新：`Create Payment Detail Directly` 中 `Manual detail rows` 标题本身就是展开入口，不再额外显示灰色说明和单独的 `Expand manual rows` 按钮。
+- 上一版本：`Create Payment Detail Directly` 弹窗新增 `AGENT` 选择，直接创建的付款明细会保存并在卡片右侧显示付款代理公司名。
+- 上一版本：`Manual detail rows` 默认折叠，只有需要手动录入新明细时才展开，减少手机端弹窗高度。
 - 上一版本：`Create Payment Detail Directly` 弹窗手机端底部操作区固定可见，避免按钮被长列表挤出边框。
 - 上一版本：弹窗底部新增 `Total` 总计，实时汇总已勾选收据金额和手动新增明细金额。
 - 上一版本：新增 `POST /api/sync/customers/by-orders`，外部 agent 可一次按多个 `ORDER NO` 查询客户资料。

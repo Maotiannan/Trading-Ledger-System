@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.155
+> 当前版本：v1.0.156
 > 最后更新：2026-05-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Create Payment Detail Directly` 手动行折叠交互收口：移除 `Manual detail rows` 下方灰色说明和单独 `Expand manual rows` 按钮，改为标题行本身作为展开/收起按钮；保留默认折叠和展开后手动录入能力，补齐组件断言防止重复控件回归 ✅ 2026-05-23
 
 - [x] `Create Payment Detail Directly` 付款代理选择与手动行折叠：`DetailDirectCreateDialog` 新增 `agents / selectedAgentId` 受控参数，在日期下方渲染付款代理下拉，只展示 `PaymentAgent.companyName`；`handleDirectCreate` 新增前端必选校验并把 `agentId` 写入 `direct-create` payload，复用后端 `resolveAccessiblePaymentAgentId` 进行权限校验和持久化。`DetailList` 在卡片头部显示已保存的 agent company name；手动新增明细行默认折叠，展开后才显示输入行和新增按钮，降低手机端弹窗高度。补齐 dialog / hook / list / manager 回归测试 ✅ 2026-05-23
 

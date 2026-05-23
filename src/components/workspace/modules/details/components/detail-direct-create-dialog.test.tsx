@@ -95,8 +95,10 @@ describe('DetailDirectCreateDialog', () => {
     expect(screen.queryByText('2026-05-23')).not.toBeInTheDocument();
     expect(screen.queryByText('Mamadou Dian Diallo "PIKIN"')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('单号')).not.toBeInTheDocument();
+    expect(screen.queryByText('需要手动补录时再展开')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '展开手动明细' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '展开手动明细' }));
+    fireEvent.click(screen.getByRole('button', { name: '手动新增明细行' }));
 
     expect(screen.getByPlaceholderText('单号')).toBeInTheDocument();
 

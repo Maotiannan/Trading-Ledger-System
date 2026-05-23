@@ -176,21 +176,19 @@ export function DetailDirectCreateDialog({
               })}
             </div>
           </section>
-          <section className="space-y-3 rounded-lg border p-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="font-medium">{tx('手动新增明细行', 'Manual detail rows')}</div>
-                <div className="text-xs text-muted-foreground">
-                  {tx('需要手动补录时再展开', 'Expand only when manual entry is needed')}
-                </div>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => setManualRowsOpen((value) => !value)}>
-                {manualRowsOpen ? <ChevronDown className="mr-2 h-4 w-4" /> : <ChevronRight className="mr-2 h-4 w-4" />}
-                {manualRowsOpen ? tx('收起手动明细', 'Collapse manual rows') : tx('展开手动明细', 'Expand manual rows')}
-              </Button>
-            </div>
+          <section className="rounded-lg border">
+            <Button
+              type="button"
+              variant="ghost"
+              className="flex h-auto w-full justify-between rounded-lg px-3 py-3 text-left"
+              aria-expanded={manualRowsOpen}
+              onClick={() => setManualRowsOpen((value) => !value)}
+            >
+              <span className="font-medium">{tx('手动新增明细行', 'Manual detail rows')}</span>
+              {manualRowsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
             {manualRowsOpen && (
-              <>
+              <div className="space-y-3 px-3 pb-3">
                 {directItems.map((item, index) => (
                   <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                     <Input
@@ -214,7 +212,7 @@ export function DetailDirectCreateDialog({
                   <Plus className="h-4 w-4 mr-2" />
                   {tx('增加明细行', 'Add Detail Row')}
                 </Button>
-              </>
+              </div>
             )}
           </section>
         </div>

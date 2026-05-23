@@ -53,6 +53,15 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                {detail.agent?.companyName && (
+                  <Badge
+                    variant="outline"
+                    className="max-w-[14rem] truncate"
+                    title={tx(`付款代理：${detail.agent.companyName}`, `Payment agent: ${detail.agent.companyName}`)}
+                  >
+                    {detail.agent.companyName}
+                  </Badge>
+                )}
                 <Badge variant={detail.status === 'ERROR' ? 'destructive' : 'default'}>{detail.status}</Badge>
                 {detail.imageUrl && (
                   <Button

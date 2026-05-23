@@ -331,6 +331,11 @@ export function useDetailActions({
   const handleDirectCreate = async () => {
     setError(null);
     try {
+      if (!selectedAgentId) {
+        setError(tx('请选择付款代理后再确认创建', 'Select a payment agent before confirming creation.'));
+        return;
+      }
+
       const selectedReceiptItems = directSelectedReceipts.map((receipt) => ({
         mark: receipt.order?.customerMark || receipt.customerMark || null,
         orderNo: receipt.order?.orderNo || receipt.orderNo || null,
@@ -356,6 +361,7 @@ export function useDetailActions({
         body: JSON.stringify({
           action: 'direct-create',
           date: directDate || null,
+          agentId: selectedAgentId,
           items: payloadItems,
         }),
       });

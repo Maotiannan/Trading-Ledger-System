@@ -465,6 +465,9 @@ export function DetailManager() {
         locale={locale}
         directDate={directDate}
         directItems={directItems}
+        agents={agents}
+        agentsLoading={agentsLoading}
+        selectedAgentId={selectedAgentId}
         selectableReceipts={directSelectableReceipts}
         selectedReceiptIds={directSelectedReceiptIds}
         selectableReceiptsLoading={directSelectableReceiptsLoading}
@@ -472,6 +475,7 @@ export function DetailManager() {
         onOpenChange={handleShowDirectCreateChange}
         onDirectDateChange={setDirectDate}
         onDirectItemsChange={setDirectItems}
+        onSelectedAgentIdChange={setSelectedAgentId}
         onSelectedReceiptIdsChange={setDirectSelectedReceiptIds}
         onSubmit={handleDirectCreate}
       />

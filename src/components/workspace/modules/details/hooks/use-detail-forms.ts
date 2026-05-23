@@ -48,6 +48,7 @@ export function useDetailForms() {
     setShowDirectCreate(open);
     if (!open) {
       setDirectSelectedReceiptIds([]);
+      setSelectedAgentId('');
     }
   };
 
@@ -65,6 +66,7 @@ export function useDetailForms() {
 
   const resetDirectForm = () => {
     setDirectDate('');
+    setSelectedAgentId('');
     setDirectSelectedReceiptIds([]);
     setDirectItems([{ ...EMPTY_DETAIL_DIRECT_ITEM }]);
   };

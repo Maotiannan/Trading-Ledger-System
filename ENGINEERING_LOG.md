@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.154
+> 当前版本：v1.0.155
 > 最后更新：2026-05-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Create Payment Detail Directly` 付款代理选择与手动行折叠：`DetailDirectCreateDialog` 新增 `agents / selectedAgentId` 受控参数，在日期下方渲染付款代理下拉，只展示 `PaymentAgent.companyName`；`handleDirectCreate` 新增前端必选校验并把 `agentId` 写入 `direct-create` payload，复用后端 `resolveAccessiblePaymentAgentId` 进行权限校验和持久化。`DetailList` 在卡片头部显示已保存的 agent company name；手动新增明细行默认折叠，展开后才显示输入行和新增按钮，降低手机端弹窗高度。补齐 dialog / hook / list / manager 回归测试 ✅ 2026-05-23
 
 - [x] `Create Payment Detail Directly` 移动端 footer 溢出修复：将 `DetailDirectCreateDialog` 改为 `header / scrollable body / sticky footer` 三段式，弹窗最大高度使用 `92dvh`，内容区独立滚动，底部操作区固定在弹窗底部并保持背景遮罩；新增总计栏，实时汇总已勾选 `SR_Received` 收据金额和手动新增明细金额，统一走 `formatUsdAmount/parseDisplayMoney` 金额格式化。补齐组件回归覆盖 sticky footer 与 total 展示 ✅ 2026-05-23
 

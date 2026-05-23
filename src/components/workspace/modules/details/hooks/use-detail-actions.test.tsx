@@ -645,6 +645,7 @@ describe('useDetailActions', () => {
       body: JSON.stringify({
         action: 'direct-create',
         date: '2026-03-11',
+        agentId: 'agent-1',
         items: [{ mark: 'MAB-1', orderNo: 'MAB-1-01', amount: 120 }],
       }),
     }));
@@ -695,6 +696,7 @@ describe('useDetailActions', () => {
       body: JSON.stringify({
         action: 'direct-create',
         date: '2026-03-11',
+        agentId: 'agent-1',
         items: [
           { mark: 'PIKIN', orderNo: 'PIKIN-20', amount: 250, receiptId: 'receipt-selected-1' },
           { mark: 'MAB-1', orderNo: 'MAB-1-01', amount: 120 },
@@ -704,6 +706,22 @@ describe('useDetailActions', () => {
     expect(handleShowDirectCreateChange).toHaveBeenCalledWith(false);
     expect(resetDirectForm).toHaveBeenCalled();
     expect(loadDetails).toHaveBeenCalled();
+  });
+
+  it('does not create detail directly without a selected payment agent', async () => {
+    const { result } = renderHook(() => useDetailActions(createDeps({
+      selectedAgentId: '',
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(mockApiCall).not.toHaveBeenCalled();
+    expect(setError).toHaveBeenCalledWith('请选择付款代理后再确认创建');
+    expect(handleShowDirectCreateChange).not.toHaveBeenCalled();
+    expect(resetDirectForm).not.toHaveBeenCalled();
+    expect(loadDetails).not.toHaveBeenCalled();
   });
 
   it('does not create detail directly when no selected receipt or valid manual row exists', async () => {

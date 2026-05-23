@@ -35,9 +35,11 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.152`
-- 本次更新：`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.`；打开弹窗时默认使用最近登记的 10 条收据中最大数字 + 1。
-- 同批修复：保存收据时如果 `Receipt No.` 重复，现在会提示“收据号已存在，请换一个编号”，不再泛化成 `Server error`。
+- 当前版本：`1.0.153`
+- 本次更新：新增 `POST /api/sync/customers/by-orders`，外部 agent 可一次按多个 `ORDER NO` 查询客户资料。
+- 同批更新：该接口沿用 Excel ML token 鉴权，并复用系统当前的财务订单、复合订单和 `ORDER_NAME` 匹配规则。
+- 上一版本：`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.`；打开弹窗时默认使用最近登记的 10 条收据中最大数字 + 1。
+- 上一版本：保存收据时如果 `Receipt No.` 重复，现在会提示“收据号已存在，请换一个编号”，不再泛化成 `Server error`。
 - 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 的 `Receipts available to add` 列表已精简为只显示 `ORDER NO` 和收据金额。
 - 上一版本：可加入收据列表的搜索框改为按 `ORDER NO` 搜索，手机和桌面端继续保留可滚动选择区。
 - 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 保留手动录入模式，并新增可勾选 `SR_Received` 收据直接加入同一张 Payment Detail。
@@ -223,6 +225,20 @@ GET /api/excel/ml?orderNo=GANDO-10&field=2
 ```bash
 POST /api/excel/ml/batch
 ```
+
+外部 agent 如果需要一次按多个 `ORDER NO` 查询完整客户资料，使用：
+
+```bash
+POST /api/sync/customers/by-orders
+Authorization: Bearer <Excel ML token>
+Content-Type: application/json
+
+{
+  "orderNos": ["GANDO-10", "SUPERDT2-09"]
+}
+```
+
+返回内容按每个 `ORDER NO` 分别给出结果。成功项包含 `matchedBy / matchedOrderNo / invNo / customer`，其中 `customer` 包含 `id / mark / orderName / orderNames / name / displayName / phone / city / consignee / companyName / companyAddress / credit`。失败项只影响当前 `ORDER NO`，不会导致整批失败。
 
 字段编号：
 

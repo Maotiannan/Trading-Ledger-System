@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.152
+> 当前版本：v1.0.153
 > 最后更新：2026-05-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 外部 agent 按 `ORDER NO` 批量查询客户资料：新增 `order-customer-lookup-service`，将财务订单精确匹配、`OrderAlias`、`/` 复合订单拆分和 `ORDER_NAME` 忽略空格推导封装为单一查询入口；新增 `POST /api/sync/customers/by-orders`，沿用 Excel ML Bearer token 和 `excelLookup` 限流，入参 `orderNos: string[]`，每条结果独立返回成功或错误，避免单个异常拖垮整批。`excel-ml-service` 同步改为调用该解析服务，避免 Excel 单字段查询和外部 agent 批量查询规则分叉；补齐 service、route、api-catalog、excel-ml 回归测试 ✅ 2026-05-23
 
 - [x] 签名收据编号冲突修复与可配置起始号：确认线上 `Server error` 根因是 `Receipt.receiptNo` 唯一键冲突，而非 `INV NO` 发票号冲突；新增 `getSuggestedNextReceiptNo()`，按最近登记 10 条 receipt 中最大纯数字编号 +1 生成默认建议。`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.` 字段，创建 session 时将用户指定编号传入后端；`allocateNextReceiptNo()` 支持显式编号、推动 `SystemCounter` 到指定编号之后，并在重复编号时返回 `CONFLICT` 人类可读错误。普通收据修改/创建中的 `receiptNo` 唯一冲突也统一映射为“收据号已存在，请换一个编号”，并补齐英文错误片段翻译与 service/route/hook/dialog/number 回归 ✅ 2026-05-23
 

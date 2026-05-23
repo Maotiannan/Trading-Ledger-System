@@ -43,6 +43,7 @@ describe('api-catalog consistency', () => {
 
   it('should expose customer sync endpoint', () => {
     expect(findAction('/api/sync/customers', 'sync')?.method).toBe('GET');
+    expect(findAction('/api/sync/customers/by-orders', 'lookup-by-orders')?.method).toBe('POST');
   });
 
   it('should expose protected upload-image read and upload actions', () => {

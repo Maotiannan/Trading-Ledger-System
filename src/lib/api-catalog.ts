@@ -65,6 +65,18 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/sync/customers/by-orders',
+    description: 'Batch customer lookup by ORDER NO for external agents',
+    actions: [
+      {
+        action: 'lookup-by-orders',
+        method: 'POST',
+        description: 'Resolve visible customer records for multiple ORDER NO values using the same finance-order, composite-order, and ORDER_NAME matching rules as the main system',
+        bodyExample: { header: 'Authorization: Bearer ml_...', orderNos: ['GANDO-10', 'SUPERDT2-09'] },
+      },
+    ],
+  },
+  {
     endpoint: '/api/customer/fixes',
     description: 'Customer fix queue and repair actions',
     actions: [

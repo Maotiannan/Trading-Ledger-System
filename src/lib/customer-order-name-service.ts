@@ -59,6 +59,7 @@ export async function findCustomerOrderNameMatches(ownerIds: string[] | null | u
         select: {
           id: true,
           mark: true,
+          normalizedMark: true,
           orderName: true,
           name: true,
           phone: true,
@@ -67,6 +68,14 @@ export async function findCustomerOrderNameMatches(ownerIds: string[] | null | u
           companyName: true,
           companyAddress: true,
           credit: true,
+          orderNames: {
+            select: {
+              orderName: true,
+              normalizedOrderName: true,
+              isPrimary: true,
+            },
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          },
         },
       },
     },

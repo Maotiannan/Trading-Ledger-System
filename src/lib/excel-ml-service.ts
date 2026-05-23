@@ -1,14 +1,8 @@
-import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError, isApiError } from '@/lib/api-error';
-import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import type { CurrentUser } from '@/lib/request-auth';
-import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
-import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
-import { getHierarchyScope } from '@/lib/user-hierarchy';
-import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
-import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
+import { resolveOrderCustomer, type OrderCustomerLookupCustomer, type OrderCustomerLookupMatchedBy } from '@/lib/order-customer-lookup-service';
 
 export const EXCEL_ML_FIELDS = [
   { index: 1, key: 'ORDER_NAME', label: 'ORDER NAME' },
@@ -26,25 +20,14 @@ export const EXCEL_ML_FIELDS = [
 
 type ExcelMlField = typeof EXCEL_ML_FIELDS[number];
 type ExcelMlFieldKey = ExcelMlField['key'];
-type ExcelMlMatchedBy = 'linked-order' | 'derived-order-name';
+type ExcelMlMatchedBy = OrderCustomerLookupMatchedBy;
 
 export type ExcelMlLookupInput = {
   orderNo: string;
   field: number;
 };
 
-type ExcelCustomer = {
-  id: string;
-  mark: string | null;
-  orderName: string | null;
-  name: string | null;
-  phone: string | null;
-  city: string | null;
-  consignee?: string | null;
-  companyName?: string | null;
-  companyAddress?: string | null;
-  credit?: unknown;
-};
+type ExcelCustomer = OrderCustomerLookupCustomer;
 
 export type ExcelMlLookupResult = {
   orderNo: string;
@@ -80,24 +63,6 @@ function getField(field: number): ExcelMlField {
     });
   }
   return match;
-}
-
-function assertOrderMatched(orderNo: string, detail?: unknown): never {
-  throw createApiError({
-    code: apiErrorCodes.EXCEL_ORDER_NOT_FOUND,
-    status: 404,
-    message: 'Excel订单未匹配到客户',
-    detail: { orderNo, ...((detail && typeof detail === 'object') ? detail : {}) },
-  });
-}
-
-function assertOrderConflict(orderNo: string, detail?: unknown): never {
-  throw createApiError({
-    code: apiErrorCodes.EXCEL_ORDER_CONFLICT,
-    status: 409,
-    message: 'Excel订单匹配到多个客户',
-    detail: { orderNo, ...((detail && typeof detail === 'object') ? detail : {}) },
-  });
 }
 
 function stringifyFieldValue(value: unknown): string {
@@ -139,171 +104,15 @@ function fieldValue(customer: ExcelCustomer, fieldKey: ExcelMlFieldKey): string 
   }
 }
 
-function sortExactOrders<T extends { createdAt: Date | string; invoice?: { createdAt: Date | string } | null }>(orders: T[]): T[] {
-  return [...orders].sort((left, right) => {
-    const rightInvoiceAt = right.invoice?.createdAt ? new Date(right.invoice.createdAt).getTime() : 0;
-    const leftInvoiceAt = left.invoice?.createdAt ? new Date(left.invoice.createdAt).getTime() : 0;
-    const invoiceDiff = rightInvoiceAt - leftInvoiceAt;
-    if (invoiceDiff !== 0) return invoiceDiff;
-    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-  });
-}
-
 async function findCustomerForOrder(
   currentUser: CurrentUser,
   orderNo: string,
 ): Promise<{ customer: ExcelCustomer; matchedBy: ExcelMlMatchedBy; derivedOrderName: string | null }> {
-  const rawOrderNo = String(orderNo || '').trim();
-  if (!rawOrderNo) assertOrderMatched(orderNo, { reason: 'empty-order-no' });
-
-  const scope = await getHierarchyScope(currentUser);
-  const ownerIds = Array.from(scope.ownerVisibleIds);
-  const visibilityWhere = buildOrderVisibilityWhere(ownerIds);
-  const candidates = buildCompositeOrderLookupCandidates(rawOrderNo);
-  const derivedOrderName = extractOrderNameFromOrderNo(rawOrderNo) || candidates.derivedOrderNames[0] || null;
-
-  let exactOrders = await db.order.findMany({
-    where: {
-      AND: [
-        visibilityWhere,
-        {
-          OR: [
-            ...(candidates.exactOrderNos.length > 0
-              ? [{
-                  orderNo: candidates.exactOrderNos.length === 1
-                    ? { equals: candidates.exactOrderNos[0] }
-                    : { in: candidates.exactOrderNos },
-                }]
-              : []),
-            ...(candidates.normalizedOrderNos.length > 0
-              ? [{
-                  aliases: {
-                    some: {
-                      aliasNo: candidates.normalizedOrderNos.length === 1
-                        ? candidates.normalizedOrderNos[0]
-                        : { in: candidates.normalizedOrderNos },
-                    },
-                  },
-                }]
-              : []),
-          ],
-        },
-      ],
-    },
-    select: {
-      id: true,
-      orderNo: true,
-      createdAt: true,
-      customer: {
-        select: {
-          id: true,
-          mark: true,
-          orderName: true,
-          name: true,
-          phone: true,
-          city: true,
-          consignee: true,
-          companyName: true,
-          companyAddress: true,
-          credit: true,
-        },
-      },
-      invoice: {
-        select: {
-          id: true,
-          invNo: true,
-          createdAt: true,
-        },
-      },
-    },
-    orderBy: [{ createdAt: 'desc' }],
-  });
-
-  if (exactOrders.length === 0) {
-    const matchedOrderId = await findOrderIdByNoOrAlias(rawOrderNo, visibilityWhere);
-    if (matchedOrderId) {
-      exactOrders = await db.order.findMany({
-        where: {
-          AND: [
-            visibilityWhere,
-            { id: matchedOrderId },
-          ],
-        },
-        select: {
-          id: true,
-          orderNo: true,
-          createdAt: true,
-          customer: {
-            select: {
-              id: true,
-              mark: true,
-              orderName: true,
-              name: true,
-              phone: true,
-              city: true,
-              consignee: true,
-              companyName: true,
-              companyAddress: true,
-              credit: true,
-            },
-          },
-          invoice: {
-            select: {
-              id: true,
-              invNo: true,
-              createdAt: true,
-            },
-          },
-        },
-        orderBy: [{ createdAt: 'desc' }],
-      });
-    }
-  }
-
-  const linkedCustomersById = new Map<string, ExcelCustomer>();
-  for (const order of sortExactOrders(exactOrders)) {
-    if (order.customer?.id && !linkedCustomersById.has(order.customer.id)) {
-      linkedCustomersById.set(order.customer.id, order.customer);
-    }
-  }
-
-  if (linkedCustomersById.size === 1) {
-    return {
-      customer: Array.from(linkedCustomersById.values())[0],
-      matchedBy: 'linked-order',
-      derivedOrderName,
-    };
-  }
-
-  if (linkedCustomersById.size > 1) {
-    assertOrderConflict(rawOrderNo, { mode: 'linked-order', customerIds: Array.from(linkedCustomersById.keys()) });
-  }
-
-  if (!derivedOrderName) {
-    assertOrderMatched(rawOrderNo, { reason: 'order-name-not-derived' });
-  }
-
-  const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, rawOrderNo);
-
-  if (matchedCustomers.length === 0) {
-    assertOrderMatched(rawOrderNo, { derivedOrderName });
-  }
-
-  if (matchedCustomers.length > 1) {
-    assertOrderConflict(rawOrderNo, {
-      mode: 'derived-order-name',
-      derivedOrderName,
-      customerIds: matchedCustomers.map((customer) => customer.customer.id),
-    });
-  }
-
+  const result = await resolveOrderCustomer(currentUser, orderNo);
   return {
-    customer: {
-      ...matchedCustomers[0].customer,
-      orderName: matchedCustomers[0].orderName,
-    },
-    matchedBy: 'derived-order-name',
-    derivedOrderName,
+    customer: result.customer,
+    matchedBy: result.matchedBy,
+    derivedOrderName: result.derivedOrderName,
   };
 }
 

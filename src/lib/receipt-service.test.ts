@@ -436,6 +436,54 @@ describe('receipt-service', () => {
     expect(result.data.id).toBe('receipt-1');
   });
 
+  it('maps duplicate receipt number update errors to a readable conflict', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-1',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SR_Received,
+      receiptNo: 'R-OLD',
+      date: null,
+      tel: null,
+      usd: 100,
+      invNo: null,
+      orderNo: 'IB-1',
+      payer: null,
+      imageUrl: null,
+      imageName: null,
+      isDeposit: false,
+      customerId: 'customer-1',
+      customerMark: 'IB',
+      customerName: 'Ibrahima',
+      customerPhone: '+224',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      orderId: 'order-old',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
+    mockDb.receipt.update.mockRejectedValueOnce({
+      code: 'P2002',
+      meta: { target: ['receiptNo'] },
+    });
+
+    await expect(updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-1',
+      payload: {
+        receiptNo: 'R-EXISTING',
+        date: null,
+        orderNo: 'IB-1',
+        tel: null,
+        invNo: null,
+        payer: null,
+        customerMark: 'IB',
+      },
+    })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      status: 409,
+      message: '收据号 R-EXISTING 已存在，请换一个编号',
+    });
+  });
+
   it('rebinds receipt order and recalculates old and new order balances on direct admin update', async () => {
     mockDb.receipt.findUnique.mockResolvedValueOnce({
       id: 'receipt-1',

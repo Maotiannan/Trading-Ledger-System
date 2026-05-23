@@ -28,6 +28,7 @@ export type ReceiptGeneratorLaunchDialogProps = {
   open: boolean;
   orderNo: string;
   usdAmount: string;
+  receiptNo: string;
   paymentMode: 'Cash' | 'Transfer';
   loadingContext: boolean;
   creatingSession: boolean;
@@ -37,6 +38,7 @@ export type ReceiptGeneratorLaunchDialogProps = {
   onOpenChange: (open: boolean) => void;
   onOrderNoChange: (value: string) => void;
   onUsdAmountChange: (value: string) => void;
+  onReceiptNoChange: (value: string) => void;
   onPaymentModeChange: (value: 'Cash' | 'Transfer') => void;
   onSubmit: () => void;
 };
@@ -49,6 +51,7 @@ export function ReceiptGeneratorLaunchDialog({
   open,
   orderNo,
   usdAmount,
+  receiptNo,
   paymentMode,
   loadingContext,
   creatingSession,
@@ -58,6 +61,7 @@ export function ReceiptGeneratorLaunchDialog({
   onOpenChange,
   onOrderNoChange,
   onUsdAmountChange,
+  onReceiptNoChange,
   onPaymentModeChange,
   onSubmit,
 }: ReceiptGeneratorLaunchDialogProps) {
@@ -80,6 +84,17 @@ export function ReceiptGeneratorLaunchDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div className="grid gap-2">
+            <Label htmlFor="receipt-generator-receipt-no">{tx('收据号', 'Receipt No.')}</Label>
+            <Input
+              id="receipt-generator-receipt-no"
+              value={receiptNo}
+              onChange={(event) => onReceiptNoChange(event.target.value)}
+              inputMode="numeric"
+              placeholder="0001000"
+            />
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="receipt-generator-order-no">ORDER NO</Label>
             <Input

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.151
+> 当前版本：v1.0.152
 > 最后更新：2026-05-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 签名收据编号冲突修复与可配置起始号：确认线上 `Server error` 根因是 `Receipt.receiptNo` 唯一键冲突，而非 `INV NO` 发票号冲突；新增 `getSuggestedNextReceiptNo()`，按最近登记 10 条 receipt 中最大纯数字编号 +1 生成默认建议。`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.` 字段，创建 session 时将用户指定编号传入后端；`allocateNextReceiptNo()` 支持显式编号、推动 `SystemCounter` 到指定编号之后，并在重复编号时返回 `CONFLICT` 人类可读错误。普通收据修改/创建中的 `receiptNo` 唯一冲突也统一映射为“收据号已存在，请换一个编号”，并补齐英文错误片段翻译与 service/route/hook/dialog/number 回归 ✅ 2026-05-23
 
 - [x] `Create Payment Detail Directly` 可加入收据列表二次收口：`DetailDirectCreateDialog` 中 `Receipts available to add` 的已存在收据行只展示 `ORDER NO` 与格式化收据金额，移除可见的 `receiptNo/date/mark/payer`，搜索框同步收窄为按订单号搜索；补齐组件回归断言，确保手机端列表继续使用有界滚动区域 ✅ 2026-05-23
 

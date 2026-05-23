@@ -33,6 +33,28 @@ function forbidden(message: string, detail?: unknown) {
   return createApiError({ code: 'FORBIDDEN', status: 403, message, detail });
 }
 
+function isReceiptNoUniqueError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; meta?: { target?: unknown } };
+  if (candidate.code !== 'P2002') return false;
+  const target = candidate.meta?.target;
+  return Array.isArray(target)
+    ? target.includes('receiptNo')
+    : String(target || '').includes('receiptNo');
+}
+
+function receiptNoConflict(receiptNo: string | null | undefined) {
+  const normalizedReceiptNo = receiptNo?.trim() || null;
+  return createApiError({
+    code: 'CONFLICT',
+    status: 409,
+    message: normalizedReceiptNo
+      ? `收据号 ${normalizedReceiptNo} 已存在，请换一个编号`
+      : '收据号已存在，请换一个编号',
+    detail: { receiptNo: normalizedReceiptNo },
+  });
+}
+
 function requireGeneratorRole(currentUser: CurrentUser) {
   if (currentUser.role === UserRole.USER) {
     throw forbidden('当前角色无权生成签名收据', { role: currentUser.role });
@@ -128,6 +150,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   orderNo: string;
   usdAmount: number;
   paymentMode?: string | null;
+  receiptNo?: string | null;
 }) {
   requireGeneratorRole(currentUser);
   const orderNo = trimString(input.orderNo);
@@ -139,9 +162,11 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   const creationContext = await buildCreationContext(currentUser, orderNo, usdAmount);
   const effectiveOrderNo = creationContext.orderNo;
 
-  const result = await runInTransaction(async (tx) => {
-    const receiptNo = await allocateNextReceiptNo(tx);
-    const finalizedLayout = buildReceiptGeneratorLayout({
+  let result;
+  try {
+    result = await runInTransaction(async (tx) => {
+      const receiptNo = await allocateNextReceiptNo(tx, { requestedReceiptNo: input.receiptNo });
+      const finalizedLayout = buildReceiptGeneratorLayout({
         receiptNo,
         orderNo: effectiveOrderNo,
         invNo: creationContext.invNo,
@@ -152,64 +177,70 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
         usdAmount,
         balanceBefore: creationContext.balanceBefore,
         paymentMode,
-    });
+      });
 
-    const receipt = await tx.receipt.create({
-      data: {
-        receiptNo,
-        date: new Date(),
-        tel: creationContext.customerPhone,
-        usd: usdAmount,
-        invNo: creationContext.invNo,
-        orderNo: effectiveOrderNo,
-        payer: finalizedLayout.clientName,
-        status: ReceiptStatus.SIGNING_PENDING,
-        customerId: creationContext.customerId,
-        customerMark: creationContext.customerMark,
-        customerName: creationContext.customerName,
-        customerPhone: creationContext.customerPhone,
-        customerCity: creationContext.customerCity,
-        needsCustomerFix: false,
-        orderId: creationContext.orderId,
-        createdBy: currentUser.id,
-        note: '签名收据待完成',
-      },
-      select: {
-        id: true,
-        receiptNo: true,
-        status: true,
-      },
-    });
+      const receipt = await tx.receipt.create({
+        data: {
+          receiptNo,
+          date: new Date(),
+          tel: creationContext.customerPhone,
+          usd: usdAmount,
+          invNo: creationContext.invNo,
+          orderNo: effectiveOrderNo,
+          payer: finalizedLayout.clientName,
+          status: ReceiptStatus.SIGNING_PENDING,
+          customerId: creationContext.customerId,
+          customerMark: creationContext.customerMark,
+          customerName: creationContext.customerName,
+          customerPhone: creationContext.customerPhone,
+          customerCity: creationContext.customerCity,
+          needsCustomerFix: false,
+          orderId: creationContext.orderId,
+          createdBy: currentUser.id,
+          note: '签名收据待完成',
+        },
+        select: {
+          id: true,
+          receiptNo: true,
+          status: true,
+        },
+      });
 
-    const session = await tx.receiptGeneratorSession.create({
-      data: {
-        receiptId: receipt.id,
-        receiptNo,
-        orderNo: effectiveOrderNo,
-        invNo: creationContext.invNo,
-        customerId: creationContext.customerId,
-        customerMark: creationContext.customerMark,
-        customerName: creationContext.customerName,
-        clientTel: creationContext.customerPhone,
-        usd: usdAmount,
-        balanceBefore: creationContext.balanceBefore,
-        balanceAfter: finalizedLayout.balanceAfter,
-        amountInWords: finalizedLayout.amountInWords,
-        motif: finalizedLayout.motif,
-        layoutSnapshot: finalizedLayout,
-        status: ReceiptGeneratorSessionStatus.PENDING,
-        createdBy: currentUser.id,
-      },
-      select: {
-        id: true,
-        receiptId: true,
-        receiptNo: true,
-        status: true,
-      },
-    });
+      const session = await tx.receiptGeneratorSession.create({
+        data: {
+          receiptId: receipt.id,
+          receiptNo,
+          orderNo: effectiveOrderNo,
+          invNo: creationContext.invNo,
+          customerId: creationContext.customerId,
+          customerMark: creationContext.customerMark,
+          customerName: creationContext.customerName,
+          clientTel: creationContext.customerPhone,
+          usd: usdAmount,
+          balanceBefore: creationContext.balanceBefore,
+          balanceAfter: finalizedLayout.balanceAfter,
+          amountInWords: finalizedLayout.amountInWords,
+          motif: finalizedLayout.motif,
+          layoutSnapshot: finalizedLayout,
+          status: ReceiptGeneratorSessionStatus.PENDING,
+          createdBy: currentUser.id,
+        },
+        select: {
+          id: true,
+          receiptId: true,
+          receiptNo: true,
+          status: true,
+        },
+      });
 
-    return { receipt, session, layout: finalizedLayout };
-  });
+      return { receipt, session, layout: finalizedLayout };
+    });
+  } catch (error) {
+    if (isReceiptNoUniqueError(error)) {
+      throw receiptNoConflict(input.receiptNo);
+    }
+    throw error;
+  }
 
   await recordAuditEvent({
     action: auditActions.RECEIPT_CREATE,

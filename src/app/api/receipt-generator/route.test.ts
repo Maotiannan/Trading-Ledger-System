@@ -1,6 +1,7 @@
 import { apiErrorCodes } from '@/lib/api-error';
-import { POST } from '@/app/api/receipt-generator/route';
-import { finalizeReceiptGeneratorSession } from '@/lib/receipt-generator-service';
+import { GET, POST } from '@/app/api/receipt-generator/route';
+import { createReceiptGeneratorSession, finalizeReceiptGeneratorSession } from '@/lib/receipt-generator-service';
+import { getSuggestedReceiptGeneratorNumber } from '@/lib/receipt-generator-read-service';
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -34,12 +35,15 @@ jest.mock('@/lib/receipt-generator-service', () => ({
 }));
 
 jest.mock('@/lib/receipt-generator-read-service', () => ({
+  getSuggestedReceiptGeneratorNumber: jest.fn(),
   getOpenReceiptGeneratorSessionByReceipt: jest.fn(),
   getReceiptGeneratorSession: jest.fn(),
   lookupReceiptGeneratorOrderContext: jest.fn(),
 }));
 
 const mockFinalizeReceiptGeneratorSession = finalizeReceiptGeneratorSession as jest.Mock;
+const mockCreateReceiptGeneratorSession = createReceiptGeneratorSession as jest.Mock;
+const mockGetSuggestedReceiptGeneratorNumber = getSuggestedReceiptGeneratorNumber as jest.Mock;
 
 describe('receipt-generator route', () => {
   let consoleErrorSpy: jest.SpyInstance;
@@ -107,5 +111,60 @@ describe('receipt-generator route', () => {
     expect(response.status).toBe(499);
     expect(json.code).toBe(apiErrorCodes.UPLOAD_ABORTED);
     expect(json.error).toContain('上传中断');
+  });
+
+  it('passes the requested receipt number when creating a signing session', async () => {
+    mockCreateReceiptGeneratorSession.mockResolvedValueOnce({
+      data: {
+        sessionId: 'session-1',
+        signingPath: '/receipt-generator/session-1',
+      },
+    });
+
+    const request = {
+      url: 'http://localhost/api/receipt-generator',
+      headers: {
+        get(name: string) {
+          return name === 'content-type' ? 'application/json' : null;
+        },
+      },
+      async json() {
+        return {
+          action: 'create-session',
+          orderNo: 'PIKIN-20',
+          usdAmount: 2500,
+          paymentMode: 'Cash',
+          receiptNo: '0002001',
+        };
+      },
+    };
+
+    const response = await POST(request as never);
+
+    expect(response.status).toBe(200);
+    expect(mockCreateReceiptGeneratorSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'admin-1' }), {
+      orderNo: 'PIKIN-20',
+      usdAmount: 2500,
+      paymentMode: 'Cash',
+      receiptNo: '0002001',
+    });
+  });
+
+  it('returns the next suggested receipt number for generator launch', async () => {
+    mockGetSuggestedReceiptGeneratorNumber.mockResolvedValueOnce({
+      data: { receiptNo: '0001010' },
+      message: '签名收据编号建议已加载',
+    });
+
+    const request = {
+      url: 'http://localhost/api/receipt-generator?action=next-receipt-no',
+    };
+
+    const response = await GET(request as never);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.receiptNo).toBe('0001010');
+    expect(mockGetSuggestedReceiptGeneratorNumber).toHaveBeenCalledWith(expect.objectContaining({ id: 'admin-1' }));
   });
 });

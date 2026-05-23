@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ReceiptGeneratorLaunchDialog } from './receipt-generator-launch-dialog';
 
 describe('ReceiptGeneratorLaunchDialog', () => {
@@ -8,6 +8,7 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     open: true,
     orderNo: 'Big Alpha-07',
     usdAmount: '2500',
+    receiptNo: '0001010',
     paymentMode: 'Cash' as const,
     loadingContext: false,
     creatingSession: false,
@@ -17,6 +18,7 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     onOpenChange: jest.fn(),
     onOrderNoChange: jest.fn(),
     onUsdAmountChange: jest.fn(),
+    onReceiptNoChange: jest.fn(),
     onPaymentModeChange: jest.fn(),
     onSubmit: jest.fn(),
   };
@@ -68,5 +70,23 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     );
 
     expect(screen.getByText('Alpha Oumar Diallo "Big Alpha"')).toBeInTheDocument();
+  });
+
+  it('shows an editable receipt number before signing', () => {
+    const onReceiptNoChange = jest.fn();
+
+    render(
+      <ReceiptGeneratorLaunchDialog
+        {...defaultProps}
+        onReceiptNoChange={onReceiptNoChange}
+      />
+    );
+
+    const input = screen.getByLabelText('收据号');
+    expect(input).toHaveValue('0001010');
+
+    fireEvent.change(input, { target: { value: '0002001' } });
+
+    expect(onReceiptNoChange).toHaveBeenLastCalledWith('0002001');
   });
 });

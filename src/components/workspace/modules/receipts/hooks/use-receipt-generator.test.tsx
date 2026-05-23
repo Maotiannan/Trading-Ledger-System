@@ -73,6 +73,7 @@ describe('useReceiptGenerator', () => {
       result.current.setShowGeneratorLaunch(true);
       result.current.setGeneratorOrderNo('MOBILE-01');
       result.current.setGeneratorUsdAmount('1234');
+      result.current.setGeneratorReceiptNo('0001010');
       result.current.setGeneratorPaymentMode('Transfer');
     });
 
@@ -88,11 +89,63 @@ describe('useReceiptGenerator', () => {
         orderNo: 'MOBILE-01',
         usdAmount: 1234,
         paymentMode: 'Transfer',
+        receiptNo: '0001010',
       }),
     }));
     expect(loadReceipts).not.toHaveBeenCalled();
     expect(result.current.showGeneratorLaunch).toBe(true);
     expect(result.current.generatorOrderNo).toBe('MOBILE-01');
+  });
+
+  it('loads the suggested receipt number when the generator dialog opens', async () => {
+    mockApiCall.mockResolvedValueOnce({
+      data: {
+        receiptNo: '0001010',
+      },
+    });
+
+    const { result } = renderHook(() => useReceiptGenerator({ tx, loadReceipts, setError }));
+
+    await act(async () => {
+      result.current.setShowGeneratorLaunch(true);
+      await Promise.resolve();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt-generator?action=next-receipt-no');
+    expect(result.current.generatorReceiptNo).toBe('0001010');
+  });
+
+  it('submits the edited receipt number when creating a signing session', async () => {
+    mockApiCall.mockResolvedValue({
+      data: {
+        signingPath: '/receipt-generator/session-custom',
+      },
+    });
+    const openSigningTargetImpl = jest.fn(() => ({ mode: 'popup' as const, popupOpened: true }));
+
+    const { result } = renderHook(() => useReceiptGenerator({ tx, loadReceipts, setError, openSigningTargetImpl }));
+
+    await act(async () => {
+      result.current.setShowGeneratorLaunch(true);
+      result.current.setGeneratorOrderNo('PIKIN-20');
+      result.current.setGeneratorUsdAmount('2500');
+      result.current.setGeneratorReceiptNo('0002001');
+    });
+
+    await act(async () => {
+      await result.current.createGeneratorSession();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt-generator', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'create-session',
+        orderNo: 'PIKIN-20',
+        usdAmount: 2500,
+        paymentMode: 'Cash',
+        receiptNo: '0002001',
+      }),
+    }));
   });
 
   it('replaces generator ORDER NO with the full matched composite order from context', async () => {

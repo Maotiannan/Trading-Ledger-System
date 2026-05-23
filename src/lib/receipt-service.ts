@@ -25,6 +25,28 @@ function forbidden(message: string, detail?: unknown) {
   return createApiError({ code: 'FORBIDDEN', status: 403, message, detail });
 }
 
+function isReceiptNoUniqueError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; meta?: { target?: unknown } };
+  if (candidate.code !== 'P2002') return false;
+  const target = candidate.meta?.target;
+  return Array.isArray(target)
+    ? target.includes('receiptNo')
+    : String(target || '').includes('receiptNo');
+}
+
+function receiptNoConflict(receiptNo: string | null | undefined) {
+  const normalizedReceiptNo = receiptNo?.trim() || null;
+  return createApiError({
+    code: 'CONFLICT',
+    status: 409,
+    message: normalizedReceiptNo
+      ? `收据号 ${normalizedReceiptNo} 已存在，请换一个编号`
+      : '收据号已存在，请换一个编号',
+    detail: { receiptNo: normalizedReceiptNo },
+  });
+}
+
 function parseEditableDateValue(date: string | null | undefined): Date | null {
   if (date == null) {
     return null;
@@ -143,77 +165,85 @@ export async function createReceiptRecord(params: {
         })()
       : null);
 
-  const receipt = await runInTransaction(async (tx) => {
-    let orderId: string | null = matchedOrder?.orderId || null;
-    if (payload.isDeposit && effectiveOrderNo && !matchedOrder) {
-      orderId = await createDepositOrder(tx, {
-        orderNo: effectiveOrderNo,
-        usd,
-        customerId: customerResolution.customerId,
-        customerMark: customerResolution.customerMark,
-        customerName: customerResolution.customerName,
-        customerPhone: customerResolution.customerPhone,
-        customerCity: customerResolution.customerCity,
-        needsCustomerFix: customerResolution.needsCustomerFix,
-        currentUserId: currentUser.id,
-      });
-    }
-
-    if (!orderId && effectiveOrderNo) {
-      orderId = await createOrder(effectiveOrderNo, currentUser.id, tx);
-    }
-
-    const created = await tx.receipt.create({
-      data: {
-        receiptNo: receiptNo?.trim() || null,
-        date: effectiveDate,
-        tel: payload.tel || null,
-        usd,
-        invNo: effectiveInvNo,
-        orderNo: effectiveOrderNo,
-        payer: effectivePayer,
-        customerId: customerResolution.customerId,
-        customerMark: customerResolution.customerMark,
-        customerName: customerResolution.customerName,
-        customerPhone: customerResolution.customerPhone,
-        customerCity: customerResolution.customerCity,
-        needsCustomerFix: customerResolution.needsCustomerFix,
-        isDeposit: payload.isDeposit || false,
-        status: ReceiptStatus.SR_Received,
-        imageUrl: imagePath || null,
-        imageName: imageName || null,
-        orderId,
-        createdBy: currentUser.id,
-      },
-      include: {
-        creator: { select: { id: true, name: true, email: true } },
-      },
-    });
-
-    if (orderId) {
-      await tx.order.update({
-        where: { id: orderId },
-        data: {
+  let receipt;
+  try {
+    receipt = await runInTransaction(async (tx) => {
+      let orderId: string | null = matchedOrder?.orderId || null;
+      if (payload.isDeposit && effectiveOrderNo && !matchedOrder) {
+        orderId = await createDepositOrder(tx, {
+          orderNo: effectiveOrderNo,
+          usd,
           customerId: customerResolution.customerId,
           customerMark: customerResolution.customerMark,
           customerName: customerResolution.customerName,
           customerPhone: customerResolution.customerPhone,
           customerCity: customerResolution.customerCity,
           needsCustomerFix: customerResolution.needsCustomerFix,
+          currentUserId: currentUser.id,
+        });
+      }
+
+      if (!orderId && effectiveOrderNo) {
+        orderId = await createOrder(effectiveOrderNo, currentUser.id, tx);
+      }
+
+      const created = await tx.receipt.create({
+        data: {
+          receiptNo: receiptNo?.trim() || null,
+          date: effectiveDate,
+          tel: payload.tel || null,
+          usd,
+          invNo: effectiveInvNo,
+          orderNo: effectiveOrderNo,
+          payer: effectivePayer,
+          customerId: customerResolution.customerId,
+          customerMark: customerResolution.customerMark,
+          customerName: customerResolution.customerName,
+          customerPhone: customerResolution.customerPhone,
+          customerCity: customerResolution.customerCity,
+          needsCustomerFix: customerResolution.needsCustomerFix,
+          isDeposit: payload.isDeposit || false,
+          status: ReceiptStatus.SR_Received,
+          imageUrl: imagePath || null,
+          imageName: imageName || null,
+          orderId,
+          createdBy: currentUser.id,
+        },
+        include: {
+          creator: { select: { id: true, name: true, email: true } },
         },
       });
-    }
-    if (created.imageUrl) {
-      await attachUploadedAssetByPath({
-        client: tx,
-        path: created.imageUrl,
-        attachedType: UploadedAssetAttachmentType.RECEIPT,
-        attachedId: created.id,
-      });
-    }
 
-    return { created, orderId };
-  });
+      if (orderId) {
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            customerId: customerResolution.customerId,
+            customerMark: customerResolution.customerMark,
+            customerName: customerResolution.customerName,
+            customerPhone: customerResolution.customerPhone,
+            customerCity: customerResolution.customerCity,
+            needsCustomerFix: customerResolution.needsCustomerFix,
+          },
+        });
+      }
+      if (created.imageUrl) {
+        await attachUploadedAssetByPath({
+          client: tx,
+          path: created.imageUrl,
+          attachedType: UploadedAssetAttachmentType.RECEIPT,
+          attachedId: created.id,
+        });
+      }
+
+      return { created, orderId };
+    });
+  } catch (error) {
+    if (isReceiptNoUniqueError(error)) {
+      throw receiptNoConflict(receiptNo);
+    }
+    throw error;
+  }
 
   if (receipt.orderId) {
     await updateOrderBalance(receipt.orderId);
@@ -292,74 +322,82 @@ export async function updateReceiptRecord(params: {
   }
 
   const previousOrderId = existingReceipt.orderId || null;
-  const updated = await runInTransaction(async (tx) => {
-    const binding = await resolveReceiptEditBinding(tx, {
-      currentUserId: currentUser.id,
-      ownerIds: ownerVisibleIds,
-      orderNo: payload.orderNo,
-      invNo: payload.invNo,
-      isDeposit: existingReceipt.isDeposit,
-      customerId: existingReceipt.customerId,
-      customerMark: payload.customerMark || existingReceipt.customerMark,
-      customerName: existingReceipt.customerName,
-      customerPhone: existingReceipt.customerPhone,
-      customerCity: existingReceipt.customerCity,
-      needsCustomerFix: existingReceipt.needsCustomerFix,
-    });
+  let updated;
+  try {
+    updated = await runInTransaction(async (tx) => {
+      const binding = await resolveReceiptEditBinding(tx, {
+        currentUserId: currentUser.id,
+        ownerIds: ownerVisibleIds,
+        orderNo: payload.orderNo,
+        invNo: payload.invNo,
+        isDeposit: existingReceipt.isDeposit,
+        customerId: existingReceipt.customerId,
+        customerMark: payload.customerMark || existingReceipt.customerMark,
+        customerName: existingReceipt.customerName,
+        customerPhone: existingReceipt.customerPhone,
+        customerCity: existingReceipt.customerCity,
+        needsCustomerFix: existingReceipt.needsCustomerFix,
+      });
 
-    await tx.receiptHistory.create({
-      data: {
+      await tx.receiptHistory.create({
+        data: {
+          receiptId,
+          receiptNo: existingReceipt.receiptNo,
+          date: existingReceipt.date,
+          tel: existingReceipt.tel,
+          usd: existingReceipt.usd,
+          invNo: existingReceipt.invNo,
+          orderNo: existingReceipt.orderNo,
+          payer: existingReceipt.payer,
+          imageUrl: existingReceipt.imageUrl,
+          imageName: existingReceipt.imageName,
+          status: existingReceipt.status,
+          note: '重新识别前保存',
+          createdBy: currentUser.id,
+        },
+      });
+
+      const nextCustomerMark = payload.customerMark || null;
+      const matchedCustomer = binding.matchedCustomer && binding.matchedCustomer.customerId && !binding.matchedCustomer.needsCustomerFix
+        ? binding.matchedCustomer
+        : null;
+      const updatedReceipt = await tx.receipt.update({
+        where: { id: receiptId },
+        data: {
+          receiptNo: payload.receiptNo || null,
+          date: nextDate,
+          tel: payload.tel || null,
+          invNo: binding.invNo,
+          orderNo: binding.orderNo,
+          orderId: binding.orderId,
+          customerMark: nextCustomerMark,
+          payer: payload.payer || null,
+          ...(matchedCustomer
+            ? {
+                customerId: matchedCustomer.customerId,
+                customerName: matchedCustomer.customerName,
+                customerPhone: matchedCustomer.customerPhone,
+                customerCity: matchedCustomer.customerCity,
+                needsCustomerFix: false,
+              }
+            : {}),
+        },
+      });
+
+      await syncReceiptDetailItemsForBinding(tx, {
         receiptId,
-        receiptNo: existingReceipt.receiptNo,
-        date: existingReceipt.date,
-        tel: existingReceipt.tel,
-        usd: existingReceipt.usd,
-        invNo: existingReceipt.invNo,
-        orderNo: existingReceipt.orderNo,
-        payer: existingReceipt.payer,
-        imageUrl: existingReceipt.imageUrl,
-        imageName: existingReceipt.imageName,
-        status: existingReceipt.status,
-        note: '重新识别前保存',
-        createdBy: currentUser.id,
-      },
-    });
-
-    const nextCustomerMark = payload.customerMark || null;
-    const matchedCustomer = binding.matchedCustomer && binding.matchedCustomer.customerId && !binding.matchedCustomer.needsCustomerFix
-      ? binding.matchedCustomer
-      : null;
-    const updatedReceipt = await tx.receipt.update({
-      where: { id: receiptId },
-      data: {
-        receiptNo: payload.receiptNo || null,
-        date: nextDate,
-        tel: payload.tel || null,
-        invNo: binding.invNo,
         orderNo: binding.orderNo,
-        orderId: binding.orderId,
         customerMark: nextCustomerMark,
-        payer: payload.payer || null,
-        ...(matchedCustomer
-          ? {
-              customerId: matchedCustomer.customerId,
-              customerName: matchedCustomer.customerName,
-              customerPhone: matchedCustomer.customerPhone,
-              customerCity: matchedCustomer.customerCity,
-              needsCustomerFix: false,
-            }
-          : {}),
-      },
-    });
+      });
 
-    await syncReceiptDetailItemsForBinding(tx, {
-      receiptId,
-      orderNo: binding.orderNo,
-      customerMark: nextCustomerMark,
+      return updatedReceipt;
     });
-
-    return updatedReceipt;
-  });
+  } catch (error) {
+    if (isReceiptNoUniqueError(error)) {
+      throw receiptNoConflict(payload.receiptNo);
+    }
+    throw error;
+  }
 
   const nextOrderId = updated.orderId || null;
   if (previousOrderId !== nextOrderId) {

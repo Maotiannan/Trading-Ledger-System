@@ -35,9 +35,11 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.151`
-- 本次更新：`Payment Detail Management -> Create Payment Detail Directly` 的 `Receipts available to add` 列表已精简为只显示 `ORDER NO` 和收据金额。
-- 同批优化：可加入收据列表的搜索框改为按 `ORDER NO` 搜索，手机和桌面端继续保留可滚动选择区。
+- 当前版本：`1.0.152`
+- 本次更新：`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.`；打开弹窗时默认使用最近登记的 10 条收据中最大数字 + 1。
+- 同批修复：保存收据时如果 `Receipt No.` 重复，现在会提示“收据号已存在，请换一个编号”，不再泛化成 `Server error`。
+- 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 的 `Receipts available to add` 列表已精简为只显示 `ORDER NO` 和收据金额。
+- 上一版本：可加入收据列表的搜索框改为按 `ORDER NO` 搜索，手机和桌面端继续保留可滚动选择区。
 - 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 保留手动录入模式，并新增可勾选 `SR_Received` 收据直接加入同一张 Payment Detail。
 - 上一版本：勾选加入的收据行只读，提交时后端会再次校验收据仍为 `SR_Received`，避免弱网或多人操作时把已流转收据重复加入付款明细。
 - 上一版本：直接创建付款明细弹窗已适配手机和桌面，收据列表可搜索、可滚动，底部操作按钮不会被长列表挤出屏幕。

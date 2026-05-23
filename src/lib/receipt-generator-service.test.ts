@@ -142,8 +142,10 @@ describe('receipt-generator-service', () => {
       orderNo: 'Big Alpha-07',
       usdAmount: 2500,
       paymentMode: 'Transfer',
+      receiptNo: '0002001',
     });
 
+    expect(mockAllocateNextReceiptNo).toHaveBeenCalledWith(mockDb, { requestedReceiptNo: '0002001' });
     expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         receiptNo: '0001000',

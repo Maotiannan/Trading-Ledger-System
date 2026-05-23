@@ -19,4 +19,10 @@ describe('api-error-catalog', () => {
       translateApiErrorMessage('SWIFT_REJECT_TOLERANCE 不能小于 SWIFT_WARNING_TOLERANCE', 'en'),
     ).toBe('SWIFT_REJECT_TOLERANCE cannot be lower than SWIFT_WARNING_TOLERANCE');
   });
+
+  it('translates duplicate receipt number messages to english', () => {
+    expect(
+      translateApiErrorMessage('收据号 0001001 已存在，请换一个编号', 'en'),
+    ).toBe('Receipt No. 0001001 already exists, please choose another number');
+  });
 });

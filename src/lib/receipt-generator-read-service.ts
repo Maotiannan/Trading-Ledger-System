@@ -4,6 +4,7 @@ import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { createApiError } from '@/lib/api-error';
 import { buildReceiptGeneratorLayout } from '@/lib/receipt-generator-layout';
+import { getSuggestedNextReceiptNo } from '@/lib/receipt-number';
 import {
   getReceiptGeneratorCustomerCompanyName,
   getReceiptGeneratorCustomerName,
@@ -124,6 +125,15 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
       preview: receiptPreview,
     },
     message: '签名收据订单上下文已加载',
+  };
+}
+
+export async function getSuggestedReceiptGeneratorNumber(currentUser: CurrentUser) {
+  assertGeneratorRole(currentUser);
+  const receiptNo = await getSuggestedNextReceiptNo(db);
+  return {
+    data: { receiptNo },
+    message: '签名收据编号建议已加载',
   };
 }
 

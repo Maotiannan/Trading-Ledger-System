@@ -100,6 +100,11 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
 };
 
 const containsMessageMap: Array<[string, string]> = [
+  ['，请换一个编号', ', please choose another number'],
+  ['收据号', 'Receipt No.'],
+  ['请换一个编号', 'Please choose another number'],
+  ['只能填写数字', 'can only contain digits'],
+  ['自动分配失败', 'automatic allocation failed'],
   ['不能为空', 'cannot be empty'],
   ['不存在', 'does not exist'],
   ['已存在', 'already exists'],

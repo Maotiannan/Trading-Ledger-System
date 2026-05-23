@@ -8,6 +8,7 @@ import {
   finalizeReceiptGeneratorSession,
 } from '@/lib/receipt-generator-service';
 import {
+  getSuggestedReceiptGeneratorNumber,
   getOpenReceiptGeneratorSessionByReceipt,
   getReceiptGeneratorSession,
   lookupReceiptGeneratorOrderContext,
@@ -29,6 +30,11 @@ export const GET = withAuth(async (request, currentUser) => {
         searchParams.get('orderNo') || '',
         searchParams.get('usdAmount') ? Number(searchParams.get('usdAmount')) : undefined,
       );
+      return createApiSuccessResponse(result, request);
+    }
+
+    if (action === 'next-receipt-no') {
+      const result = await getSuggestedReceiptGeneratorNumber(currentUser);
       return createApiSuccessResponse(result, request);
     }
 
@@ -70,6 +76,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           orderNo: typeof body.orderNo === 'string' ? body.orderNo : '',
           usdAmount: Number(body.usdAmount),
           paymentMode: typeof body.paymentMode === 'string' ? body.paymentMode : null,
+          receiptNo: typeof body.receiptNo === 'string' ? body.receiptNo : null,
         });
         return createApiSuccessResponse(result, request);
       }

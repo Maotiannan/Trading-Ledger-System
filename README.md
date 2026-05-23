@@ -35,10 +35,12 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.150`
-- 本次更新：`Payment Detail Management -> Create Payment Detail Directly` 保留手动录入模式，并新增可勾选 `SR_Received` 收据直接加入同一张 Payment Detail。
-- 同批更新：勾选加入的收据行只读，提交时后端会再次校验收据仍为 `SR_Received`，避免弱网或多人操作时把已流转收据重复加入付款明细。
-- 同批优化：直接创建付款明细弹窗已适配手机和桌面，收据列表可搜索、可滚动，底部操作按钮不会被长列表挤出屏幕。
+- 当前版本：`1.0.151`
+- 本次更新：`Payment Detail Management -> Create Payment Detail Directly` 的 `Receipts available to add` 列表已精简为只显示 `ORDER NO` 和收据金额。
+- 同批优化：可加入收据列表的搜索框改为按 `ORDER NO` 搜索，手机和桌面端继续保留可滚动选择区。
+- 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 保留手动录入模式，并新增可勾选 `SR_Received` 收据直接加入同一张 Payment Detail。
+- 上一版本：勾选加入的收据行只读，提交时后端会再次校验收据仍为 `SR_Received`，避免弱网或多人操作时把已流转收据重复加入付款明细。
+- 上一版本：直接创建付款明细弹窗已适配手机和桌面，收据列表可搜索、可滚动，底部操作按钮不会被长列表挤出屏幕。
 - 上一版本：`Receipt Management` 右上角动作按钮顺序调整为 `Create Directly -> Generate Signed Receipt -> Upload Receipt`，仅调整视觉顺序，不改变权限与布局逻辑。
 - 本次更新：`Approval / 审批` 页面默认只显示待处理申请，每个审批模块每页 `5` 条；勾选 `ALL` 并点击“查询”后可查看该模块全部历史申请。
 - 同批更新：审批页 `Requested Values` 现在只显示实际被修改字段的“修改前 → 修改后”，不再把未变化字段整块堆出来。

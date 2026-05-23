@@ -47,12 +47,8 @@ export function DetailDirectCreateDialog({
     if (!keyword) return selectableReceipts;
     return selectableReceipts.filter((receipt) => {
       const haystack = [
-        receipt.receiptNo,
         receipt.order?.orderNo,
         receipt.orderNo,
-        receipt.order?.customerMark,
-        receipt.customerMark,
-        receipt.payer,
       ].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(keyword);
     });
@@ -67,7 +63,6 @@ export function DetailDirectCreateDialog({
   };
 
   const getReceiptOrderNo = (receipt: DetailDirectSelectableReceipt) => receipt.order?.orderNo || receipt.orderNo || '-';
-  const getReceiptMark = (receipt: DetailDirectSelectableReceipt) => receipt.order?.customerMark || receipt.customerMark || '-';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,7 +85,7 @@ export function DetailDirectCreateDialog({
               </div>
               <Input
                 className="sm:max-w-xs"
-                placeholder={tx('搜索收据号/单号/唛头/付款人', 'Search receipt/order/mark/payer')}
+                placeholder={tx('搜索单号', 'Search order no.')}
                 value={receiptSearch}
                 onChange={(event) => setReceiptSearch(event.target.value)}
               />
@@ -113,7 +108,7 @@ export function DetailDirectCreateDialog({
                 return (
                   <label
                     key={receipt.id}
-                    className="grid cursor-pointer gap-2 rounded-md border bg-background p-3 text-sm shadow-xs sm:grid-cols-[auto_1.2fr_1fr_1fr_1fr] sm:items-center"
+                    className="grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border bg-background p-3 text-sm shadow-xs"
                   >
                     <input
                       type="checkbox"
@@ -122,20 +117,10 @@ export function DetailDirectCreateDialog({
                       onChange={() => toggleReceipt(receipt.id)}
                     />
                     <div className="min-w-0">
-                      <div className="font-medium">{receipt.receiptNo || '-'}</div>
-                      <div className="text-xs text-muted-foreground">{receipt.date || '-'}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground">{tx('单号', 'Order')}</div>
                       <div className="truncate font-medium">{getReceiptOrderNo(receipt)}</div>
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-muted-foreground">{tx('唛头', 'Mark')}</div>
-                      <div className="truncate">{getReceiptMark(receipt)}</div>
-                    </div>
-                    <div className="min-w-0 sm:text-right">
+                    <div className="text-right">
                       <div className="font-semibold">{formatUsdAmount(receipt.usd)}</div>
-                      <div className="truncate text-xs text-muted-foreground">{receipt.payer || '-'}</div>
                     </div>
                   </label>
                 );

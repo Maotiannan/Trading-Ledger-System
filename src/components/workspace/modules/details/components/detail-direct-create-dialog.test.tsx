@@ -59,9 +59,11 @@ describe('DetailDirectCreateDialog', () => {
     );
 
     expect(screen.getByText('可加入的收据')).toBeInTheDocument();
-    expect(screen.getByText('0001001')).toBeInTheDocument();
     expect(screen.getByText('PIKIN-20')).toBeInTheDocument();
     expect(screen.getByText('$250')).toBeInTheDocument();
+    expect(screen.queryByText('0001001')).not.toBeInTheDocument();
+    expect(screen.queryByText('2026-05-23')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mamadou Dian Diallo "PIKIN"')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('单号')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText('选择收据 0001001'));

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
-import { formatUsdAmount } from '@/lib/display-format';
+import { formatUsdAmount, parseDisplayMoney } from '@/lib/display-format';
 import { Check, Plus } from 'lucide-react';
 import type { DetailDirectItemForm, DetailDirectSelectableReceipt } from '../types';
 
@@ -42,6 +42,15 @@ export function DetailDirectCreateDialog({
 }: DetailDirectCreateDialogProps) {
   const [receiptSearch, setReceiptSearch] = useState('');
   const selectedReceiptIdSet = useMemo(() => new Set(selectedReceiptIds), [selectedReceiptIds]);
+  const selectedReceiptTotal = useMemo(() => (
+    selectableReceipts.reduce((sum, receipt) => (
+      selectedReceiptIdSet.has(receipt.id) ? sum + (parseDisplayMoney(receipt.usd) || 0) : sum
+    ), 0)
+  ), [selectableReceipts, selectedReceiptIdSet]);
+  const manualItemsTotal = useMemo(() => (
+    directItems.reduce((sum, item) => sum + (parseDisplayMoney(item.amount) || 0), 0)
+  ), [directItems]);
+  const totalAmount = selectedReceiptTotal + manualItemsTotal;
   const visibleReceipts = useMemo(() => {
     const keyword = receiptSearch.trim().toLowerCase();
     if (!keyword) return selectableReceipts;
@@ -66,14 +75,14 @@ export function DetailDirectCreateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-hidden p-4 sm:max-w-5xl sm:p-6">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+        <DialogHeader className="shrink-0 border-b p-4 pr-10 sm:p-6 sm:pr-12">
           <DialogTitle>{tx('直接创建付款明细', 'Create Payment Detail Directly')}</DialogTitle>
           <DialogDescription>
             {tx('可勾选已收到的收据，也可以继续手动录入新明细行', 'Select received receipts or keep entering new detail rows manually')}
           </DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 space-y-4 overflow-y-auto py-2 pr-1">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
           <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} value={directDate} onChange={(e) => onDirectDateChange(e.target.value)} />
           <section className="rounded-lg border p-3">
             <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -154,12 +163,23 @@ export function DetailDirectCreateDialog({
           </Button>
           </section>
         </div>
-        <DialogFooter className="border-t pt-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{tx('取消', 'Cancel')}</Button>
-          <Button onClick={onSubmit}>
-            <Check className="h-4 w-4 mr-2" />
-            {tx('创建', 'Create')}
-          </Button>
+        <DialogFooter
+          data-testid="direct-create-footer"
+          className="sticky bottom-0 z-10 flex-col shrink-0 border-t bg-background/95 p-4 shadow-[0_-8px_16px_rgba(15,23,42,0.06)] backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:p-6"
+        >
+          <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2 text-sm sm:min-w-64 sm:flex-col sm:items-start sm:justify-center">
+            <span className="text-muted-foreground">{tx('总计', 'Total')}</span>
+            <span data-testid="direct-create-total-amount" className="text-lg font-semibold text-foreground">
+              {formatUsdAmount(totalAmount, '$0')}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{tx('取消', 'Cancel')}</Button>
+            <Button onClick={onSubmit}>
+              <Check className="h-4 w-4 mr-2" />
+              {tx('创建', 'Create')}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

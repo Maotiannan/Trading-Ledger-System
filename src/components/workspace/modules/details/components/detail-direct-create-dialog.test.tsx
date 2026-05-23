@@ -95,6 +95,36 @@ describe('DetailDirectCreateDialog', () => {
     );
 
     expect(screen.getByTestId('direct-create-receipt-options')).toHaveClass('max-h-72', 'overflow-y-auto');
+    expect(screen.getByTestId('direct-create-footer')).toHaveClass('sticky', 'bottom-0');
     expect(screen.getByRole('button', { name: '创建' })).toBeInTheDocument();
+  });
+
+  it('shows the total amount for selected receipts and manual rows near the footer', () => {
+    render(
+      <DetailDirectCreateDialog
+        open
+        locale="zh"
+        directDate="2026-05-23"
+        directItems={[
+          { mark: 'AMD', orderNo: 'AMD-01', amount: '1000' },
+          { mark: 'IBS', orderNo: 'IBS-01', amount: '$250.49' },
+        ]}
+        selectableReceipts={[
+          makeReceipt({ id: 'receipt-1', receiptNo: '0001001', usd: 250 }),
+          makeReceipt({ id: 'receipt-2', receiptNo: '0001002', usd: 500 }),
+        ]}
+        selectedReceiptIds={['receipt-1', 'receipt-2']}
+        selectableReceiptsLoading={false}
+        tx={tx}
+        onOpenChange={jest.fn()}
+        onDirectDateChange={jest.fn()}
+        onDirectItemsChange={jest.fn()}
+        onSelectedReceiptIdsChange={jest.fn()}
+        onSubmit={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('总计')).toBeInTheDocument();
+    expect(screen.getByTestId('direct-create-total-amount')).toHaveTextContent('$2,000');
   });
 });

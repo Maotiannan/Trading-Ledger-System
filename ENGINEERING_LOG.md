@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.153
+> 当前版本：v1.0.154
 > 最后更新：2026-05-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Create Payment Detail Directly` 移动端 footer 溢出修复：将 `DetailDirectCreateDialog` 改为 `header / scrollable body / sticky footer` 三段式，弹窗最大高度使用 `92dvh`，内容区独立滚动，底部操作区固定在弹窗底部并保持背景遮罩；新增总计栏，实时汇总已勾选 `SR_Received` 收据金额和手动新增明细金额，统一走 `formatUsdAmount/parseDisplayMoney` 金额格式化。补齐组件回归覆盖 sticky footer 与 total 展示 ✅ 2026-05-23
 
 - [x] 外部 agent 按 `ORDER NO` 批量查询客户资料：新增 `order-customer-lookup-service`，将财务订单精确匹配、`OrderAlias`、`/` 复合订单拆分和 `ORDER_NAME` 忽略空格推导封装为单一查询入口；新增 `POST /api/sync/customers/by-orders`，沿用 Excel ML Bearer token 和 `excelLookup` 限流，入参 `orderNos: string[]`，每条结果独立返回成功或错误，避免单个异常拖垮整批。`excel-ml-service` 同步改为调用该解析服务，避免 Excel 单字段查询和外部 agent 批量查询规则分叉；补齐 service、route、api-catalog、excel-ml 回归测试 ✅ 2026-05-23
 

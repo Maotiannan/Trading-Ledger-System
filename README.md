@@ -35,9 +35,11 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.153`
-- 本次更新：新增 `POST /api/sync/customers/by-orders`，外部 agent 可一次按多个 `ORDER NO` 查询客户资料。
-- 同批更新：该接口沿用 Excel ML token 鉴权，并复用系统当前的财务订单、复合订单和 `ORDER_NAME` 匹配规则。
+- 当前版本：`1.0.154`
+- 本次更新：`Create Payment Detail Directly` 弹窗手机端底部操作区固定可见，避免按钮被长列表挤出边框。
+- 同批更新：弹窗底部新增 `Total` 总计，实时汇总已勾选收据金额和手动新增明细金额。
+- 上一版本：新增 `POST /api/sync/customers/by-orders`，外部 agent 可一次按多个 `ORDER NO` 查询客户资料。
+- 上一版本：该接口沿用 Excel ML token 鉴权，并复用系统当前的财务订单、复合订单和 `ORDER_NAME` 匹配规则。
 - 上一版本：`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.`；打开弹窗时默认使用最近登记的 10 条收据中最大数字 + 1。
 - 上一版本：保存收据时如果 `Receipt No.` 重复，现在会提示“收据号已存在，请换一个编号”，不再泛化成 `Server error`。
 - 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 的 `Receipts available to add` 列表已精简为只显示 `ORDER NO` 和收据金额。

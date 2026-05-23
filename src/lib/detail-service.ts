@@ -108,17 +108,28 @@ async function processDetailItems(params: {
   imageName: string | null;
   autoCreateNote: string;
   receiptMatchOptions?: FindMatchingReceiptOptions;
+  requiredExplicitReceiptStatus?: ReceiptStatus;
   tx: DbTransactionClient;
 }): Promise<{ items: DetailProcessedItem[]; touchedOrderIds: string[] }> {
   const processedItems: DetailProcessedItem[] = [];
   const touchedOrderIds = new Set<string>();
+  const usedReceiptIds = new Set<string>();
 
   for (const item of params.items) {
     let receiptId = item.receiptId;
 
     if (receiptId) {
+      if (usedReceiptIds.has(receiptId)) {
+        throw badRequest('同一张收据不能重复加入付款明细', { receiptId });
+      }
       try {
         const receipt = await getAccessibleReceipt(receiptId, params.currentUser, params.tx);
+        if (params.requiredExplicitReceiptStatus && receipt.status !== params.requiredExplicitReceiptStatus) {
+          throw badRequest('只有SR_Received状态的收据可以加入新建付款明细', {
+            receiptId,
+            status: receipt.status,
+          });
+        }
         await maybeAttachReceiptImage(params.tx, receiptId, receipt, params.imagePath, params.imageName);
       } catch (error) {
         if (isApiError(error) && error.code === 'RESOURCE_NOT_FOUND' && item.orderNo) {
@@ -132,6 +143,9 @@ async function processDetailItems(params: {
     if (!receiptId && item.orderNo) {
       const autoMatchedReceiptId = await findMatchingReceipt(item.orderNo, item.amount, params.receiptMatchOptions);
       if (autoMatchedReceiptId) {
+        if (usedReceiptIds.has(autoMatchedReceiptId)) {
+          throw badRequest('同一张收据不能重复加入付款明细，请删除重复手动行', { receiptId: autoMatchedReceiptId });
+        }
         const matchedReceipt = await getAccessibleReceipt(autoMatchedReceiptId, params.currentUser, params.tx);
         receiptId = autoMatchedReceiptId;
         await maybeAttachReceiptImage(params.tx, receiptId, matchedReceipt, params.imagePath, params.imageName);
@@ -181,6 +195,9 @@ async function processDetailItems(params: {
       amount: item.amount,
       receiptId,
     });
+    if (receiptId) {
+      usedReceiptIds.add(receiptId);
+    }
   }
 
   return { items: processedItems, touchedOrderIds: Array.from(touchedOrderIds) };
@@ -328,6 +345,7 @@ export async function createDetailRecord(params: {
       imagePath: imagePath || null,
       imageName: imageName || null,
       autoCreateNote: mode === 'direct-create' ? '由付款明细直接创建' : '由付款明细自动创建',
+      requiredExplicitReceiptStatus: mode === 'direct-create' ? ReceiptStatus.SR_Received : undefined,
       tx,
     });
     const agentId = await resolveAccessiblePaymentAgentId(currentUser, payload.agentId);

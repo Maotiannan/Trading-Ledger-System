@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
 import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
-import type { DetailDirectItemForm, DetailOcrResult, DetailOcrUploadStatus } from '../types';
+import type { DetailDirectItemForm, DetailDirectSelectableReceipt, DetailOcrResult, DetailOcrUploadStatus } from '../types';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 
 export type DetailActionText = (zh: string, en: string) => string;
@@ -18,6 +18,7 @@ export type DetailActionDeps = {
   savedImagePath: { path: string; name: string } | null;
   selectedAgentId?: string;
   directDate: string;
+  directSelectedReceipts?: DetailDirectSelectableReceipt[];
   directItems: DetailDirectItemForm[];
   setOcrResult: (value: DetailOcrResult | null) => void;
   setImagePreview: (value: string | null) => void;
@@ -41,6 +42,7 @@ export function useDetailActions({
   savedImagePath,
   selectedAgentId,
   directDate,
+  directSelectedReceipts = [],
   directItems,
   setOcrResult,
   setImagePreview,
@@ -329,13 +331,25 @@ export function useDetailActions({
   const handleDirectCreate = async () => {
     setError(null);
     try {
-      const payloadItems = directItems
+      const selectedReceiptItems = directSelectedReceipts.map((receipt) => ({
+        mark: receipt.order?.customerMark || receipt.customerMark || null,
+        orderNo: receipt.order?.orderNo || receipt.orderNo || null,
+        amount: Number(receipt.usd),
+        receiptId: receipt.id,
+      }));
+      const manualItems = directItems
         .filter((item) => item.amount && Number(item.amount) > 0)
         .map((item) => ({
           mark: item.mark || null,
           orderNo: item.orderNo || null,
           amount: Number(item.amount),
         }));
+      const payloadItems = [...selectedReceiptItems, ...manualItems];
+
+      if (payloadItems.length === 0) {
+        setError(tx('请选择收据或填写至少一条有效明细', 'Select receipts or enter at least one valid detail row.'));
+        return;
+      }
 
       const result = await apiCall('detail', {
         method: 'POST',

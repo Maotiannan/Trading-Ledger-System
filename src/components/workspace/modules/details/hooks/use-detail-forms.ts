@@ -17,6 +17,7 @@ export function useDetailForms() {
   const [ocrUploadMessage, setOcrUploadMessage] = useState<string | null>(null);
   const [ocrUploadProgress, setOcrUploadProgress] = useState<number | null>(null);
   const [directDate, setDirectDate] = useState('');
+  const [directSelectedReceiptIds, setDirectSelectedReceiptIds] = useState<string[]>([]);
   const [directItems, setDirectItems] = useState<DetailDirectItemForm[]>([{ ...EMPTY_DETAIL_DIRECT_ITEM }]);
   const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
   const [viewingImage, setViewingImage] = useState<{ url: string; name: string } | null>(null);
@@ -45,6 +46,9 @@ export function useDetailForms() {
 
   const handleShowDirectCreateChange = (open: boolean) => {
     setShowDirectCreate(open);
+    if (!open) {
+      setDirectSelectedReceiptIds([]);
+    }
   };
 
   const toggleDetail = (detailId: string) => {
@@ -61,6 +65,7 @@ export function useDetailForms() {
 
   const resetDirectForm = () => {
     setDirectDate('');
+    setDirectSelectedReceiptIds([]);
     setDirectItems([{ ...EMPTY_DETAIL_DIRECT_ITEM }]);
   };
 
@@ -87,6 +92,8 @@ export function useDetailForms() {
     setOcrUploadProgress,
     directDate,
     setDirectDate,
+    directSelectedReceiptIds,
+    setDirectSelectedReceiptIds,
     directItems,
     setDirectItems,
     expandedDetails,

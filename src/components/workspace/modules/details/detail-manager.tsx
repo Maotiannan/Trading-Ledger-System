@@ -12,6 +12,7 @@ import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/resp
 import {
   apiCall,
   getDisplayImageUrl,
+  getErrorMessage,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
   useLatestRequestGuard,
@@ -27,7 +28,7 @@ import {
 } from './components';
 import { useDetailActions, useDetailForms } from './hooks';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
-import type { PaymentAgentSummary } from './types';
+import type { DetailDirectSelectableReceipt, PaymentAgentSummary } from './types';
 import { Building2, Plus, Upload } from 'lucide-react';
 
 export function DetailManager() {
@@ -45,6 +46,8 @@ export function DetailManager() {
   const [editLinkedReceiptLabels, setEditLinkedReceiptLabels] = useState<string[]>([]);
   const [agents, setAgents] = useState<PaymentAgentSummary[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  const [directSelectableReceipts, setDirectSelectableReceipts] = useState<DetailDirectSelectableReceipt[]>([]);
+  const [directSelectableReceiptsLoading, setDirectSelectableReceiptsLoading] = useState(false);
   const [editForm, setEditForm] = useState<DetailEditablePatch>({
     date: null,
     agentId: null,
@@ -74,6 +77,8 @@ export function DetailManager() {
     setOcrUploadProgress,
     directDate,
     setDirectDate,
+    directSelectedReceiptIds,
+    setDirectSelectedReceiptIds,
     directItems,
     setDirectItems,
     expandedDetails,
@@ -85,6 +90,7 @@ export function DetailManager() {
     resetDirectForm,
   } = useDetailForms();
   const detailRequestGuard = useLatestRequestGuard();
+  const directReceiptRequestGuard = useLatestRequestGuard();
   const editPreviewTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const loadAgents = useCallback(async () => {
@@ -98,6 +104,31 @@ export function DetailManager() {
       setAgentsLoading(false);
     }
   }, []);
+
+  const loadDirectSelectableReceipts = useCallback(async () => {
+    const requestToken = directReceiptRequestGuard.nextToken();
+    setDirectSelectableReceiptsLoading(true);
+    try {
+      const result = await apiCall('receipt?status=SR_Received');
+      if (!directReceiptRequestGuard.isLatest(requestToken)) return;
+      if (result.success && Array.isArray(result.data)) {
+        setDirectSelectableReceipts(
+          (result.data as DetailDirectSelectableReceipt[]).filter((receipt) => receipt.status === 'SR_Received')
+        );
+      } else {
+        setDirectSelectableReceipts([]);
+        setError(getErrorMessage(result, tx('加载可加入收据失败', 'Failed to load selectable receipts')));
+      }
+    } catch (error) {
+      if (!directReceiptRequestGuard.isLatest(requestToken)) return;
+      setDirectSelectableReceipts([]);
+      setError(getErrorMessage(error, tx('加载可加入收据失败', 'Failed to load selectable receipts')));
+    } finally {
+      if (directReceiptRequestGuard.isLatest(requestToken)) {
+        setDirectSelectableReceiptsLoading(false);
+      }
+    }
+  }, [directReceiptRequestGuard, tx, setError]);
 
   const loadDetails = useCallback(async () => {
     const requestToken = detailRequestGuard.nextToken();
@@ -133,6 +164,16 @@ export function DetailManager() {
     void loadAgents();
   }, [loadAgents]);
 
+  useEffect(() => {
+    if (!showDirectCreate) {
+      setDirectSelectableReceipts([]);
+      return;
+    }
+    void loadDirectSelectableReceipts();
+  }, [loadDirectSelectableReceipts, showDirectCreate]);
+
+  const directSelectedReceipts = directSelectableReceipts.filter((receipt) => directSelectedReceiptIds.includes(receipt.id));
+
   const {
     uploading,
     submitting,
@@ -150,6 +191,7 @@ export function DetailManager() {
     savedImagePath,
     selectedAgentId,
     directDate,
+    directSelectedReceipts,
     directItems,
     setOcrResult,
     setImagePreview,
@@ -423,10 +465,14 @@ export function DetailManager() {
         locale={locale}
         directDate={directDate}
         directItems={directItems}
+        selectableReceipts={directSelectableReceipts}
+        selectedReceiptIds={directSelectedReceiptIds}
+        selectableReceiptsLoading={directSelectableReceiptsLoading}
         tx={tx}
         onOpenChange={handleShowDirectCreateChange}
         onDirectDateChange={setDirectDate}
         onDirectItemsChange={setDirectItems}
+        onSelectedReceiptIdsChange={setDirectSelectedReceiptIds}
         onSubmit={handleDirectCreate}
       />
 

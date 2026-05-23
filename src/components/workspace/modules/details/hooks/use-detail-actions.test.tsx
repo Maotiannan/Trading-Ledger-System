@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useDetailActions } from './use-detail-actions';
 import { apiCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import { uploadBusinessImage } from '@/components/workspace/modules/shared/business-image-upload';
+import type { Receipt } from '@/lib/store';
 import type { DetailOcrUploadStatus } from '../types';
 
 jest.mock('@/components/workspace/shared', () => ({
@@ -91,6 +92,7 @@ describe('useDetailActions', () => {
   });
 
   function createDeps(overrides: Partial<Parameters<typeof useDetailActions>[0]> = {}) {
+    const directSelectedReceipts: Receipt[] = [];
     return {
       tx,
       loadDetails,
@@ -99,6 +101,7 @@ describe('useDetailActions', () => {
       savedImagePath: null,
       selectedAgentId: 'agent-1',
       directDate: '2026-03-11',
+      directSelectedReceipts,
       directItems: [
         { mark: 'MAB-1', orderNo: 'MAB-1-01', amount: '120' },
         { mark: '', orderNo: '', amount: '' },
@@ -643,6 +646,59 @@ describe('useDetailActions', () => {
         action: 'direct-create',
         date: '2026-03-11',
         items: [{ mark: 'MAB-1', orderNo: 'MAB-1-01', amount: 120 }],
+      }),
+    }));
+    expect(handleShowDirectCreateChange).toHaveBeenCalledWith(false);
+    expect(resetDirectForm).toHaveBeenCalled();
+    expect(loadDetails).toHaveBeenCalled();
+  });
+
+  it('creates detail directly with selected SR receipts and manual rows in one payload', async () => {
+    mockApiCall.mockResolvedValue({ success: true });
+    const selectedReceipt = {
+      id: 'receipt-selected-1',
+      receiptNo: '0001001',
+      date: '2026-05-23',
+      tel: null,
+      usd: 250,
+      invNo: 'INV-1',
+      orderNo: 'PIKIN-20',
+      payer: 'Mamadou Dian Diallo "PIKIN"',
+      customerMark: 'PIKIN',
+      customerName: 'Mamadou Dian Diallo',
+      status: 'SR_Received',
+      imageUrl: null,
+      isDeposit: false,
+      isMerged: false,
+      note: null,
+      createdAt: '2026-05-23T00:00:00.000Z',
+      creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      order: {
+        id: 'order-1',
+        orderNo: 'PIKIN-20',
+        amount: 500,
+        orderBalance: 250,
+        customerMark: 'PIKIN',
+        customerName: 'Mamadou Dian Diallo',
+      },
+    } satisfies Receipt;
+    const { result } = renderHook(() => useDetailActions(createDeps({
+      directSelectedReceipts: [selectedReceipt],
+    })));
+
+    await act(async () => {
+      await result.current.handleDirectCreate();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('detail', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'direct-create',
+        date: '2026-03-11',
+        items: [
+          { mark: 'PIKIN', orderNo: 'PIKIN-20', amount: 250, receiptId: 'receipt-selected-1' },
+          { mark: 'MAB-1', orderNo: 'MAB-1-01', amount: 120 },
+        ],
       }),
     }));
     expect(handleShowDirectCreateChange).toHaveBeenCalledWith(false);

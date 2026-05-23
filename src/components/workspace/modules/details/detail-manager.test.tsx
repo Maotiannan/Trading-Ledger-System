@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DetailManager } from './detail-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl';
 import { useDetailActions, useDetailForms } from './hooks';
 import type { DetailListProps } from './components/detail-list';
 import type { DetailEditDialogProps } from './components/detail-edit-dialog';
+import type { DetailDirectCreateDialogProps } from './components/detail-direct-create-dialog';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(async () => ({ success: true, data: [] })),
@@ -30,7 +31,10 @@ jest.mock('./hooks', () => ({
 }));
 
 jest.mock('./components', () => ({
-  DetailDirectCreateDialog: () => null,
+  DetailDirectCreateDialog: (props: DetailDirectCreateDialogProps) => {
+    (globalThis as { __detailDirectCreateDialogProps?: DetailDirectCreateDialogProps }).__detailDirectCreateDialogProps = props;
+    return null;
+  },
   DetailEditDialog: (props: DetailEditDialogProps) => {
     (globalThis as { __detailEditDialogProps?: DetailEditDialogProps }).__detailEditDialogProps = props;
     return null;
@@ -56,6 +60,7 @@ describe('DetailManager', () => {
   beforeEach(() => {
     delete (globalThis as { __detailListProps?: DetailListProps }).__detailListProps;
     delete (globalThis as { __detailEditDialogProps?: DetailEditDialogProps }).__detailEditDialogProps;
+    delete (globalThis as { __detailDirectCreateDialogProps?: DetailDirectCreateDialogProps }).__detailDirectCreateDialogProps;
     mockApiCall.mockClear();
     mockUseLatestRequestGuard.mockReturnValue({ nextToken: jest.fn(() => 1), isLatest: jest.fn(() => true) });
     mockUseUiText.mockReturnValue((zh: string) => zh);
@@ -86,6 +91,8 @@ describe('DetailManager', () => {
       setOcrUploadProgress: jest.fn(),
       directDate: '2026-05-05',
       setDirectDate: jest.fn(),
+      directSelectedReceiptIds: [],
+      setDirectSelectedReceiptIds: jest.fn(),
       directItems: [{ mark: 'MAB-1', orderNo: 'MAB-1-01', amount: '120' }],
       setDirectItems: jest.fn(),
       expandedDetails: new Set(),
@@ -226,5 +233,88 @@ describe('DetailManager', () => {
     fireEvent.click(screen.getByRole('button', { name: '筛选' }));
 
     expect(screen.getByTestId('detail-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
+  });
+
+  it('loads SR_Received receipts when direct create opens and passes them into the dialog', async () => {
+    mockUseDetailForms.mockReturnValue({
+      showUpload: false,
+      showDirectCreate: true,
+      ocrResult: null,
+      setOcrResult: jest.fn(),
+      imagePreview: null,
+      setImagePreview: jest.fn(),
+      selectedFile: null,
+      setSelectedFile: jest.fn(),
+      error: null,
+      setError: jest.fn(),
+      savedImagePath: null,
+      setSavedImagePath: jest.fn(),
+      ocrUploadStatus: 'idle',
+      setOcrUploadStatus: jest.fn(),
+      ocrUploadMessage: null,
+      setOcrUploadMessage: jest.fn(),
+      ocrUploadProgress: null,
+      setOcrUploadProgress: jest.fn(),
+      directDate: '2026-05-05',
+      setDirectDate: jest.fn(),
+      directSelectedReceiptIds: ['receipt-1'],
+      setDirectSelectedReceiptIds: jest.fn(),
+      directItems: [{ mark: 'MAB-1', orderNo: 'MAB-1-01', amount: '120' }],
+      setDirectItems: jest.fn(),
+      expandedDetails: new Set(),
+      viewingImage: null,
+      setViewingImage: jest.fn(),
+      handleShowUploadChange: jest.fn(),
+      handleShowDirectCreateChange: jest.fn(),
+      toggleDetail: jest.fn(),
+      resetDirectForm: jest.fn(),
+    });
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'receipt?status=SR_Received') {
+        return {
+          success: true,
+          data: [
+            {
+              id: 'receipt-1',
+              receiptNo: '0001001',
+              date: '2026-05-23',
+              usd: 250,
+              orderNo: 'PIKIN-20',
+              payer: 'Mamadou Dian Diallo "PIKIN"',
+              customerMark: 'PIKIN',
+              status: 'SR_Received',
+              order: { orderNo: 'PIKIN-20', customerMark: 'PIKIN' },
+            },
+            {
+              id: 'receipt-waiting',
+              receiptNo: '0001002',
+              date: '2026-05-23',
+              usd: 100,
+              orderNo: 'OLD-01',
+              payer: 'Old',
+              customerMark: 'OLD',
+              status: 'Waiting_SWIFT',
+            },
+          ],
+        };
+      }
+      return { success: true, data: [] };
+    });
+
+    await act(async () => {
+      render(<DetailManager />);
+    });
+
+    await waitFor(() => {
+      expect(mockApiCall).toHaveBeenCalledWith('receipt?status=SR_Received');
+    });
+
+    const directCreateProps = (globalThis as { __detailDirectCreateDialogProps?: DetailDirectCreateDialogProps }).__detailDirectCreateDialogProps;
+    expect(directCreateProps?.selectableReceipts).toEqual([
+      expect.objectContaining({ id: 'receipt-1', status: 'SR_Received' }),
+    ]);
+    expect(mockUseDetailActions).toHaveBeenCalledWith(expect.objectContaining({
+      directSelectedReceipts: [expect.objectContaining({ id: 'receipt-1' })],
+    }));
   });
 });

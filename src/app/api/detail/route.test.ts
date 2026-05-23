@@ -267,6 +267,41 @@ describe('detail route edit-approval actions', () => {
     expect(json.success).toBe(true);
   });
 
+  it('passes selected receipt ids through direct-create payloads', async () => {
+    mockCreateDetailRecord.mockResolvedValueOnce({
+      data: { id: 'detail-direct-1' },
+      message: '付款明细已直接创建',
+    });
+
+    const response = await POST(buildJsonRequest({
+      action: 'direct-create',
+      date: '2026-05-23',
+      items: [
+        { mark: 'PIKIN', orderNo: 'PIKIN-20', amount: 250, receiptId: 'receipt-selected-1' },
+        { mark: 'MAB', orderNo: 'MAB-1-01', amount: 120 },
+      ],
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockCreateDetailRecord).toHaveBeenCalledWith(expect.objectContaining({
+      currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
+      payload: {
+        agentId: null,
+        date: '2026-05-23',
+        items: [
+          { mark: 'PIKIN', orderNo: 'PIKIN-20', amount: 250, receiptId: 'receipt-selected-1', matchedReceiptId: null },
+          { mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receiptId: null, matchedReceiptId: null },
+        ],
+      },
+      imagePath: null,
+      imageName: null,
+      mode: 'direct-create',
+    }));
+    expect(json.success).toBe(true);
+    expect(json.message).toBe('付款明细已直接创建');
+  });
+
   it('submits review-edit through the detail edit review service', async () => {
     mockReviewDetailEdit.mockResolvedValueOnce({ message: '付款明细修改申请已通过' });
 

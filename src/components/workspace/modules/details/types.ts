@@ -4,6 +4,23 @@ export type DetailDirectItemForm = {
   amount: string;
 };
 
+export type DetailDirectSelectableReceipt = {
+  id: string;
+  receiptNo: string | null;
+  date: string | null;
+  usd: number;
+  orderNo: string | null;
+  payer: string | null;
+  customerMark?: string | null;
+  customerName?: string | null;
+  status: string;
+  order?: {
+    orderNo?: string | null;
+    customerMark?: string | null;
+    customerName?: string | null;
+  } | null;
+};
+
 export type DetailImageUploadStatus = 'idle' | 'compressing' | 'uploading' | 'saving' | 'success' | 'failed';
 
 export type DetailOcrUploadStatus = DetailImageUploadStatus;

@@ -169,6 +169,32 @@ describe('detail-service', () => {
     }));
   });
 
+  it('rejects explicit receipt selection during direct create when receipt is no longer SR_Received', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-waiting',
+      createdBy: 'sales-1',
+      imageUrl: null,
+      imageName: null,
+      status: ReceiptStatus.Waiting_SWIFT,
+    });
+
+    await expect(createDetailRecord({
+      currentUser: makeUser(),
+      payload: {
+        agentId: null,
+        date: null,
+        items: [{ mark: 'IB', orderNo: 'IB-1', amount: 100, receiptId: 'receipt-waiting', matchedReceiptId: null }],
+      },
+      mode: 'direct-create',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: '只有SR_Received状态的收据可以加入新建付款明细',
+    });
+
+    expect(mockDb.detail.create).not.toHaveBeenCalled();
+    expect(mockDb.receipt.updateMany).not.toHaveBeenCalled();
+  });
+
   it('aborts detail create before post-transaction work when attach fails', async () => {
     mockFindMatchingReceipt.mockResolvedValueOnce(null);
     mockFindOrCreateOrder.mockResolvedValueOnce('order-asset');

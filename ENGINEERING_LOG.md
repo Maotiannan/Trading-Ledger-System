@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.149
-> 最后更新：2026-05-20
+> 当前版本：v1.0.150
+> 最后更新：2026-05-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Create Payment Detail Directly` 增加 `SR_Received` 收据直选能力：打开弹窗时加载当前账号可见的 `SR_Received` 收据，前端以只读勾选行合并到 direct-create payload，手动新增行保留；后端 `createDetailRecord` 对显式 `receiptId` 再次校验状态仍为 `SR_Received`，并阻止同一收据重复加入同一张付款明细；补齐 dialog / manager / hook / service 回归测试 ✅ 2026-05-23
 
 - [x] `Receipt Management` 顶部右侧动作按钮顺序收口为 `Create Directly -> Generate Signed Receipt -> Upload Receipt`，仅调整视觉排序，不改变权限、弹窗或数据逻辑 ✅ 2026-05-20
 

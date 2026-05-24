@@ -191,6 +191,18 @@ describe('detail-export-image', () => {
     expect(svg).toContain('data:image/png;base64,');
   });
 
+  it('renders Deposit with the same blue badge styling as Initial', () => {
+    const svg = buildDetailExportSvg({
+      ...viewModel,
+      rows: [
+        { index: 1, mark: 'DEP', orderNo: 'DEP-01', type: 'Deposit', amount: 500 },
+      ],
+    });
+
+    expect(svg).toContain('width="56" height="21" rx="4" fill="#eaedfa"');
+    expect(svg).toContain('font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="#415cc3">Deposit</text>');
+  });
+
   it('renders a readable jpeg buffer from the export layout', async () => {
     const jpeg = await renderDetailExportJpeg(viewModel);
     const metadata = await sharp(jpeg).metadata();

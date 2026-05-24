@@ -17,8 +17,7 @@ import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
-import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
-import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
+import { ensureDetailPreviewImage, regenerateDetailPreviewImage } from '@/lib/detail-image-assets';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
@@ -180,7 +179,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         headers: {
           'Content-Type': previewImage.mimeType,
           'Content-Disposition': `inline; filename=\"${encodeURIComponent(previewImage.name)}\"`,
-          'Cache-Control': 'private, max-age=3600',
+          'Cache-Control': 'no-store',
         },
       });
     }
@@ -201,28 +200,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           id: detailId,
           ...buildDetailVisibilityWhere(Array.from(scope.ownerVisibleIds)),
         },
-        include: {
-          agent: true,
-          creator: { select: { id: true, name: true, email: true } },
-          items: {
-            include: {
-              receipt: {
-                select: {
-                  id: true,
-                  orderNo: true,
-                  orderId: true,
-                  isDeposit: true,
-                  createdAt: true,
-                },
-              },
-            },
-          },
-          swift: {
-            select: {
-              status: true,
-            },
-          },
-        },
+        select: { id: true },
       });
 
       if (!detail) {
@@ -233,14 +211,13 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           detail: { detailId },
         });
       }
-      const exportViewModel = await buildDetailExportViewModel(detail);
-      const buffer = await renderDetailExportJpeg(exportViewModel);
-      const fileDate = detail.date ? new Date(detail.date).toISOString().slice(0, 10) : 'undated';
+      const exportImage = await regenerateDetailPreviewImage(detail.id, { includeBuffer: true });
+      const buffer = exportImage.buffer ?? await readFile(resolveUploadedAssetAbsolutePath(exportImage.path));
       return new NextResponse(new Uint8Array(buffer), {
         status: 200,
         headers: {
-          'Content-Type': 'image/jpeg',
-          'Content-Disposition': `attachment; filename=\"payment-detail-${fileDate}-${detail.id}.jpg\"`,
+          'Content-Type': exportImage.mimeType,
+          'Content-Disposition': `attachment; filename=\"${encodeURIComponent(exportImage.name)}\"`,
           'Cache-Control': 'no-store',
         },
       });

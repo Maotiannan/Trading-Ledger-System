@@ -35,9 +35,11 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.160`
-- 本次更新：`Payment Detail Management` 的 `Export Pic` 图片中，首笔付款如果关联的是定金收据，会在 `TYPE` 列显示 `Deposit`；非定金首笔仍显示 `Initial`。
-- 本次更新：付款明细导出图右上角日期改为浅蓝色；过长 `ORDER NO` 会在本列内自动换行，避免遮挡 `TYPE / AMOUNT`。
+- 当前版本：`1.0.161`
+- 本次更新：`Payment Detail Management` 的 `Export Pic` 图片中，`Deposit` 现在和 `Initial` 一样使用蓝色文字与浅蓝底色。
+- 本次更新：每次点击 `Export Pic` 下载付款明细图片时，系统都会重新生成图片并覆盖服务器端小眼睛预览图，避免继续看到旧图。
+- 上一版本：`Payment Detail Management` 的 `Export Pic` 图片中，首笔付款如果关联的是定金收据，会在 `TYPE` 列显示 `Deposit`；非定金首笔仍显示 `Initial`。
+- 上一版本：付款明细导出图右上角日期改为浅蓝色；过长 `ORDER NO` 会在本列内自动换行，避免遮挡 `TYPE / AMOUNT`。
 - 上一版本：`Generate Signed Receipt` 的收据号重新从 `0010000` 起按 7 位编号递增，由后端事务内原子分配；弹窗里的编号只作预览，不再允许手动改号，也不再使用“最近 10 条最大编号 +1”的规则。
 - 上一版本：`Payment Detail Management` 的小眼睛现在对所有付款明细可用；没有上传原图的明细会自动生成并绑定 `Export Pic` 图片，有上传原图的明细会按“金额 + 日期 + 付款代理”统一命名。
 - 上一版本：`Receipt Management` 中 `SIGNING_PENDING` 待签名收据现在允许创建者和管理员点击删除，但仍统一进入删除审批通道，不会绕过审批直接删除。

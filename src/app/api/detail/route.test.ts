@@ -72,6 +72,7 @@ jest.mock('@/lib/detail-export-image', () => ({
 
 jest.mock('@/lib/detail-image-assets', () => ({
   ensureDetailPreviewImage: jest.fn(),
+  regenerateDetailPreviewImage: jest.fn(),
 }));
 
 jest.mock('@/lib/detail-service', () => ({
@@ -96,7 +97,7 @@ jest.mock('@/lib/invoice-read-service', () => ({
 import { db } from '@/lib/db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
-import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
+import { ensureDetailPreviewImage, regenerateDetailPreviewImage } from '@/lib/detail-image-assets';
 import { GET, POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
@@ -116,6 +117,7 @@ const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockBuildDetailExportViewModel = buildDetailExportViewModel as jest.Mock;
 const mockRenderDetailExportJpeg = renderDetailExportJpeg as jest.Mock;
 const mockEnsureDetailPreviewImage = ensureDetailPreviewImage as jest.Mock;
+const mockRegenerateDetailPreviewImage = regenerateDetailPreviewImage as jest.Mock;
 const mockCreateDetailRecord = createDetailRecord as jest.Mock;
 const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
 const mockReviewDetailEdit = reviewDetailEdit as jest.Mock;
@@ -391,25 +393,17 @@ describe('detail route edit-approval actions', () => {
     }));
   });
 
-  it('exports direct-created payment detail pictures through the export-pic action', async () => {
+  it('regenerates and persists the preview image when exporting payment detail pictures', async () => {
     mockDb.detail.findFirst.mockResolvedValueOnce({
       id: 'detail-1',
-      sourceMode: 'DIRECT',
-      date: '2026-05-05T00:00:00.000Z',
-      items: [{ id: 'item-1', mark: 'MAB', orderNo: 'MAB-1-01', amount: 120, receipt: { orderNo: 'MAB-1-01', orderId: 'order-1' } }],
-      creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
-      agent: { companyName: 'Mitty Group' },
-      swift: { status: 'RECEIVED' },
-    });
-    mockBuildDetailExportViewModel.mockResolvedValueOnce({
-      dateLabel: '05 / 05 / 2026',
-      totalAmount: 120,
-      transactionCount: 1,
-      footerAgentLabel: 'Mitty Group',
-      rows: [{ index: 1, mark: 'MAB', orderNo: 'MAB-1-01', type: 'Std', amount: 120 }],
     });
     const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
-    mockRenderDetailExportJpeg.mockResolvedValueOnce(jpeg);
+    mockRegenerateDetailPreviewImage.mockResolvedValueOnce({
+      path: '/upload/images/details/ocr/payment-detail_120_2026-05-05_Mitty_Group.jpg',
+      name: 'payment-detail_120_2026-05-05_Mitty_Group.jpg',
+      mimeType: 'image/jpeg',
+      buffer: jpeg,
+    });
 
     const response = await GET(buildGetRequest('https://example.com/api/detail?action=export-pic&detailId=detail-1'));
 
@@ -417,10 +411,11 @@ describe('detail route edit-approval actions', () => {
     expect(mockDb.detail.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ id: 'detail-1' }),
     }));
-    expect(mockBuildDetailExportViewModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
-    expect(mockRenderDetailExportJpeg).toHaveBeenCalledWith(expect.objectContaining({ footerAgentLabel: 'Mitty Group' }));
+    expect(mockRegenerateDetailPreviewImage).toHaveBeenCalledWith('detail-1', { includeBuffer: true });
+    expect(mockBuildDetailExportViewModel).not.toHaveBeenCalled();
+    expect(mockRenderDetailExportJpeg).not.toHaveBeenCalled();
     expect(response.headers.get('content-type')).toBe('image/jpeg');
-    expect(response.headers.get('content-disposition')).toContain('.jpg');
+    expect(response.headers.get('content-disposition')).toContain('payment-detail_120_2026-05-05_Mitty_Group.jpg');
   });
 
   it('serves and persists a generated preview image for details without uploaded images', async () => {

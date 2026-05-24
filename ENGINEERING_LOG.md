@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.160
+> 当前版本：v1.0.161
 > 最后更新：2026-05-24
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail Export Pic` 预览刷新修复：`Deposit` TYPE 改为与 `Initial` 一致的浅蓝底蓝字徽章；新增 `regenerateDetailPreviewImage()`，`/api/detail?action=export-pic` 下载时不再只返回一次性 JPEG，而是重新生成并写回 `Detail.imageUrl/imageName`，已有系统生成预览图会直接覆盖同一路径，非系统图则生成新的 `payment-detail_<金额>_<日期>_<agent>.jpg` 预览引用。`preview-image` 响应改为 `no-store`，避免浏览器继续缓存旧图。补齐 export SVG、detail-image-assets、detail route 红绿回归 ✅ 2026-05-24
 
 - [x] `Payment Detail Export Pic` 版式规则收口：`detail-export-image` 新增 `Deposit` 类型，首笔付款在 `receipt.isDeposit=true` 或所属订单在 `DEPOSIT_POOL` 时显示 `Deposit`，`Un_Associated` 仅继续阻止误判 `Final`；`export-pic` 与预览图生成查询补充 `receipt.isDeposit`。导出 SVG 右上角日期改浅蓝，`ORDER NO` 按列宽拆分为多行并动态增加行高，行内 `MARK / ORDER / TYPE / AMOUNT` 全部使用垂直居中，避免长订单号遮挡 TYPE。补齐 `detail-export-image` 红绿回归 ✅ 2026-05-24
 

@@ -367,14 +367,14 @@ function buildTypeBadge(type: DetailExportRow['type'], x: number, centerY: numbe
       <text class="root" x="${x + 24}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.pink}">Final</text>
     `;
   }
-  if (type === 'Initial') {
+  if (type === 'Initial' || type === 'Deposit') {
+    const label = type === 'Deposit' ? 'Deposit' : 'Initial';
     return `
       <rect x="${x}" y="${centerY - 10.5}" width="56" height="21" rx="4" fill="${COLORS.indigoBg}" />
-      <text class="root" x="${x + 28}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.indigo}">Initial</text>
+      <text class="root" x="${x + 28}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.indigo}">${label}</text>
     `;
   }
-  const label = type === 'Deposit' ? 'Deposit' : 'Standard';
-  return `<text class="root" x="${x}" y="${centerY}" font-size="12" font-weight="700" dominant-baseline="middle" fill="#000000">${label}</text>`;
+  return `<text class="root" x="${x}" y="${centerY}" font-size="12" font-weight="700" dominant-baseline="middle" fill="#000000">Standard</text>`;
 }
 
 export function buildDetailExportSvg(viewModel: DetailExportViewModel) {

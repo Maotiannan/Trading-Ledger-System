@@ -108,6 +108,24 @@ async function pickUniqueTarget(fileName: string) {
   });
 }
 
+function isGeneratedDetailPreviewPath(value: string | null | undefined) {
+  if (!value) return false;
+  return value.includes(`/${DETAIL_IMAGE_SUBDIR}/`) && path.basename(value).startsWith('payment-detail_');
+}
+
+async function pickGeneratedPreviewTarget(detail: DetailImageSource) {
+  if (isGeneratedDetailPreviewPath(detail.imageUrl)) {
+    const absolutePath = resolveUploadedAssetAbsolutePath(detail.imageUrl!);
+    return {
+      name: detail.imageName || path.basename(detail.imageUrl!),
+      absolutePath,
+      publicPath: detail.imageUrl!,
+    };
+  }
+
+  return pickUniqueTarget(buildDetailPreviewImageFileName(detail, '.jpg'));
+}
+
 async function upsertAttachedDetailAsset(input: {
   oldPath?: string | null;
   path: string;
@@ -228,10 +246,16 @@ async function standardizeExistingDetailImage(detail: DetailImageSource, include
   return saved;
 }
 
-async function generateDetailExportImage(detail: DetailImageSource, includeBuffer: boolean): Promise<DetailPreviewImageAsset> {
+async function generateDetailExportImage(
+  detail: DetailImageSource,
+  includeBuffer: boolean,
+  options: { overwriteGeneratedPreview?: boolean } = {},
+): Promise<DetailPreviewImageAsset> {
   const viewModel = await buildDetailExportViewModel(detail);
   const buffer = await renderDetailExportJpeg(viewModel);
-  const target = await pickUniqueTarget(buildDetailPreviewImageFileName(detail, '.jpg'));
+  const target = options.overwriteGeneratedPreview
+    ? await pickGeneratedPreviewTarget(detail)
+    : await pickUniqueTarget(buildDetailPreviewImageFileName(detail, '.jpg'));
   await writeFile(target.absolutePath, buffer);
 
   const saved = {
@@ -301,4 +325,12 @@ export async function ensureDetailPreviewImage(
     return standardizeExistingDetailImage(detail, Boolean(options.includeBuffer));
   }
   return generateDetailExportImage(detail, Boolean(options.includeBuffer));
+}
+
+export async function regenerateDetailPreviewImage(
+  detailId: string,
+  options: { includeBuffer?: boolean } = {},
+): Promise<DetailPreviewImageAsset> {
+  const detail = await loadDetailForPreview(detailId);
+  return generateDetailExportImage(detail, Boolean(options.includeBuffer), { overwriteGeneratedPreview: true });
 }

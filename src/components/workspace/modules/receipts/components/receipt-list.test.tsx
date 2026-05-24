@@ -42,6 +42,7 @@ describe('ReceiptList', () => {
         currentPage={1}
         totalPages={1}
         isAdmin
+        currentUserId="admin-1"
         canEdit
         canResumeSigning
         tx={tx}
@@ -75,6 +76,7 @@ describe('ReceiptList', () => {
         currentPage={1}
         totalPages={2}
         isAdmin
+        currentUserId="admin-1"
         canEdit
         canResumeSigning
         tx={tx}
@@ -104,6 +106,7 @@ describe('ReceiptList', () => {
         currentPage={1}
         totalPages={1}
         isAdmin={false}
+        currentUserId="sales-1"
         canEdit
         canResumeSigning
         tx={tx}
@@ -131,6 +134,7 @@ describe('ReceiptList', () => {
         currentPage={1}
         totalPages={1}
         isAdmin
+        currentUserId="admin-1"
         canEdit
         canResumeSigning
         tx={tx}
@@ -149,6 +153,89 @@ describe('ReceiptList', () => {
     );
 
     expect(screen.getByTitle('修改收据')).toBeInTheDocument();
+    expect(screen.getByTitle('申请删除')).toBeInTheDocument();
+  });
+
+  it('shows deletion request action for SIGNING_PENDING receipts to admins and creators only', () => {
+    const { rerender } = render(
+      <ReceiptList
+        receipts={[{ ...baseReceipt, status: 'SIGNING_PENDING', creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' } }]}
+        paginatedReceipts={[{ ...baseReceipt, status: 'SIGNING_PENDING', creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' } }]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin={false}
+        currentUserId="sales-1"
+        canEdit
+        canResumeSigning
+        tx={tx}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByTitle('申请删除')).toBeInTheDocument();
+
+    rerender(
+      <ReceiptList
+        receipts={[{ ...baseReceipt, status: 'SIGNING_PENDING', creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' } }]}
+        paginatedReceipts={[{ ...baseReceipt, status: 'SIGNING_PENDING', creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' } }]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin={false}
+        currentUserId="other-user"
+        canEdit
+        canResumeSigning
+        tx={tx}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByTitle('申请删除')).not.toBeInTheDocument();
+
+    rerender(
+      <ReceiptList
+        receipts={[{ ...baseReceipt, status: 'SIGNING_PENDING', creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' } }]}
+        paginatedReceipts={[{ ...baseReceipt, status: 'SIGNING_PENDING', creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' } }]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin
+        currentUserId="admin-1"
+        canEdit
+        canResumeSigning
+        tx={tx}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
     expect(screen.getByTitle('申请删除')).toBeInTheDocument();
   });
 });

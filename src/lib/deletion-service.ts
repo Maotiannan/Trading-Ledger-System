@@ -73,7 +73,10 @@ async function assertDeletionRequestableTarget(
         detail: { targetType, targetId },
       });
     }
-    if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
+    const canRequestSigningPendingDeletion =
+      receipt.status === ReceiptStatus.SIGNING_PENDING
+      && (currentUser.role === UserRole.ADMIN || receipt.createdBy === currentUser.id);
+    if (!canRequestSigningPendingDeletion && !(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
       throw createApiError({
         code: 'FORBIDDEN',
         status: 403,

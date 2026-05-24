@@ -510,6 +510,7 @@ export function ReceiptManager() {
         currentPage={currentPage}
         totalPages={totalPages}
         isAdmin={isAdmin}
+        currentUserId={user?.id || null}
         canEdit={canEditReceipts}
         canResumeSigning={canUseReceiptGenerator}
         tx={tx}

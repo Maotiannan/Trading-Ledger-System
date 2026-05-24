@@ -73,7 +73,7 @@ describe('useReceiptGenerator', () => {
       result.current.setShowGeneratorLaunch(true);
       result.current.setGeneratorOrderNo('MOBILE-01');
       result.current.setGeneratorUsdAmount('1234');
-      result.current.setGeneratorReceiptNo('0001010');
+      result.current.setGeneratorReceiptNo('010000');
       result.current.setGeneratorPaymentMode('Transfer');
     });
 
@@ -89,7 +89,6 @@ describe('useReceiptGenerator', () => {
         orderNo: 'MOBILE-01',
         usdAmount: 1234,
         paymentMode: 'Transfer',
-        receiptNo: '0001010',
       }),
     }));
     expect(loadReceipts).not.toHaveBeenCalled();
@@ -100,7 +99,7 @@ describe('useReceiptGenerator', () => {
   it('loads the suggested receipt number when the generator dialog opens', async () => {
     mockApiCall.mockResolvedValueOnce({
       data: {
-        receiptNo: '0001010',
+        receiptNo: '010000',
       },
     });
 
@@ -112,10 +111,10 @@ describe('useReceiptGenerator', () => {
     });
 
     expect(mockApiCall).toHaveBeenCalledWith('receipt-generator?action=next-receipt-no');
-    expect(result.current.generatorReceiptNo).toBe('0001010');
+    expect(result.current.generatorReceiptNo).toBe('010000');
   });
 
-  it('submits the edited receipt number when creating a signing session', async () => {
+  it('lets the server assign the receipt number when creating a signing session', async () => {
     mockApiCall.mockResolvedValue({
       data: {
         signingPath: '/receipt-generator/session-custom',
@@ -129,7 +128,6 @@ describe('useReceiptGenerator', () => {
       result.current.setShowGeneratorLaunch(true);
       result.current.setGeneratorOrderNo('PIKIN-20');
       result.current.setGeneratorUsdAmount('2500');
-      result.current.setGeneratorReceiptNo('0002001');
     });
 
     await act(async () => {
@@ -143,7 +141,6 @@ describe('useReceiptGenerator', () => {
         orderNo: 'PIKIN-20',
         usdAmount: 2500,
         paymentMode: 'Cash',
-        receiptNo: '0002001',
       }),
     }));
   });

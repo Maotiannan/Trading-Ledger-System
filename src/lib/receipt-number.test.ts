@@ -7,12 +7,12 @@ import {
 } from '@/lib/receipt-number';
 
 describe('receipt-number', () => {
-  it('formats receipt numbers as seven digits', () => {
-    expect(formatReceiptNo(1000)).toBe('0001000');
-    expect(formatReceiptNo(1001)).toBe('0001001');
+  it('formats receipt numbers as six digits', () => {
+    expect(formatReceiptNo(10000)).toBe('010000');
+    expect(formatReceiptNo(10001)).toBe('010001');
   });
 
-  it('allocates receipt numbers atomically starting from 0001000', async () => {
+  it('allocates receipt numbers atomically starting from 010000', async () => {
     let current = RECEIPT_COUNTER_START;
     const upsert = jest.fn().mockImplementation(async ({ create, update }) => {
       if (current === RECEIPT_COUNTER_START) {
@@ -24,43 +24,71 @@ describe('receipt-number', () => {
     });
 
     const tx = {
-      systemCounter: { upsert },
+      systemCounter: {
+        findUnique: jest.fn().mockImplementation(async () => ({ nextValue: current })),
+        upsert,
+      },
       receipt: { findFirst: jest.fn().mockResolvedValue(null) },
     } as never;
 
     const first = await allocateNextReceiptNo(tx);
     const second = await allocateNextReceiptNo(tx);
 
-    expect(first).toBe('0001000');
-    expect(second).toBe('0001001');
+    expect(first).toBe('010000');
+    expect(second).toBe('010001');
     expect(upsert).toHaveBeenCalledTimes(2);
   });
 
-  it('suggests the next receipt number from the largest numeric value in the latest ten receipts', async () => {
-    const findMany = jest.fn().mockResolvedValue([
-      { receiptNo: '0001004' },
-      { receiptNo: 'manual-note' },
-      { receiptNo: '0001009' },
-      { receiptNo: null },
-      { receiptNo: '0001007' },
-    ]);
+  it('suggests the next receipt number from the atomic counter and skips existing numbers', async () => {
+    const findFirst = jest.fn()
+      .mockResolvedValueOnce({ id: 'receipt-010000' })
+      .mockResolvedValueOnce(null);
 
     const tx = {
-      receipt: { findMany },
+      systemCounter: { findUnique: jest.fn().mockResolvedValue({ nextValue: 10000 }) },
+      receipt: { findFirst },
     } as never;
 
-    await expect(getSuggestedNextReceiptNo(tx)).resolves.toBe('0001010');
-    expect(findMany).toHaveBeenCalledWith({
-      where: { receiptNo: { not: null } },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-      select: { receiptNo: true },
+    await expect(getSuggestedNextReceiptNo(tx)).resolves.toBe('010001');
+    expect(findFirst).toHaveBeenNthCalledWith(1, {
+      where: { receiptNo: '010000' },
+      select: { id: true },
+    });
+    expect(findFirst).toHaveBeenNthCalledWith(2, {
+      where: { receiptNo: '010001' },
+      select: { id: true },
     });
   });
 
-  it('uses a requested receipt number and moves the counter past it', async () => {
+  it('skips occupied receipt numbers while allocating from the atomic counter', async () => {
+    let current = RECEIPT_COUNTER_START;
+    const tx = {
+      systemCounter: {
+        findUnique: jest.fn().mockResolvedValue({ nextValue: current }),
+        upsert: jest.fn().mockImplementation(async ({ create, update }) => {
+          if (current === RECEIPT_COUNTER_START) {
+            current = create.nextValue;
+          } else if (typeof update.nextValue === 'object') {
+            current += update.nextValue.increment;
+          } else {
+            current = update.nextValue;
+          }
+          return { key: RECEIPT_COUNTER_KEY, nextValue: current };
+        }),
+      },
+      receipt: {
+        findFirst: jest.fn()
+          .mockResolvedValueOnce({ id: 'receipt-010000' })
+          .mockResolvedValueOnce(null),
+      },
+    } as never;
+
+    await expect(allocateNextReceiptNo(tx)).resolves.toBe('010001');
+  });
+
+  it('uses a requested six-digit receipt number and moves the counter past it', async () => {
     const findFirst = jest.fn().mockResolvedValue(null);
-    const upsert = jest.fn().mockResolvedValue({ key: RECEIPT_COUNTER_KEY, nextValue: 2002 });
+    const upsert = jest.fn().mockResolvedValue({ key: RECEIPT_COUNTER_KEY, nextValue: 10006 });
 
     const tx = {
       receipt: { findFirst },
@@ -70,19 +98,19 @@ describe('receipt-number', () => {
       },
     } as never;
 
-    await expect(allocateNextReceiptNo(tx, { requestedReceiptNo: '2001' })).resolves.toBe('0002001');
+    await expect(allocateNextReceiptNo(tx, { requestedReceiptNo: '10005' })).resolves.toBe('010005');
     expect(findFirst).toHaveBeenCalledWith({
-      where: { receiptNo: '0002001' },
+      where: { receiptNo: '010005' },
       select: { id: true },
     });
     expect(upsert).toHaveBeenCalledWith({
       where: { key: RECEIPT_COUNTER_KEY },
       create: {
         key: RECEIPT_COUNTER_KEY,
-        nextValue: 2002,
+        nextValue: 10006,
       },
       update: {
-        nextValue: 2002,
+        nextValue: 10006,
       },
     });
   });
@@ -93,6 +121,6 @@ describe('receipt-number', () => {
       systemCounter: { upsert: jest.fn() },
     } as never;
 
-    await expect(allocateNextReceiptNo(tx, { requestedReceiptNo: '0001001' })).rejects.toThrow('收据号 0001001 已存在，请换一个编号');
+    await expect(allocateNextReceiptNo(tx, { requestedReceiptNo: '010001' })).rejects.toThrow('收据号 010001 已存在，请换一个编号');
   });
 });

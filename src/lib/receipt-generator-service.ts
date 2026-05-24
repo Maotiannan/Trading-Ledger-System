@@ -150,7 +150,6 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   orderNo: string;
   usdAmount: number;
   paymentMode?: string | null;
-  receiptNo?: string | null;
 }) {
   requireGeneratorRole(currentUser);
   const orderNo = trimString(input.orderNo);
@@ -165,7 +164,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   let result;
   try {
     result = await runInTransaction(async (tx) => {
-      const receiptNo = await allocateNextReceiptNo(tx, { requestedReceiptNo: input.receiptNo });
+      const receiptNo = await allocateNextReceiptNo(tx);
       const finalizedLayout = buildReceiptGeneratorLayout({
         receiptNo,
         orderNo: effectiveOrderNo,
@@ -237,7 +236,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
     });
   } catch (error) {
     if (isReceiptNoUniqueError(error)) {
-      throw receiptNoConflict(input.receiptNo);
+      throw receiptNoConflict(null);
     }
     throw error;
   }

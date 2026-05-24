@@ -76,7 +76,6 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           orderNo: typeof body.orderNo === 'string' ? body.orderNo : '',
           usdAmount: Number(body.usdAmount),
           paymentMode: typeof body.paymentMode === 'string' ? body.paymentMode : null,
-          receiptNo: typeof body.receiptNo === 'string' ? body.receiptNo : null,
         });
         return createApiSuccessResponse(result, request);
       }

@@ -2,11 +2,11 @@ import type { DbTransactionClient } from '@/lib/transaction';
 import { createApiError } from '@/lib/api-error';
 
 export const RECEIPT_COUNTER_KEY = 'RECEIPT_NO';
-export const RECEIPT_COUNTER_START = 1000;
+export const RECEIPT_COUNTER_START = 10000;
 const MAX_ALLOCATION_ATTEMPTS = 100;
 
 export function formatReceiptNo(counter: number): string {
-  return String(counter).padStart(7, '0');
+  return String(counter).padStart(6, '0');
 }
 
 function parseReceiptCounter(value: unknown): number | null {
@@ -57,18 +57,45 @@ async function receiptNoExists(tx: DbTransactionClient, receiptNo: string): Prom
   return Boolean(existing);
 }
 
-export async function getSuggestedNextReceiptNo(tx: Pick<DbTransactionClient, 'receipt'>): Promise<string> {
-  const latestReceipts = await tx.receipt.findMany({
-    where: { receiptNo: { not: null } },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-    select: { receiptNo: true },
+export async function getSuggestedNextReceiptNo(tx: Pick<DbTransactionClient, 'receipt' | 'systemCounter'>): Promise<string> {
+  const counter = await tx.systemCounter.findUnique({
+    where: { key: RECEIPT_COUNTER_KEY },
+    select: { nextValue: true },
   });
-  const counters = latestReceipts
-    .map((row) => parseReceiptCounter(row.receiptNo))
-    .filter((value): value is number => value !== null);
-  const largest = counters.length > 0 ? Math.max(...counters) : RECEIPT_COUNTER_START - 1;
-  return formatReceiptNo(largest + 1);
+  let nextValue = Math.max(counter?.nextValue ?? RECEIPT_COUNTER_START, RECEIPT_COUNTER_START);
+
+  for (let attempt = 0; attempt < MAX_ALLOCATION_ATTEMPTS; attempt += 1) {
+    const receiptNo = formatReceiptNo(nextValue);
+    if (!(await receiptNoExists(tx as DbTransactionClient, receiptNo))) {
+      return receiptNo;
+    }
+    nextValue += 1;
+  }
+
+  throw createApiError({
+    code: 'CONFLICT',
+    status: 409,
+    message: '收据号自动分配失败，请稍后重试',
+  });
+}
+
+async function reserveNextReceiptCounter(tx: DbTransactionClient): Promise<number> {
+  const current = await tx.systemCounter.findUnique({
+    where: { key: RECEIPT_COUNTER_KEY },
+    select: { nextValue: true },
+  });
+  const shouldInitialize = !current || current.nextValue < RECEIPT_COUNTER_START;
+  const counter = await tx.systemCounter.upsert({
+    where: { key: RECEIPT_COUNTER_KEY },
+    create: {
+      key: RECEIPT_COUNTER_KEY,
+      nextValue: RECEIPT_COUNTER_START + 1,
+    },
+    update: shouldInitialize
+      ? { nextValue: RECEIPT_COUNTER_START + 1 }
+      : { nextValue: { increment: 1 } },
+  });
+  return shouldInitialize ? RECEIPT_COUNTER_START : Math.max(counter.nextValue - 1, RECEIPT_COUNTER_START);
 }
 
 export async function allocateNextReceiptNo(
@@ -89,26 +116,12 @@ export async function allocateNextReceiptNo(
     return requested.receiptNo;
   }
 
-  const counter = await tx.systemCounter.upsert({
-    where: { key: RECEIPT_COUNTER_KEY },
-    create: {
-      key: RECEIPT_COUNTER_KEY,
-      nextValue: RECEIPT_COUNTER_START + 1,
-    },
-    update: {
-      nextValue: { increment: 1 },
-    },
-  });
-
-  let receiptNo = formatReceiptNo(counter.nextValue - 1);
   for (let attempt = 0; attempt < MAX_ALLOCATION_ATTEMPTS; attempt += 1) {
+    const counterValue = await reserveNextReceiptCounter(tx);
+    const receiptNo = formatReceiptNo(counterValue);
     if (!(await receiptNoExists(tx, receiptNo))) {
       return receiptNo;
     }
-    const suggestedReceiptNo = await getSuggestedNextReceiptNo(tx);
-    const suggestedCounter = parseReceiptCounter(suggestedReceiptNo) ?? RECEIPT_COUNTER_START;
-    await bumpCounterPast(tx, suggestedCounter + 1);
-    receiptNo = formatReceiptNo(suggestedCounter);
   }
 
   throw createApiError({

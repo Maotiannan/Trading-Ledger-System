@@ -192,6 +192,59 @@ describe('deletion-service', () => {
     });
   });
 
+  it('allows a SIGNING_PENDING receipt creator to submit a deletion request for approval', async () => {
+    mockDb.deletionRequest.findFirst.mockResolvedValueOnce(null);
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-signing',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+    mockDb.deletionRequest.create.mockResolvedValueOnce({
+      id: 'req-signing',
+      targetType: DeletionTargetType.RECEIPT,
+      targetId: 'receipt-signing',
+    });
+
+    const result = await createDeletionRequest({
+      currentUser: makeUser({ id: 'sales-1', role: UserRole.SALES }),
+      targetType: 'RECEIPT',
+      targetId: 'receipt-signing',
+    });
+
+    expect(result.id).toBe('req-signing');
+    expect(mockDb.deletionRequest.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        targetType: DeletionTargetType.RECEIPT,
+        targetId: 'receipt-signing',
+        requestedBy: 'sales-1',
+        status: DeletionStatus.PENDING,
+      }),
+    }));
+  });
+
+  it('allows an admin to submit a SIGNING_PENDING receipt deletion request even when not the creator', async () => {
+    mockDb.deletionRequest.findFirst.mockResolvedValueOnce(null);
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-signing-admin',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+    mockDb.deletionRequest.create.mockResolvedValueOnce({
+      id: 'req-signing-admin',
+      targetType: DeletionTargetType.RECEIPT,
+      targetId: 'receipt-signing-admin',
+    });
+
+    const result = await createDeletionRequest({
+      currentUser: makeUser({ id: 'admin-1', role: UserRole.ADMIN, level: 1, parentId: null, createdById: null }),
+      targetType: 'RECEIPT',
+      targetId: 'receipt-signing-admin',
+    });
+
+    expect(result.id).toBe('req-signing-admin');
+    expect(mockCanAccessOwnedResourceAsync).not.toHaveBeenCalled();
+  });
+
   it('blocks detail deletion request when status is Bank_Transfer', async () => {
     mockDb.deletionRequest.findFirst.mockResolvedValueOnce(null);
     mockDb.detail.findUnique.mockResolvedValueOnce({

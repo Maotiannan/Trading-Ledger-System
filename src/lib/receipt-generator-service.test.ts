@@ -90,7 +90,7 @@ describe('receipt-generator-service', () => {
     jest.clearAllMocks();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
-    mockAllocateNextReceiptNo.mockResolvedValue('0001000');
+    mockAllocateNextReceiptNo.mockResolvedValue('010000');
     mockRm.mockResolvedValue(undefined);
     mockLookupInvoiceOrderContext.mockResolvedValue({
       data: {
@@ -128,13 +128,13 @@ describe('receipt-generator-service', () => {
   it('creates a signing-pending receipt and generator session before signing', async () => {
     mockDb.receipt.create.mockResolvedValueOnce({
       id: 'receipt-1',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       status: ReceiptStatus.SIGNING_PENDING,
     });
     mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
       id: 'session-1',
       receiptId: 'receipt-1',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       status: ReceiptGeneratorSessionStatus.PENDING,
     });
 
@@ -142,13 +142,12 @@ describe('receipt-generator-service', () => {
       orderNo: 'Big Alpha-07',
       usdAmount: 2500,
       paymentMode: 'Transfer',
-      receiptNo: '0002001',
     });
 
-    expect(mockAllocateNextReceiptNo).toHaveBeenCalledWith(mockDb, { requestedReceiptNo: '0002001' });
+    expect(mockAllocateNextReceiptNo).toHaveBeenCalledWith(mockDb);
     expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        receiptNo: '0001000',
+        receiptNo: '010000',
         status: ReceiptStatus.SIGNING_PENDING,
         orderId: 'order-1',
         invNo: 'L25MH060523',
@@ -194,13 +193,13 @@ describe('receipt-generator-service', () => {
     });
     mockDb.receipt.create.mockResolvedValueOnce({
       id: 'receipt-pikin',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       status: ReceiptStatus.SIGNING_PENDING,
     });
     mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
       id: 'session-pikin',
       receiptId: 'receipt-pikin',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       status: ReceiptGeneratorSessionStatus.PENDING,
     });
 
@@ -251,13 +250,13 @@ describe('receipt-generator-service', () => {
     });
     mockDb.receipt.create.mockResolvedValueOnce({
       id: 'receipt-composite',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       status: ReceiptStatus.SIGNING_PENDING,
     });
     mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
       id: 'session-composite',
       receiptId: 'receipt-composite',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       status: ReceiptGeneratorSessionStatus.PENDING,
     });
 
@@ -289,39 +288,39 @@ describe('receipt-generator-service', () => {
       id: 'session-1',
       createdBy: 'admin-1',
       receiptId: 'receipt-1',
-      receiptNo: '0001000',
-      layoutSnapshot: { receiptNo: '0001000' },
+      receiptNo: '010000',
+      layoutSnapshot: { receiptNo: '010000' },
       status: ReceiptGeneratorSessionStatus.PENDING,
       receipt: {
         id: 'receipt-1',
         createdBy: 'admin-1',
         status: ReceiptStatus.SIGNING_PENDING,
-        receiptNo: '0001000',
+        receiptNo: '010000',
       },
     });
     mockSaveReceiptGeneratorArtifact
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-        name: '0001000-receipt.png',
+        path: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+        name: '010000-receipt.png',
       })
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
-        name: '0001000-receiver-signature.png',
+        path: '/upload/images/receipts/generated/2026/04/signatures/010000-receiver-signature.png',
+        name: '010000-receiver-signature.png',
       })
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
-        name: '0001000-payer-signature.png',
+        path: '/upload/images/receipts/generated/2026/04/signatures/010000-payer-signature.png',
+        name: '010000-payer-signature.png',
       });
     mockDb.receiptGeneratorSession.update.mockResolvedValueOnce({
       id: 'session-1',
-      finalImageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-      finalImageName: '0001000-receipt.png',
+      finalImageUrl: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+      finalImageName: '010000-receipt.png',
       receipt: {
         id: 'receipt-1',
-        receiptNo: '0001000',
+        receiptNo: '010000',
         status: ReceiptStatus.SR_Received,
-        imageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-        imageName: '0001000-receipt.png',
+        imageUrl: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+        imageName: '010000-receipt.png',
       },
     });
 
@@ -340,7 +339,7 @@ describe('receipt-generator-service', () => {
       receiptImage,
       receiverSignature,
       payerSignature,
-      layoutSnapshot: { receiptNo: '0001000', orderNo: 'Big Alpha-07' },
+      layoutSnapshot: { receiptNo: '010000', orderNo: 'Big Alpha-07' },
     });
 
     expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -358,40 +357,40 @@ describe('receipt-generator-service', () => {
       id: 'session-1',
       createdBy: 'admin-1',
       receiptId: 'receipt-1',
-      receiptNo: '0001000',
-      layoutSnapshot: { receiptNo: '0001000' },
+      receiptNo: '010000',
+      layoutSnapshot: { receiptNo: '010000' },
       status: ReceiptGeneratorSessionStatus.PENDING,
       receipt: {
         id: 'receipt-1',
         createdBy: 'admin-1',
         status: ReceiptStatus.SIGNING_PENDING,
-        receiptNo: '0001000',
+        receiptNo: '010000',
       },
     });
     mockSaveReceiptGeneratorArtifact
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-        name: '0001000-receipt.png',
+        path: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+        name: '010000-receipt.png',
       })
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
-        name: '0001000-receiver-signature.png',
+        path: '/upload/images/receipts/generated/2026/04/signatures/010000-receiver-signature.png',
+        name: '010000-receiver-signature.png',
       })
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
-        name: '0001000-payer-signature.png',
+        path: '/upload/images/receipts/generated/2026/04/signatures/010000-payer-signature.png',
+        name: '010000-payer-signature.png',
       });
     mockDb.uploadedAsset.createMany.mockResolvedValueOnce({ count: 3 });
     mockDb.receiptGeneratorSession.update.mockResolvedValueOnce({
       id: 'session-1',
-      finalImageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-      finalImageName: '0001000-receipt.png',
+      finalImageUrl: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+      finalImageName: '010000-receipt.png',
       receipt: {
         id: 'receipt-1',
-        receiptNo: '0001000',
+        receiptNo: '010000',
         status: ReceiptStatus.SR_Received,
-        imageUrl: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-        imageName: '0001000-receipt.png',
+        imageUrl: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+        imageName: '010000-receipt.png',
       },
     });
 
@@ -407,14 +406,14 @@ describe('receipt-generator-service', () => {
       receiptImage: makeMockFile('receipt.png'),
       receiverSignature: makeMockFile('receiver.png'),
       payerSignature: makeMockFile('payer.png'),
-      layoutSnapshot: { receiptNo: '0001000', orderNo: 'Big Alpha-07' },
+      layoutSnapshot: { receiptNo: '010000', orderNo: 'Big Alpha-07' },
     });
 
     expect(mockDb.uploadedAsset.createMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.arrayContaining([
         expect.objectContaining({
-          path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
-          name: '0001000-receiver-signature.png',
+          path: '/upload/images/receipts/generated/2026/04/signatures/010000-receiver-signature.png',
+          name: '010000-receiver-signature.png',
           category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
           mimeType: 'image/png',
           sizeBytes: pngBytes.byteLength,
@@ -424,8 +423,8 @@ describe('receipt-generator-service', () => {
           attachedId: 'session-1',
         }),
         expect.objectContaining({
-          path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
-          name: '0001000-payer-signature.png',
+          path: '/upload/images/receipts/generated/2026/04/signatures/010000-payer-signature.png',
+          name: '010000-payer-signature.png',
           category: UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE,
           mimeType: 'image/png',
           sizeBytes: pngBytes.byteLength,
@@ -435,8 +434,8 @@ describe('receipt-generator-service', () => {
           attachedId: 'session-1',
         }),
         expect.objectContaining({
-          path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-          name: '0001000-receipt.png',
+          path: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+          name: '010000-receipt.png',
           category: UploadedAssetCategory.RECEIPT_GENERATOR_FINAL,
           mimeType: 'image/png',
           sizeBytes: pngBytes.byteLength,
@@ -454,28 +453,28 @@ describe('receipt-generator-service', () => {
       id: 'session-1',
       createdBy: 'admin-1',
       receiptId: 'receipt-1',
-      receiptNo: '0001000',
-      layoutSnapshot: { receiptNo: '0001000' },
+      receiptNo: '010000',
+      layoutSnapshot: { receiptNo: '010000' },
       status: ReceiptGeneratorSessionStatus.PENDING,
       receipt: {
         id: 'receipt-1',
         createdBy: 'admin-1',
         status: ReceiptStatus.SIGNING_PENDING,
-        receiptNo: '0001000',
+        receiptNo: '010000',
       },
     });
     mockSaveReceiptGeneratorArtifact
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/0001000-receipt.png',
-        name: '0001000-receipt.png',
+        path: '/upload/images/receipts/generated/2026/04/010000-receipt.png',
+        name: '010000-receipt.png',
       })
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-receiver-signature.png',
-        name: '0001000-receiver-signature.png',
+        path: '/upload/images/receipts/generated/2026/04/signatures/010000-receiver-signature.png',
+        name: '010000-receiver-signature.png',
       })
       .mockResolvedValueOnce({
-        path: '/upload/images/receipts/generated/2026/04/signatures/0001000-payer-signature.png',
-        name: '0001000-payer-signature.png',
+        path: '/upload/images/receipts/generated/2026/04/signatures/010000-payer-signature.png',
+        name: '010000-payer-signature.png',
       });
     mockDb.uploadedAsset.createMany.mockRejectedValueOnce(new Error('attach failed'));
 
@@ -491,20 +490,20 @@ describe('receipt-generator-service', () => {
       receiptImage: makeMockFile('receipt.png'),
       receiverSignature: makeMockFile('receiver.png'),
       payerSignature: makeMockFile('payer.png'),
-      layoutSnapshot: { receiptNo: '0001000', orderNo: 'Big Alpha-07' },
+      layoutSnapshot: { receiptNo: '010000', orderNo: 'Big Alpha-07' },
     })).rejects.toThrow('attach failed');
 
     expect(mockRm).toHaveBeenCalledTimes(3);
     expect(mockRm).toHaveBeenCalledWith(
-      expect.stringContaining('/receipts/generated/2026/04/0001000-receipt.png'),
+      expect.stringContaining('/receipts/generated/2026/04/010000-receipt.png'),
       { force: true },
     );
     expect(mockRm).toHaveBeenCalledWith(
-      expect.stringContaining('/receipts/generated/2026/04/signatures/0001000-receiver-signature.png'),
+      expect.stringContaining('/receipts/generated/2026/04/signatures/010000-receiver-signature.png'),
       { force: true },
     );
     expect(mockRm).toHaveBeenCalledWith(
-      expect.stringContaining('/receipts/generated/2026/04/signatures/0001000-payer-signature.png'),
+      expect.stringContaining('/receipts/generated/2026/04/signatures/010000-payer-signature.png'),
       { force: true },
     );
   });

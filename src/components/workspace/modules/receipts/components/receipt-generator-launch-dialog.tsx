@@ -91,8 +91,13 @@ export function ReceiptGeneratorLaunchDialog({
               value={receiptNo}
               onChange={(event) => onReceiptNoChange(event.target.value)}
               inputMode="numeric"
-              placeholder="0001000"
+              placeholder="010000"
+              readOnly
+              className="bg-muted"
             />
+            <p className="text-xs text-muted-foreground">
+              {tx('提交时由服务器原子分配，显示值仅作预览。', 'The server assigns this atomically on submit. The displayed value is only a preview.')}
+            </p>
           </div>
 
           <div className="grid gap-2">

@@ -105,7 +105,7 @@ export function useReceiptGenerator(params: {
       })
       .catch((error) => {
         if (!cancelled) {
-          setGeneratorError(getErrorMessage(error, tx('收据号建议加载失败，请手动填写', 'Failed to load receipt number suggestion. Enter it manually.')));
+          setGeneratorError(getErrorMessage(error, tx('收据号建议加载失败，提交时系统仍会自动分配', 'Failed to load receipt number suggestion. The server will still assign one on submit.')));
         }
       });
     return () => {
@@ -176,11 +176,6 @@ export function useReceiptGenerator(params: {
       setGeneratorError(tx('收款金额不能为空', 'USD amount is required.'));
       return;
     }
-    if (!generatorReceiptNo.trim()) {
-      setGeneratorError(tx('收据号不能为空', 'Receipt No. is required.'));
-      return;
-    }
-
     setGeneratorCreating(true);
     setGeneratorError(null);
     setError(null);
@@ -192,7 +187,6 @@ export function useReceiptGenerator(params: {
           orderNo: generatorContext?.orderNo?.trim() || generatorOrderNo.trim(),
           usdAmount: Number(generatorUsdAmount),
           paymentMode: generatorPaymentMode,
-          receiptNo: generatorReceiptNo.trim(),
         }),
       });
       const signingPath = result.data?.signingPath;
@@ -214,7 +208,7 @@ export function useReceiptGenerator(params: {
     } finally {
       setGeneratorCreating(false);
     }
-  }, [generatorContext, generatorOrderNo, generatorPaymentMode, generatorReceiptNo, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
+  }, [generatorContext, generatorOrderNo, generatorPaymentMode, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
 
   const resumeGeneratorSession = useCallback(async (receiptId: string) => {
     try {

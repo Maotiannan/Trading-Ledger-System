@@ -14,6 +14,7 @@ export type ReceiptListProps = {
   currentPage: number;
   totalPages: number;
   isAdmin: boolean;
+  currentUserId?: string | null;
   canEdit: boolean;
   canResumeSigning: boolean;
   tx: (zh: string, en: string) => string;
@@ -36,6 +37,7 @@ export function ReceiptList({
   currentPage,
   totalPages,
   isAdmin,
+  currentUserId,
   canEdit,
   canResumeSigning,
   tx,
@@ -72,10 +74,11 @@ export function ReceiptList({
           <TableBody>
             {paginatedReceipts.map((receipt) => {
               const canEditThisReceipt = canEdit && (receipt.status !== 'RECEIVED' || isAdmin);
+              const isSigningPendingCreator = receipt.status === 'SIGNING_PENDING' && receipt.creator?.id === currentUserId;
               const canDeleteThisReceipt =
                 receipt.status !== 'Bank_Transfer'
-                && receipt.status !== 'SIGNING_PENDING'
-                && (receipt.status !== 'RECEIVED' || isAdmin);
+                && (receipt.status !== 'RECEIVED' || isAdmin)
+                && (receipt.status !== 'SIGNING_PENDING' || isAdmin || isSigningPendingCreator);
               return (
               <TableRow key={receipt.id} className={receipt.needsCustomerFix ? 'bg-red-50' : ''}>
                 <TableCell>{receipt.receiptNo || '-'}</TableCell>

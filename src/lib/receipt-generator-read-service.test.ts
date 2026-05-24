@@ -188,7 +188,7 @@ describe('receipt-generator-read-service', () => {
     mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
       id: 'session-1',
       receiptId: 'receipt-1',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       orderNo: 'Big Alpha-07',
       invNo: 'L25MH060523',
       customerMark: 'Big Alpha',
@@ -216,7 +216,7 @@ describe('receipt-generator-read-service', () => {
 
     const result = await getReceiptGeneratorSession(makeUser(), 'session-1');
 
-    expect(result.data.receiptNo).toBe('0001000');
+    expect(result.data.receiptNo).toBe('010000');
     expect(result.data.canFinalize).toBe(true);
     expect(result.data.receiptStatus).toBe('SIGNING_PENDING');
     expect(result.data.layout.clientName).toBe('Alpha Trading SARL "Big Alpha"');
@@ -227,7 +227,7 @@ describe('receipt-generator-read-service', () => {
     mockDb.receiptGeneratorSession.findFirst.mockResolvedValueOnce({
       id: 'session-1',
       receiptId: 'receipt-1',
-      receiptNo: '0001000',
+      receiptNo: '010000',
       orderNo: 'Big Alpha-07',
       invNo: 'L25MH060523',
       customerMark: 'Big Alpha',
@@ -251,7 +251,7 @@ describe('receipt-generator-read-service', () => {
 
     const result = await getOpenReceiptGeneratorSessionByReceipt(makeUser(), 'receipt-1');
     expect(result.data.id).toBe('session-1');
-    expect(result.data.receiptNo).toBe('0001000');
+    expect(result.data.receiptNo).toBe('010000');
     expect(result.data.layout.clientName).toBe('Alpha Trading SARL "Big Alpha"');
   });
 });

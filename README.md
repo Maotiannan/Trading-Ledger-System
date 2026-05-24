@@ -35,8 +35,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.157`
-- 本次更新：所有主要搜索框新增回车强制搜索；不改原有输入即时搜索逻辑，只在按 Enter 时用当前输入值主动提交一次查询。
+- 当前版本：`1.0.158`
+- 本次更新：`Generate Signed Receipt` 的收据号重新从 `010000` 起按 6 位编号递增，由后端事务内原子分配；弹窗里的编号只作预览，不再允许手动改号，也不再使用“最近 10 条最大编号 +1”的规则。
+- 本次更新：`Receipt Management` 中 `SIGNING_PENDING` 待签名收据现在允许创建者和管理员点击删除，但仍统一进入删除审批通道，不会绕过审批直接删除。
+- 上一版本：所有主要搜索框新增回车强制搜索；不改原有输入即时搜索逻辑，只在按 Enter 时用当前输入值主动提交一次查询。
 - 上一版本：`Create Payment Detail Directly` 中 `Manual detail rows` 标题本身就是展开入口，不再额外显示灰色说明和单独的 `Expand manual rows` 按钮。
 - 上一版本：`Create Payment Detail Directly` 弹窗新增 `AGENT` 选择，直接创建的付款明细会保存并在卡片右侧显示付款代理公司名。
 - 上一版本：`Manual detail rows` 默认折叠，只有需要手动录入新明细时才展开，减少手机端弹窗高度。
@@ -44,7 +46,6 @@ README 现在只保留用户应该看的内容。
 - 上一版本：弹窗底部新增 `Total` 总计，实时汇总已勾选收据金额和手动新增明细金额。
 - 上一版本：新增 `POST /api/sync/customers/by-orders`，外部 agent 可一次按多个 `ORDER NO` 查询客户资料。
 - 上一版本：该接口沿用 Excel ML token 鉴权，并复用系统当前的财务订单、复合订单和 `ORDER_NAME` 匹配规则。
-- 上一版本：`Generate Signed Receipt` 弹窗新增可编辑 `Receipt No.`；打开弹窗时默认使用最近登记的 10 条收据中最大数字 + 1。
 - 上一版本：保存收据时如果 `Receipt No.` 重复，现在会提示“收据号已存在，请换一个编号”，不再泛化成 `Server error`。
 - 上一版本：`Payment Detail Management -> Create Payment Detail Directly` 的 `Receipts available to add` 列表已精简为只显示 `ORDER NO` 和收据金额。
 - 上一版本：可加入收据列表的搜索框改为按 `ORDER NO` 搜索，手机和桌面端继续保留可滚动选择区。

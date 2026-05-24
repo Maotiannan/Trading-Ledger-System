@@ -134,7 +134,6 @@ describe('receipt-generator route', () => {
           orderNo: 'PIKIN-20',
           usdAmount: 2500,
           paymentMode: 'Cash',
-          receiptNo: '0002001',
         };
       },
     };
@@ -146,13 +145,12 @@ describe('receipt-generator route', () => {
       orderNo: 'PIKIN-20',
       usdAmount: 2500,
       paymentMode: 'Cash',
-      receiptNo: '0002001',
     });
   });
 
   it('returns the next suggested receipt number for generator launch', async () => {
     mockGetSuggestedReceiptGeneratorNumber.mockResolvedValueOnce({
-      data: { receiptNo: '0001010' },
+      data: { receiptNo: '010000' },
       message: '签名收据编号建议已加载',
     });
 
@@ -164,7 +162,7 @@ describe('receipt-generator route', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.receiptNo).toBe('0001010');
+    expect(json.data.receiptNo).toBe('010000');
     expect(mockGetSuggestedReceiptGeneratorNumber).toHaveBeenCalledWith(expect.objectContaining({ id: 'admin-1' }));
   });
 });

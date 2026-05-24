@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.157
+> 当前版本：v1.0.158
 > 最后更新：2026-05-24
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 签名收据编号规则二次收口：`RECEIPT_COUNTER_START` 调整为 `10000`，`formatReceiptNo()` 统一输出 6 位编号，`getSuggestedNextReceiptNo()` 改为读取 `SystemCounter` 并跳过已占用编号，不再按最近 10 条收据推导。`Generate Signed Receipt` 创建 session 时不再接收前端 `receiptNo`，后端事务内调用 `allocateNextReceiptNo(tx)` 原子分配，弹窗编号改为只读预览；`SIGNING_PENDING` 收据删除入口开放给创建者和管理员，但仍走 `DeletionRequest` 审批通道。补齐 receipt-number / generator service / route / hook / dialog / receipt-list / deletion-service 回归，定向 49 用例、全量 754 用例通过 ✅ 2026-05-24
 
 - [x] 全局搜索框 Enter 强制提交：新增 `submitSearchOnEnter` 统一键盘入口，过滤 IME 组合输入并阻止默认表单提交；`Customer / Invoice / Receipt / Payment Detail / SWIFT / Orders / Approval` 顶部搜索及客户修复、付款明细直建弹窗搜索接入 Enter 主动查询。原有 onChange 即时搜索、按钮查询和本地过滤逻辑保持不变；列表加载函数只新增可选 `searchOverride` 参数，避免按 Enter 时被 React 状态延迟影响。补齐 helper 与 CustomerToolbar 红绿回归测试 ✅ 2026-05-24
 

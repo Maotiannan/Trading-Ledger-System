@@ -91,7 +91,7 @@ export function ReceiptGeneratorLaunchDialog({
               value={receiptNo}
               onChange={(event) => onReceiptNoChange(event.target.value)}
               inputMode="numeric"
-              placeholder="010000"
+              placeholder="0010000"
               readOnly
               className="bg-muted"
             />

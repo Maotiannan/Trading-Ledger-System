@@ -63,19 +63,17 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                   </Badge>
                 )}
                 <Badge variant={detail.status === 'ERROR' ? 'destructive' : 'default'}>{detail.status}</Badge>
-                {detail.imageUrl && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onViewImage(detail);
-                    }}
-                    title={tx('查看图片', 'View image')}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onViewImage(detail);
+                  }}
+                  title={tx('查看图片', 'View image')}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
                 {canEdit && (
                   <Button
                     size="sm"

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readFile } from 'node:fs/promises';
 import { DetailStatus, ReceiptStatus } from '@prisma/client';
 import { UploadedAssetCategory } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -17,7 +18,9 @@ import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
+import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
+import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
@@ -139,6 +142,45 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           linkedReceiptLabel: matchedReceipt?.orderNo?.trim() || null,
           suggestedMark,
           willCreateReceipt: !matchedReceiptId,
+        },
+      });
+    }
+
+    if (action === 'preview-image') {
+      const detailId = searchParams.get('detailId') || '';
+      if (!detailId) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少明细ID',
+        });
+      }
+
+      const scope = await getHierarchyScope(currentUser);
+      const visibleDetail = await db.detail.findFirst({
+        where: {
+          id: detailId,
+          ...buildDetailVisibilityWhere(Array.from(scope.ownerVisibleIds)),
+        },
+        select: { id: true },
+      });
+      if (!visibleDetail) {
+        throw createApiError({
+          code: 'RESOURCE_NOT_FOUND',
+          status: 404,
+          message: '付款明细不存在或无权访问',
+          detail: { detailId },
+        });
+      }
+
+      const previewImage = await ensureDetailPreviewImage(visibleDetail.id, { includeBuffer: true });
+      const buffer = previewImage.buffer ?? await readFile(resolveUploadedAssetAbsolutePath(previewImage.path));
+      return new NextResponse(new Uint8Array(buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': previewImage.mimeType,
+          'Content-Disposition': `inline; filename=\"${encodeURIComponent(previewImage.name)}\"`,
+          'Cache-Control': 'private, max-age=3600',
         },
       });
     }

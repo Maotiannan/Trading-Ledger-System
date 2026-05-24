@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { DetailList } from './detail-list';
 import type { Detail } from '@/lib/store';
 
@@ -45,5 +45,26 @@ describe('DetailList', () => {
     );
 
     expect(screen.getByText('Mitty Group')).toBeInTheDocument();
+  });
+
+  it('shows view image action even when a direct-created detail has no uploaded image', () => {
+    const onViewImage = jest.fn();
+    render(
+      <DetailList
+        details={[makeDetail({ imageUrl: null, sourceMode: 'DIRECT' })]}
+        expandedDetails={new Set()}
+        canEdit
+        tx={tx}
+        onToggleDetail={jest.fn()}
+        onViewImage={onViewImage}
+        onEditDetail={jest.fn()}
+        onExportDetailPic={jest.fn()}
+        onDeleteDetail={jest.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTitle('查看图片'));
+
+    expect(onViewImage).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
   });
 });

@@ -73,7 +73,7 @@ describe('useReceiptGenerator', () => {
       result.current.setShowGeneratorLaunch(true);
       result.current.setGeneratorOrderNo('MOBILE-01');
       result.current.setGeneratorUsdAmount('1234');
-      result.current.setGeneratorReceiptNo('010000');
+      result.current.setGeneratorReceiptNo('0010000');
       result.current.setGeneratorPaymentMode('Transfer');
     });
 
@@ -99,7 +99,7 @@ describe('useReceiptGenerator', () => {
   it('loads the suggested receipt number when the generator dialog opens', async () => {
     mockApiCall.mockResolvedValueOnce({
       data: {
-        receiptNo: '010000',
+        receiptNo: '0010000',
       },
     });
 
@@ -111,7 +111,7 @@ describe('useReceiptGenerator', () => {
     });
 
     expect(mockApiCall).toHaveBeenCalledWith('receipt-generator?action=next-receipt-no');
-    expect(result.current.generatorReceiptNo).toBe('010000');
+    expect(result.current.generatorReceiptNo).toBe('0010000');
   });
 
   it('lets the server assign the receipt number when creating a signing session', async () => {

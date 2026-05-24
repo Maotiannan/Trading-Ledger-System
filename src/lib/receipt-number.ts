@@ -6,7 +6,7 @@ export const RECEIPT_COUNTER_START = 10000;
 const MAX_ALLOCATION_ATTEMPTS = 100;
 
 export function formatReceiptNo(counter: number): string {
-  return String(counter).padStart(6, '0');
+  return String(counter).padStart(7, '0');
 }
 
 function parseReceiptCounter(value: unknown): number | null {

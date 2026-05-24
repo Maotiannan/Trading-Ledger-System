@@ -70,6 +70,10 @@ jest.mock('@/lib/detail-export-image', () => ({
   renderDetailExportJpeg: jest.fn(),
 }));
 
+jest.mock('@/lib/detail-image-assets', () => ({
+  ensureDetailPreviewImage: jest.fn(),
+}));
+
 jest.mock('@/lib/detail-service', () => ({
   createDetailRecord: jest.fn(),
   updateDetailRecord: jest.fn(),
@@ -92,6 +96,7 @@ jest.mock('@/lib/invoice-read-service', () => ({
 import { db } from '@/lib/db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
+import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
 import { GET, POST } from '@/app/api/detail/route';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
@@ -110,6 +115,7 @@ const mockDb = db as unknown as {
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockBuildDetailExportViewModel = buildDetailExportViewModel as jest.Mock;
 const mockRenderDetailExportJpeg = renderDetailExportJpeg as jest.Mock;
+const mockEnsureDetailPreviewImage = ensureDetailPreviewImage as jest.Mock;
 const mockCreateDetailRecord = createDetailRecord as jest.Mock;
 const mockRequestDetailEdit = requestDetailEdit as jest.Mock;
 const mockReviewDetailEdit = reviewDetailEdit as jest.Mock;
@@ -415,5 +421,23 @@ describe('detail route edit-approval actions', () => {
     expect(mockRenderDetailExportJpeg).toHaveBeenCalledWith(expect.objectContaining({ footerAgentLabel: 'Mitty Group' }));
     expect(response.headers.get('content-type')).toBe('image/jpeg');
     expect(response.headers.get('content-disposition')).toContain('.jpg');
+  });
+
+  it('serves and persists a generated preview image for details without uploaded images', async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
+    mockDb.detail.findFirst.mockResolvedValueOnce({ id: 'detail-1' });
+    mockEnsureDetailPreviewImage.mockResolvedValueOnce({
+      path: '/upload/images/details/ocr/payment-detail_250_2026-05-23_Mitty_Group.jpg',
+      name: 'payment-detail_250_2026-05-23_Mitty_Group.jpg',
+      buffer: jpeg,
+      mimeType: 'image/jpeg',
+    });
+
+    const response = await GET(buildGetRequest('https://example.com/api/detail?action=preview-image&detailId=detail-1'));
+
+    expect(response.status).toBe(200);
+    expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-1', { includeBuffer: true });
+    expect(response.headers.get('content-type')).toBe('image/jpeg');
+    expect(response.headers.get('content-disposition')).toContain('inline');
   });
 });

@@ -150,7 +150,7 @@ describe('receipt-generator route', () => {
 
   it('returns the next suggested receipt number for generator launch', async () => {
     mockGetSuggestedReceiptGeneratorNumber.mockResolvedValueOnce({
-      data: { receiptNo: '010000' },
+      data: { receiptNo: '0010000' },
       message: '签名收据编号建议已加载',
     });
 
@@ -162,7 +162,7 @@ describe('receipt-generator route', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.receiptNo).toBe('010000');
+    expect(json.data.receiptNo).toBe('0010000');
     expect(mockGetSuggestedReceiptGeneratorNumber).toHaveBeenCalledWith(expect.objectContaining({ id: 'admin-1' }));
   });
 });

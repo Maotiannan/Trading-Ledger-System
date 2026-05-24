@@ -93,7 +93,7 @@ test('admin can generate a signed receipt and return to receipt list with attach
   await finalizeButton.evaluate((button: HTMLButtonElement) => button.click());
 
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/010\d{3}\.png$/);
+  expect(download.suggestedFilename()).toMatch(/001\d{4}\.png$/);
 
   await expect.poll(() => popup.isClosed()).toBeTruthy();
 

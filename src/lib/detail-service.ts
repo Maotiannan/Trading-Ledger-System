@@ -11,6 +11,7 @@ import type { CurrentUser } from '@/lib/request-auth';
 import type { DetailPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
+import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -387,6 +388,14 @@ export async function createDetailRecord(params: {
 
   for (const orderId of result.touchedOrderIds) {
     await updateOrderBalance(orderId);
+  }
+
+  try {
+    const previewImage = await ensureDetailPreviewImage(result.detail.id);
+    result.detail.imageUrl = previewImage.path;
+    result.detail.imageName = previewImage.name;
+  } catch (error) {
+    console.error('Ensure payment detail preview image failed:', error);
   }
 
   await recordAuditEvent({

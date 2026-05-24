@@ -12,7 +12,6 @@ import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/resp
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
-  getDisplayImageUrl,
   getErrorMessage,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
@@ -428,9 +427,8 @@ export function DetailManager() {
         tx={tx}
         onToggleDetail={toggleDetail}
         onViewImage={(detail) => {
-          if (!detail.imageUrl) return;
           setViewingImage({
-            url: getDisplayImageUrl(detail.imageUrl),
+            url: `/api/detail?action=preview-image&detailId=${encodeURIComponent(detail.id)}`,
             name: detail.imageName || tx('付款明细图片', 'Payment detail image'),
           });
         }}

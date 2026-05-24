@@ -67,7 +67,7 @@ export default async function run(t) {
   const receiptNo = String(createSession.data?.data?.receiptNo || '');
   const receiptId = String(createSession.data?.data?.receiptId || '');
   t.assertOk(Boolean(sessionId), 'generator session created');
-  t.assertEqual(receiptNo, '010000', 'first generator receipt uses atomic receipt number starting at 010000');
+  t.assertEqual(receiptNo, '0010000', 'first generator receipt uses atomic receipt number starting at 0010000');
 
   const receiptListBeforeFinalize = await t.request('GET', `/api/receipt?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
   const pendingReceipt = findReceiptByNo(receiptListBeforeFinalize.data?.data, receiptNo);

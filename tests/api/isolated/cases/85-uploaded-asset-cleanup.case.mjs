@@ -258,12 +258,15 @@ export default async function run(t) {
     });
     const detailId = detailConfirm.data?.data?.id;
     assert.ok(detailId, 'detail confirm returns detail id');
+    const finalDetailImagePath = detailConfirm.data?.data?.imageUrl;
+    assert.ok(finalDetailImagePath, 'detail confirm returns standardized preview image path');
+    assert.match(finalDetailImagePath, /\/upload\/images\/details\/ocr\/payment-detail_260_2026-04-30_/);
 
-    const attachedDetailOcrAsset = await prisma.uploadedAsset.findFirst({ where: { path: stagedDetailOcrAsset.path } });
+    const attachedDetailOcrAsset = await prisma.uploadedAsset.findFirst({ where: { path: finalDetailImagePath } });
     assert.equal(attachedDetailOcrAsset?.status, 'ATTACHED');
     assert.equal(attachedDetailOcrAsset?.attachedType, 'DETAIL');
     assert.equal(attachedDetailOcrAsset?.attachedId, detailId);
-    t.step('detail OCR confirm attaches staged asset');
+    t.step('detail OCR confirm attaches and renames staged asset');
 
     const detailList = await t.request('GET', `/api/detail?search=${encodeURIComponent(detailOrderNo)}`, { expectedStatus: 200 });
     const createdDetail = findDetailByOrder(detailList.data?.data, detailOrderNo);

@@ -6,6 +6,7 @@ import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
+import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -58,6 +59,10 @@ jest.mock('@/lib/payment-agent-service', () => ({
   resolveAccessiblePaymentAgentId: jest.fn(),
 }));
 
+jest.mock('@/lib/detail-image-assets', () => ({
+  ensureDetailPreviewImage: jest.fn(),
+}));
+
 function makeUser(overrides: Partial<{ id: string; role: UserRole }> = {}) {
   return {
     id: 'sales-1',
@@ -87,6 +92,7 @@ const mockFindOrCreateOrder = findOrCreateOrder as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockResolveAccessiblePaymentAgentId = resolveAccessiblePaymentAgentId as jest.Mock;
+const mockEnsureDetailPreviewImage = ensureDetailPreviewImage as jest.Mock;
 
 describe('detail-service', () => {
   beforeEach(() => {
@@ -102,6 +108,10 @@ describe('detail-service', () => {
       needsCustomerFix: false,
     });
     mockResolveAccessiblePaymentAgentId.mockResolvedValue('agent-1');
+    mockEnsureDetailPreviewImage.mockResolvedValue({
+      path: '/upload/images/details/ocr/payment-detail_100_today_Mitty_Group.jpg',
+      name: 'payment-detail_100_today_Mitty_Group.jpg',
+    });
   });
 
   it('creates missing receipts/orders during direct detail creation', async () => {
@@ -132,6 +142,7 @@ describe('detail-service', () => {
     }));
     expect(mockDb.order.update).toHaveBeenCalled();
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-1');
     expect(result.message).toBe('付款明细已直接创建');
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
@@ -160,6 +171,7 @@ describe('detail-service', () => {
       mode: 'confirm',
     });
 
+    expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-asset');
     expect(mockDb.uploadedAsset.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ path: '/upload/images/details/ocr/test.png' }),
       data: expect.objectContaining({

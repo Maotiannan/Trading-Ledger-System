@@ -8,7 +8,7 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     open: true,
     orderNo: 'Big Alpha-07',
     usdAmount: '2500',
-    receiptNo: '010000',
+    receiptNo: '0010000',
     paymentMode: 'Cash' as const,
     loadingContext: false,
     creatingSession: false,
@@ -83,7 +83,7 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     );
 
     const input = screen.getByLabelText('收据号');
-    expect(input).toHaveValue('010000');
+    expect(input).toHaveValue('0010000');
     expect(input).toHaveAttribute('readonly');
     expect(onReceiptNoChange).not.toHaveBeenCalled();
     expect(screen.getByText('提交时由服务器原子分配，显示值仅作预览。')).toBeInTheDocument();

@@ -34,6 +34,11 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/swift', 'direct-create')?.method).toBe('POST');
   });
 
+  it('should expose payment detail preview and export image routes', () => {
+    expect(findAction('/api/detail', 'preview-image')?.method).toBe('GET');
+    expect(findAction('/api/detail', 'export-pic')?.method).toBe('GET');
+  });
+
   it('should expose independent Orders page actions', () => {
     expect(findAction('/api/orders', 'list')?.method).toBe('GET');
     expect(findAction('/api/orders', 'customer-options')?.method).toBe('GET');

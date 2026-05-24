@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -130,10 +131,10 @@ export function DetailManager() {
     }
   }, [directReceiptRequestGuard, tx, setError]);
 
-  const loadDetails = useCallback(async () => {
+  const loadDetails = useCallback(async (searchOverride?: string) => {
     const requestToken = detailRequestGuard.nextToken();
     const params = new URLSearchParams();
-    const trimmedSearch = search.trim();
+    const trimmedSearch = (searchOverride ?? search).trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
     if (statusFilter) params.set('status', statusFilter);
     if (dateFrom) params.set('dateFrom', dateFrom);
@@ -378,7 +379,15 @@ export function DetailManager() {
         testIdPrefix="detail"
         filterLabel={tx('筛选', 'Filters')}
         renderSearch={() => (
-          <Input placeholder={tx('搜索唛头/单号', 'Search mark/order no.')} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            placeholder={tx('搜索唛头/单号', 'Search mark/order no.')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
+              setSearch(value);
+              void loadDetails(value);
+            })}
+          />
         )}
         renderFilters={() => (
           <>

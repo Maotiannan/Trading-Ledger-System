@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiCall, useUiText } from '@/components/workspace/shared';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import type { ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
 import type { DetailEditRequestRow } from '@/lib/detail-edit-types';
@@ -143,12 +144,12 @@ export function DeletionManager() {
     }));
   };
 
-  const applyApprovalFilter = (section: ApprovalSectionKey) => {
+  const applyApprovalFilter = (section: ApprovalSectionKey, searchOverride?: string) => {
     setApprovalFilters((prev) => ({
       ...prev,
       [section]: {
         ...prev[section],
-        search: prev[section].draftSearch.trim(),
+        search: (searchOverride ?? prev[section].draftSearch).trim(),
         showAll: prev[section].draftShowAll,
       },
     }));
@@ -186,6 +187,10 @@ export function DeletionManager() {
             placeholder={tx('搜索申请内容', 'Search requests')}
             value={filter.draftSearch}
             onChange={(event) => updateApprovalFilter(section, { draftSearch: event.target.value })}
+            onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
+              updateApprovalFilter(section, { draftSearch: value });
+              applyApprovalFilter(section, value);
+            })}
           />
           <Button
             type="button"

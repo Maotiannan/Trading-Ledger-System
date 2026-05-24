@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.156
-> 最后更新：2026-05-23
+> 当前版本：v1.0.157
+> 最后更新：2026-05-24
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 全局搜索框 Enter 强制提交：新增 `submitSearchOnEnter` 统一键盘入口，过滤 IME 组合输入并阻止默认表单提交；`Customer / Invoice / Receipt / Payment Detail / SWIFT / Orders / Approval` 顶部搜索及客户修复、付款明细直建弹窗搜索接入 Enter 主动查询。原有 onChange 即时搜索、按钮查询和本地过滤逻辑保持不变；列表加载函数只新增可选 `searchOverride` 参数，避免按 Enter 时被 React 状态延迟影响。补齐 helper 与 CustomerToolbar 红绿回归测试 ✅ 2026-05-24
 
 - [x] `Create Payment Detail Directly` 手动行折叠交互收口：移除 `Manual detail rows` 下方灰色说明和单独 `Expand manual rows` 按钮，改为标题行本身作为展开/收起按钮；保留默认折叠和展开后手动录入能力，补齐组件断言防止重复控件回归 ✅ 2026-05-23
 

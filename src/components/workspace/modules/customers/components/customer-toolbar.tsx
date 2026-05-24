@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { Loader2, Plus, Upload } from 'lucide-react';
 import type { CustomerOwnerOption } from '../types';
 
@@ -15,6 +16,7 @@ export type CustomerToolbarProps = {
   inputRef: React.RefObject<HTMLInputElement | null>;
   onFileChange: (file: File) => void;
   onSearchChange: (value: string) => void;
+  onSearchSubmit?: (value: string) => void;
   onImportOwnerChange: (value: string) => void;
   onDownloadTemplate: () => void;
   onOpenImport: () => void;
@@ -31,6 +33,7 @@ export function CustomerToolbar({
   inputRef,
   onFileChange,
   onSearchChange,
+  onSearchSubmit,
   onImportOwnerChange,
   onDownloadTemplate,
   onOpenImport,
@@ -54,6 +57,7 @@ export function CustomerToolbar({
           placeholder={tx('搜索 mark/order_name/name/phone/city', 'Search mark/order_name/name/phone/city')}
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={(event) => submitSearchOnEnter(event, (value) => onSearchSubmit?.(value))}
           className="w-full sm:w-72"
         />
         {isAdmin && (

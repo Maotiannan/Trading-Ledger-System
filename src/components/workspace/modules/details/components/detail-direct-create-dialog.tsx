@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { formatUsdAmount, parseDisplayMoney } from '@/lib/display-format';
 import { Check, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import type { DetailDirectItemForm, DetailDirectSelectableReceipt, PaymentAgentSummary } from '../types';
@@ -137,6 +138,7 @@ export function DetailDirectCreateDialog({
                 placeholder={tx('搜索单号', 'Search order no.')}
                 value={receiptSearch}
                 onChange={(event) => setReceiptSearch(event.target.value)}
+                onKeyDown={(event) => submitSearchOnEnter(event, setReceiptSearch)}
               />
             </div>
             <div

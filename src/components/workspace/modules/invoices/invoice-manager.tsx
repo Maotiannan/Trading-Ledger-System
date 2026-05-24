@@ -188,6 +188,10 @@ export function InvoiceManager() {
         search={search}
         tx={tx}
         onSearchChange={setSearch}
+        onSearchSubmit={(value) => {
+          setSearch(value);
+          void loadInvoices(value);
+        }}
         onReset={() => setSearch('')}
       />
 

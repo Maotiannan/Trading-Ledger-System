@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -264,9 +265,10 @@ export function ReceiptManager() {
     resetToFirstPage();
   };
 
-  const applyFilters = () => {
+  const applyFilters = (searchOverride?: string) => {
+    const nextSearch = searchOverride ?? search;
     setAppliedFilters({
-      search,
+      search: nextSearch,
       statuses: statusFilter,
       dateFrom,
       dateTo,
@@ -449,10 +451,14 @@ export function ReceiptManager() {
             placeholder={tx('搜索收据号/单号/付款人', 'Search receipt/order/payer')}
             value={search}
             onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }}
+            onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
+              setSearch(value);
+              applyFilters(value);
+            })}
           />
         )}
         renderMobileSearchAction={() => (
-          <Button onClick={applyFilters}>{tx('查询', 'Search')}</Button>
+          <Button onClick={() => applyFilters()}>{tx('查询', 'Search')}</Button>
         )}
         renderFilters={() => (
           <>
@@ -493,7 +499,7 @@ export function ReceiptManager() {
             >
               {tx('重置筛选', 'Reset Filters')}
             </Button>
-            <Button onClick={applyFilters}>{tx('查询', 'Search')}</Button>
+            <Button onClick={() => applyFilters()}>{tx('查询', 'Search')}</Button>
           </div>
         )}
       />

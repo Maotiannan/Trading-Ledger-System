@@ -26,6 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiCall, lookupOrderContextByOrderNo, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { CheckSquare, Loader2, Pencil, Plus, Search } from 'lucide-react';
 import type { OrderTrackerCustomerOption, OrderTrackerRow } from './types';
@@ -91,13 +92,14 @@ export function OrderTrackerManager() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const loadOrders = useCallback(async () => {
+  const loadOrders = useCallback(async (searchOverride?: string) => {
     const token = requestGuard.nextToken();
     setLoading(true);
     setError('');
     try {
       const params = new URLSearchParams();
-      if (search.trim()) params.set('search', search.trim());
+      const trimmedSearch = (searchOverride ?? search).trim();
+      if (trimmedSearch) params.set('search', trimmedSearch);
       if (statusFilter && statusFilter !== 'ALL') params.set('status', statusFilter);
       const endpoint = `orders${params.toString() ? `?${params.toString()}` : ''}`;
       const result = await apiCall(endpoint) as OrderTrackerApiResult;
@@ -333,6 +335,10 @@ export function OrderTrackerManager() {
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
+                setSearch(value);
+                void loadOrders(value);
+              })}
               placeholder={tx('搜索订单号 / 客户 / 备注', 'Search ORDER / customer / note')}
             />
             <Select value={statusFilter} onValueChange={setStatusFilter}>

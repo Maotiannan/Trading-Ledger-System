@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import type { CustomerFormState, CustomerOwnerOption } from '../types';
 
 export type CustomerFixDialogProps = {
@@ -18,6 +19,7 @@ export type CustomerFixDialogProps = {
   onOpenChange: (open: boolean) => void;
   onFormChange: (updater: (prev: CustomerFormState) => CustomerFormState) => void;
   onExistingCustomerSearchChange: (value: string) => void;
+  onExistingCustomerSearchSubmit?: (value: string) => void;
   onExistingCustomerSelect: (row: Record<string, unknown>) => void;
   onSubmit: () => void;
 };
@@ -35,6 +37,7 @@ export function CustomerFixDialog({
   onOpenChange,
   onFormChange,
   onExistingCustomerSearchChange,
+  onExistingCustomerSearchSubmit,
   onExistingCustomerSelect,
   onSubmit,
 }: CustomerFixDialogProps) {
@@ -51,6 +54,7 @@ export function CustomerFixDialog({
               placeholder={tx('搜索 MARK/ORDER_NAME/NAME/PHONE', 'Search MARK/ORDER_NAME/NAME/PHONE')}
               value={existingCustomerSearch}
               onChange={(e) => onExistingCustomerSearchChange(e.target.value)}
+              onKeyDown={(event) => submitSearchOnEnter(event, (value) => onExistingCustomerSearchSubmit?.(value))}
             />
             <div className="mt-2 max-h-40 space-y-2 overflow-y-auto">
               {existingCustomerSearching && (

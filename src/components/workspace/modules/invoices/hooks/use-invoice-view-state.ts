@@ -17,10 +17,10 @@ export function useInvoiceViewState({
   const invoiceImportInputRef = useRef<HTMLInputElement | null>(null);
   const requestGuard = useLatestRequestGuard();
 
-  const loadInvoices = useCallback(async () => {
+  const loadInvoices = useCallback(async (searchOverride?: string) => {
     const requestToken = requestGuard.nextToken();
     const params = new URLSearchParams();
-    const trimmedSearch = search.trim();
+    const trimmedSearch = (searchOverride ?? search).trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
     const endpoint = `invoice${params.toString() ? `?${params.toString()}` : ''}`;
     const cachedResult = trimmedSearch ? null : peekPrefetchedApiResult<{ success?: boolean; data?: Invoice[] }>(endpoint);

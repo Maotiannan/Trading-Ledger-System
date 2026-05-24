@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
+import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
   getDisplayImageUrl,
@@ -75,10 +76,10 @@ export function SwiftManager() {
   } = useSwiftForms();
   const swiftRequestGuard = useLatestRequestGuard();
 
-  const loadSwifts = useCallback(async () => {
+  const loadSwifts = useCallback(async (searchOverride?: string) => {
     const requestToken = swiftRequestGuard.nextToken();
     const params = new URLSearchParams();
-    const trimmedSearch = search.trim();
+    const trimmedSearch = (searchOverride ?? search).trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
@@ -241,7 +242,15 @@ export function SwiftManager() {
         testIdPrefix="swift"
         filterLabel={tx('筛选', 'Filters')}
         renderSearch={() => (
-          <Input placeholder={tx('搜索汇款人/收款人/账号', 'Search sender/receiver/account')} value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input
+            placeholder={tx('搜索汇款人/收款人/账号', 'Search sender/receiver/account')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
+              setSearch(value);
+              void loadSwifts(value);
+            })}
+          />
         )}
         renderFilters={() => (
           <>

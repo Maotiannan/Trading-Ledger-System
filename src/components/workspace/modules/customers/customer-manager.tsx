@@ -87,9 +87,9 @@ export function CustomerManager() {
   const customerImportTable = useImportResultTable(customerImportRows);
   const customerImportColumns = useCustomerImportColumns(updateCustomerImportIssue);
 
-  const loadCustomers = useCallback(async () => {
+  const loadCustomers = useCallback(async (searchOverride?: string) => {
     const requestToken = customerRequestGuard.nextToken();
-    const trimmedSearch = search.trim();
+    const trimmedSearch = (searchOverride ?? search).trim();
     const endpoint = `customer${trimmedSearch ? `?search=${encodeURIComponent(trimmedSearch)}` : ''}`;
     const cachedResult = trimmedSearch ? null : peekPrefetchedApiResult<{ success?: boolean; data?: Array<Record<string, unknown>> }>(endpoint);
     if (cachedResult?.success && Array.isArray(cachedResult.data)) {
@@ -255,6 +255,10 @@ export function CustomerManager() {
         inputRef={customerImportInputRef}
         onFileChange={(file) => void handleCustomerExcelImport(file)}
         onSearchChange={setSearch}
+        onSearchSubmit={(value) => {
+          setSearch(value);
+          void loadCustomers(value);
+        }}
         onImportOwnerChange={setImportOwnerId}
         onDownloadTemplate={downloadCustomerImportTemplate}
         onOpenImport={() => customerImportInputRef.current?.click()}
@@ -332,6 +336,18 @@ export function CustomerManager() {
         }}
         onFormChange={(updater) => setForm(updater)}
         onExistingCustomerSearchChange={setFixCustomerSearch}
+        onExistingCustomerSearchSubmit={(value) => {
+          const query = value.trim();
+          setFixCustomerSearch(value);
+          if (!query) return;
+          setFixCustomerSearching(true);
+          void apiCall(`customer?search=${encodeURIComponent(query)}`)
+            .then((result) => {
+              setFixCustomerOptions(result.success && Array.isArray(result.data) ? result.data.slice(0, 10) : []);
+            })
+            .catch(() => setFixCustomerOptions([]))
+            .finally(() => setFixCustomerSearching(false));
+        }}
         onExistingCustomerSelect={(row) => {
           setFixExistingCustomerId(String(row.id || ''));
           setForm((prev) => ({

@@ -38,7 +38,8 @@ const viewModel: DetailExportViewModel = {
     { index: 1, mark: 'Simagan', orderNo: 'Simagan-07', type: 'Final', amount: 5277 },
     { index: 2, mark: 'Sabou', orderNo: 'Sabou-01', type: 'Final', amount: 3003 },
     { index: 6, mark: 'THP', orderNo: 'THP-04', type: 'Initial', amount: 3070 },
-    { index: 7, mark: 'AMD', orderNo: 'AMD-05', type: 'Std', amount: 3000 },
+    { index: 7, mark: 'DEP', orderNo: 'DEP-01', type: 'Deposit', amount: 500 },
+    { index: 8, mark: 'AMD', orderNo: 'AMD-05', type: 'Std', amount: 3000 },
   ],
 };
 
@@ -150,7 +151,7 @@ describe('detail-export-image', () => {
     expect(model.rows[0].type).toBe('Final');
   });
 
-  it('does not classify pool orders as Final even when their balance is cleared', async () => {
+  it('classifies a first deposit receipt as Deposit instead of Initial', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([
       { id: 'order-pool', orderBalance: -1500, invoice: { invNo: 'DEPOSIT_POOL' } },
     ]);
@@ -165,11 +166,11 @@ describe('detail-export-image', () => {
       totalAmount: 1500,
       swift: { status: 'RECEIVED' },
       items: [
-        { mark: 'SOW', orderNo: 'SOW-02', amount: 1500, receipt: { id: 'receipt-pool', orderNo: 'SOW-02', orderId: 'order-pool', createdAt: '2026-05-01T00:00:00.000Z' } },
+        { mark: 'SOW', orderNo: 'SOW-02', amount: 1500, receipt: { id: 'receipt-pool', orderNo: 'SOW-02', orderId: 'order-pool', isDeposit: true, createdAt: '2026-05-01T00:00:00.000Z' } },
       ],
     });
 
-    expect(model.rows[0].type).toBe('Initial');
+    expect(model.rows[0].type).toBe('Deposit');
   });
 
   it('builds svg content using the payment details export layout', () => {
@@ -182,6 +183,7 @@ describe('detail-export-image', () => {
     expect(svg).toContain('Simagan-07');
     expect(svg).toContain('Final');
     expect(svg).toContain('Initial');
+    expect(svg).toContain('Deposit');
     expect(svg).toContain('Standard');
     expect(svg).toContain('TOTAL TRANSFERRED');
     expect(svg).toContain('Mitty Group · Disbursement');
@@ -203,15 +205,54 @@ describe('detail-export-image', () => {
     const svg = buildDetailExportSvg(viewModel);
 
     expect(svg).toContain('width="720"');
-    expect(svg).toContain('font-size="15" font-weight="700" fill="#000000">Simagan');
+    expect(svg).toContain('font-size="15" font-weight="700" dominant-baseline="middle" fill="#000000">Simagan');
     expect(svg).toContain('font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">MARK');
-    expect(svg).toContain('font-size="13" fill="#000000">Simagan-07');
-    expect(svg).toContain('font-size="12" font-weight="700" fill="#000000">Standard');
+    expect(svg).toContain('font-size="13" fill="#000000" dominant-baseline="middle"><tspan');
+    expect(svg).toContain('>Simagan-07</tspan>');
+    expect(svg).toContain('font-size="12" font-weight="700" dominant-baseline="middle" fill="#000000">Standard');
     expect(svg).toContain('font-size="24" font-weight="700" fill="#415cc3">$101,326</text>');
     expect(svg).toContain('font-size="11" font-weight="700" fill="#000000" letter-spacing="1.1">TOTAL');
     expect(svg).toContain('font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.6">TOTAL TRANSFERRED');
     expect(svg).toContain('font-size="15" fill="#cccccc">Mitty Group · Disbursement');
     expect(svg).toContain('font-size="15" text-anchor="end" fill="#cccccc">20 records');
+  });
+
+  it('uses light blue date text and wraps long order numbers inside their table cell', () => {
+    const svg = buildDetailExportSvg({
+      ...viewModel,
+      rows: [
+        {
+          index: 1,
+          mark: 'LONG',
+          orderNo: 'SUPER-DT2-10B/SUPER-DT2-11B/SUPER-DT2-12B',
+          type: 'Std',
+          amount: 30040,
+        },
+      ],
+    });
+
+    expect(svg).toContain(`fill="#7ea6ff">${viewModel.dateLabel}</text>`);
+    expect(svg).toContain('<tspan');
+    expect(svg).toContain('SUPER-DT2-10B/');
+    expect(svg).toContain('SUPER-DT2-11B/');
+    expect(svg).toContain('dominant-baseline="middle"');
+  });
+
+  it('keeps spaces in order numbers while applying wrapped SVG text', () => {
+    const svg = buildDetailExportSvg({
+      ...viewModel,
+      rows: [
+        {
+          index: 1,
+          mark: 'OUM',
+          orderNo: 'OUMAR LAH-01',
+          type: 'Initial',
+          amount: 1200,
+        },
+      ],
+    });
+
+    expect(svg).toContain('OUMAR LAH-01');
   });
 
   it('uses bundled Arial font files for deterministic server rendering', () => {

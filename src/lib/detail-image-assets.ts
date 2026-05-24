@@ -266,6 +266,7 @@ async function loadDetailForPreview(detailId: string): Promise<DetailImageSource
               id: true,
               orderNo: true,
               orderId: true,
+              isDeposit: true,
               createdAt: true,
             },
           },

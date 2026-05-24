@@ -211,6 +211,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
                   id: true,
                   orderNo: true,
                   orderId: true,
+                  isDeposit: true,
                   createdAt: true,
                 },
               },

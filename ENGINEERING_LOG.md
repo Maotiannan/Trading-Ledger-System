@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.159
+> 当前版本：v1.0.160
 > 最后更新：2026-05-24
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail Export Pic` 版式规则收口：`detail-export-image` 新增 `Deposit` 类型，首笔付款在 `receipt.isDeposit=true` 或所属订单在 `DEPOSIT_POOL` 时显示 `Deposit`，`Un_Associated` 仅继续阻止误判 `Final`；`export-pic` 与预览图生成查询补充 `receipt.isDeposit`。导出 SVG 右上角日期改浅蓝，`ORDER NO` 按列宽拆分为多行并动态增加行高，行内 `MARK / ORDER / TYPE / AMOUNT` 全部使用垂直居中，避免长订单号遮挡 TYPE。补齐 `detail-export-image` 红绿回归 ✅ 2026-05-24
 
 - [x] 签名收据编号规则三次收口：保留 `RECEIPT_COUNTER_START = 10000` 和后端事务原子分配，只把 `formatReceiptNo()` 输出从 6 位改为 7 位，首号为 `0010000`；同步更新 receipt-generator route/service/read/hook/dialog/E2E 与 isolated API 断言，避免 CI 继续按旧 `010000` 规则判断。`Payment Detail` 新增 `detail-image-assets` 服务，统一处理小眼睛预览图：已有上传图会移动到 `details/ocr` 并按 `payment-detail_<金额>_<日期>_<agent>` 命名，无上传图会生成 `Export Pic` JPEG、保存到同目录、写回 `Detail.imageUrl/imageName` 并登记为已绑定上传资产；前端小眼睛统一走 `/api/detail?action=preview-image`。补齐 receipt-number / detail-image-assets / detail route / detail service / detail list 回归 ✅ 2026-05-24
 

@@ -14,6 +14,7 @@ type DetailExportSourceItem = {
     id?: string | null;
     orderNo?: string | null;
     orderId?: string | null;
+    isDeposit?: boolean | null;
     createdAt?: string | Date | null;
   } | null;
 };
@@ -36,7 +37,7 @@ export type DetailExportRow = {
   index: number;
   mark: string;
   orderNo: string;
-  type: 'Initial' | 'Final' | 'Std';
+  type: 'Initial' | 'Final' | 'Std' | 'Deposit';
   amount: number;
 };
 
@@ -55,6 +56,8 @@ const HEADER_HEIGHT = 92;
 const STATS_HEIGHT = 66;
 const TABLE_HEADER_HEIGHT = 42;
 const ROW_HEIGHT = 42;
+const ORDER_LINE_HEIGHT = 16;
+const ORDER_MAX_LINE_CHARS = 18;
 const FOOTER_HEIGHT = 50;
 const FOOTNOTE_HEIGHT = 30;
 const BOTTOM_MARGIN = 12;
@@ -62,6 +65,7 @@ const LOGO_WIDTH = 245;
 const LOGO_HEIGHT = 45;
 const COLORS = {
   blue: '#415cc3',
+  dateBlue: '#7ea6ff',
   muted: '#999999',
   lightMuted: '#bbbbbb',
   border: '#eeeeee',
@@ -171,10 +175,12 @@ type ResolvedItemAnalysis = {
   orderId: string | null;
   orderBalance: number | null;
   isPoolOrder: boolean;
+  isDepositPayment: boolean;
   isFirstPayment: boolean;
 };
 
 const SYSTEM_POOL_INVOICE_NOS = new Set(['DEPOSIT_POOL', 'Un_Associated']);
+const DEPOSIT_POOL_INVOICE_NO = 'DEPOSIT_POOL';
 
 async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedItemAnalysis[]> {
   const resolvedOrderIds = await Promise.all(detail.items.map(async (item) => {
@@ -187,6 +193,7 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
   const uniqueOrderIds = Array.from(new Set(resolvedOrderIds.filter((value): value is string => Boolean(value))));
   const orderBalanceMap = new Map<string, number>();
   const poolOrderIds = new Set<string>();
+  const depositOrderIds = new Set<string>();
   const earliestReceiptIdMap = new Map<string, string>();
 
   if (uniqueOrderIds.length > 0) {
@@ -205,6 +212,9 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
       const invNo = row.invoice?.invNo ?? null;
       if (invNo && SYSTEM_POOL_INVOICE_NOS.has(invNo)) {
         poolOrderIds.add(row.id);
+      }
+      if (invNo === DEPOSIT_POOL_INVOICE_NO) {
+        depositOrderIds.add(row.id);
       }
     }
 
@@ -237,6 +247,7 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
       orderId,
       orderBalance: orderId ? (orderBalanceMap.get(orderId) ?? null) : null,
       isPoolOrder: orderId ? poolOrderIds.has(orderId) : false,
+      isDepositPayment: Boolean(detail.items[index]?.receipt?.isDeposit || (orderId && depositOrderIds.has(orderId))),
       isFirstPayment: Boolean(orderId && currentReceiptId && earliestReceiptId && currentReceiptId === earliestReceiptId),
     };
   });
@@ -247,6 +258,9 @@ function determineType(analysis: ResolvedItemAnalysis): DetailExportRow['type'] 
     return 'Final';
   }
   if (analysis.isFirstPayment) {
+    if (analysis.isDepositPayment) {
+      return 'Deposit';
+    }
     return 'Initial';
   }
   return 'Std';
@@ -256,7 +270,13 @@ export async function buildDetailExportViewModel(detail: DetailExportSource): Pr
   const rowsAnalysis = await analyzeDetailItems(detail);
   const rows = detail.items.map((item, index) => {
     const amount = toNumber(item.amount);
-    const analysis = rowsAnalysis[index] ?? { orderId: null, orderBalance: null, isPoolOrder: false, isFirstPayment: false };
+    const analysis = rowsAnalysis[index] ?? {
+      orderId: null,
+      orderBalance: null,
+      isPoolOrder: false,
+      isDepositPayment: false,
+      isFirstPayment: false,
+    };
     return {
       index: index + 1,
       mark: normalizeText(item.mark).toUpperCase(),
@@ -279,25 +299,87 @@ export async function buildDetailExportViewModel(detail: DetailExportSource): Pr
   };
 }
 
-function buildTypeBadge(type: DetailExportRow['type'], x: number, baseline: number) {
+function wrapTextByColumns(value: string, maxChars: number) {
+  const source = value.trim();
+  if (!source) return ['-'];
+
+  const tokens = source.match(/[^/\s]+[\/\s]?/g) ?? [source];
+  const lines: string[] = [];
+  let current = '';
+
+  const pushHardWrapped = (token: string) => {
+    let remaining = token;
+    while (remaining.length > maxChars) {
+      lines.push(remaining.slice(0, maxChars));
+      remaining = remaining.slice(maxChars);
+    }
+    return remaining;
+  };
+
+  for (const rawToken of tokens) {
+    const token = rawToken;
+    if (!token.trim()) continue;
+
+    if (token.length > maxChars) {
+      if (current) {
+        lines.push(current.trimEnd());
+        current = '';
+      }
+      current = pushHardWrapped(token);
+      continue;
+    }
+
+    const next = current ? `${current}${token}` : token;
+    if (next.length > maxChars && current) {
+      lines.push(current.trimEnd());
+      current = token;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) lines.push(current.trimEnd());
+  return lines.length > 0 ? lines : ['-'];
+}
+
+function getOrderLines(row: DetailExportRow) {
+  return wrapTextByColumns(row.orderNo, ORDER_MAX_LINE_CHARS);
+}
+
+function getRowHeight(row: DetailExportRow) {
+  const lineCount = getOrderLines(row).length;
+  return Math.max(ROW_HEIGHT, lineCount * ORDER_LINE_HEIGHT + 18);
+}
+
+function buildWrappedOrderText(row: DetailExportRow, centerY: number) {
+  const lines = getOrderLines(row);
+  const firstY = centerY - ((lines.length - 1) * ORDER_LINE_HEIGHT) / 2;
+  const tspans = lines.map((line, index) => (
+    `<tspan x="${TABLE_COLUMNS.orderNo}" y="${firstY + index * ORDER_LINE_HEIGHT}">${escapeXml(line)}</tspan>`
+  )).join('');
+  return `<text class="root" x="${TABLE_COLUMNS.orderNo}" y="${centerY}" font-size="13" fill="#000000" dominant-baseline="middle">${tspans}</text>`;
+}
+
+function buildTypeBadge(type: DetailExportRow['type'], x: number, centerY: number) {
   if (type === 'Final') {
     return `
-      <rect x="${x}" y="${baseline - 16}" width="48" height="21" rx="4" fill="${COLORS.pinkBg}" />
-      <text class="root" x="${x + 24}" y="${baseline}" font-size="11" font-weight="700" text-anchor="middle" fill="${COLORS.pink}">Final</text>
+      <rect x="${x}" y="${centerY - 10.5}" width="48" height="21" rx="4" fill="${COLORS.pinkBg}" />
+      <text class="root" x="${x + 24}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.pink}">Final</text>
     `;
   }
   if (type === 'Initial') {
     return `
-      <rect x="${x}" y="${baseline - 16}" width="56" height="21" rx="4" fill="${COLORS.indigoBg}" />
-      <text class="root" x="${x + 28}" y="${baseline}" font-size="11" font-weight="700" text-anchor="middle" fill="${COLORS.indigo}">Initial</text>
+      <rect x="${x}" y="${centerY - 10.5}" width="56" height="21" rx="4" fill="${COLORS.indigoBg}" />
+      <text class="root" x="${x + 28}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.indigo}">Initial</text>
     `;
   }
-  return `<text class="root" x="${x}" y="${baseline}" font-size="12" font-weight="700" fill="#000000">Standard</text>`;
+  const label = type === 'Deposit' ? 'Deposit' : 'Standard';
+  return `<text class="root" x="${x}" y="${centerY}" font-size="12" font-weight="700" dominant-baseline="middle" fill="#000000">${label}</text>`;
 }
 
 export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
-  const rowCount = Math.max(viewModel.rows.length, 1);
-  const tableBodyHeight = rowCount * ROW_HEIGHT;
+  const rowHeights = viewModel.rows.length > 0 ? viewModel.rows.map(getRowHeight) : [ROW_HEIGHT];
+  const tableBodyHeight = rowHeights.reduce((sum, value) => sum + value, 0);
   const height = TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT + TABLE_HEADER_HEIGHT + tableBodyHeight + FOOTER_HEIGHT + FOOTNOTE_HEIGHT + BOTTOM_MARGIN;
   const sheetWidth = WIDTH - SIDE_PADDING * 2;
   const logoDataUri = resolveLogoDataUri();
@@ -306,17 +388,20 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
   const footerY = bodyStartY + tableBodyHeight;
   const footnoteY = footerY + FOOTER_HEIGHT;
 
+  let nextRowTop = bodyStartY;
   const rows = viewModel.rows.map((row, index) => {
-    const rowTop = bodyStartY + index * ROW_HEIGHT;
-    const rowBottom = rowTop + ROW_HEIGHT;
-    const baseline = rowTop + 27;
+    const rowTop = nextRowTop;
+    const rowHeight = rowHeights[index] ?? ROW_HEIGHT;
+    const rowBottom = rowTop + rowHeight;
+    const centerY = rowTop + rowHeight / 2;
+    nextRowTop = rowBottom;
     return `
       <line x1="${SIDE_PADDING}" y1="${rowBottom}" x2="${WIDTH - SIDE_PADDING}" y2="${rowBottom}" stroke="${COLORS.row}" stroke-width="1" />
-      <text class="root" x="${TABLE_COLUMNS.index}" y="${baseline}" font-size="11" fill="#cccccc">${row.index}</text>
-      <text class="root" x="${TABLE_COLUMNS.mark}" y="${baseline}" font-size="15" font-weight="700" fill="#000000">${escapeXml(row.mark)}</text>
-      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${baseline}" font-size="13" fill="#000000">${escapeXml(row.orderNo)}</text>
-      ${buildTypeBadge(row.type, TABLE_COLUMNS.type, baseline)}
-      <text class="root" x="${TABLE_COLUMNS.amount}" y="${baseline}" font-size="15" font-weight="700" text-anchor="end" fill="#000000">$${escapeXml(formatAmount(row.amount))}</text>
+      <text class="root" x="${TABLE_COLUMNS.index}" y="${centerY}" font-size="11" dominant-baseline="middle" fill="#cccccc">${row.index}</text>
+      <text class="root" x="${TABLE_COLUMNS.mark}" y="${centerY}" font-size="15" font-weight="700" dominant-baseline="middle" fill="#000000">${escapeXml(row.mark)}</text>
+      ${buildWrappedOrderText(row, centerY)}
+      ${buildTypeBadge(row.type, TABLE_COLUMNS.type, centerY)}
+      <text class="root" x="${TABLE_COLUMNS.amount}" y="${centerY}" font-size="15" font-weight="700" dominant-baseline="middle" text-anchor="end" fill="#000000">$${escapeXml(formatAmount(row.amount))}</text>
     `;
   }).join('');
 
@@ -331,7 +416,7 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
 
       <line x1="${SIDE_PADDING}" y1="${TOP_BORDER + HEADER_HEIGHT}" x2="${WIDTH - SIDE_PADDING}" y2="${TOP_BORDER + HEADER_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
       <image href="${logoDataUri}" x="${SIDE_PADDING + 10}" y="${TOP_BORDER + 26}" width="${LOGO_WIDTH}" height="${LOGO_HEIGHT}" preserveAspectRatio="xMinYMid meet" />
-      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${TOP_BORDER + 46}" font-size="12" text-anchor="end" fill="${COLORS.muted}">${escapeXml(viewModel.dateLabel)}</text>
+      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${TOP_BORDER + 46}" font-size="12" text-anchor="end" fill="${COLORS.dateBlue}">${escapeXml(viewModel.dateLabel)}</text>
 
       <line x1="${SIDE_PADDING + sheetWidth / 2}" y1="${TOP_BORDER + HEADER_HEIGHT}" x2="${SIDE_PADDING + sheetWidth / 2}" y2="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
       <line x1="${SIDE_PADDING}" y1="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" x2="${WIDTH - SIDE_PADDING}" y2="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />

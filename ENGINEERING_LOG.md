@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.163
+> 当前版本：v1.0.164
 > 最后更新：2026-05-25
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `CustomerConsignee` 默认值选择与弹窗按钮收口：新增 `setCustomerConsigneePrimary()`，事务内校验客户可见范围和 `consigneeId` 归属，先清空同客户全部 `isPrimary`，再设置目标为默认，并同步旧 `Customer.consignee` 字段；`/api/customer` 新增 `consignee-set-primary` action。前端 `CustomerConsigneeDialog` 新增“设为默认”入口，当前默认项显示默认状态，删除改为 icon-only 小垃圾桶按钮；`CustomerManager` 统一错误兜底与刷新。补齐 service / dialog / manager 红绿回归 ✅ 2026-05-25
 
 - [x] `CustomerConsignee` 长文本与前端错误闭环修复：复现用户新增长 `CONSIGNEE` 时后端返回 `CONSIGNEE过长`，同时前端 `submitConsignee()` 缺少 `catch/finally` 导致 Add 按钮一直转圈；新增 `normalized_consignee_hash` 字段并迁移旧数据，唯一约束改为 `customerId + sha256(normalizedConsignee)`，`normalized_consignee` 改为 `TEXT`，允许保留完整长文本；前端新增异常兜底，失败时显示错误并必定关闭 submitting。补齐长文本 service 回归与 CustomerManager 异常 UI 回归 ✅ 2026-05-25
 

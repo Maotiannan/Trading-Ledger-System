@@ -288,3 +288,40 @@ export async function deleteCustomerConsignee(currentUser: CurrentUser, customer
 
   return { message: 'CONSIGNEE已删除' };
 }
+
+export async function setCustomerConsigneePrimary(currentUser: CurrentUser, customerIdInput: string, consigneeIdInput: string) {
+  assertManager(currentUser);
+  const customerId = trimStr(customerIdInput);
+  const consigneeId = trimStr(consigneeIdInput);
+  if (!consigneeId) {
+    throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'CONSIGNEE ID不能为空' });
+  }
+
+  const result = await runInTransaction(async (tx) => {
+    const customer = await assertCustomerVisible(currentUser, customerId, tx);
+    const existing = await tx.customerConsignee.findUnique({ where: { id: consigneeId } });
+    if (!existing || existing.customerId !== customer.id) {
+      throw createApiError({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: 'CONSIGNEE不存在或无权限' });
+    }
+    await tx.customerConsignee.updateMany({ where: { customerId: customer.id }, data: { isPrimary: false } });
+    await tx.customerConsignee.updateMany({ where: { id: consigneeId }, data: { isPrimary: true } });
+    await tx.customer.update({ where: { id: customer.id }, data: { consignee: existing.consignee } });
+    return { ...existing, isPrimary: true };
+  });
+
+  await recordAuditEvent({
+    action: auditActions.CUSTOMER_UPDATE,
+    actorId: currentUser.id,
+    targetType: auditTargetTypes.CUSTOMER,
+    targetId: customerId,
+    metadata: {
+      source: 'customer-consignee-set-primary',
+      consigneeId,
+    },
+  });
+
+  return {
+    data: serializeConsignee(result),
+    message: '默认CONSIGNEE已更新',
+  };
+}

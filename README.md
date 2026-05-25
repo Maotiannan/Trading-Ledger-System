@@ -35,9 +35,11 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.163`
-- 本次更新：修复 `Customer Management` 新增 `CONSIGNEE` 失败后 Add 按钮一直转圈的问题；现在会停止转圈并显示具体错误。
-- 本次更新：`CONSIGNEE` 支持长文本保存，系统改用哈希去重，不再因为内容超过 191 个字符被拒绝。
+- 当前版本：`1.0.164`
+- 本次更新：`Customer Management` 的 `CONSIGNEE Management` 支持选择默认 `CONSIGNEE`，默认值会同步回客户主 `CONSIGNEE` 字段。
+- 本次更新：`CONSIGNEE Management` 的删除入口改为小垃圾桶图标，减少弹窗内按钮占位。
+- 上一版本：修复 `Customer Management` 新增 `CONSIGNEE` 失败后 Add 按钮一直转圈的问题；现在会停止转圈并显示具体错误。
+- 上一版本：`CONSIGNEE` 支持长文本保存，系统改用哈希去重，不再因为内容超过 191 个字符被拒绝。
 - 上一版本：客户资料支持维护多个 `CONSIGNEE`；在 `Customer Management` 中点击 `CONSIGNEE` 文本可打开弹窗新增或删除。
 - 上一版本：新增 `POST /api/customers/order-consignee/write` 和兼容路径 `/customers/order-consignee/write`，外部系统可按 `ORDER NO` 写入客户 `CONSIGNEE`，同一订单同一 `CONSIGNEE` 重复写入会幂等成功。
 - 上一版本：数据库迁移只新增 `CustomerConsignee` 子表并从旧 `Customer.consignee` 回填，不删除旧字段，确保历史客户和财务数据安全。

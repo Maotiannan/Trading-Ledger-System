@@ -25,6 +25,7 @@ import {
   addCustomerConsignee,
   deleteCustomerConsignee,
   listCustomerConsignees,
+  setCustomerConsigneePrimary,
 } from '@/lib/customer-consignee-service';
 
 function trimStr(value: unknown): string {
@@ -337,6 +338,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     if (action === 'consignee-delete') {
       const result = await deleteCustomerConsignee(currentUser, trimStr(body.customerId), trimStr(body.consigneeId));
+      return createApiSuccessResponse(result, request);
+    }
+
+    if (action === 'consignee-set-primary') {
+      const result = await setCustomerConsigneePrimary(currentUser, trimStr(body.customerId), trimStr(body.consigneeId));
       return createApiSuccessResponse(result, request);
     }
 

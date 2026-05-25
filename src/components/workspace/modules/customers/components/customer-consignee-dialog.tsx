@@ -1,12 +1,11 @@
 'use client';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react';
 
 export type CustomerConsigneeItem = {
   id: string;
@@ -29,6 +28,7 @@ export type CustomerConsigneeDialogProps = {
   onInputChange: (value: string) => void;
   onAdd: () => void;
   onDelete: (id: string) => void;
+  onSetPrimary: (id: string) => void;
 };
 
 export function CustomerConsigneeDialog({
@@ -44,6 +44,7 @@ export function CustomerConsigneeDialog({
   onInputChange,
   onAdd,
   onDelete,
+  onSetPrimary,
 }: CustomerConsigneeDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,19 +97,37 @@ export function CustomerConsigneeDialog({
                   <div key={item.id} className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-1">
                       <div className="whitespace-normal break-words text-sm font-medium">{item.consignee}</div>
-                      {item.isPrimary && <Badge variant="outline">{tx('当前默认', 'Primary')}</Badge>}
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="self-start text-red-600 hover:text-red-700 sm:self-center"
-                      onClick={() => onDelete(item.id)}
-                      disabled={submitting}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      {tx('删除', 'Delete')}
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-2 self-start sm:self-center">
+                      {item.isPrimary ? (
+                        <div className="inline-flex h-8 items-center gap-1 rounded-md border px-2 text-xs text-muted-foreground">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          {tx('当前默认', 'Primary')}
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onSetPrimary(item.id)}
+                          disabled={submitting || item.id.startsWith('legacy-')}
+                        >
+                          {tx('设为默认', 'Set default')}
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-red-600 hover:text-red-700"
+                        aria-label={tx('删除 CONSIGNEE', 'Delete CONSIGNEE')}
+                        title={tx('删除 CONSIGNEE', 'Delete CONSIGNEE')}
+                        onClick={() => onDelete(item.id)}
+                        disabled={submitting || item.id.startsWith('legacy-')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

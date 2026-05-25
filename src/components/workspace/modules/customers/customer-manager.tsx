@@ -357,6 +357,33 @@ export function CustomerManager() {
     }
   };
 
+  const setPrimaryConsignee = async (consigneeId: string) => {
+    const customerId = String(consigneeDialogCustomer?.id || '').trim();
+    if (!customerId || !consigneeId || consigneeId.startsWith('legacy-')) return;
+    setConsigneeSubmitting(true);
+    setConsigneeError('');
+    try {
+      const result = await apiCall('customer', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'consignee-set-primary',
+          customerId,
+          consigneeId,
+        }),
+      });
+      if (result.success) {
+        await loadConsignees(customerId);
+        await loadCustomers();
+      } else {
+        setConsigneeError(String(result.message || result.error || tx('默认CONSIGNEE更新失败', 'Failed to update default CONSIGNEE')));
+      }
+    } catch (error) {
+      setConsigneeError(getErrorMessage(error, tx('默认CONSIGNEE更新失败', 'Failed to update default CONSIGNEE')));
+    } finally {
+      setConsigneeSubmitting(false);
+    }
+  };
+
   const consigneeDialogCustomerLabel = (() => {
     if (!consigneeDialogCustomer) return '';
     const mark = String(consigneeDialogCustomer.mark || '').trim();
@@ -548,6 +575,7 @@ export function CustomerManager() {
         onInputChange={setConsigneeInput}
         onAdd={() => { void submitConsignee(); }}
         onDelete={(id) => { void deleteConsignee(id); }}
+        onSetPrimary={(id) => { void setPrimaryConsignee(id); }}
       />
     </div>
   );

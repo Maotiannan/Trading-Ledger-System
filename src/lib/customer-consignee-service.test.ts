@@ -5,6 +5,7 @@ import {
   addCustomerConsignee,
   deleteCustomerConsignee,
   listCustomerConsignees,
+  setCustomerConsigneePrimary,
   writeOrderConsignee,
 } from '@/lib/customer-consignee-service';
 
@@ -210,5 +211,23 @@ describe('customer-consignee-service', () => {
     expect(mockDb.customerConsignee.updateMany).toHaveBeenCalledWith({ where: { customerId: 'customer-1' }, data: { isPrimary: false } });
     expect(mockDb.customerConsignee.updateMany).toHaveBeenCalledWith({ where: { id: 'consignee-2' }, data: { isPrimary: true } });
     expect(mockDb.customer.update).toHaveBeenCalledWith({ where: { id: 'customer-1' }, data: { consignee: 'Remaining' } });
+  });
+
+  it('sets one consignee as primary and syncs the legacy customer consignee field', async () => {
+    mockDb.customerConsignee.findUnique.mockResolvedValueOnce({
+      id: 'consignee-2',
+      customerId: 'customer-1',
+      consignee: 'Second Consignee',
+      isPrimary: false,
+      createdAt: new Date('2026-05-25T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-25T00:00:00.000Z'),
+    });
+
+    const result = await setCustomerConsigneePrimary(adminUser, 'customer-1', 'consignee-2');
+
+    expect(mockDb.customerConsignee.updateMany).toHaveBeenCalledWith({ where: { customerId: 'customer-1' }, data: { isPrimary: false } });
+    expect(mockDb.customerConsignee.updateMany).toHaveBeenCalledWith({ where: { id: 'consignee-2' }, data: { isPrimary: true } });
+    expect(mockDb.customer.update).toHaveBeenCalledWith({ where: { id: 'customer-1' }, data: { consignee: 'Second Consignee' } });
+    expect(result.data).toEqual(expect.objectContaining({ id: 'consignee-2', consignee: 'Second Consignee', isPrimary: true }));
   });
 });

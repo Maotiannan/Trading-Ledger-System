@@ -87,17 +87,19 @@ jest.mock('./components', () => ({
       open consignees
     </button>
   ),
-  CustomerConsigneeDialog: ({ open, inputValue, submitting, error, onInputChange, onAdd }: {
+  CustomerConsigneeDialog: ({ open, inputValue, submitting, error, onInputChange, onAdd, onSetPrimary }: {
     open: boolean;
     inputValue: string;
     submitting: boolean;
     error: string;
     onInputChange: (value: string) => void;
     onAdd: () => void;
+    onSetPrimary: (id: string) => void;
   }) => open ? (
     <div>
       <input aria-label="consignee input" value={inputValue} onChange={(event) => onInputChange(event.target.value)} />
       <button type="button" onClick={onAdd}>add consignee</button>
+      <button type="button" onClick={() => onSetPrimary('consignee-2')}>set primary</button>
       <span data-testid="consignee-submitting">{submitting ? 'yes' : 'no'}</span>
       <span role="alert">{error}</span>
     </div>
@@ -111,7 +113,11 @@ describe('CustomerManager consignee dialog', () => {
     jest.clearAllMocks();
     mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
       if (endpoint === 'customer' && options?.method === 'POST') {
-        throw new Error('CONSIGNEE过长');
+        const body = JSON.parse(String(options.body || '{}')) as { action?: string };
+        if (body.action === 'consignee-add') {
+          throw new Error('CONSIGNEE过长');
+        }
+        return { success: true, data: {} };
       }
       if (endpoint.startsWith('customer?action=consignees')) {
         return { success: true, data: [] };
@@ -129,5 +135,21 @@ describe('CustomerManager consignee dialog', () => {
 
     await waitFor(() => expect(screen.getByTestId('consignee-submitting')).toHaveTextContent('no'));
     expect(screen.getByRole('alert')).toHaveTextContent('CONSIGNEE过长');
+  });
+
+  it('submits a primary CONSIGNEE selection through the customer API', async () => {
+    render(<CustomerManager />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'open consignees' }));
+    fireEvent.click(screen.getByRole('button', { name: 'set primary' }));
+
+    await waitFor(() => expect(mockApiCall).toHaveBeenCalledWith('customer', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'consignee-set-primary',
+        customerId: 'customer-1',
+        consigneeId: 'consignee-2',
+      }),
+    })));
   });
 });

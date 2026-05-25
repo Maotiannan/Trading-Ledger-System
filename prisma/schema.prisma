@@ -640,15 +640,16 @@ model CustomerConsignee {
   id                  String   @id @default(cuid())
   customerId          String
   consignee           String   @db.Text
-  normalizedConsignee String   @map("normalized_consignee")
+  normalizedConsignee     String   @map("normalized_consignee") @db.Text
+  normalizedConsigneeHash String   @map("normalized_consignee_hash")
   isPrimary           Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  @@unique([customerId, normalizedConsignee])
-  @@index([normalizedConsignee])
+  @@unique([customerId, normalizedConsigneeHash])
+  @@index([normalizedConsigneeHash])
   @@index([customerId, isPrimary])
 }
 

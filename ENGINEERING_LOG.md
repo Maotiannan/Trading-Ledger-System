@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.162
+> 当前版本：v1.0.163
 > 最后更新：2026-05-25
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `CustomerConsignee` 长文本与前端错误闭环修复：复现用户新增长 `CONSIGNEE` 时后端返回 `CONSIGNEE过长`，同时前端 `submitConsignee()` 缺少 `catch/finally` 导致 Add 按钮一直转圈；新增 `normalized_consignee_hash` 字段并迁移旧数据，唯一约束改为 `customerId + sha256(normalizedConsignee)`，`normalized_consignee` 改为 `TEXT`，允许保留完整长文本；前端新增异常兜底，失败时显示错误并必定关闭 submitting。补齐长文本 service 回归与 CustomerManager 异常 UI 回归 ✅ 2026-05-25
 
 - [x] 多 `CONSIGNEE` 子表与外部写入接口落地：新增 `CustomerConsignee` 子表和安全迁移，仅从旧 `Customer.consignee` 回填，不删除旧字段；新增 `customer-consignee-service`，`writeOrderConsignee()` 复用 `resolveOrderCustomer()` 和 Excel ML token 可见范围，事务内按 `ORDER NO -> CUSTOMER -> CONSIGNEE` 幂等写入；新增 `POST /api/customers/order-consignee/write` 与兼容路径 `/customers/order-consignee/write`，响应直接返回 `{ written, orderNo, customerId, consigneeId, consignee, updatedAt }`；`Customer Management` 列表点击 `CONSIGNEE` 打开管理弹窗，支持新增/删除并同步旧字段。补齐 service / route / api-catalog / UI component 单测 ✅ 2026-05-25
 

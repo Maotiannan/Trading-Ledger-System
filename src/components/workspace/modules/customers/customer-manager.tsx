@@ -5,6 +5,7 @@ import { useStore } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   apiCall,
+  getErrorMessage,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
   useLatestRequestGuard,
@@ -306,22 +307,27 @@ export function CustomerManager() {
     if (!customerId || !consignee) return;
     setConsigneeSubmitting(true);
     setConsigneeError('');
-    const result = await apiCall('customer', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'consignee-add',
-        customerId,
-        consignee,
-      }),
-    });
-    if (result.success) {
-      setConsigneeInput('');
-      await loadConsignees(customerId);
-      await loadCustomers();
-    } else {
-      setConsigneeError(String(result.message || result.error || tx('CONSIGNEE新增失败', 'Failed to add CONSIGNEE')));
+    try {
+      const result = await apiCall('customer', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'consignee-add',
+          customerId,
+          consignee,
+        }),
+      });
+      if (result.success) {
+        setConsigneeInput('');
+        await loadConsignees(customerId);
+        await loadCustomers();
+      } else {
+        setConsigneeError(String(result.message || result.error || tx('CONSIGNEE新增失败', 'Failed to add CONSIGNEE')));
+      }
+    } catch (error) {
+      setConsigneeError(getErrorMessage(error, tx('CONSIGNEE新增失败', 'Failed to add CONSIGNEE')));
+    } finally {
+      setConsigneeSubmitting(false);
     }
-    setConsigneeSubmitting(false);
   };
 
   const deleteConsignee = async (consigneeId: string) => {
@@ -329,21 +335,26 @@ export function CustomerManager() {
     if (!customerId || !consigneeId || consigneeId.startsWith('legacy-')) return;
     setConsigneeSubmitting(true);
     setConsigneeError('');
-    const result = await apiCall('customer', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'consignee-delete',
-        customerId,
-        consigneeId,
-      }),
-    });
-    if (result.success) {
-      await loadConsignees(customerId);
-      await loadCustomers();
-    } else {
-      setConsigneeError(String(result.message || result.error || tx('CONSIGNEE删除失败', 'Failed to delete CONSIGNEE')));
+    try {
+      const result = await apiCall('customer', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'consignee-delete',
+          customerId,
+          consigneeId,
+        }),
+      });
+      if (result.success) {
+        await loadConsignees(customerId);
+        await loadCustomers();
+      } else {
+        setConsigneeError(String(result.message || result.error || tx('CONSIGNEE删除失败', 'Failed to delete CONSIGNEE')));
+      }
+    } catch (error) {
+      setConsigneeError(getErrorMessage(error, tx('CONSIGNEE删除失败', 'Failed to delete CONSIGNEE')));
+    } finally {
+      setConsigneeSubmitting(false);
     }
-    setConsigneeSubmitting(false);
   };
 
   const consigneeDialogCustomerLabel = (() => {

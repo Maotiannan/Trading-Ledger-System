@@ -35,10 +35,12 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.162`
-- 本次更新：客户资料支持维护多个 `CONSIGNEE`；在 `Customer Management` 中点击 `CONSIGNEE` 文本可打开弹窗新增或删除。
-- 本次更新：新增 `POST /api/customers/order-consignee/write` 和兼容路径 `/customers/order-consignee/write`，外部系统可按 `ORDER NO` 写入客户 `CONSIGNEE`，同一订单同一 `CONSIGNEE` 重复写入会幂等成功。
-- 本次更新：数据库迁移只新增 `CustomerConsignee` 子表并从旧 `Customer.consignee` 回填，不删除旧字段，确保历史客户和财务数据安全。
+- 当前版本：`1.0.163`
+- 本次更新：修复 `Customer Management` 新增 `CONSIGNEE` 失败后 Add 按钮一直转圈的问题；现在会停止转圈并显示具体错误。
+- 本次更新：`CONSIGNEE` 支持长文本保存，系统改用哈希去重，不再因为内容超过 191 个字符被拒绝。
+- 上一版本：客户资料支持维护多个 `CONSIGNEE`；在 `Customer Management` 中点击 `CONSIGNEE` 文本可打开弹窗新增或删除。
+- 上一版本：新增 `POST /api/customers/order-consignee/write` 和兼容路径 `/customers/order-consignee/write`，外部系统可按 `ORDER NO` 写入客户 `CONSIGNEE`，同一订单同一 `CONSIGNEE` 重复写入会幂等成功。
+- 上一版本：数据库迁移只新增 `CustomerConsignee` 子表并从旧 `Customer.consignee` 回填，不删除旧字段，确保历史客户和财务数据安全。
 - 上一版本：`Payment Detail Management` 的 `Export Pic` 图片中，`Deposit` 现在和 `Initial` 一样使用蓝色文字与浅蓝底色。
 - 上一版本：每次点击 `Export Pic` 下载付款明细图片时，系统都会重新生成图片并覆盖服务器端小眼睛预览图，避免继续看到旧图。
 - 上一版本：`Payment Detail Management` 的 `Export Pic` 图片中，首笔付款如果关联的是定金收据，会在 `TYPE` 列显示 `Deposit`；非定金首笔仍显示 `Initial`。

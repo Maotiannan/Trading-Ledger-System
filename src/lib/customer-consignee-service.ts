@@ -1,4 +1,5 @@
 import { UserRole } from '@prisma/client';
+import { createHash } from 'crypto';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
@@ -36,6 +37,10 @@ export function normalizeConsignee(value: unknown): string {
   return trimStr(value).replace(/\s+/g, ' ').toLowerCase();
 }
 
+export function hashNormalizedConsignee(normalizedConsignee: string): string {
+  return createHash('sha256').update(normalizedConsignee).digest('hex');
+}
+
 function serializeDate(value: unknown): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
@@ -70,9 +75,6 @@ function assertConsigneeInput(consigneeInput: unknown): { consignee: string; nor
   const normalizedConsignee = normalizeConsignee(consignee);
   if (!consignee || !normalizedConsignee) {
     throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'CONSIGNEE不能为空' });
-  }
-  if (normalizedConsignee.length > 191) {
-    throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'CONSIGNEE过长' });
   }
   return { consignee, normalizedConsignee };
 }
@@ -111,9 +113,9 @@ async function syncLegacyPrimaryConsignee(client: ConsigneeDbClient, customerId:
   await client.customer.update({ where: { id: customerId }, data: { consignee: null } });
 }
 
-async function existingConsignee(client: ConsigneeDbClient, customerId: string, normalizedConsignee: string) {
+async function existingConsignee(client: ConsigneeDbClient, customerId: string, normalizedConsigneeHash: string) {
   return client.customerConsignee.findFirst({
-    where: { customerId, normalizedConsignee },
+    where: { customerId, normalizedConsigneeHash },
   });
 }
 
@@ -134,6 +136,7 @@ async function createConsigneeInCustomer(
       customerId,
       consignee,
       normalizedConsignee,
+      normalizedConsigneeHash: hashNormalizedConsignee(normalizedConsignee),
       isPrimary: isFirst,
     },
   });
@@ -149,7 +152,8 @@ export async function ensureCustomerConsignee(
   consigneeInput: unknown,
 ): Promise<{ row: { id: string; customerId: string; consignee: string; updatedAt?: unknown }; written: boolean }> {
   const { consignee, normalizedConsignee } = assertConsigneeInput(consigneeInput);
-  const existing = await existingConsignee(client, customerId, normalizedConsignee);
+  const normalizedConsigneeHash = hashNormalizedConsignee(normalizedConsignee);
+  const existing = await existingConsignee(client, customerId, normalizedConsigneeHash);
   if (existing) {
     return { row: existing, written: false };
   }
@@ -158,7 +162,7 @@ export async function ensureCustomerConsignee(
     return { row: created, written: true };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2002') {
-      const row = await existingConsignee(client, customerId, normalizedConsignee);
+      const row = await existingConsignee(client, customerId, normalizedConsigneeHash);
       if (row) return { row, written: false };
     }
     throw error;

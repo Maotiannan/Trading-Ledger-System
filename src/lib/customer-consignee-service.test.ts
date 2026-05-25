@@ -70,6 +70,16 @@ const adminUser = {
 describe('customer-consignee-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb.customer.findFirst.mockReset();
+    mockDb.customer.findUnique.mockReset();
+    mockDb.customer.update.mockReset();
+    mockDb.customerConsignee.findMany.mockReset();
+    mockDb.customerConsignee.findFirst.mockReset();
+    mockDb.customerConsignee.findUnique.mockReset();
+    mockDb.customerConsignee.create.mockReset();
+    mockDb.customerConsignee.delete.mockReset();
+    mockDb.customerConsignee.updateMany.mockReset();
+    mockDb.$transaction.mockReset();
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockDb.customer.findFirst.mockResolvedValue({ id: 'customer-1', ownerId: 'sales-1', consignee: 'Old Consignee' });
     mockDb.customer.findUnique.mockResolvedValue({ id: 'customer-1', ownerId: 'sales-1', consignee: 'Old Consignee' });
@@ -118,6 +128,26 @@ describe('customer-consignee-service', () => {
       customerId: 'customer-1',
       consigneeId: 'consignee-new',
       consignee: 'New Consignee',
+    }));
+  });
+
+  it('accepts long consignee text by storing a stable normalized hash for idempotency', async () => {
+    const longConsignee = `Name: ${'ALPHA '.repeat(45)}ADDRESS LINE CONAKRY GUINEA`.trim();
+    mockDb.customerConsignee.findMany.mockResolvedValueOnce([]);
+
+    const result = await writeOrderConsignee(salesUser, { orderNo: 'AB-12', consignee: longConsignee });
+
+    expect(mockDb.customerConsignee.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        customerId: 'customer-1',
+        consignee: longConsignee,
+        normalizedConsignee: expect.stringContaining('alpha'),
+        normalizedConsigneeHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    }));
+    expect(result).toEqual(expect.objectContaining({
+      written: true,
+      consignee: longConsignee,
     }));
   });
 

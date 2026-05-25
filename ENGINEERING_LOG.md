@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.161
-> 最后更新：2026-05-24
+> 当前版本：v1.0.162
+> 最后更新：2026-05-25
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 多 `CONSIGNEE` 子表与外部写入接口落地：新增 `CustomerConsignee` 子表和安全迁移，仅从旧 `Customer.consignee` 回填，不删除旧字段；新增 `customer-consignee-service`，`writeOrderConsignee()` 复用 `resolveOrderCustomer()` 和 Excel ML token 可见范围，事务内按 `ORDER NO -> CUSTOMER -> CONSIGNEE` 幂等写入；新增 `POST /api/customers/order-consignee/write` 与兼容路径 `/customers/order-consignee/write`，响应直接返回 `{ written, orderNo, customerId, consigneeId, consignee, updatedAt }`；`Customer Management` 列表点击 `CONSIGNEE` 打开管理弹窗，支持新增/删除并同步旧字段。补齐 service / route / api-catalog / UI component 单测 ✅ 2026-05-25
 
 - [x] `Payment Detail Export Pic` 预览刷新修复：`Deposit` TYPE 改为与 `Initial` 一致的浅蓝底蓝字徽章；新增 `regenerateDetailPreviewImage()`，`/api/detail?action=export-pic` 下载时不再只返回一次性 JPEG，而是重新生成并写回 `Detail.imageUrl/imageName`，已有系统生成预览图会直接覆盖同一路径，非系统图则生成新的 `payment-detail_<金额>_<日期>_<agent>.jpg` 预览引用。`preview-image` 响应改为 `no-store`，避免浏览器继续缓存旧图。补齐 export SVG、detail-image-assets、detail route 红绿回归 ✅ 2026-05-24
 

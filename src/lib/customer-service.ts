@@ -13,6 +13,7 @@ import {
   resolveCustomerOwnerId,
 } from '@/lib/customer-scope';
 import { syncCustomerOrderNames } from '@/lib/customer-order-name-service';
+import { syncCustomerPrimaryConsigneeFromLegacy } from '@/lib/customer-consignee-service';
 import { runInTransaction } from '@/lib/transaction';
 
 export type CustomerPayload = {
@@ -255,6 +256,7 @@ export async function createCustomerRecord(
         },
       });
       await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName!, payload.orderNames || []);
+      await syncCustomerPrimaryConsigneeFromLegacy(tx, created.id, payload.consignee || null);
 
       const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, created.id, tx);
       phoneConflict = phoneConflicts.length > 0;
@@ -357,6 +359,7 @@ export async function updateCustomerRecord(
         },
       });
       await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], id, payload.orderName!, payload.orderNames || []);
+      await syncCustomerPrimaryConsigneeFromLegacy(tx, id, payload.consignee || null);
 
       const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, id, tx);
       phoneConflict = phoneConflicts.length > 0;
@@ -536,6 +539,7 @@ export async function processCustomerImportRows(
           },
         });
         await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName!, payload.orderNames || []);
+        await syncCustomerPrimaryConsigneeFromLegacy(tx, created.id, payload.consignee || null);
       });
 
       await recordAuditEvent({

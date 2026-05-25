@@ -21,6 +21,11 @@ import {
   listCustomerOwnerOptions,
   listCustomers,
 } from '@/lib/customer-read-service';
+import {
+  addCustomerConsignee,
+  deleteCustomerConsignee,
+  listCustomerConsignees,
+} from '@/lib/customer-consignee-service';
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -123,6 +128,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       customerId: trimStr(searchParams.get('customerId')),
       orderName: trimStr(searchParams.get('orderName')),
     });
+    return createApiSuccessResponse(result, request);
+  }
+
+  if (action === 'consignees') {
+    const result = await listCustomerConsignees(currentUser, trimStr(searchParams.get('customerId')));
     return createApiSuccessResponse(result, request);
   }
 
@@ -317,6 +327,16 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     if (action === 'delete') {
       const result = await deleteCustomerRecord(currentUser, trimStr(body.id));
+      return createApiSuccessResponse(result, request);
+    }
+
+    if (action === 'consignee-add') {
+      const result = await addCustomerConsignee(currentUser, trimStr(body.customerId), body.consignee);
+      return createApiSuccessResponse(result, request);
+    }
+
+    if (action === 'consignee-delete') {
+      const result = await deleteCustomerConsignee(currentUser, trimStr(body.customerId), trimStr(body.consigneeId));
       return createApiSuccessResponse(result, request);
     }
 

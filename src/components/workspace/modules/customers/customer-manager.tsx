@@ -15,11 +15,13 @@ import { useImportResultTable } from '@/components/workspace/hooks';
 import {
   CustomerFixDialog,
   CustomerFixQueue,
+  CustomerConsigneeDialog,
   CustomerFormDialog,
   CustomerList,
   CustomerLongTextPreviewDialog,
   CustomerOrderHistoryDialog,
   CustomerToolbar,
+  type CustomerConsigneeItem,
   type CustomerOrderHistory,
 } from './components';
 import type { CustomerOwnerOption } from './types';
@@ -55,6 +57,12 @@ export function CustomerManager() {
   const [orderHistoryError, setOrderHistoryError] = useState('');
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistory, setOrderHistory] = useState<CustomerOrderHistory | null>(null);
+  const [consigneeDialogCustomer, setConsigneeDialogCustomer] = useState<Record<string, unknown> | null>(null);
+  const [consigneeRows, setConsigneeRows] = useState<CustomerConsigneeItem[]>([]);
+  const [consigneeInput, setConsigneeInput] = useState('');
+  const [consigneeLoading, setConsigneeLoading] = useState(false);
+  const [consigneeSubmitting, setConsigneeSubmitting] = useState(false);
+  const [consigneeError, setConsigneeError] = useState('');
   const customerRequestGuard = useLatestRequestGuard();
   const {
     customerImportInputRef,
@@ -243,6 +251,108 @@ export function CustomerManager() {
     setOrderHistoryLoading(false);
   };
 
+  const normalizeConsigneeRows = (rawRows: unknown): CustomerConsigneeItem[] => {
+    if (!Array.isArray(rawRows)) return [];
+    const rows: CustomerConsigneeItem[] = [];
+    for (const item of rawRows) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      const id = String(row.id || '').trim();
+      const consignee = String(row.consignee || '').trim();
+      if (!id || !consignee) continue;
+      rows.push({
+        id,
+        consignee,
+        isPrimary: Boolean(row.isPrimary),
+        createdAt: typeof row.createdAt === 'string' ? row.createdAt : null,
+        updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : null,
+      });
+    }
+    return rows;
+  };
+
+  const localConsigneeRows = (row: Record<string, unknown>): CustomerConsigneeItem[] => {
+    const rows = normalizeConsigneeRows(row.consignees);
+    if (rows.length > 0) return rows;
+    const legacy = String(row.consignee || '').trim();
+    return legacy ? [{ id: `legacy-${String(row.id || '')}`, consignee: legacy, isPrimary: true }] : [];
+  };
+
+  const loadConsignees = async (customerId: string) => {
+    if (!customerId) return;
+    setConsigneeLoading(true);
+    setConsigneeError('');
+    const result = await apiCall(`customer?action=consignees&customerId=${encodeURIComponent(customerId)}`);
+    if (result.success) {
+      setConsigneeRows(normalizeConsigneeRows(result.data));
+    } else {
+      setConsigneeError(String(result.message || result.error || tx('CONSIGNEE加载失败', 'Failed to load CONSIGNEE')));
+    }
+    setConsigneeLoading(false);
+  };
+
+  const openConsigneeManager = (row: Record<string, unknown>) => {
+    const customerId = String(row.id || '').trim();
+    setConsigneeDialogCustomer(row);
+    setConsigneeRows(localConsigneeRows(row));
+    setConsigneeInput('');
+    setConsigneeError('');
+    if (customerId) void loadConsignees(customerId);
+  };
+
+  const submitConsignee = async () => {
+    const customerId = String(consigneeDialogCustomer?.id || '').trim();
+    const consignee = consigneeInput.trim();
+    if (!customerId || !consignee) return;
+    setConsigneeSubmitting(true);
+    setConsigneeError('');
+    const result = await apiCall('customer', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'consignee-add',
+        customerId,
+        consignee,
+      }),
+    });
+    if (result.success) {
+      setConsigneeInput('');
+      await loadConsignees(customerId);
+      await loadCustomers();
+    } else {
+      setConsigneeError(String(result.message || result.error || tx('CONSIGNEE新增失败', 'Failed to add CONSIGNEE')));
+    }
+    setConsigneeSubmitting(false);
+  };
+
+  const deleteConsignee = async (consigneeId: string) => {
+    const customerId = String(consigneeDialogCustomer?.id || '').trim();
+    if (!customerId || !consigneeId || consigneeId.startsWith('legacy-')) return;
+    setConsigneeSubmitting(true);
+    setConsigneeError('');
+    const result = await apiCall('customer', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'consignee-delete',
+        customerId,
+        consigneeId,
+      }),
+    });
+    if (result.success) {
+      await loadConsignees(customerId);
+      await loadCustomers();
+    } else {
+      setConsigneeError(String(result.message || result.error || tx('CONSIGNEE删除失败', 'Failed to delete CONSIGNEE')));
+    }
+    setConsigneeSubmitting(false);
+  };
+
+  const consigneeDialogCustomerLabel = (() => {
+    if (!consigneeDialogCustomer) return '';
+    const mark = String(consigneeDialogCustomer.mark || '').trim();
+    const name = String(consigneeDialogCustomer.companyName || consigneeDialogCustomer.name || '').trim();
+    return [mark, name].filter(Boolean).join(' / ');
+  })();
+
   return (
     <div className="space-y-6">
       <CustomerToolbar
@@ -286,6 +396,7 @@ export function CustomerManager() {
             truncateLongText={truncateLongText}
             onPreviewLongText={(label, value) => setCustomerLongTextPreview({ label, value })}
             onOpenOrderNameHistory={(row, orderName) => { void openOrderNameHistory(row, orderName); }}
+            onOpenConsignees={openConsigneeManager}
             onEdit={openEdit}
             onDelete={handleDelete}
           />
@@ -404,6 +515,28 @@ export function CustomerManager() {
             setOrderHistoryError('');
           }
         }}
+      />
+
+      <CustomerConsigneeDialog
+        open={Boolean(consigneeDialogCustomer)}
+        customerLabel={consigneeDialogCustomerLabel}
+        consignees={consigneeRows}
+        inputValue={consigneeInput}
+        loading={consigneeLoading}
+        submitting={consigneeSubmitting}
+        error={consigneeError}
+        tx={tx}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConsigneeDialogCustomer(null);
+            setConsigneeRows([]);
+            setConsigneeInput('');
+            setConsigneeError('');
+          }
+        }}
+        onInputChange={setConsigneeInput}
+        onAdd={() => { void submitConsignee(); }}
+        onDelete={(id) => { void deleteConsignee(id); }}
       />
     </div>
   );

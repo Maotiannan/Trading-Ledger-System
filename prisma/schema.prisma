@@ -609,6 +609,7 @@ model Customer {
   creator User @relation("CustomerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
   owner   User @relation("CustomerOwner", fields: [ownerId], references: [id])
   orderNames CustomerOrderName[]
+  consignees CustomerConsignee[]
   orders  Order[]
   receipts Receipt[]
   orderTrackers OrderTracker[]
@@ -632,6 +633,22 @@ model CustomerOrderName {
 
   @@unique([customerId, normalizedOrderName])
   @@index([normalizedOrderName])
+  @@index([customerId, isPrimary])
+}
+
+model CustomerConsignee {
+  id                  String   @id @default(cuid())
+  customerId          String
+  consignee           String   @db.Text
+  normalizedConsignee String   @map("normalized_consignee")
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, normalizedConsignee])
+  @@index([normalizedConsignee])
   @@index([customerId, isPrimary])
 }
 

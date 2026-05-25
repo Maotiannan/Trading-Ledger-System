@@ -16,6 +16,7 @@ export type CustomerListProps = {
   truncateLongText: (value: string, maxLength?: number) => string;
   onPreviewLongText: (label: string, value: string) => void;
   onOpenOrderNameHistory: (row: Record<string, unknown>, orderName: string) => void;
+  onOpenConsignees: (row: Record<string, unknown>) => void;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 };
@@ -30,6 +31,7 @@ export function CustomerList({
   truncateLongText,
   onPreviewLongText,
   onOpenOrderNameHistory,
+  onOpenConsignees,
   onEdit,
   onDelete,
 }: CustomerListProps) {
@@ -41,6 +43,26 @@ export function CustomerList({
       : [];
     const primary = String(row.orderName || '').trim();
     return Array.from(new Set([primary, ...aliases].filter(Boolean)));
+  };
+
+  const getConsigneeSummary = (row: Record<string, unknown>) => {
+    const rows = Array.isArray(row.consignees)
+      ? row.consignees
+        .map((item) => {
+          if (!item || typeof item !== 'object') return '';
+          return String((item as Record<string, unknown>).consignee || '').trim();
+        })
+        .filter(Boolean)
+      : [];
+    const legacy = String(row.consignee || '').trim();
+    const values = Array.from(new Set([...(legacy ? [legacy] : []), ...rows]));
+    if (values.length === 0) return { text: '-', title: '', count: 0 };
+    const first = values[0];
+    return {
+      text: values.length > 1 ? `${truncateLongText(first)} +${values.length - 1}` : truncateLongText(first),
+      title: values.join('\n'),
+      count: values.length,
+    };
   };
 
   return (
@@ -64,7 +86,7 @@ export function CustomerList({
           </TableHeader>
           <TableBody>
             {customers.map((row) => {
-              const consigneeFull = String(row.consignee || '').trim();
+              const consigneeSummary = getConsigneeSummary(row);
               const companyNameFull = String(row.companyName || '').trim();
               const addressFull = String(row.companyAddress || '').trim();
               const orderNames = getOrderNames(row);
@@ -94,16 +116,14 @@ export function CustomerList({
                   </TableCell>
                   <TableCell>{String(row.city || '-')}</TableCell>
                   <TableCell>
-                    {consigneeFull ? (
-                      <button
-                        type="button"
-                        className="max-w-[220px] truncate text-left hover:underline"
-                        title={consigneeFull}
-                        onClick={() => onPreviewLongText('CONSIGNEE', consigneeFull)}
-                      >
-                        {truncateLongText(consigneeFull)}
-                      </button>
-                    ) : '-'}
+                    <button
+                      type="button"
+                      className="max-w-[220px] truncate text-left text-blue-700 hover:underline"
+                      title={consigneeSummary.title || tx('点击维护 CONSIGNEE', 'Manage CONSIGNEE')}
+                      onClick={() => onOpenConsignees(row)}
+                    >
+                      {consigneeSummary.text}
+                    </button>
                   </TableCell>
                   <TableCell>{formatOwnerLabel(row)}</TableCell>
                   {canSeeExtended && (

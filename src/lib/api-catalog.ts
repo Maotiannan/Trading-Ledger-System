@@ -77,6 +77,18 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/customers/order-consignee/write',
+    description: 'External CONSIGNEE write endpoint for an ORDER NO, authenticated by Excel ML token',
+    actions: [
+      {
+        action: 'write-order-consignee',
+        method: 'POST',
+        description: 'Resolve ORDER NO to a visible customer, add the CONSIGNEE idempotently, and keep legacy Customer.consignee synchronized',
+        bodyExample: { header: 'Authorization: Bearer ml_...', orderNo: 'AB-12', consignee: 'Alpha Consignee' },
+      },
+    ],
+  },
+  {
     endpoint: '/api/customer/fixes',
     description: 'Customer fix queue and repair actions',
     actions: [

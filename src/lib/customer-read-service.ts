@@ -118,6 +118,16 @@ export async function listCustomers(
         },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
+      consignees: {
+        select: {
+          id: true,
+          consignee: true,
+          isPrimary: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      },
       owner: {
         select: {
           id: true,

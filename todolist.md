@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.161
-> 最后更新：2026-05-24
+> 当前版本：v1.0.162
+> 最后更新：2026-05-25
 
 ## 当前状态
 
@@ -23,21 +23,28 @@
 - 付款代理管理已可正常新增代理，弹窗桌面端信息区可完整查看
 - 新增客户增量同步 API：外部系统可用 `GET /api/sync/customers?since=<cursor>` 拉取可见范围内变更客户、删除标记和下一次游标
 - 新增 `ORDER NO` 批量客户资料查询 API：外部 agent 可用 Excel ML token 调用 `POST /api/sync/customers/by-orders`
+- 新增 `ORDER NO -> CONSIGNEE` 写入 API：外部系统可按订单号幂等写入客户多个 `CONSIGNEE`
+- 客户管理中 `CONSIGNEE` 可点击维护多个收货人，旧字段继续保留用于历史兼容
 - 新增独立 `Orders` 页面：业务订单跟踪与财务订单表隔离，但创建时严格检查财务订单和订单别名，避免重复订单进入两个体系
 - `Orders / 订单管理` 页面已完成用户侧文案收口：移除工程提示、补齐中文标签，并限制超长客户名称撑宽弹窗
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- 客户资料支持多个 `CONSIGNEE`，点击客户列表里的 `CONSIGNEE` 文本即可打开管理弹窗
+- 弹窗内可以新增或删除不同 `CONSIGNEE`，旧的主 `Customer.consignee` 字段继续保留用于历史兼容
+- 新增 `POST /api/customers/order-consignee/write`，外部系统可按 `ORDER NO` 写入对应客户的 `CONSIGNEE`，重复写入同一值会幂等成功
+
+### 0.1 上一里程碑
 - `Payment Detail Management` 的 `Export Pic` 图片中，`Deposit` 现在使用与 `Initial` 一致的蓝色文字和浅蓝底色
 - 每次点击 `Export Pic` 下载付款明细图片时，系统都会重新生成图片，并覆盖服务器端小眼睛预览图，避免旧图继续显示
 
-### 0.1 上一里程碑
+### 0.2 上一里程碑
 - `Payment Detail Management` 的 `Export Pic` 图片中，首笔付款如果关联的是定金收据，`TYPE` 列显示 `Deposit`
 - 非定金首笔仍显示 `Initial`；已结清规则和普通 `Standard` 规则保持不变
 - 导出图右上角日期改为浅蓝色，过长 `ORDER NO` 会在本列内自动换行，不再遮挡后续列
 
-### 0.2 上一里程碑
+### 0.3 上一里程碑
 - `Generate Signed Receipt` 的收据号重新从 `0010000` 起按 7 位编号递增
 - 收据号由后端事务内原子分配，弹窗只显示预览，不再允许前端手动改号，也不再按最近 10 条收据取最大值
 - `Payment Detail Management` 的小眼睛对所有付款明细可用：无上传图的明细会自动生成并保存 `Export Pic` 图片，有上传图的明细会统一按金额、日期和付款代理重命名

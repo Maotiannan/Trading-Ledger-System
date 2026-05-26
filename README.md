@@ -35,9 +35,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.164`
-- 本次更新：`Customer Management` 的 `CONSIGNEE Management` 支持选择默认 `CONSIGNEE`，默认值会同步回客户主 `CONSIGNEE` 字段。
-- 本次更新：`CONSIGNEE Management` 的删除入口改为小垃圾桶图标，减少弹窗内按钮占位。
+- 当前版本：`1.0.165`
+- 本次更新：`Customer Management` 现在把 `CONSIGNEE` 的 `-` 视为空白占位；外部 API 写入真实 `CONSIGNEE` 时会清理占位项，并在原默认值为空白时自动改用真实收货人。
+- 上一版本：`Customer Management` 的 `CONSIGNEE Management` 支持选择默认 `CONSIGNEE`，默认值会同步回客户主 `CONSIGNEE` 字段。
+- 上一版本：`CONSIGNEE Management` 的删除入口改为小垃圾桶图标，减少弹窗内按钮占位。
 - 上一版本：修复 `Customer Management` 新增 `CONSIGNEE` 失败后 Add 按钮一直转圈的问题；现在会停止转圈并显示具体错误。
 - 上一版本：`CONSIGNEE` 支持长文本保存，系统改用哈希去重，不再因为内容超过 191 个字符被拒绝。
 - 上一版本：客户资料支持维护多个 `CONSIGNEE`；在 `Customer Management` 中点击 `CONSIGNEE` 文本可打开弹窗新增或删除。

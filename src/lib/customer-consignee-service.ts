@@ -37,6 +37,11 @@ export function normalizeConsignee(value: unknown): string {
   return trimStr(value).replace(/\s+/g, ' ').toLowerCase();
 }
 
+function isBlankConsigneePlaceholder(value: unknown): boolean {
+  const text = trimStr(value);
+  return text === '-' || text === '－' || text === '—' || text === '–';
+}
+
 export function hashNormalizedConsignee(normalizedConsignee: string): string {
   return createHash('sha256').update(normalizedConsignee).digest('hex');
 }
@@ -73,7 +78,7 @@ function assertManager(currentUser: CurrentUser): void {
 function assertConsigneeInput(consigneeInput: unknown): { consignee: string; normalizedConsignee: string } {
   const consignee = trimStr(consigneeInput).replace(/\s+/g, ' ');
   const normalizedConsignee = normalizeConsignee(consignee);
-  if (!consignee || !normalizedConsignee) {
+  if (!consignee || !normalizedConsignee || isBlankConsigneePlaceholder(consignee)) {
     throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: 'CONSIGNEE不能为空' });
   }
   return { consignee, normalizedConsignee };
@@ -101,9 +106,8 @@ async function syncLegacyPrimaryConsignee(client: ConsigneeDbClient, customerId:
   const remaining = await client.customerConsignee.findMany({
     where: { customerId },
     orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-    take: 1,
   });
-  const primary = remaining[0] || null;
+  const primary = remaining.find((row) => !isBlankConsigneePlaceholder(row.consignee)) || null;
   if (primary) {
     await client.customerConsignee.updateMany({ where: { customerId }, data: { isPrimary: false } });
     await client.customerConsignee.updateMany({ where: { id: primary.id }, data: { isPrimary: true } });
@@ -124,23 +128,18 @@ async function createConsigneeInCustomer(
   customerId: string,
   consignee: string,
   normalizedConsignee: string,
+  isPrimary: boolean,
 ) {
-  const existingRows = await client.customerConsignee.findMany({
-    where: { customerId },
-    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
-    take: 1,
-  });
-  const isFirst = existingRows.length === 0;
   const created = await client.customerConsignee.create({
     data: {
       customerId,
       consignee,
       normalizedConsignee,
       normalizedConsigneeHash: hashNormalizedConsignee(normalizedConsignee),
-      isPrimary: isFirst,
+      isPrimary,
     },
   });
-  if (isFirst) {
+  if (isPrimary) {
     await client.customer.update({ where: { id: customerId }, data: { consignee } });
   }
   return created;
@@ -150,15 +149,39 @@ export async function ensureCustomerConsignee(
   client: ConsigneeDbClient,
   customerId: string,
   consigneeInput: unknown,
-): Promise<{ row: { id: string; customerId: string; consignee: string; updatedAt?: unknown }; written: boolean }> {
+): Promise<{ row: { id: string; customerId: string; consignee: string; isPrimary?: boolean | null; updatedAt?: unknown }; written: boolean }> {
   const { consignee, normalizedConsignee } = assertConsigneeInput(consigneeInput);
   const normalizedConsigneeHash = hashNormalizedConsignee(normalizedConsignee);
+  const currentRows = await client.customerConsignee.findMany({
+    where: { customerId },
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+  });
+  const blankRows = currentRows.filter((row) => isBlankConsigneePlaceholder(row.consignee));
+  const validRows = currentRows.filter((row) => !isBlankConsigneePlaceholder(row.consignee));
+  const primaryWasBlank = blankRows.some((row) => Boolean(row.isPrimary));
+  const hasValidPrimary = validRows.some((row) => Boolean(row.isPrimary));
+  const shouldMakeWrittenPrimary = primaryWasBlank || !hasValidPrimary;
   const existing = await existingConsignee(client, customerId, normalizedConsigneeHash);
   if (existing) {
+    for (const row of blankRows) {
+      await client.customerConsignee.delete({ where: { id: row.id } });
+    }
+    if (shouldMakeWrittenPrimary) {
+      await client.customerConsignee.updateMany({ where: { customerId }, data: { isPrimary: false } });
+      await client.customerConsignee.updateMany({ where: { id: existing.id }, data: { isPrimary: true } });
+      await client.customer.update({ where: { id: customerId }, data: { consignee: existing.consignee } });
+      return { row: { ...existing, isPrimary: true }, written: false };
+    }
     return { row: existing, written: false };
   }
   try {
-    const created = await createConsigneeInCustomer(client, customerId, consignee, normalizedConsignee);
+    for (const row of blankRows) {
+      await client.customerConsignee.delete({ where: { id: row.id } });
+    }
+    if (shouldMakeWrittenPrimary) {
+      await client.customerConsignee.updateMany({ where: { customerId }, data: { isPrimary: false } });
+    }
+    const created = await createConsigneeInCustomer(client, customerId, consignee, normalizedConsignee, shouldMakeWrittenPrimary);
     return { row: created, written: true };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P2002') {
@@ -225,9 +248,10 @@ export async function listCustomerConsignees(currentUser: CurrentUser, customerI
     where: { customerId: customer.id },
     orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
   });
+  const visibleRows = rows.filter((row) => !isBlankConsigneePlaceholder(row.consignee));
   return {
-    data: rows.map(serializeConsignee),
-    message: `CONSIGNEE已加载，共 ${rows.length} 条`,
+    data: visibleRows.map(serializeConsignee),
+    message: `CONSIGNEE已加载，共 ${visibleRows.length} 条`,
   };
 }
 

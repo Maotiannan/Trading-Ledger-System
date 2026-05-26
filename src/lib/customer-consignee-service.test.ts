@@ -132,6 +132,70 @@ describe('customer-consignee-service', () => {
     }));
   });
 
+  it('replaces a dash placeholder with the written consignee and makes it primary', async () => {
+    mockDb.customerConsignee.findMany.mockResolvedValueOnce([
+      { id: 'consignee-empty', customerId: 'customer-1', consignee: '-', isPrimary: true },
+    ]);
+
+    const result = await writeOrderConsignee(salesUser, { orderNo: 'AB-12', consignee: 'Real Consignee' });
+
+    expect(mockDb.customerConsignee.delete).toHaveBeenCalledWith({ where: { id: 'consignee-empty' } });
+    expect(mockDb.customerConsignee.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        customerId: 'customer-1',
+        consignee: 'Real Consignee',
+        isPrimary: true,
+      }),
+    }));
+    expect(mockDb.customer.update).toHaveBeenCalledWith({
+      where: { id: 'customer-1' },
+      data: { consignee: 'Real Consignee' },
+    });
+    expect(result).toEqual(expect.objectContaining({
+      written: true,
+      consignee: 'Real Consignee',
+    }));
+  });
+
+  it('promotes an existing consignee when the current primary is a dash placeholder', async () => {
+    mockDb.customerConsignee.findFirst.mockResolvedValueOnce({
+      id: 'consignee-real',
+      customerId: 'customer-1',
+      consignee: 'Real Consignee',
+      normalizedConsignee: 'real consignee',
+      isPrimary: false,
+      updatedAt: new Date('2026-05-25T01:00:00.000Z'),
+    });
+    mockDb.customerConsignee.findMany.mockResolvedValueOnce([
+      { id: 'consignee-empty', customerId: 'customer-1', consignee: '-', isPrimary: true },
+      { id: 'consignee-real', customerId: 'customer-1', consignee: 'Real Consignee', isPrimary: false },
+    ]);
+
+    const result = await writeOrderConsignee(salesUser, { orderNo: 'AB-12', consignee: 'Real Consignee' });
+
+    expect(mockDb.customerConsignee.delete).toHaveBeenCalledWith({ where: { id: 'consignee-empty' } });
+    expect(mockDb.customerConsignee.updateMany).toHaveBeenCalledWith({ where: { customerId: 'customer-1' }, data: { isPrimary: false } });
+    expect(mockDb.customerConsignee.updateMany).toHaveBeenCalledWith({ where: { id: 'consignee-real' }, data: { isPrimary: true } });
+    expect(mockDb.customer.update).toHaveBeenCalledWith({
+      where: { id: 'customer-1' },
+      data: { consignee: 'Real Consignee' },
+    });
+    expect(result).toEqual(expect.objectContaining({
+      written: false,
+      consigneeId: 'consignee-real',
+      consignee: 'Real Consignee',
+    }));
+  });
+
+  it('rejects a dash placeholder as a new consignee value', async () => {
+    await expect(writeOrderConsignee(salesUser, { orderNo: 'AB-12', consignee: '-' })).rejects.toMatchObject({
+      status: 400,
+      message: 'CONSIGNEE不能为空',
+    });
+
+    expect(mockDb.customerConsignee.create).not.toHaveBeenCalled();
+  });
+
   it('accepts long consignee text by storing a stable normalized hash for idempotency', async () => {
     const longConsignee = `Name: ${'ALPHA '.repeat(45)}ADDRESS LINE CONAKRY GUINEA`.trim();
     mockDb.customerConsignee.findMany.mockResolvedValueOnce([]);

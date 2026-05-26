@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.164
-> 最后更新：2026-05-25
+> 当前版本：v1.0.165
+> 最后更新：2026-05-26
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `CustomerConsignee` 空白占位清理：统一把 `- / － / — / –` 视为空白 `CONSIGNEE` 占位，新增/API 写入真实 `CONSIGNEE` 时事务内删除同客户占位项；如果原默认项是占位项，则把写入或匹配到的真实 `CONSIGNEE` 升为默认并同步旧 `Customer.consignee` 字段；列表读取过滤占位项，直接传入占位值会按空白拒绝。补齐 service 红绿回归 ✅ 2026-05-26
 
 - [x] `CustomerConsignee` 默认值选择与弹窗按钮收口：新增 `setCustomerConsigneePrimary()`，事务内校验客户可见范围和 `consigneeId` 归属，先清空同客户全部 `isPrimary`，再设置目标为默认，并同步旧 `Customer.consignee` 字段；`/api/customer` 新增 `consignee-set-primary` action。前端 `CustomerConsigneeDialog` 新增“设为默认”入口，当前默认项显示默认状态，删除改为 icon-only 小垃圾桶按钮；`CustomerManager` 统一错误兜底与刷新。补齐 service / dialog / manager 红绿回归 ✅ 2026-05-25
 

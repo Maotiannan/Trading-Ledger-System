@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.165
-> 最后更新：2026-05-26
+> 当前版本：v1.0.166
+> 最后更新：2026-06-01
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `muledger` COS 备份脚本落地：新增 `scripts/backup/muledger-cos-backup.sh`，按 `database/mysql/YYYY/MM/DD` 上传 `trading_ledger` gzip dump 与 sha256，按 `media/upload/` 增量同步 NAS 上传目录，并写入 manifest；新增 macOS COSCLI 安装脚本、LaunchAgent 每日定时安装脚本、本地 env 模板和 `docs/backup/muledger-cos-backup.md` 权限/运行手册。密钥只读取本机私有 env，不进入 Git。已完成 shell 语法与 dry-run 验证 ✅ 2026-06-01
 
 - [x] `CustomerConsignee` 空白占位清理：统一把 `- / － / — / –` 视为空白 `CONSIGNEE` 占位，新增/API 写入真实 `CONSIGNEE` 时事务内删除同客户占位项；如果原默认项是占位项，则把写入或匹配到的真实 `CONSIGNEE` 升为默认并同步旧 `Customer.consignee` 字段；列表读取过滤占位项，直接传入占位值会按空白拒绝。补齐 service 红绿回归 ✅ 2026-05-26
 

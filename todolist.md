@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.165
-> 最后更新：2026-05-26
+> 当前版本：v1.0.166
+> 最后更新：2026-06-01
 
 ## 当前状态
 
@@ -13,6 +13,7 @@
 - 批量导入、问题行修复、模板下载
 - 设置页版本号、系统配置和分支清库
 - 生成签名收据、签名前临时状态隔离、签名后自动挂图
+- 腾讯云 COS 备份方案已落地脚本：数据库和 NAS 上传文件可自动备份到 `muledger-backup-prod-1318783232`
 - `Receipt Management` 顶部动作顺序已固定为 `Create Directly / Generate Signed Receipt / Upload Receipt`
 - `Customer Management` 的 `CONSIGNEE` 中 `-` 代表空白；系统写入真实收货人时会自动移除空白占位并修正默认项
 - 临时上传图片的 24h 孤儿清理，以及签名收据 `SIGNING_PENDING` 72h 超时清理

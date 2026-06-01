@@ -35,8 +35,10 @@ README 现在只保留用户应该看的内容。
 
 ## 最近更新
 
-- 当前版本：`1.0.165`
-- 本次更新：`Customer Management` 现在把 `CONSIGNEE` 的 `-` 视为空白占位；外部 API 写入真实 `CONSIGNEE` 时会清理占位项，并在原默认值为空白时自动改用真实收货人。
+- 当前版本：`1.0.166`
+- 本次更新：新增 `muledger` 腾讯云 COS 备份脚本与运行文档，覆盖 MySQL `trading_ledger` 和 NAS 上传目录。
+- 本次更新：已提供本地私有备份配置模板、COSCLI 安装脚本、手动备份脚本和 macOS 每日定时备份安装脚本。
+- 上一版本：`Customer Management` 现在把 `CONSIGNEE` 的 `-` 视为空白占位；外部 API 写入真实 `CONSIGNEE` 时会清理占位项，并在原默认值为空白时自动改用真实收货人。
 - 上一版本：`Customer Management` 的 `CONSIGNEE Management` 支持选择默认 `CONSIGNEE`，默认值会同步回客户主 `CONSIGNEE` 字段。
 - 上一版本：`CONSIGNEE Management` 的删除入口改为小垃圾桶图标，减少弹窗内按钮占位。
 - 上一版本：修复 `Customer Management` 新增 `CONSIGNEE` 失败后 Add 按钮一直转圈的问题；现在会停止转圈并显示具体错误。
@@ -331,6 +333,8 @@ docker compose up -d --build
 - 上传或生成的文件：存在 NAS 挂载目录里。
 
 不要把 MySQL 数据目录、NAS 上传目录或 Docker volume 当成临时文件删除。
+
+腾讯云 COS 自动备份脚本和权限配置见：[muledger-cos-backup.md](docs/backup/muledger-cos-backup.md)。
 
 ### 1. MySQL 业务数据库
 

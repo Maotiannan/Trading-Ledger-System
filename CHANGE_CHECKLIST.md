@@ -12,6 +12,7 @@ The goal is simple:
 Every non-trivial change should check these items:
 - decide whether the new rule or threshold should be configurable in `Settings`
 - decide whether the change belongs in `service / transaction / audit / catalog` instead of route or page code
+- decide whether the change adds durable business data that must be included in backup and restore coverage
 - update or add automated tests before relying on manual verification
 - update `README.md`
 - update `todolist.md`
@@ -111,6 +112,8 @@ Must do:
 - prefer idempotent or backward-safe rollout if the project already has live data
 - ensure service layer writes remain transactional
 - test against isolated DB/API environment
+- confirm the new table, index, counter, audit table, approval table, or seed data is covered by the MySQL `trading_ledger` backup in `docs/backup/muledger-cos-backup.md`
+- update `docs/backup/muledger-cos-backup.md` if restore assumptions, dump tooling, critical table families, or recovery checks change
 - document rollout risk and recovery notes in README if needed
 - update `todolist.md`
 
@@ -146,9 +149,25 @@ Must do:
 - keep per-row or per-batch result summary stable
 - prefer resumable or retryable failure handling
 - keep templates and UI prompts in sync
+- if import/export creates stored files, generated images, PDFs, or third-party persistent data, add the exact path/source to `docs/backup/muledger-cos-backup.md`
 - add isolated API tests for success, failure, and edge rows
 - add browser test only for critical user-facing workflow confirmation
 - update README and `todolist.md`
+
+## 8.1 If Upload / Generated File Storage Changes
+
+Examples:
+- new upload category
+- new generated receipt/detail/SWIFT/agent file path
+- new object storage prefix
+- cleanup lifecycle changes
+
+Must do:
+- keep files under `UPLOAD_HOST_DIR` unless a documented alternative storage source is added
+- update the NAS upload layout table in `docs/backup/muledger-cos-backup.md`
+- update `UploadedAsset` registration, attachment, and cleanup rules when the file is user/business data
+- run `scripts/backup/muledger-cos-backup.sh --dry-run` if backup paths, storage env vars, or backup scripts changed
+- run a restore drill if the change creates a new critical file family or changes restore assumptions
 
 ## 9. If The Change Is Documentation-Only
 

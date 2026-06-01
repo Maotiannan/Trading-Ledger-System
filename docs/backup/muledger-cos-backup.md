@@ -11,6 +11,42 @@ Back up these two business data areas:
 
 Do not treat Docker containers, `.next`, `node_modules`, or test output as business backup data.
 
+### NAS Upload Layout
+
+The backup script syncs the full NAS upload directory to `media/upload/` in COS. These subpaths are business data and must remain covered:
+
+| NAS path under `UPLOAD_HOST_DIR` | Current use |
+| --- | --- |
+| `images/receipts/direct/` | `Create Receipt Directly` receipt attachments |
+| `images/receipts/ocr/` | receipt OCR upload images |
+| `images/details/ocr/` | payment detail OCR uploads and generated detail preview/export images |
+| `images/swifts/ocr/` | SWIFT OCR images and PDF attachments |
+| `images/receipts/generated/` | finalized generated signed receipt images |
+| `images/receipts/generated/signatures/` | generated receipt signature artifacts |
+| `images/agents/files/` | payment agent attachment files |
+
+If code adds a new `UploadedAssetCategory`, generated report directory, or file upload subpath, add it to this table and confirm it is under `UPLOAD_HOST_DIR`.
+
+### Backup Change Gate
+
+Any change that adds or changes durable business data must update this runbook in the same work item.
+
+Trigger this gate when changing any of these:
+
+- Prisma schema models, indexes, migrations, seed data, counters, audit tables, approval tables, or any MySQL table used by production.
+- Upload categories, image/PDF generation paths, NAS paths, COS paths, `UploadedAsset` lifecycle rules, or cleanup jobs.
+- New external persistent storage, third-party file APIs, report export storage, generated documents, or scheduled data pipelines.
+- Environment variables that decide where data is stored, dumped, synchronized, cleaned, or restored.
+
+Required checks before closing that work item:
+
+- Confirm the new data is inside MySQL `trading_ledger`, the NAS upload directory, or an explicitly documented new backup source.
+- If the data is in MySQL only, confirm `mariadb-dump` backup still captures it automatically.
+- If the data creates files, add the exact directory/prefix to the NAS layout table in this document.
+- If the data lives outside MySQL/NAS, add a new section with backup command, restore command, retention policy, and failure alert plan.
+- Run `scripts/backup/muledger-cos-backup.sh --dry-run` after changing backup scripts or storage environment variables.
+- Run a restore drill when adding a new database engine, changing dump tooling, changing restore assumptions, or adding a critical new table family.
+
 ## 2. Tencent Cloud COS Bucket
 
 - Bucket: `muledger-backup-prod-1318783232`
@@ -153,7 +189,7 @@ Do not restore directly into the production database first.
 Correct restore drill:
 
 1. Download one database dump and verify `.sha256`.
-2. Restore into a temporary MySQL database.
+2. Restore into a temporary MariaDB `10.6` database.
 3. Point a test app instance to the temporary database.
 4. Sync media files to a temporary folder.
 5. Verify login, customers, invoices, receipts, details, SWIFT previews, and generated receipt images.

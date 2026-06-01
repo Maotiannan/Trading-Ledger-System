@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.166
+> 当前版本：v1.0.167
 > 最后更新：2026-06-01
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 持久化数据变更备份门禁：根目录 `AGENTS.md` 和 `CHANGE_CHECKLIST.md` 新增规则，后续任何新增/修改数据库表、迁移、上传目录、生成文件目录、外部对象存储路径、定时清理任务或第三方持久化数据时，必须同步检查并更新项目备份范围；`docs/backup/muledger-cos-backup.md` 新增 `Backup Change Gate` 和 NAS 上传路径表，把 MySQL `trading_ledger`、NAS 上传目录、COS 路径、`UploadedAsset` 生命周期、清理任务、恢复演练触发条件和 dry-run 要求关联到同一份运行手册，避免新增业务数据但备份遗漏 ✅ 2026-06-01
 
 - [x] `muledger` COS 备份脚本落地：新增 `scripts/backup/muledger-cos-backup.sh`，按 `database/mysql/YYYY/MM/DD` 上传 `trading_ledger` gzip dump 与 sha256，按 `media/upload/` 增量同步 NAS 上传目录，并写入 manifest；新增 macOS COSCLI 安装脚本、LaunchAgent 每日定时安装脚本、本地 env 模板和 `docs/backup/muledger-cos-backup.md` 权限/运行手册。密钥只读取本机私有 env，不进入 Git。已完成 shell 语法与 dry-run 验证 ✅ 2026-06-01
 

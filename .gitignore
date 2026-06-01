@@ -58,6 +58,7 @@ server.log
 /download/tmp/
 /test-results/
 /playwright-report/
+coscli_output/
 
 # runtime artifacts
 *.sqlite

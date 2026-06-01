@@ -102,7 +102,7 @@ COS_CONFIG_PATH="${COS_CONFIG_PATH:-$MULEDGER_BACKUP_HOME/cos.yaml}"
 mkdir -p "$RUN_DIR" "$LOG_DIR" "$SNAPSHOT_DIR" "$(dirname "$COS_CONFIG_PATH")"
 
 log() {
-  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2
 }
 
 require_cmd() {

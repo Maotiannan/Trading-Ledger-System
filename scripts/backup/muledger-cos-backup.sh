@@ -88,7 +88,7 @@ if [[ "$COSCLI_BIN" == "coscli" && -x "$HOME/.local/bin/coscli" ]]; then
   COSCLI_BIN="$HOME/.local/bin/coscli"
 fi
 MYSQLDUMP_BIN="${MYSQLDUMP_BIN:-auto}"
-MYSQLDUMP_DOCKER_IMAGE="${MYSQLDUMP_DOCKER_IMAGE:-mysql:8}"
+MYSQLDUMP_DOCKER_IMAGE="${MYSQLDUMP_DOCKER_IMAGE:-mariadb:10.6}"
 MULEDGER_BACKUP_HOME="${MULEDGER_BACKUP_HOME:-$HOME/.muledger-backup}"
 LOCAL_RETENTION_DAYS="${LOCAL_RETENTION_DAYS:-14}"
 UPLOAD_HOST_DIR="${UPLOAD_HOST_DIR:-/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload}"
@@ -180,14 +180,16 @@ NODE
 
 sha256_file() {
   local file="$1"
+  local checksum
   if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" > "$file.sha256"
+    checksum="$(shasum -a 256 "$file" | awk '{print $1}')"
   elif command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$file" > "$file.sha256"
+    checksum="$(sha256sum "$file" | awk '{print $1}')"
   else
     echo "Missing shasum or sha256sum" >&2
     exit 1
   fi
+  printf '%s  %s\n' "$checksum" "$(basename "$file")" > "$file.sha256"
 }
 
 dump_database() {
@@ -216,11 +218,11 @@ dump_database() {
     MYSQL_PWD="$DB_PASSWORD" mariadb-dump "${common_args[@]}" | gzip -9 > "$dump_file"
   else
     require_cmd docker
-    log "mysqldump not found locally. Using Docker image $MYSQLDUMP_DOCKER_IMAGE as a client only."
+    log "mysqldump/mariadb-dump not found locally. Using Docker image $MYSQLDUMP_DOCKER_IMAGE as a client only."
     docker run --rm \
       -e MYSQL_PWD="$DB_PASSWORD" \
       "$MYSQLDUMP_DOCKER_IMAGE" \
-      mysqldump "${common_args[@]}" | gzip -9 > "$dump_file"
+      mariadb-dump "${common_args[@]}" | gzip -9 > "$dump_file"
   fi
 
   gzip -t "$dump_file"

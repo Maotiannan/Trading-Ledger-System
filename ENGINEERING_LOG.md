@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.168
-> 最后更新：2026-06-03
+> 当前版本：v1.0.169
+> 最后更新：2026-06-04
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Generate Signed Receipt` 完整复合订单精确输入漏分支修复：复核用户反馈后确认 v1.0.168 只让 `lookupInvoiceOrderContext()` 的 alias fallback 分支选择了 `amount + receipts`，但第一条 exact `orderNo in candidates` 分支仍只选择旧 `orderBalance`，导致直接输入 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 时继续返回 `17869`。现 exact 分支同样选择 `amount` 和非 `SIGNING_PENDING` receipts，并把单测升级为断言第一条 Prisma 查询必须带出实时余额所需字段；本地源码只读调用已确认该订单返回 `3869` ✅ 2026-06-04
 
 - [x] 签名收据复合订单余额暗病修复：确认 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 这类复合订单在 `Generate Signed Receipt` 弹窗里读到的是旧 `Order.orderBalance`，而 `Invoice / Receipt` 页面按已完成收据实时重算，所以两个页面余额不同。`lookupInvoiceOrderContext()` 现改为按订单金额减去非 `SIGNING_PENDING` 收据实时计算上下文余额；`finalizeReceiptGeneratorSession()` 在签名完成事务内调用 `updateOrderBalance()` 重算对应订单余额；`calculateOrderBalance()`、收据列表余额、删除/alias 回填与历史脚本均排除未完成签名的临时收据。补齐 invoice-read-service、receipt-generator-service、matching、receipt-balance 单测与 isolated API 65 回归 ✅ 2026-06-03
 

@@ -296,6 +296,15 @@ describe('invoice-read-service', () => {
 
     const result = await lookupInvoiceOrderContext(makeUser() as never, 'PIKIN-19_B/PIKIN-19B/PIKIN-21');
 
+    expect(mockDb.order.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      select: expect.objectContaining({
+        amount: true,
+        receipts: {
+          where: { status: { not: 'SIGNING_PENDING' } },
+          select: { usd: true, status: true },
+        },
+      }),
+    }));
     expect(result.data.exactMatches[0]).toEqual(expect.objectContaining({
       orderNo: 'PIKIN-19_B/PIKIN-19B/PIKIN-21',
       orderBalance: 3869,

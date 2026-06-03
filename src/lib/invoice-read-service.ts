@@ -225,7 +225,12 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     select: {
       id: true,
       orderNo: true,
+      amount: true,
       orderBalance: true,
+      receipts: {
+        where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
+        select: { usd: true, status: true },
+      },
       customerId: true,
       customerMark: true,
       customerName: true,

@@ -13,6 +13,16 @@ describe('receipt-balance', () => {
     expect(result.get('receipt-3')).toBe(50);
   });
 
+  it('ignores signing-pending receipts when calculating displayed balance', () => {
+    const result = buildReceiptBalanceAfterMap([
+      { id: 'receipt-pending', orderId: 'order-1', usd: 70, status: 'SIGNING_PENDING', createdAt: '2026-05-04T01:00:00.000Z' },
+      { id: 'receipt-finalized', orderId: 'order-1', usd: 30, status: 'SR_Received', createdAt: '2026-05-04T02:00:00.000Z' },
+    ], new Map([['order-1', 100]]));
+
+    expect(result.get('receipt-pending')).toBeNull();
+    expect(result.get('receipt-finalized')).toBe(70);
+  });
+
   it('returns null when a receipt has no associated order amount context', () => {
     const result = buildReceiptBalanceAfterMap([
       { id: 'receipt-1', orderId: null, usd: 30, createdAt: '2026-05-04T02:00:00.000Z' },

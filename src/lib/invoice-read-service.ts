@@ -1,3 +1,4 @@
+import { ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -16,6 +17,24 @@ function rankInvoice(invNo: string) {
   if (invNo === 'DEPOSIT_POOL') return 0;
   if (invNo === 'Un_Associated') return 1;
   return 2;
+}
+
+function computeLiveOrderBalance(row: {
+  amount?: unknown;
+  orderBalance?: unknown;
+  receipts?: Array<{ usd: unknown; status?: unknown }>;
+}): number {
+  const amount = Number(row.amount);
+  if (!Number.isFinite(amount) || !Array.isArray(row.receipts)) {
+    return Number(row.orderBalance || 0);
+  }
+
+  const received = row.receipts.reduce((sum, receipt) => {
+    if (receipt.status === ReceiptStatus.SIGNING_PENDING) return sum;
+    return sum + Number(receipt.usd || 0);
+  }, 0);
+
+  return Number((amount - received).toFixed(2));
 }
 
 export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId: string) {
@@ -122,7 +141,12 @@ export async function listOrderMatchCandidates(currentUser: CurrentUser, orderNo
     select: {
       id: true,
       orderNo: true,
+      amount: true,
       orderBalance: true,
+      receipts: {
+        where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
+        select: { usd: true, status: true },
+      },
       customerId: true,
       customerMark: true,
       customerName: true,
@@ -244,7 +268,12 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
         select: {
           id: true,
           orderNo: true,
+          amount: true,
           orderBalance: true,
+          receipts: {
+            where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
+            select: { usd: true, status: true },
+          },
           customerId: true,
           customerMark: true,
           customerName: true,
@@ -284,6 +313,7 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
 
   const exactContextMatches = exactMatches.map((row) => ({
     ...row,
+    orderBalance: computeLiveOrderBalance(row),
     customerPhone: row.customerPhone || row.customer?.phone || null,
     customerPayer: getCustomerPayerBase(row.customer || {}),
   }));
@@ -350,6 +380,7 @@ export async function listInvoiceRecords(currentUser: CurrentUser, search: strin
           receipts: {
             where: {
               orderId: { not: null },
+              status: { not: ReceiptStatus.SIGNING_PENDING },
               ...buildReceiptVisibilityWhere(ownerIds),
             },
             select: { usd: true, status: true },

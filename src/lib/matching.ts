@@ -229,17 +229,25 @@ export function findSubsetSum(
 }
 
 // 计算ORDER BALANCE
-// ORDER BALANCE = AMOUNT - 该ORDER下所有收据金额之和
+// ORDER BALANCE = AMOUNT - 该ORDER下所有已入业务流程收据金额之和
 export async function calculateOrderBalance(orderId: string, client: MatchingWriteClient = db): Promise<number> {
   const order = await client.order.findUnique({
     where: { id: orderId },
-    include: { receipts: true }
+    include: {
+      receipts: {
+        where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
+        select: { usd: true, status: true },
+      },
+    },
   });
 
   if (!order) return 0;
 
-  // 计算所有关联收据的金额总和
-  const numericReceiptSum = order.receipts.reduce((sum, receipt) => sum + Number(receipt.usd), 0);
+  // 计算所有已入业务流程关联收据的金额总和
+  const numericReceiptSum = order.receipts.reduce((sum, receipt) => {
+    if (receipt.status === ReceiptStatus.SIGNING_PENDING) return sum;
+    return sum + Number(receipt.usd);
+  }, 0);
 
   // ORDER BALANCE = AMOUNT - 收据总额
   return Number(order.amount) - numericReceiptSum;

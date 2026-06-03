@@ -291,7 +291,10 @@ async function approveDetailDeletion(
     if (!order) continue;
 
     const receiptAgg = await tx.receipt.aggregate({
-      where: { orderId },
+      where: {
+        orderId,
+        status: { not: ReceiptStatus.SIGNING_PENDING },
+      },
       _sum: { usd: true },
     });
     const receiptSum = Number(receiptAgg._sum.usd ?? 0);

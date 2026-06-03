@@ -18,6 +18,7 @@ import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { runInTransaction } from '@/lib/transaction';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
+import { updateOrderBalance } from '@/lib/matching';
 import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
 import {
   getReceiptGeneratorCustomerCompanyName,
@@ -287,6 +288,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
       receipt: {
         select: {
           id: true,
+          orderId: true,
           createdBy: true,
           status: true,
           receiptNo: true,
@@ -373,6 +375,10 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
           note: '签名收据已生成',
         },
       });
+
+      if (receipt.orderId) {
+        await updateOrderBalance(receipt.orderId, tx);
+      }
 
       await tx.uploadedAsset.createMany({
         data: [

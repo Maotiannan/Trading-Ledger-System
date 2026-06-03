@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.167
-> 最后更新：2026-06-01
+> 当前版本：v1.0.168
+> 最后更新：2026-06-03
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 签名收据复合订单余额暗病修复：确认 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 这类复合订单在 `Generate Signed Receipt` 弹窗里读到的是旧 `Order.orderBalance`，而 `Invoice / Receipt` 页面按已完成收据实时重算，所以两个页面余额不同。`lookupInvoiceOrderContext()` 现改为按订单金额减去非 `SIGNING_PENDING` 收据实时计算上下文余额；`finalizeReceiptGeneratorSession()` 在签名完成事务内调用 `updateOrderBalance()` 重算对应订单余额；`calculateOrderBalance()`、收据列表余额、删除/alias 回填与历史脚本均排除未完成签名的临时收据。补齐 invoice-read-service、receipt-generator-service、matching、receipt-balance 单测与 isolated API 65 回归 ✅ 2026-06-03
 
 - [x] 持久化数据变更备份门禁：根目录 `AGENTS.md` 和 `CHANGE_CHECKLIST.md` 新增规则，后续任何新增/修改数据库表、迁移、上传目录、生成文件目录、外部对象存储路径、定时清理任务或第三方持久化数据时，必须同步检查并更新项目备份范围；`docs/backup/muledger-cos-backup.md` 新增 `Backup Change Gate` 和 NAS 上传路径表，把 MySQL `trading_ledger`、NAS 上传目录、COS 路径、`UploadedAsset` 生命周期、清理任务、恢复演练触发条件和 dry-run 要求关联到同一份运行手册，避免新增业务数据但备份遗漏 ✅ 2026-06-01
 

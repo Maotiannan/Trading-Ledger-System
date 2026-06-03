@@ -42,6 +42,19 @@ describe('matching.calculateOrderBalance', () => {
     expect(mockedFindUnique).toHaveBeenCalled();
   });
 
+  it('should ignore SIGNING_PENDING receipts in balance calculation', async () => {
+    mockedFindUnique.mockResolvedValue({
+      id: 'o1',
+      amount: 100,
+      receipts: [
+        { id: 'r1', usd: 30, status: 'SR_Received' },
+        { id: 'r2', usd: 70, status: 'SIGNING_PENDING' },
+      ],
+    });
+
+    await expect(calculateOrderBalance('o1')).resolves.toBe(70);
+  });
+
   it('should return 0 when order does not exist', async () => {
     mockedFindUnique.mockResolvedValue(null);
 

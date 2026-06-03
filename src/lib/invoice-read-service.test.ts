@@ -256,6 +256,52 @@ describe('invoice-read-service', () => {
     }));
   });
 
+  it('computes exact order context balance from attached receipts instead of stale stored balance', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-pikin',
+        orderNo: 'PIKIN-19_B/PIKIN-19B/PIKIN-21',
+        amount: 20088,
+        orderBalance: 17869,
+        receipts: [
+          { usd: 500, status: 'RECEIVED' },
+          { usd: 1719, status: 'SR_Received' },
+          { usd: 14000, status: 'Bank_Transfer' },
+          { usd: 900, status: 'SIGNING_PENDING' },
+        ],
+        customerId: 'customer-pikin',
+        customerMark: 'PIKIN',
+        customerName: 'PIKIN',
+        customerPhone: '622491286',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+        createdAt: new Date('2026-05-07T00:00:00Z'),
+        invoice: {
+          id: 'inv-pikin',
+          invNo: 'L25MH071089B',
+          createdAt: new Date('2026-05-07T00:00:00Z'),
+        },
+        customer: {
+          id: 'customer-pikin',
+          orderName: 'PIKIN',
+          companyName: null,
+          mark: 'PIKIN',
+          name: 'Mamadou Dian Diallo',
+          phone: '622491286',
+          city: 'Conakry',
+        },
+      },
+    ]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
+
+    const result = await lookupInvoiceOrderContext(makeUser() as never, 'PIKIN-19_B/PIKIN-19B/PIKIN-21');
+
+    expect(result.data.exactMatches[0]).toEqual(expect.objectContaining({
+      orderNo: 'PIKIN-19_B/PIKIN-19B/PIKIN-21',
+      orderBalance: 3869,
+    }));
+  });
+
   it('falls back payer suggestion from customer name when company name is empty', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([
       {

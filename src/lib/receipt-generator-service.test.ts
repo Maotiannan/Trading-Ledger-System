@@ -13,6 +13,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { allocateNextReceiptNo } from '@/lib/receipt-number';
 import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
+import { updateOrderBalance } from '@/lib/matching';
 import {
   createReceiptGeneratorSession,
   finalizeReceiptGeneratorSession,
@@ -56,6 +57,10 @@ jest.mock('@/lib/receipt-generator-image', () => ({
   saveReceiptGeneratorArtifact: jest.fn(),
 }));
 
+jest.mock('@/lib/matching', () => ({
+  updateOrderBalance: jest.fn(),
+}));
+
 jest.mock('fs/promises', () => ({
   rm: jest.fn(),
 }));
@@ -81,6 +86,7 @@ const mockDb = db as unknown as {
 const mockLookupInvoiceOrderContext = lookupInvoiceOrderContext as jest.Mock;
 const mockAllocateNextReceiptNo = allocateNextReceiptNo as jest.Mock;
 const mockSaveReceiptGeneratorArtifact = saveReceiptGeneratorArtifact as jest.Mock;
+const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockRm = rm as jest.MockedFunction<typeof rm>;
@@ -91,6 +97,7 @@ describe('receipt-generator-service', () => {
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockAllocateNextReceiptNo.mockResolvedValue('0010000');
+    mockUpdateOrderBalance.mockResolvedValue(undefined);
     mockRm.mockResolvedValue(undefined);
     mockLookupInvoiceOrderContext.mockResolvedValue({
       data: {
@@ -293,6 +300,7 @@ describe('receipt-generator-service', () => {
       status: ReceiptGeneratorSessionStatus.PENDING,
       receipt: {
         id: 'receipt-1',
+        orderId: 'order-1',
         createdBy: 'admin-1',
         status: ReceiptStatus.SIGNING_PENDING,
         receiptNo: '0010000',
@@ -349,6 +357,7 @@ describe('receipt-generator-service', () => {
       }),
     }));
     expect(mockDb.receiptGeneratorSession.update).toHaveBeenCalled();
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1', mockDb);
     expect(result.data.receiptStatus).toBe('SR_Received');
   });
 

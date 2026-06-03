@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ReceiptStatus } from '@prisma/client';
 
 const db = new PrismaClient();
 
@@ -47,7 +47,12 @@ function buildCanonicalGroupOrderNo(orderNos) {
 async function refreshOrderBalance(tx, orderId) {
   const order = await tx.order.findUnique({
     where: { id: orderId },
-    include: { receipts: { select: { usd: true } } },
+    include: {
+      receipts: {
+        where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
+        select: { usd: true },
+      },
+    },
   });
   if (!order) return;
   const receiptSum = order.receipts.reduce((sum, row) => sum + Number(row.usd), 0);

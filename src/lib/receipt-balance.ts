@@ -2,6 +2,7 @@ type ReceiptBalanceRow = {
   id: string;
   orderId: string | null;
   usd: number;
+  status?: string | null;
   createdAt: Date | string;
 };
 
@@ -12,6 +13,7 @@ export function buildReceiptBalanceAfterMap(
   const byOrder = new Map<string, ReceiptBalanceRow[]>();
   for (const row of receipts) {
     if (!row.orderId) continue;
+    if (row.status === 'SIGNING_PENDING') continue;
     if (!byOrder.has(row.orderId)) byOrder.set(row.orderId, []);
     byOrder.get(row.orderId)!.push(row);
   }

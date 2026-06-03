@@ -124,6 +124,11 @@ export default async function run(t) {
   t.assertEqual(finalizedReceipt?.status, 'SR_Received', 'receipt leaves SIGNING_PENDING after finalize');
   t.assertMatch(finalizedReceipt?.imageUrl || '', /\/upload\/images\/receipts\/generated\//, 'finalized receipt stores generated receipt image');
 
+  const contextAfterFinalize = await t.request('GET', `/api/receipt-generator?action=order-context&orderNo=${encodeURIComponent(orderNo)}&usdAmount=1`, {
+    expectedStatus: 200,
+  });
+  t.assertEqual(contextAfterFinalize.data?.data?.balanceBefore, 0, 'generator context reflects finalized receipt balance');
+
   const resumeAfterFinalize = await t.request('GET', `/api/receipt-generator?action=resume-by-receipt&receiptId=${encodeURIComponent(receiptId)}`, {
     expectedStatus: 404,
   });

@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.167
-> 最后更新：2026-06-01
+> 当前版本：v1.0.168
+> 最后更新：2026-06-03
 
 ## 当前状态
 
@@ -18,6 +18,7 @@
 - `Receipt Management` 顶部动作顺序已固定为 `Create Directly / Generate Signed Receipt / Upload Receipt`
 - `Customer Management` 的 `CONSIGNEE` 中 `-` 代表空白；系统写入真实收货人时会自动移除空白占位并修正默认项
 - 临时上传图片的 24h 孤儿清理，以及签名收据 `SIGNING_PENDING` 72h 超时清理
+- `Generate Signed Receipt` 的复合订单余额已与账单、收据页面统一：余额按订单金额减去已完成/已入流程收据实时计算，未完成签名的临时收据不参与余额
 - 收据管理的 `SALES` 修改审批流：销售提交修改申请，管理员在可见范围内审批；管理员可直接修改
 - `RECEIVED` 状态收据支持重新绑定 `ORDER NO / INV NO`，用于修正已完成收据误挂到错误订单的问题
 - `Create Payment Detail Directly` 可直接勾选 `SR_Received` 收据加入付款明细，创建时选择 `AGENT`，手动录入区默认折叠
@@ -36,28 +37,33 @@
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- 修复 `Generate Signed Receipt` 中复合订单显示旧余额的问题，例如 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 会按真实已收款重新计算余额
+- 签名收据完成后会自动重算对应订单余额，避免后续页面继续读到旧余额
+- `SIGNING_PENDING` 待签名收据不再计入订单余额，未签完的临时记录不会影响客户欠款判断
+
+### 0.1 上一里程碑
 - `CONSIGNEE Management` 新增“设为默认”，可把任意一个收货人设为客户默认收货人
 - 删除 `CONSIGNEE` 改为小垃圾桶图标，减少弹窗占位
 
-### 0.1 上一里程碑
+### 0.2 上一里程碑
 - 修复客户管理新增 `CONSIGNEE` 失败后按钮一直转圈的问题
 - `CONSIGNEE` 现在支持长文本保存，系统使用哈希去重，不再因为内容过长被拒绝
 
-### 0.2 上一里程碑
+### 0.3 上一里程碑
 - 客户资料支持多个 `CONSIGNEE`，点击客户列表里的 `CONSIGNEE` 文本即可打开管理弹窗
 - 弹窗内可以新增或删除不同 `CONSIGNEE`，旧的主 `Customer.consignee` 字段继续保留用于历史兼容
 - 新增 `POST /api/customers/order-consignee/write`，外部系统可按 `ORDER NO` 写入对应客户的 `CONSIGNEE`，重复写入同一值会幂等成功
 
-### 0.3 上一里程碑
+### 0.4 上一里程碑
 - `Payment Detail Management` 的 `Export Pic` 图片中，`Deposit` 现在使用与 `Initial` 一致的蓝色文字和浅蓝底色
 - 每次点击 `Export Pic` 下载付款明细图片时，系统都会重新生成图片，并覆盖服务器端小眼睛预览图，避免旧图继续显示
 
-### 0.4 上一里程碑
+### 0.5 上一里程碑
 - `Payment Detail Management` 的 `Export Pic` 图片中，首笔付款如果关联的是定金收据，`TYPE` 列显示 `Deposit`
 - 非定金首笔仍显示 `Initial`；已结清规则和普通 `Standard` 规则保持不变
 - 导出图右上角日期改为浅蓝色，过长 `ORDER NO` 会在本列内自动换行，不再遮挡后续列
 
-### 0.5 上一里程碑
+### 0.6 上一里程碑
 - `Generate Signed Receipt` 的收据号重新从 `0010000` 起按 7 位编号递增
 - 收据号由后端事务内原子分配，弹窗只显示预览，不再允许前端手动改号，也不再按最近 10 条收据取最大值
 - `Payment Detail Management` 的小眼睛对所有付款明细可用：无上传图的明细会自动生成并保存 `Export Pic` 图片，有上传图的明细会统一按金额、日期和付款代理重命名
@@ -148,6 +154,11 @@
 - GitHub Actions 已接入类型检查、构建、单测、API/E2E 回归
 
 ## 当前版本重点
+
+### v1.0.168
+- `Generate Signed Receipt` 的订单上下文余额不再读取可能过期的订单表旧余额，而是按订单金额减去已完成/已入流程收据实时计算。
+- 签名收据完成签名并入库后，系统会同步重算对应订单余额，避免签名收据金额漏算。
+- `SIGNING_PENDING` 待签名临时收据不参与订单余额，未完成签名不会影响发票、收据、客户欠款判断。
 
 ### v1.0.145
 - 修复付款代理管理弹窗点击 `New / 新增` 后被自动选回第一条代理的问题。

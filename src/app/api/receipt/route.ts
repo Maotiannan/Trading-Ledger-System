@@ -153,12 +153,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       const orderReceipts = await db.receipt.findMany({
         where: {
           orderId: { in: orderIds },
+          status: { not: ReceiptStatus.SIGNING_PENDING },
           ...buildReceiptVisibilityWhere(ownerIds),
         },
         select: {
           id: true,
           orderId: true,
           usd: true,
+          status: true,
           createdAt: true,
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],

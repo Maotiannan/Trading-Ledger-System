@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.169
+> 当前版本：v1.0.170
 > 最后更新：2026-06-04
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] README 用户化收口：将 README 从混合“版本流水 + 技术手册 + 数据手册”的 500+ 行文档压缩为面向使用者的入口说明，保留用户截图、模块、流程、权限、数据安全和启动方式；新增 `docs/data-and-integrations.md` 承接 Excel ML / sync / consignee 写入接口、MySQL/NAS 数据范围、上传目录、资产台账、Docker volume、内置模板与测试临时数据说明。版本升至 `1.0.170`，不新增数据表、不新增持久化路径，备份范围不变 ✅ 2026-06-04
 
 - [x] `Generate Signed Receipt` 完整复合订单精确输入漏分支修复：复核用户反馈后确认 v1.0.168 只让 `lookupInvoiceOrderContext()` 的 alias fallback 分支选择了 `amount + receipts`，但第一条 exact `orderNo in candidates` 分支仍只选择旧 `orderBalance`，导致直接输入 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 时继续返回 `17869`。现 exact 分支同样选择 `amount` 和非 `SIGNING_PENDING` receipts，并把单测升级为断言第一条 Prisma 查询必须带出实时余额所需字段；本地源码只读调用已确认该订单返回 `3869` ✅ 2026-06-04
 

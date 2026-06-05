@@ -5,6 +5,7 @@ import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
 import { runInTransaction } from '@/lib/transaction';
+import { isUnsafeInitialAdminPassword } from '@/lib/security-config';
 
 export async function initializePrimaryAdmin(input: {
   email: string;
@@ -15,6 +16,13 @@ export async function initializePrimaryAdmin(input: {
   const password = String(input.password || '');
   if (!email || !password) {
     throw createApiError({ code: 'INIT_CONFIG_MISSING', status: 400, message: '缺少初始化管理员配置' });
+  }
+  if (isUnsafeInitialAdminPassword(password)) {
+    throw createApiError({
+      code: 'INIT_PASSWORD_WEAK',
+      status: 400,
+      message: '初始化管理员密码不安全，请配置一个非默认强密码',
+    });
   }
 
   const hashedPassword = await hashPassword(password);

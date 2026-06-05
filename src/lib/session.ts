@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
+import { requireProductionSecret } from '@/lib/security-config';
 
 const SESSION_COOKIE_NAME = 'tls_session';
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
@@ -18,7 +19,7 @@ function fromBase64Url(input: string): string {
 }
 
 function getSessionSecret(): string {
-  const secret = process.env.SESSION_SECRET;
+  const secret = requireProductionSecret('SESSION_SECRET', process.env.SESSION_SECRET);
   if (secret && secret.length >= 32) return secret;
 
   if (process.env.NODE_ENV === 'production') {

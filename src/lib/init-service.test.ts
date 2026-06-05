@@ -81,4 +81,17 @@ describe('init-service', () => {
 
     expect(result.message).toBe('管理员已存在');
   });
+
+  it('rejects the public default admin password', async () => {
+    await expect(initializePrimaryAdmin({
+      email: 'admin@example.com',
+      password: '12345678',
+    })).rejects.toMatchObject({
+      code: 'INIT_PASSWORD_WEAK',
+      status: 400,
+    });
+
+    expect(mockHashPassword).not.toHaveBeenCalled();
+    expect(mockDb.user.upsert).not.toHaveBeenCalled();
+  });
 });

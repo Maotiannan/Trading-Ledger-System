@@ -69,6 +69,7 @@ export BASE_URL
 export COOKIE_FILE
 export DATABASE_URL="mysql://root:rootpass@127.0.0.1:3307/trading_ledger_test"
 export SESSION_SECRET="test-session-secret-12345678901234567890"
+export MAINTENANCE_JOB_TOKEN="test-maintenance-token-12345678901234567890"
 export ENABLE_INIT_ROUTE="true"
 export INIT_ADMIN_TOKEN="test-init-token"
 export INIT_ADMIN_EMAIL="admin@example.com"

@@ -1,10 +1,7 @@
-import { DetailStatus, DeletionStatus } from '@prisma/client';
+import { DetailEditRequestStatus, DetailStatus, DeletionStatus, ReceiptEditRequestStatus, SwiftEditRequestStatus } from '@prisma/client';
 import { db } from '@/lib/db';
-import { listDeletionRequests } from '@/lib/deletion-service';
-import { listDetailEditRequests } from '@/lib/detail-edit-request-service';
-import { listReceiptEditRequests } from '@/lib/receipt-edit-request-service';
-import { listSwiftEditRequests } from '@/lib/swift-edit-request-service';
 import { formatOrderNameDisplay } from '@/lib/display-format';
+import { addMoney, moneyToNumber } from '@/lib/money';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildDetailVisibilityWhere,
@@ -74,10 +71,10 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     waitingSwift,
     recentReceipts,
     recentDetails,
-    deletionRequests,
-    receiptEditRequests,
-    detailEditRequests,
-    swiftEditRequests,
+    pendingDeletionRequests,
+    pendingReceiptEditRequests,
+    pendingDetailEditRequests,
+    pendingSwiftEditRequests,
   ] = await Promise.all([
     db.invoice.count({ where: invoiceWhere }),
     db.invoice.findMany({
@@ -91,18 +88,11 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
           select: {
             id: true,
             orderNo: true,
+            customerId: true,
             customerName: true,
             customerMark: true,
             amount: true,
-            receipts: {
-              where: {
-                orderId: { not: null },
-                ...receiptWhere,
-              },
-              select: {
-                usd: true,
-              },
-            },
+            orderBalance: true,
           },
         },
       },
@@ -149,21 +139,18 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
         _count: { select: { items: true } },
       },
     }),
-    listDeletionRequests(currentUser),
-    listReceiptEditRequests(currentUser),
-    listDetailEditRequests(currentUser),
-    listSwiftEditRequests(currentUser),
+    db.deletionRequest.count({ where: { status: DeletionStatus.PENDING } }),
+    db.receiptEditRequest.count({ where: { status: ReceiptEditRequestStatus.PENDING } }),
+    db.detailEditRequest.count({ where: { status: DetailEditRequestStatus.PENDING } }),
+    db.swiftEditRequest.count({ where: { status: SwiftEditRequestStatus.PENDING } }),
   ]);
 
-  const unpaidTotal = visibleInvoices.reduce((invoiceSum, invoice) => {
-    const invAmount = invoice.orders.reduce((orderSum, order) => orderSum + Number(order.amount), 0);
-    const receivedAmount = invoice.orders.reduce((orderSum, order) => (
-      orderSum + order.receipts.reduce((receiptSum, receipt) => receiptSum + Number(receipt.usd), 0)
-    ), 0);
-    const invBalance = invAmount - receivedAmount;
-
-    return invoiceSum + Math.max(invBalance, 0);
-  }, 0);
+  const unpaidTotal = moneyToNumber(addMoney(
+    visibleInvoices.flatMap((invoice) => invoice.orders.map((order) => {
+      const outstanding = moneyToNumber(order.orderBalance);
+      return outstanding > 0 ? outstanding : 0;
+    }))
+  ));
   const now = Date.now();
   const releasedInvoices: DashboardSummary['releasedInvoices'] = [];
   const customerOutstandingMap = new Map<string, DashboardSummary['customerOutstanding'][number]>();
@@ -172,13 +159,12 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     let invoiceOutstanding = 0;
 
     for (const order of invoice.orders) {
-      const receivedAmount = order.receipts.reduce((receiptSum, receipt) => receiptSum + Number(receipt.usd), 0);
-      const outstanding = Math.max(Number(order.amount) - receivedAmount, 0);
+      const outstanding = Math.max(moneyToNumber(order.orderBalance), 0);
       invoiceOutstanding += outstanding;
 
       if (outstanding <= 0) continue;
       const customerLabel = formatOrderNameDisplay(order.customerName || order.customerMark || order.orderNo);
-      const customerKey = customerLabel;
+      const customerKey = order.customerId ? `customer:${order.customerId}` : `order:${order.id}`;
       const existing = customerOutstandingMap.get(customerKey);
       const entry = existing || {
         customerKey,
@@ -230,12 +216,10 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     pendingReceipts,
     pendingReceiptsAmount: Number(pendingReceiptsAmountAgg._sum.usd ?? 0),
     waitingSwift,
-    pendingDeletion: [
-      ...deletionRequests,
-      ...receiptEditRequests,
-      ...detailEditRequests,
-      ...swiftEditRequests,
-    ].filter((request) => request.status === DeletionStatus.PENDING).length,
+    pendingDeletion: pendingDeletionRequests
+      + pendingReceiptEditRequests
+      + pendingDetailEditRequests
+      + pendingSwiftEditRequests,
     recentReceipts: recentReceipts.map((receipt) => ({
       id: receipt.id,
       orderNo: receipt.orderNo,

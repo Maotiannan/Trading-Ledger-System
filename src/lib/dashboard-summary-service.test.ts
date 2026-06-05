@@ -1,8 +1,4 @@
 import { db } from '@/lib/db';
-import { listDeletionRequests } from '@/lib/deletion-service';
-import { listDetailEditRequests } from '@/lib/detail-edit-request-service';
-import { listReceiptEditRequests } from '@/lib/receipt-edit-request-service';
-import { listSwiftEditRequests } from '@/lib/swift-edit-request-service';
 import { getDashboardSummary } from '@/lib/dashboard-summary-service';
 import { getOwnerVisibleIds } from '@/lib/resource-visibility';
 
@@ -21,23 +17,19 @@ jest.mock('@/lib/db', () => ({
       count: jest.fn(),
       findMany: jest.fn(),
     },
+    deletionRequest: {
+      count: jest.fn(),
+    },
+    receiptEditRequest: {
+      count: jest.fn(),
+    },
+    detailEditRequest: {
+      count: jest.fn(),
+    },
+    swiftEditRequest: {
+      count: jest.fn(),
+    },
   },
-}));
-
-jest.mock('@/lib/deletion-service', () => ({
-  listDeletionRequests: jest.fn(),
-}));
-
-jest.mock('@/lib/receipt-edit-request-service', () => ({
-  listReceiptEditRequests: jest.fn(),
-}));
-
-jest.mock('@/lib/detail-edit-request-service', () => ({
-  listDetailEditRequests: jest.fn(),
-}));
-
-jest.mock('@/lib/swift-edit-request-service', () => ({
-  listSwiftEditRequests: jest.fn(),
 }));
 
 jest.mock('@/lib/resource-visibility', () => ({
@@ -52,11 +44,11 @@ const mockDb = db as unknown as {
   invoice: { count: jest.Mock; findMany: jest.Mock };
   receipt: { count: jest.Mock; aggregate: jest.Mock; findMany: jest.Mock };
   detail: { count: jest.Mock; findMany: jest.Mock };
+  deletionRequest: { count: jest.Mock };
+  receiptEditRequest: { count: jest.Mock };
+  detailEditRequest: { count: jest.Mock };
+  swiftEditRequest: { count: jest.Mock };
 };
-const mockListDeletionRequests = listDeletionRequests as jest.Mock;
-const mockListReceiptEditRequests = listReceiptEditRequests as jest.Mock;
-const mockListDetailEditRequests = listDetailEditRequests as jest.Mock;
-const mockListSwiftEditRequests = listSwiftEditRequests as jest.Mock;
 const mockGetOwnerVisibleIds = getOwnerVisibleIds as jest.Mock;
 
 function makeUser() {
@@ -82,10 +74,10 @@ describe('dashboard-summary-service', () => {
     mockDb.detail.count.mockResolvedValue(1);
     mockDb.receipt.findMany.mockResolvedValue([]);
     mockDb.detail.findMany.mockResolvedValue([]);
-    mockListDeletionRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'APPROVED' }]);
-    mockListReceiptEditRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'REJECTED' }]);
-    mockListDetailEditRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'APPROVED' }]);
-    mockListSwiftEditRequests.mockResolvedValue([{ status: 'PENDING' }, { status: 'PENDING' }]);
+    mockDb.deletionRequest.count.mockResolvedValue(1);
+    mockDb.receiptEditRequest.count.mockResolvedValue(1);
+    mockDb.detailEditRequest.count.mockResolvedValue(1);
+    mockDb.swiftEditRequest.count.mockResolvedValue(2);
   });
 
   afterEach(() => {
@@ -102,10 +94,11 @@ describe('dashboard-summary-service', () => {
           {
             id: 'order-1',
             orderNo: 'Super Dt2-09',
+            customerId: 'customer-super-dt2',
             customerName: 'super dt2',
             customerMark: 'SDT2',
             amount: 1000,
-            receipts: [{ usd: 250 }],
+            orderBalance: 750,
           },
         ],
       },
@@ -117,10 +110,11 @@ describe('dashboard-summary-service', () => {
           {
             id: 'order-2',
             orderNo: 'MAB-1-10',
+            customerId: 'customer-mab-1',
             customerName: 'mab-1',
             customerMark: 'MAB-1',
             amount: 500,
-            receipts: [{ usd: 500 }],
+            orderBalance: 0,
           },
         ],
       },
@@ -137,6 +131,19 @@ describe('dashboard-summary-service', () => {
       _sum: { usd: true },
     });
     expect(summary.pendingDeletion).toBe(5);
+    expect(mockDb.invoice.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        orders: expect.objectContaining({
+          select: expect.not.objectContaining({
+            receipts: expect.anything(),
+          }),
+        }),
+      }),
+    }));
+    expect(mockDb.deletionRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+    expect(mockDb.receiptEditRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+    expect(mockDb.detailEditRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
+    expect(mockDb.swiftEditRequest.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
     expect(summary.releasedInvoices).toEqual([
       {
         id: 'invoice-1',
@@ -148,7 +155,7 @@ describe('dashboard-summary-service', () => {
     ]);
     expect(summary.customerOutstanding).toEqual([
       {
-        customerKey: 'SUPER DT2',
+        customerKey: 'customer:customer-super-dt2',
         customerLabel: 'SUPER DT2',
         totalOutstanding: 750,
         orders: [

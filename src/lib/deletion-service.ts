@@ -13,6 +13,7 @@ import { updateOrderBalance } from '@/lib/matching';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
+import { addMoney, moneyToNumber, subtractMoney } from '@/lib/money';
 
 const AUTO_DETAIL_RECEIPT_NOTES = new Set(['由付款明细自动创建', '由付款明细直接创建']);
 
@@ -189,7 +190,7 @@ async function approveReceiptDeletion(
       where: { detailId },
       select: { amount: true },
     });
-    const totalAmount = remainItems.reduce((sum, item) => sum + Number(item.amount), 0);
+    const totalAmount = moneyToNumber(addMoney(remainItems.map((item) => item.amount)));
     await tx.detail.update({
       where: { id: detailId },
       data: { totalAmount },
@@ -297,10 +298,10 @@ async function approveDetailDeletion(
       },
       _sum: { usd: true },
     });
-    const receiptSum = Number(receiptAgg._sum.usd ?? 0);
+    const receiptSum = receiptAgg._sum.usd ?? 0;
     await tx.order.update({
       where: { id: orderId },
-      data: { orderBalance: Number(order.amount) - receiptSum },
+      data: { orderBalance: moneyToNumber(subtractMoney(order.amount, receiptSum)) },
     });
   }
 }

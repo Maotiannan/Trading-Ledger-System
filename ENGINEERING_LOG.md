@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.170
-> 最后更新：2026-06-04
+> 当前版本：v1.0.171
+> 最后更新：2026-06-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 代码审计第一轮修复：生产 `SESSION_SECRET` 和维护任务 token 改为 fail-fast，公开占位符不再能通过生产校验；初始化管理员密码取消 `12345678` 兜底并新增 `INIT_PASSWORD_WEAK` 中英文错误码；移除未使用的 `next-auth` beta 依赖；限流默认不信任可伪造的 `x-forwarded-for`，只有 `TRUST_PROXY_HEADERS=true` 时使用受 Caddy 重写的代理头，同时为内存限流 Map 增加过期 key 机会清扫；Dashboard 待审批总数改为数据库 count，首页欠款统计改用 `Order.orderBalance`，不再带出每个订单所有收据；`matching.findOrCreateOrder/findMatchingOrder` 改为按订单 token 收窄候选后再计算相似度；关键订单余额刷新路径引入 `money.ts` Decimal 工具，避免 `0.30 - 0.10 - 0.20` 这类浮点尾差；`.txt` 上传增加 UTF-8/NUL 内容校验；CI、Docker、`npm start` 统一到 Node 22，`@resvg/resvg-js` 通过 `serverExternalPackages` 外部化，不再使用 `eval('require')`。补齐 session/init/rate-limit/matching/dashboard/upload 回归，定向 70 用例通过，`npm run typecheck` 通过。未强行落地默认拒绝 middleware 和大文件拆分：这两项会影响 Excel token、内部维护、外部同步等非 Cookie API，需要单独设计后实施 ✅ 2026-06-05
 
 - [x] README 用户化收口：将 README 从混合“版本流水 + 技术手册 + 数据手册”的 500+ 行文档压缩为面向使用者的入口说明，保留用户截图、模块、流程、权限、数据安全和启动方式；新增 `docs/data-and-integrations.md` 承接 Excel ML / sync / consignee 写入接口、MySQL/NAS 数据范围、上传目录、资产台账、Docker volume、内置模板与测试临时数据说明。版本升至 `1.0.170`，不新增数据表、不新增持久化路径，备份范围不变 ✅ 2026-06-04
 

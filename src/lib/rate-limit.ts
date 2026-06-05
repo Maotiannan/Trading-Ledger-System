@@ -44,14 +44,31 @@ const bucketConfigs: Record<RateLimitBucket, RateLimitBucketConfig> = {
   },
 };
 
-const rateLimitStore = new Map<string, number[]>();
+const rateLimitStore = new Map<string, { timestamps: number[]; windowMs: number }>();
+let lastSweepAt = 0;
 
-function getClientIp(request: NextRequest): string {
+export function getClientIp(request: NextRequest): string {
+  const trustProxyHeaders = process.env.TRUST_PROXY_HEADERS === 'true';
   const forwardedFor = request.headers.get('x-forwarded-for');
-  if (forwardedFor) {
+  if (trustProxyHeaders && forwardedFor) {
     return forwardedFor.split(',')[0]?.trim() || 'unknown';
   }
   return request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown';
+}
+
+function sweepExpiredRateLimitKeys(now: number): void {
+  if (now - lastSweepAt < 30_000) return;
+  lastSweepAt = now;
+
+  for (const [key, entry] of rateLimitStore.entries()) {
+    const threshold = now - entry.windowMs;
+    const active = entry.timestamps.filter((timestamp) => timestamp > threshold);
+    if (active.length === 0) {
+      rateLimitStore.delete(key);
+    } else if (active.length !== entry.timestamps.length) {
+      rateLimitStore.set(key, { timestamps: active, windowMs: entry.windowMs });
+    }
+  }
 }
 
 function buildRateLimitKey(
@@ -72,6 +89,11 @@ function buildRateLimitKey(
 
 export function resetRateLimitStore(): void {
   rateLimitStore.clear();
+  lastSweepAt = 0;
+}
+
+export function getRateLimitStoreSizeForDiagnostics(): number {
+  return rateLimitStore.size;
 }
 
 export async function enforceRateLimit(
@@ -87,12 +109,13 @@ export async function enforceRateLimit(
 
   const key = buildRateLimitKey(bucket, request, options);
   const now = Date.now();
+  sweepExpiredRateLimitKeys(now);
   const threshold = now - windowMs;
-  const active = (rateLimitStore.get(key) || []).filter((timestamp) => timestamp > threshold);
+  const active = (rateLimitStore.get(key)?.timestamps || []).filter((timestamp) => timestamp > threshold);
 
   if (active.length >= max) {
     const retryAfterMs = Math.max(1, windowMs - (now - active[0]));
-    rateLimitStore.set(key, active);
+    rateLimitStore.set(key, { timestamps: active, windowMs });
     throw createApiError({
       code: 'RATE_LIMITED',
       status: 429,
@@ -107,5 +130,5 @@ export async function enforceRateLimit(
   }
 
   active.push(now);
-  rateLimitStore.set(key, active);
+  rateLimitStore.set(key, { timestamps: active, windowMs });
 }

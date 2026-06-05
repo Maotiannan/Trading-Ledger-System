@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { Resvg } from '@resvg/resvg-js';
 import { ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { formatOrderNameDisplay } from '@/lib/display-format';
@@ -86,26 +87,6 @@ const TABLE_COLUMNS = {
 
 let cachedLogoDataUri: string | null = null;
 let cachedFontPaths: string[] | null = null;
-type ResvgConstructor = new (
-  svg: string,
-  options?: {
-    fitTo?: {
-      mode: 'width';
-      value: number;
-    };
-    font?: {
-      loadSystemFonts?: boolean;
-      fontFiles?: string[];
-      defaultFontFamily?: string;
-    };
-  },
-) => {
-  render(): {
-    asPng(): Uint8Array;
-  };
-};
-
-let cachedResvgConstructor: ResvgConstructor | null = null;
 
 function escapeXml(value: string) {
   return value
@@ -156,19 +137,6 @@ export function getDetailExportFontPaths() {
     path.join(process.cwd(), 'public', 'detail-export', 'arial-bold.ttf'),
   ];
   return cachedFontPaths;
-}
-
-function resolveResvgConstructor() {
-  if (cachedResvgConstructor) {
-    return cachedResvgConstructor;
-  }
-
-  const runtimeRequire = eval('require') as NodeRequire;
-  const resvgModule = runtimeRequire('@resvg/resvg-js') as {
-    Resvg: ResvgConstructor;
-  };
-  cachedResvgConstructor = resvgModule.Resvg;
-  return cachedResvgConstructor;
 }
 
 type ResolvedItemAnalysis = {
@@ -445,7 +413,6 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
 
 export async function renderDetailExportJpeg(viewModel: DetailExportViewModel) {
   const svg = buildDetailExportSvg(viewModel);
-  const Resvg = resolveResvgConstructor();
   const resvg = new Resvg(svg, {
     fitTo: {
       mode: 'width',

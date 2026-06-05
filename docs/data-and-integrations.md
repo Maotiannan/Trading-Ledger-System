@@ -197,6 +197,18 @@ docker volume rm ...
 
 这些命令可能删除 Caddy 运行卷；如果未来数据库改成 Docker volume，也可能删除数据库数据。
 
+## 生产运行密钥
+
+生产环境必须显式配置这些值，不能使用公开占位符：
+
+| 环境变量 | 用途 |
+|---|---|
+| `SESSION_SECRET` | 签发登录会话 Cookie |
+| `MAINTENANCE_JOB_TOKEN` | Docker `maintenance` 服务调用内部清理接口 |
+| `TRUST_PROXY_HEADERS` | 是否信任 Caddy 重写后的代理 IP 头，Docker/Caddy 部署建议为 `true` |
+
+如果缺少 `SESSION_SECRET` 或 `MAINTENANCE_JOB_TOKEN`，`docker compose` 会拒绝启动，避免系统用公开默认值悄悄运行。
+
 ## 项目内置模板资源
 
 这些文件跟随 Git 和 Docker 镜像发布，不是用户上传数据：

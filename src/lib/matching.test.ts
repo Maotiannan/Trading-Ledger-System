@@ -1,4 +1,4 @@
-import { calculateOrderBalance, findMatchingOrder, validateAmountTolerance } from '@/lib/matching';
+import { calculateOrderBalance, findMatchingOrder, findOrCreateOrder, validateAmountTolerance } from '@/lib/matching';
 import { db } from '@/lib/db';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 
@@ -59,6 +59,45 @@ describe('matching.calculateOrderBalance', () => {
     mockedFindUnique.mockResolvedValue(null);
 
     await expect(calculateOrderBalance('missing')).resolves.toBe(0);
+  });
+
+  it('normalizes decimal math to cents when calculating balances', async () => {
+    mockedFindUnique.mockResolvedValue({
+      id: 'o-decimal',
+      amount: '0.30',
+      receipts: [
+        { id: 'r1', usd: '0.10', status: 'SR_Received' },
+        { id: 'r2', usd: '0.20', status: 'RECEIVED' },
+      ],
+    });
+
+    await expect(calculateOrderBalance('o-decimal')).resolves.toBe(0);
+  });
+});
+
+describe('matching.findOrCreateOrder', () => {
+  beforeEach(() => {
+    mockedFindMany.mockReset();
+    mockedFindUnique.mockReset();
+    mockedFindOrderIdByNoOrAlias.mockReset();
+  });
+
+  it('narrows fuzzy matching candidates instead of loading every order', async () => {
+    mockedFindOrderIdByNoOrAlias.mockResolvedValueOnce(null);
+    mockedFindMany.mockResolvedValueOnce([
+      {
+        id: 'order-super-dt2',
+        orderNo: 'SUPER DT2-09',
+        tokens: '["super","dt2","09","superdt209"]',
+      },
+    ]);
+
+    await expect(findOrCreateOrder('SUPER DT2-09', 'admin-1')).resolves.toBe('order-super-dt2');
+
+    expect(mockedFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.any(Object),
+      take: expect.any(Number),
+    }));
   });
 });
 

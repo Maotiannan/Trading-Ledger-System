@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { runInTransaction } from '@/lib/transaction';
+import { isUnsafeInitialAdminPassword } from '@/lib/security-config';
 
 // bcrypt 工作因子（cost factor），值越高越安全但越慢
 const SALT_ROUNDS = 12;
@@ -45,9 +46,12 @@ export async function migratePassword(userId: string, newPassword: string): Prom
 // 创建默认管理员账户
 export async function createDefaultAdmin() {
   const adminEmail = process.env.INIT_ADMIN_EMAIL || 'admin@example.com';
-  const adminPassword = process.env.INIT_ADMIN_PASSWORD || '12345678';
+  const adminPassword = process.env.INIT_ADMIN_PASSWORD || '';
   if (!adminEmail || !adminPassword) {
     return;
+  }
+  if (isUnsafeInitialAdminPassword(adminPassword)) {
+    throw new Error('INIT_ADMIN_PASSWORD is unsafe; configure a non-default password before creating the default admin');
   }
 
   const existingAdmin = await db.user.findUnique({

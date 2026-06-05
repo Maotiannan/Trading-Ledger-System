@@ -4,6 +4,7 @@ import { serializeOrderTokens } from '@/lib/tokenizer';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { buildOrderNoWithAliases, canonicalizeOrderNo, isCompositeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
+import { addMoney, moneyToNumber, subtractMoney } from '@/lib/money';
 
 type DbExecutor = Prisma.TransactionClient | typeof db;
 
@@ -185,10 +186,10 @@ async function refreshOrderBalance(tx: DbExecutor, orderId: string): Promise<voi
     },
   });
   if (!order) return;
-  const receiptSum = order.receipts.reduce((sum, row) => sum + Number(row.usd), 0);
+  const receiptSum = addMoney(order.receipts.map((row) => row.usd));
   await tx.order.update({
     where: { id: orderId },
-    data: { orderBalance: Number(order.amount) - receiptSum },
+    data: { orderBalance: moneyToNumber(subtractMoney(order.amount, receiptSum)) },
   });
 }
 
@@ -286,7 +287,7 @@ export async function consolidateGroupedOrders(params?: {
             invoiceId: preferred.invoiceId,
             orderNo: canonicalOrderNo,
             tokens: serializeOrderTokens(canonicalOrderNo),
-            amount: rows.reduce((sum, row) => sum + Number(row.amount), 0),
+            amount: moneyToNumber(addMoney(rows.map((row) => row.amount))),
             orderBalance: 0,
             createdBy: preferred.createdBy || preferred.invoice.createdBy,
             customerId: preferred.customerId,
@@ -304,7 +305,7 @@ export async function consolidateGroupedOrders(params?: {
       const sources = rows.filter((row) => row.id !== targetId);
       if (sources.length > 0) {
         const incrementAmount = existingComposite
-          ? sources.reduce((sum, row) => sum + Number(row.amount), 0)
+          ? moneyToNumber(addMoney(sources.map((row) => row.amount)))
           : 0;
 
         if (incrementAmount !== 0) {

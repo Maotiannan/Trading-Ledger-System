@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { db } from '@/lib/db';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
+import { getClientIp } from '@/lib/rate-limit';
 
 const TOKEN_PREFIX = 'ml';
 const MODERN_TOKEN_PATTERN = /^ml_([a-f0-9]{16})_([a-f0-9]{64})$/i;
@@ -110,9 +111,8 @@ function parseBearerToken(headerValue: string | null): string {
 }
 
 export function getExcelApiTokenIp(request: NextRequest): string | null {
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  if (forwardedFor) return forwardedFor.split(',')[0]?.trim() || null;
-  return request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip');
+  const ip = getClientIp(request);
+  return ip === 'unknown' ? null : ip;
 }
 
 export async function listExcelApiTokens(currentUser: CurrentUser): Promise<ExcelApiTokenSummary[]> {

@@ -12,6 +12,7 @@ import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
 import { getCustomerPayerBase } from '@/lib/customer-display';
+import { addMoney, moneyToNumber, subtractMoney, type MoneyInput } from '@/lib/money';
 
 function rankInvoice(invNo: string) {
   if (invNo === 'DEPOSIT_POOL') return 0;
@@ -24,17 +25,18 @@ function computeLiveOrderBalance(row: {
   orderBalance?: unknown;
   receipts?: Array<{ usd: unknown; status?: unknown }>;
 }): number {
-  const amount = Number(row.amount);
+  const amount = moneyToNumber(row.amount as MoneyInput);
   if (!Number.isFinite(amount) || !Array.isArray(row.receipts)) {
-    return Number(row.orderBalance || 0);
+    return moneyToNumber((row.orderBalance || 0) as MoneyInput);
   }
 
-  const received = row.receipts.reduce((sum, receipt) => {
-    if (receipt.status === ReceiptStatus.SIGNING_PENDING) return sum;
-    return sum + Number(receipt.usd || 0);
-  }, 0);
+  const received = addMoney(
+    row.receipts
+      .filter((receipt) => receipt.status !== ReceiptStatus.SIGNING_PENDING)
+      .map((receipt) => receipt.usd || 0)
+  );
 
-  return Number((amount - received).toFixed(2));
+  return moneyToNumber(subtractMoney(amount, received));
 }
 
 export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId: string) {
@@ -398,21 +400,19 @@ export async function listInvoiceRecords(currentUser: CurrentUser, search: strin
   });
 
   const result = invoices.map((invoice) => {
-    const invAmount = invoice.orders.reduce((sum, order) => sum + Number(order.amount), 0);
-    const receivedAmount = invoice.orders.reduce((sum, order) => (
-      sum + order.receipts.reduce((receiptSum, receipt) => receiptSum + Number(receipt.usd), 0)
-    ), 0);
-    const invBalance = invAmount - receivedAmount;
+    const invAmount = moneyToNumber(addMoney(invoice.orders.map((order) => order.amount)));
+    const receivedAmount = addMoney(invoice.orders.flatMap((order) => order.receipts.map((receipt) => receipt.usd)));
+    const invBalance = moneyToNumber(subtractMoney(invAmount, receivedAmount));
 
     return {
       ...invoice,
       invAmount,
       invBalance,
       orders: invoice.orders.map((order) => {
-        const orderReceived = order.receipts.reduce((sum, receipt) => sum + Number(receipt.usd), 0);
+        const orderReceived = addMoney(order.receipts.map((receipt) => receipt.usd));
         return {
           ...order,
-          orderBalance: Number(order.amount) - orderReceived,
+          orderBalance: moneyToNumber(subtractMoney(order.amount, orderReceived)),
           isSystemOrder: false,
         };
       }),

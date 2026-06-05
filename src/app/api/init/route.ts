@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     }
 
     const adminEmail = process.env.INIT_ADMIN_EMAIL || 'admin@example.com';
-    const adminPassword = process.env.INIT_ADMIN_PASSWORD || '12345678';
+    const adminPassword = process.env.INIT_ADMIN_PASSWORD || '';
     if (!adminEmail || !adminPassword) {
       return createApiErrorResponse({ code: apiErrorCodes.INIT_CONFIG_MISSING, status: 400, message: '缺少初始化管理员配置' }, request);
     }

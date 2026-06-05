@@ -31,6 +31,7 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   INIT_DISABLED: { zh: '初始化接口已禁用', en: 'Init route is disabled' },
   INIT_TOKEN_INVALID: { zh: '初始化令牌无效', en: 'Invalid init token' },
   INIT_CONFIG_MISSING: { zh: '缺少初始化管理员配置', en: 'Missing init admin configuration' },
+  INIT_PASSWORD_WEAK: { zh: '初始化管理员密码不安全，请配置非默认强密码', en: 'Initial admin password is unsafe. Configure a non-default strong password.' },
   CUSTOMER_DUPLICATE: { zh: '发现重复客户', en: 'Duplicate customer detected' },
   CUSTOMER_SCOPE_FORBIDDEN: { zh: '客户超出当前可操作范围', en: 'Customer is outside your permitted scope' },
   IMPORT_EMPTY_FILE: { zh: '导入文件为空', en: 'Import file is empty' },

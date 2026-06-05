@@ -1,18 +1,38 @@
 import { db } from '@/lib/db';
 import { ReceiptStatus } from '@prisma/client';
-import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens } from '@/lib/tokenizer';
+import { calculateOrderSimilarity, parseOrderTokens, serializeOrderTokens, tokenizeOrder } from '@/lib/tokenizer';
 import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
 import { findOrderIdByNoOrAlias, mapOrderIdsByOrderNos, syncOrderAliases } from '@/lib/order-alias-db';
 import { formatUsdAmount } from '@/lib/display-format';
 import type { DbTransactionClient } from '@/lib/transaction';
 import { runInTransaction } from '@/lib/transaction';
+import { addMoney, moneyToNumber, subtractMoney } from '@/lib/money';
 
 type MatchingWriteClient = Pick<DbTransactionClient, 'invoice' | 'order' | 'receipt' | 'systemSetting'>;
+const ORDER_MATCH_CANDIDATE_LIMIT = 250;
 
 export type FindMatchingReceiptOptions = {
   statuses?: ReceiptStatus[];
   requireAmountTolerance?: boolean;
 };
+
+function buildOrderCandidateWhere(orderNo: string) {
+  const tokens = tokenizeOrder(orderNo)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2)
+    .slice(0, 6);
+
+  if (tokens.length === 0) {
+    return {};
+  }
+
+  return {
+    OR: tokens.flatMap((token) => [
+      { orderNo: { contains: token } },
+      { tokens: { contains: token } },
+    ]),
+  };
+}
 
 // 确保DEPOSIT_POOL发票池存在
 export async function ensureDepositPoolInvoice(userId: string, client: MatchingWriteClient = db): Promise<string> {
@@ -114,9 +134,11 @@ export async function findOrCreateOrder(orderNo: string, userId: string, client?
   const directId = await findOrderIdByNoOrAlias(orderNo);
   if (directId) return directId;
 
-  // 查找所有订单
+  // 先按订单号分词收窄候选，再在小集合上算相似度，避免热路径全表扫描。
   const orders = await db.order.findMany({
+    where: buildOrderCandidateWhere(orderNo),
     orderBy: { createdAt: 'asc' },
+    take: ORDER_MATCH_CANDIDATE_LIMIT,
     select: { id: true, orderNo: true, tokens: true }
   });
 
@@ -165,9 +187,11 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
     }
   }
 
-  // 查找所有订单，按创建时间排序
+  // 只查询可能相关的候选订单，避免因大小写兜底而扫描全表。
   const orders = await db.order.findMany({
+    where: buildOrderCandidateWhere(orderNo),
     orderBy: { createdAt: 'asc' },
+    take: ORDER_MATCH_CANDIDATE_LIMIT,
     select: {
       id: true,
       orderNo: true,
@@ -244,13 +268,14 @@ export async function calculateOrderBalance(orderId: string, client: MatchingWri
   if (!order) return 0;
 
   // 计算所有已入业务流程关联收据的金额总和
-  const numericReceiptSum = order.receipts.reduce((sum, receipt) => {
-    if (receipt.status === ReceiptStatus.SIGNING_PENDING) return sum;
-    return sum + Number(receipt.usd);
-  }, 0);
+  const numericReceiptSum = addMoney(
+    order.receipts
+      .filter((receipt) => receipt.status !== ReceiptStatus.SIGNING_PENDING)
+      .map((receipt) => receipt.usd)
+  );
 
   // ORDER BALANCE = AMOUNT - 收据总额
-  return Number(order.amount) - numericReceiptSum;
+  return moneyToNumber(subtractMoney(order.amount, numericReceiptSum));
 }
 
 // 更新ORDER BALANCE

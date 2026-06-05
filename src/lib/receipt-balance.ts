@@ -1,3 +1,5 @@
+import { moneyToNumber, subtractMoney, toDecimal } from '@/lib/money';
+
 type ReceiptBalanceRow = {
   id: string;
   orderId: string | null;
@@ -33,10 +35,10 @@ export function buildReceiptBalanceAfterMap(
       return left.id.localeCompare(right.id);
     });
 
-    let remaining = Number(orderAmount);
+    let remaining = toDecimal(orderAmount);
     for (const row of rows) {
-      remaining -= Number(row.usd);
-      result.set(row.id, remaining);
+      remaining = subtractMoney(remaining, row.usd);
+      result.set(row.id, moneyToNumber(remaining));
     }
   }
 

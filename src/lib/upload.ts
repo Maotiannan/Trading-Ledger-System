@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
+import { TextDecoder } from 'util';
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -152,7 +153,13 @@ function validateGenericFileMagic(buffer: Buffer, extension: string): boolean {
   }
 
   if (extension === '.txt') {
-    return true;
+    if (buffer.includes(0x00)) return false;
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   return false;

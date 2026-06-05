@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { runUploadedAssetMaintenance } from '@/lib/uploaded-asset-maintenance';
+import { requireProductionSecret } from '@/lib/security-config';
 
 export async function POST(request: Request) {
   const token = request.headers.get('x-maintenance-token');
-  const expectedToken = process.env.MAINTENANCE_JOB_TOKEN || 'replace-with-a-long-random-secret';
+  const expectedToken = requireProductionSecret('MAINTENANCE_JOB_TOKEN', process.env.MAINTENANCE_JOB_TOKEN);
 
   if (!token || token !== expectedToken) {
     return NextResponse.json(

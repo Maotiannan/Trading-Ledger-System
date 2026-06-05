@@ -1,11 +1,11 @@
 {
   "name": "nextjs_tailwind_shadcn_ts",
-  "version": "1.0.170",
+  "version": "1.0.171",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
+    "start": "NODE_ENV=production node .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
     "typecheck": "rm -rf .next/types .next/dev/types .next-api-isolated/types .next-api-isolated/dev/types .next-e2e-isolated/types .next-e2e-isolated/dev/types && npx tsc --noEmit",
     "test": "jest",
@@ -72,7 +72,6 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.525.0",
     "next": "^16.1.1",
-    "next-auth": "^5.0.0-beta.30",
     "next-intl": "^4.3.4",
     "next-themes": "^0.4.6",
     "pdf-lib": "^1.17.1",

@@ -17,6 +17,8 @@ import type { CustomerFixTarget } from './use-customer-forms';
 
 export type CustomerActionText = (zh: string, en: string) => string;
 
+type CustomerOwnerOption = { id: string; email: string; name: string | null; role: string; level: number };
+
 export type CustomerActionDeps = {
   tx: CustomerActionText;
   isAdmin: boolean;
@@ -29,7 +31,7 @@ export type CustomerActionDeps = {
   latestFailedRows: CustomerImportRowView[];
   loadCustomers: () => Promise<void>;
   loadFixes: () => Promise<void>;
-  setOwnerOptions: (options: Array<{ id: string; email: string; name: string | null; role: string; level: number }>) => void;
+  setOwnerOptions: (options: CustomerOwnerOption[]) => void;
   setImportOwnerId: (value: string | ((prev: string) => string)) => void;
   setForm: React.Dispatch<React.SetStateAction<CustomerFormState>>;
   setShowCreate: (open: boolean) => void;
@@ -77,7 +79,7 @@ export function useCustomerActions({
   const loadOwnerOptions = useCallback(async () => {
     const result = await apiCall('customer?action=owner-options');
     if (!result.success) return;
-    const options = Array.isArray(result.data) ? result.data : [];
+    const options = (Array.isArray(result.data) ? result.data : []) as CustomerOwnerOption[];
     setOwnerOptions(options);
 
     if (isAdmin) {

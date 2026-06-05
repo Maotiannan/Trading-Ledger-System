@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/route-auth';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import { toApiErrorResponse } from '@/lib/api-error-response';
+import { logger } from '@/lib/logger';
 import {
   attachPaymentAgentFile,
   createPaymentAgent,
@@ -22,7 +23,7 @@ export const GET = withAuth(async (request, currentUser) => {
     const data = await listPaymentAgents(currentUser, { search });
     return createApiSuccessResponse({ data, message: '付款代理已加载' }, request);
   } catch (error) {
-    console.error('Payment agent GET error:', error);
+    logger.error('Payment agent GET error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -81,7 +82,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     throw new Error('未知操作');
   } catch (error) {
-    console.error('Payment agent POST error:', error);
+    logger.error('Payment agent POST error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

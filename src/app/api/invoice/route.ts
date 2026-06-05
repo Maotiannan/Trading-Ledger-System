@@ -28,6 +28,7 @@ import {
 } from '@/lib/invoice-read-service';
 import { withAuth, withRole } from '@/lib/route-auth';
 import { parseJsonRequest } from '@/lib/http-body';
+import { logger } from '@/lib/logger';
 
 function mapInvoiceImportRows(rowsInput: unknown[]): InvoiceImportInputRow[] {
   return rowsInput.map((row, index) => {
@@ -130,7 +131,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const result = await listInvoiceRecords(currentUser, search);
     return createApiSuccessResponse(result, request);
   } catch (error) {
-    console.error('Get invoices error:', error);
+    logger.error('Get invoices error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -258,7 +259,7 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
     });
     return createApiSuccessResponse({ data: result.data, message: result.message }, request);
   } catch (error) {
-    console.error('Create invoice error:', error);
+    logger.error('Create invoice error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -273,7 +274,7 @@ export const DELETE = withRole(UserRole.ADMIN, async (request: NextRequest, curr
     const result = await deleteInvoiceRecord(currentUser, searchParams.get('id') || '');
     return createApiSuccessResponse({ message: result.message }, request);
   } catch (error) {
-    console.error('Delete invoice error:', error);
+    logger.error('Delete invoice error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -370,7 +371,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
       detail: { action },
     });
   } catch (error) {
-    console.error('Update order error:', error);
+    logger.error('Update order error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

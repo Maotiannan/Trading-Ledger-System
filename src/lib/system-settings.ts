@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 export const editableSystemSettingKeys = [
   'OCR_DISABLED',
@@ -149,7 +150,7 @@ export async function getSystemSettings(keys: string[]): Promise<Record<string, 
   } catch (error) {
     if (!cacheWarned) {
       cacheWarned = true;
-      console.warn('[system-settings] table unavailable, fallback to environment only', error);
+      logger.warn('System settings table unavailable, fallback to environment only', error);
     }
     if (!cachedValues) return {};
     const result: Record<string, string> = {};

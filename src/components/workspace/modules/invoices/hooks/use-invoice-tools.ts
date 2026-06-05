@@ -6,6 +6,7 @@ import type { User } from '@/lib/store';
 import type { BranchAdminOption, RematchPreviewGroup, RematchSelection, TransferFromOrder } from '../types';
 
 export type InvoiceToolText = (zh: string, en: string) => string;
+type AuthUserOptionRow = Partial<BranchAdminOption> & { role?: string };
 
 function collectDescendantAdminOptions(rows: Array<BranchAdminOption>, currentUserId: string): BranchAdminOption[] {
   const childrenByParent = new Map<string, BranchAdminOption[]>();
@@ -69,7 +70,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
       if (!result.success) {
         throw new Error(getErrorMessage(result, tx('加载分支管理员失败', 'Failed to load branch admin options')));
       }
-      const rows = Array.isArray(result.data) ? result.data : [];
+      const rows = (Array.isArray(result.data) ? result.data : []) as AuthUserOptionRow[];
       const adminRows = rows
         .filter((row): row is BranchAdminOption & { role: string } => Boolean(row?.id) && row?.role === 'ADMIN')
         .map((row) => ({

@@ -27,6 +27,7 @@ import {
   listCustomerConsignees,
   setCustomerConsigneePrimary,
 } from '@/lib/customer-consignee-service';
+import { logger } from '@/lib/logger';
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -348,7 +349,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
 
     return badRequest('未知操作', apiErrorCodes.INVALID_ACTION, { action }, request);
   } catch (error) {
-    console.error('Customer POST error:', error);
+    logger.error('Customer POST error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,

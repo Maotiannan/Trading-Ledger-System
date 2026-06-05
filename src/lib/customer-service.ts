@@ -1,4 +1,4 @@
-import { UserRole } from '@prisma/client';
+import { UserRole, type Customer } from '@prisma/client';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
@@ -202,6 +202,12 @@ function asApiError(error: unknown, messageFallback = '数据库错误') {
   });
 }
 
+function assertCustomerTransactionResult(customer: Customer | null, message: string): asserts customer is Customer {
+  if (!customer) {
+    throw createApiError({ code: 'INTERNAL_ERROR', status: 500, message });
+  }
+}
+
 export async function canSalesEditExtendedCustomerFields(): Promise<boolean> {
   const settings = await getSystemSettings(['SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS']);
   return (settings.SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS || 'false').toLowerCase() === 'true';
@@ -219,10 +225,9 @@ export async function createCustomerRecord(
 
   const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedCustomerFields());
   try {
-    let created;
     let ownerId = currentUser.id;
     let phoneConflict = false;
-    await runInTransaction(async (tx) => {
+    const created = await runInTransaction(async (tx) => {
       ownerId = await resolveCustomerOwnerId(currentUser, requestedOwnerId || null, tx);
       const duplicates = await findDuplicateCustomersInScope(ownerId, {
         mark: payload.mark!,
@@ -239,7 +244,7 @@ export async function createCustomerRecord(
         companyName: showExtended ? payload.companyName || null : null,
       }, undefined, tx);
 
-      created = await tx.customer.create({
+      const createdCustomer = await tx.customer.create({
         data: {
           mark: payload.mark!,
           normalizedMark: normalizeMarkForMatch(payload.mark!),
@@ -255,12 +260,14 @@ export async function createCustomerRecord(
           ownerId,
         },
       });
-      await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName!, payload.orderNames || []);
-      await syncCustomerPrimaryConsigneeFromLegacy(tx, created.id, payload.consignee || null);
+      await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], createdCustomer.id, payload.orderName!, payload.orderNames || []);
+      await syncCustomerPrimaryConsigneeFromLegacy(tx, createdCustomer.id, payload.consignee || null);
 
-      const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, created.id, tx);
+      const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, createdCustomer.id, tx);
       phoneConflict = phoneConflicts.length > 0;
+      return createdCustomer;
     });
+    assertCustomerTransactionResult(created, '客户创建失败');
 
     await recordAuditEvent({
       action: auditActions.CUSTOMER_CREATE,
@@ -319,10 +326,9 @@ export async function updateCustomerRecord(
   }
 
   try {
-    let updated;
     let ownerId = existing.ownerId;
     let phoneConflict = false;
-    await runInTransaction(async (tx) => {
+    const updated = await runInTransaction(async (tx) => {
       ownerId = await resolveCustomerOwnerId(currentUser, requestedOwnerId || existing.ownerId, tx);
       const duplicates = await findDuplicateCustomersInScope(ownerId, {
         mark: payload.mark!,
@@ -338,7 +344,7 @@ export async function updateCustomerRecord(
         companyName: showExtended ? payload.companyName || null : null,
       }, id, tx);
 
-      updated = await tx.customer.update({
+      const updatedCustomer = await tx.customer.update({
         where: { id },
         data: {
           mark: payload.mark!,
@@ -363,7 +369,9 @@ export async function updateCustomerRecord(
 
       const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, id, tx);
       phoneConflict = phoneConflicts.length > 0;
+      return updatedCustomer;
     });
+    assertCustomerTransactionResult(updated, '客户更新失败');
 
     await recordAuditEvent({
       action: auditActions.CUSTOMER_UPDATE,
@@ -514,15 +522,14 @@ export async function processCustomerImportRows(
         continue;
       }
 
-      let created;
-      await runInTransaction(async (tx) => {
+      const created = await runInTransaction(async (tx) => {
         await assertNoCustomerScopeConflict(effectiveOwnerId, {
           orderName: payload.orderName!,
           phone: payload.phone!,
           companyName: showExtended ? payload.companyName || null : null,
         }, undefined, tx);
 
-        created = await tx.customer.create({
+        const createdCustomer = await tx.customer.create({
           data: {
             mark: payload.mark!,
             normalizedMark: normalizeMarkForMatch(payload.mark!),
@@ -538,9 +545,11 @@ export async function processCustomerImportRows(
             ownerId: effectiveOwnerId,
           },
         });
-        await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], created.id, payload.orderName!, payload.orderNames || []);
-        await syncCustomerPrimaryConsigneeFromLegacy(tx, created.id, payload.consignee || null);
+        await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], createdCustomer.id, payload.orderName!, payload.orderNames || []);
+        await syncCustomerPrimaryConsigneeFromLegacy(tx, createdCustomer.id, payload.consignee || null);
+        return createdCustomer;
       });
+      assertCustomerTransactionResult(created, '客户导入失败');
 
       await recordAuditEvent({
         action: auditActions.CUSTOMER_CREATE,

@@ -12,6 +12,7 @@ import type { DetailPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
 import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
+import { logger } from '@/lib/logger';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -395,7 +396,7 @@ export async function createDetailRecord(params: {
     result.detail.imageUrl = previewImage.path;
     result.detail.imageName = previewImage.name;
   } catch (error) {
-    console.error('Ensure payment detail preview image failed:', error);
+    logger.error('Ensure payment detail preview image failed', error);
   }
 
   await recordAuditEvent({

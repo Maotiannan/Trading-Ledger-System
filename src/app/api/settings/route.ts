@@ -19,6 +19,7 @@ import {
   updateCurrentUserImageCompressionPreferences,
   updateSystemSettings,
 } from '@/lib/settings-write-service';
+import { logger } from '@/lib/logger';
 function escapeCsvCell(value: unknown): string {
   const text = String(value ?? '');
   if (/[",\r\n]/.test(text)) {
@@ -141,7 +142,7 @@ export const GET = withAuth(async (_request, currentUser) => {
     const data = await listSettings(currentUser);
     return createApiSuccessResponse({ data, message: '设置已加载' }, _request);
   } catch (error) {
-    console.error('Settings GET error:', error);
+    logger.error('Settings GET error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -193,7 +194,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       detail: { action },
     });
   } catch (error) {
-    console.error('Settings POST error:', error);
+    logger.error('Settings POST error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

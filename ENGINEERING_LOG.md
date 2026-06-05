@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.171
+> 当前版本：v1.0.172
 > 最后更新：2026-06-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 代码审计第二轮工程收口：`tsconfig.noImplicitAny` 从 `false` 改为 `true`，修复客户导入/创建/更新、OCR 模型探测、客户和发票前端 hook 中暴露出的隐式 any；`customer-service` 中三处事务外部变量赋值改为事务直接返回创建/更新结果，避免严格类型下出现“事务成功但外部对象可能为空”的不稳定写法。新增 `logger.ts`，服务端/API 裸 `console.*` 统一收口为结构化日志并对 password/token/secret/cookie/authorization 等字段递归脱敏；OCR 解析失败不再记录完整模型原文，只记录长度。定向 typecheck、lint 与 83 个相关测试通过 ✅ 2026-06-05
 
 - [x] 代码审计第一轮修复：生产 `SESSION_SECRET` 和维护任务 token 改为 fail-fast，公开占位符不再能通过生产校验；初始化管理员密码取消 `12345678` 兜底并新增 `INIT_PASSWORD_WEAK` 中英文错误码；移除未使用的 `next-auth` beta 依赖；限流默认不信任可伪造的 `x-forwarded-for`，只有 `TRUST_PROXY_HEADERS=true` 时使用受 Caddy 重写的代理头，同时为内存限流 Map 增加过期 key 机会清扫；Dashboard 待审批总数改为数据库 count，首页欠款统计改用 `Order.orderBalance`，不再带出每个订单所有收据；`matching.findOrCreateOrder/findMatchingOrder` 改为按订单 token 收窄候选后再计算相似度；关键订单余额刷新路径引入 `money.ts` Decimal 工具，避免 `0.30 - 0.10 - 0.20` 这类浮点尾差；`.txt` 上传增加 UTF-8/NUL 内容校验；CI、Docker、`npm start` 统一到 Node 22，`@resvg/resvg-js` 通过 `serverExternalPackages` 外部化，不再使用 `eval('require')`。补齐 session/init/rate-limit/matching/dashboard/upload 回归，定向 70 用例通过，`npm run typecheck` 通过。未强行落地默认拒绝 middleware 和大文件拆分：这两项会影响 Excel token、内部维护、外部同步等非 Cookie API，需要单独设计后实施 ✅ 2026-06-05
 

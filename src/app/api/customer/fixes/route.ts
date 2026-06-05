@@ -6,6 +6,7 @@ import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import { withAuth } from '@/lib/route-auth';
 import { listCustomerFixQueue } from '@/lib/customer-fix-read-service';
+import { logger } from '@/lib/logger';
 import {
   linkOrderCustomerFix,
   linkReceiptCustomerFix,
@@ -84,7 +85,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     });
     return createApiSuccessResponse(result, request);
   } catch (error) {
-    console.error('Customer fixes POST error:', error);
+    logger.error('Customer fixes POST error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,

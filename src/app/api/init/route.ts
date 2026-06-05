@@ -3,6 +3,7 @@ import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { initializePrimaryAdmin } from '@/lib/init-service';
+import { logger } from '@/lib/logger';
 
 // 初始化默认管理员账户
 export async function POST(request: Request) {
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     });
     return createApiSuccessResponse({ message: result.message, data: result.data }, request);
   } catch (error) {
-    console.error('Init error:', error);
+    logger.error('Init error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,

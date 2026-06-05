@@ -1,6 +1,7 @@
 import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult } from '@/lib/types';
 import { getSystemSettings } from '@/lib/system-settings';
 import { normalizeSwiftOcrResult } from '@/lib/swift-normalization';
+import { logger } from '@/lib/logger';
 
 type OcrConfig = {
   maxRetries: number;
@@ -58,7 +59,7 @@ function resolveVisionModel(config: OcrConfig): string {
   if (!isBigModelProvider(config.apiBaseUrl)) return normalized;
   if (isVisionModel(normalized)) return normalized;
   if (!ocrModelOverrideLogged) {
-    console.warn(`[OCR] BigModel configured with non-vision model "${normalized}", auto-switching to "glm-4.6v" for image OCR`);
+    logger.warn('OCR BigModel configured with non-vision model; auto-switching to glm-4.6v', { configuredModel: normalized });
     ocrModelOverrideLogged = true;
   }
   return 'glm-4.6v';
@@ -276,11 +277,11 @@ async function probeProviderModels(
   }
 
   const json = await response.json().catch(() => ({}));
-  const data = Array.isArray(json?.data) ? json.data : [];
+  const data = (Array.isArray(json?.data) ? json.data : []) as Array<{ id?: string }>;
   const available = data
     .map((m: { id?: string }) => String(m?.id || '').trim())
     .filter((id: string) => Boolean(id));
-  const modelExists = available.some((id) => id.toLowerCase() === config.model.toLowerCase());
+  const modelExists = available.some((id: string) => id.toLowerCase() === config.model.toLowerCase());
   return { modelExists, total: data.length, available };
 }
 
@@ -318,9 +319,9 @@ function canUseOcr(config: OcrConfig): boolean {
 function logOcrDisabledReason(label: string, config: OcrConfig): void {
   if (ocrDisabledLogged) return;
   if (config.disabled) {
-    console.warn(`[OCR:${label}] OCR is disabled by OCR_DISABLED=true, fallback parser will be used`);
+    logger.warn('OCR disabled, fallback parser will be used', { label, reason: 'OCR_DISABLED' });
   } else if (!config.apiKey) {
-    console.warn(`[OCR:${label}] OCR_API_KEY is not configured, fallback parser will be used`);
+    logger.warn('OCR API key is not configured, fallback parser will be used', { label, reason: 'OCR_API_KEY_MISSING' });
   }
   ocrDisabledLogged = true;
 }
@@ -358,7 +359,7 @@ async function withRetry<T>(fn: (signal: AbortSignal) => Promise<T>, label: stri
       return await withTimeout(fn, config.timeoutMs, label);
     } catch (error) {
       lastError = error;
-      console.error(`[OCR:${label}] attempt ${i + 1} failed`, error);
+      logger.error('OCR attempt failed', { label, attempt: i + 1, error });
 
       if (i < config.maxRetries - 1 && isRetryableError(error)) {
         const waitMs = config.retryBaseDelayMs * Math.pow(2, i);
@@ -462,9 +463,13 @@ function logUsage(label: string, response: any, config: OcrConfig): void {
     (promptTokens / 1000) * config.inputCostPer1k +
     (completionTokens / 1000) * config.outputCostPer1k;
 
-  console.log(
-    `[OCR:${label}] usage prompt=${promptTokens} completion=${completionTokens} total=${totalTokens} estimated_cost=${estimatedCost.toFixed(6)}`
-  );
+  logger.info('OCR usage', {
+    label,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    estimatedCost: Number(estimatedCost.toFixed(6)),
+  });
 }
 
 async function runVisionRequest<T>(
@@ -492,10 +497,10 @@ async function runVisionRequest<T>(
     const parsed = parseJsonObject<T>(content);
     if (parsed) return parsed;
 
-    console.error(`[OCR:${label}] parse failed`, content);
+    logger.error('OCR parse failed', { label, contentLength: content.length });
     throw new Error(`OCR响应解析失败，请检查模型输出格式`);
   } catch (error) {
-    console.error(`[OCR:${label}] request failed`, error);
+    logger.error('OCR request failed', { label, error });
     throw (error instanceof Error ? error : new Error('OCR识别失败'));
   }
 }
@@ -524,10 +529,10 @@ async function runTextRequest<T>(
     const parsed = parseJsonObject<T>(content);
     if (parsed) return parsed;
 
-    console.error(`[OCR:${label}] parse failed`, content);
+    logger.error('OCR parse failed', { label, contentLength: content.length });
     throw new Error('OCR响应解析失败，请检查模型输出格式');
   } catch (error) {
-    console.error(`[OCR:${label}] request failed`, error);
+    logger.error('OCR request failed', { label, error });
     throw (error instanceof Error ? error : new Error('OCR识别失败'));
   }
 }

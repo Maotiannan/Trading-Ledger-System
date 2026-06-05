@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import type { AuditAction, AuditTargetType } from '@/lib/audit-catalog';
+import { logger } from '@/lib/logger';
 
 export type AuditEvent = {
   action: AuditAction | string;
@@ -16,7 +17,7 @@ export interface AuditSink {
 
 class ConsoleAuditSink implements AuditSink {
   async write(event: AuditEvent): Promise<void> {
-    console.info('[AUDIT]', JSON.stringify(event));
+    logger.info('AUDIT', event);
   }
 }
 
@@ -70,7 +71,7 @@ export async function recordAuditEvent(event: AuditEvent): Promise<void> {
   try {
     await sink.write(normalized);
   } catch (error) {
-    console.warn('[AUDIT_FALLBACK]', error);
+    logger.warn('AUDIT_FALLBACK', error);
     await fallbackSink.write(normalized);
   }
 }

@@ -19,6 +19,7 @@ import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { createSwiftRecord, deleteSwiftRecord, markSwiftReceived, updateSwiftRecord } from '@/lib/swift-service';
 import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
 import { normalizeSwiftOcrResult } from '@/lib/swift-normalization';
+import { logger } from '@/lib/logger';
 
 function parseSwiftPayloadValue(value: unknown) {
   const normalized = value && typeof value === 'object'
@@ -104,7 +105,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     return NextResponse.json({ success: true, data: filterRowsBySearch(swifts, search) });
   } catch (error) {
-    console.error('Get swifts error:', error);
+    logger.error('Get swifts error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -281,7 +282,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       detail: { action },
     });
   } catch (error) {
-    console.error('Swift API error:', error);
+    logger.error('Swift API error', error);
     if (error instanceof UploadValidationError || error instanceof InputValidationError) {
       return toApiErrorResponse(error, {
         code: 'BAD_REQUEST',

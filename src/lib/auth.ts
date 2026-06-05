@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { runInTransaction } from '@/lib/transaction';
 import { isUnsafeInitialAdminPassword } from '@/lib/security-config';
+import { logger } from '@/lib/logger';
 
 // bcrypt 工作因子（cost factor），值越高越安全但越慢
 const SALT_ROUNDS = 12;
@@ -70,7 +71,7 @@ export async function createDefaultAdmin() {
         parentId: null,
       }
     }));
-    console.log(`Default admin created: ${adminEmail}`);
+    logger.info('Default admin created');
   }
 }
 
@@ -99,7 +100,7 @@ export async function validateUser(email: string, password: string): Promise<Use
 
   // 如果是旧密码格式，自动迁移到 bcrypt
   if (isLegacyHash(user.password)) {
-    console.log(`Migrating password for user ${email} to bcrypt...`);
+      logger.info('Migrating legacy password hash to bcrypt');
     await migratePassword(user.id, password);
   }
 

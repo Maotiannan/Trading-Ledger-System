@@ -13,6 +13,7 @@ import {
   getReceiptGeneratorSession,
   lookupReceiptGeneratorOrderContext,
 } from '@/lib/receipt-generator-read-service';
+import { logger } from '@/lib/logger';
 
 function isUploadAbortError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error
@@ -140,7 +141,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     });
   } catch (error) {
     if (isUploadAbortError(error)) {
-      console.error('Receipt generator finalize aborted:', {
+      logger.error('Receipt generator finalize aborted', {
         code: error.code || 'ABORTED',
       });
       return toApiErrorResponse(error, {

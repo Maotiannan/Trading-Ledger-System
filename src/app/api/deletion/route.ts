@@ -5,6 +5,7 @@ import { toApiErrorResponse } from '@/lib/api-error-response';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import { enforceRateLimit } from '@/lib/rate-limit';
+import { logger } from '@/lib/logger';
 import {
   createDeletionRequest,
   listDeletionRequests,
@@ -17,7 +18,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const requests = await listDeletionRequests(currentUser);
     return NextResponse.json({ success: true, data: requests });
   } catch (error) {
-    console.error('Get deletion requests error:', error);
+    logger.error('Get deletion requests error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -66,7 +67,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       detail: { action },
     });
   } catch (error) {
-    console.error('Deletion API error:', error);
+    logger.error('Deletion API error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

@@ -24,6 +24,7 @@ import { createDetailRecord, updateDetailRecord } from '@/lib/detail-service';
 import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/lib/detail-edit-request-service';
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
+import { logger } from '@/lib/logger';
 
 function parseDetailPayloadValue(value: unknown) {
   if (typeof value === 'string') {
@@ -272,7 +273,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     return NextResponse.json({ success: true, data: filterRowsBySearch(details, search) });
   } catch (error) {
-    console.error('Get details error:', error);
+    logger.error('Get details error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -432,7 +433,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       detail: { action },
     });
   } catch (error) {
-    console.error('Detail API error:', error);
+    logger.error('Detail API error', error);
     if (error instanceof UploadValidationError || error instanceof InputValidationError) {
       return toApiErrorResponse(error, {
         code: 'BAD_REQUEST',

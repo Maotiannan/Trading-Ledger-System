@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/route-auth';
 import { createApiError } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { getDashboardSummary } from '@/lib/dashboard-summary-service';
+import { logger } from '@/lib/logger';
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
@@ -21,7 +22,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const summary = await getDashboardSummary(currentUser);
     return NextResponse.json({ success: true, data: summary });
   } catch (error) {
-    console.error('Dashboard API error:', error);
+    logger.error('Dashboard API error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

@@ -4,6 +4,7 @@ import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-resp
 import { localizeApiSuccessMessage } from '@/lib/api-success-response';
 import { withAuth } from '@/lib/route-auth';
 import { exportReport } from '@/lib/report-service';
+import { logger } from '@/lib/logger';
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   const { searchParams } = new URL(request.url);
@@ -30,7 +31,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       },
     });
   } catch (error) {
-    console.error('Report export failed:', error);
+    logger.error('Report export failed', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.REPORT_EXPORT_FAILED,
       status: 500,

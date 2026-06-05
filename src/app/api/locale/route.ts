@@ -3,6 +3,7 @@ import { apiErrorCodes } from '@/lib/api-error';
 import { toApiErrorResponse } from '@/lib/api-error-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import { defaultLocale, isSupportedLocale } from '@/lib/i18n';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     });
     return response;
   } catch (error) {
-    console.error('Locale API error:', error);
+    logger.error('Locale API error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,

@@ -20,6 +20,7 @@ import {
   listManagedUserParentOptions,
   listManagedUsers,
 } from '@/lib/auth-read-service';
+import { logger } from '@/lib/logger';
 
 function badRequest(request: NextRequest, message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown) {
   return createApiErrorResponse({ code, status: 400, message, detail }, request);
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
       detail: { action },
     });
   } catch (error) {
-    console.error('Auth API error:', error);
+    logger.error('Auth API error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,

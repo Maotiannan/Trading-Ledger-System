@@ -13,6 +13,7 @@ import { createApiError } from '@/lib/api-error';
 import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
+import { logger } from '@/lib/logger';
 
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const PUBLIC_UPLOAD_PREFIX = '/upload/images/';
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Read upload image error:', error);
+    logger.error('Read upload image error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.FILE_READ_FAILED,
       status: 404,
@@ -170,9 +171,8 @@ export async function POST(request: NextRequest) {
 
     return createApiSuccessResponse({ data: payload }, request);
   } catch (error) {
-    console.error('Upload image error:', error);
     if (error instanceof Error && (error.message === 'aborted' || ('code' in error && (error as NodeJS.ErrnoException).code === 'ECONNRESET'))) {
-      console.error('Upload image aborted:', {
+      logger.error('Upload image aborted', {
         code: ('code' in error ? (error as NodeJS.ErrnoException).code : 'ABORTED') || 'ABORTED',
       });
       return createApiErrorResponse({
@@ -188,6 +188,7 @@ export async function POST(request: NextRequest) {
         message: error.message,
       }, request);
     }
+    logger.error('Upload image error', error);
     return toApiErrorResponse(error, {
       code: apiErrorCodes.INTERNAL_ERROR,
       status: 500,

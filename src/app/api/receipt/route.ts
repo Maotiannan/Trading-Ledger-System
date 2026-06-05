@@ -24,6 +24,7 @@ import {
   markReceiptReceived,
   updateReceiptRecord,
 } from '@/lib/receipt-service';
+import { logger } from '@/lib/logger';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import {
   listReceiptEditRequests,
@@ -182,7 +183,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
 
     return NextResponse.json({ success: true, data: filterRowsBySearch(enrichedReceipts, search) });
   } catch (error) {
-    console.error('Get receipts error:', error);
+    logger.error('Get receipts error', error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,
@@ -209,7 +210,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       try {
         const base64 = await toOcrDataUrl(file);
         const ocrResult = normalizeReceiptOcrResult(await recognizeReceipt(base64) as unknown as Record<string, unknown>);
-        console.info('[OCR:receipt] normalized fields', {
+        logger.info('OCR receipt normalized fields', {
           receiptNo: ocrResult.receiptNo,
           orderNo: ocrResult.orderNo,
           invNo: ocrResult.invNo,
@@ -358,7 +359,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
       detail: { action },
     });
   } catch (error) {
-    console.error('Receipt API error:', error);
+    logger.error('Receipt API error', error);
     if (error instanceof UploadValidationError || error instanceof InputValidationError) {
       return toApiErrorResponse(error, {
         code: 'BAD_REQUEST',

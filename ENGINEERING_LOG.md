@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.172
+> 当前版本：v1.0.173
 > 最后更新：2026-06-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 一键安全重建脚本固化：新增 `scripts/rebuild-local-app.sh`，把本地日常更新统一为“检查 `.env` 必要密钥 -> `docker compose config --quiet` -> `docker compose up -d --no-deps --build app` -> 刷新 `maintenance` -> app health check -> maintenance 清理接口检查 -> 最终容器状态输出”。脚本只重建 app 与维护服务，不执行 `docker compose down -v`、Docker volume 删除或上传目录清理；本地缺失/不安全的 `SESSION_SECRET` 和 `MAINTENANCE_JOB_TOKEN` 只在 `.env` 中生成，不向终端打印真实值。新增脚本安全契约测试，确保后续改脚本不会引入破坏性 Docker 命令 ✅ 2026-06-05
 
 - [x] 代码审计第二轮工程收口：`tsconfig.noImplicitAny` 从 `false` 改为 `true`，修复客户导入/创建/更新、OCR 模型探测、客户和发票前端 hook 中暴露出的隐式 any；`customer-service` 中三处事务外部变量赋值改为事务直接返回创建/更新结果，避免严格类型下出现“事务成功但外部对象可能为空”的不稳定写法。新增 `logger.ts`，服务端/API 裸 `console.*` 统一收口为结构化日志并对 password/token/secret/cookie/authorization 等字段递归脱敏；OCR 解析失败不再记录完整模型原文，只记录长度。定向 typecheck、lint 与 83 个相关测试通过 ✅ 2026-06-05
 

@@ -14,8 +14,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
-  DASHBOARD_CARD_REGISTRY,
-  hideDashboardCard,
   normalizeDashboardLayoutPreference,
   type DashboardCardId,
   type DashboardLayoutPreference,
@@ -51,7 +49,7 @@ import {
 } from '@/components/workspace/shared';
 import {
   Loader2, LogIn, LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, Plus, Upload, Check, X, AlertTriangle, Eye,
+  Building2, Trash2, Plus, Upload, Check, AlertTriangle, Eye,
   History, ArrowRight, RefreshCw, UserPlus, Key, LayoutDashboard, Settings, Save,
   ChevronDown, ChevronRight, Pencil
 } from 'lucide-react';
@@ -90,32 +88,6 @@ type DashboardCustomerOutstanding = {
 };
 
 const DASHBOARD_LIST_PAGE_SIZE = 10;
-
-function DashboardCardShell({
-  cardId,
-  label,
-  children,
-  onHide,
-}: {
-  cardId: DashboardCardId;
-  label: string;
-  children: React.ReactNode;
-  onHide: (cardId: DashboardCardId) => void;
-}) {
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        aria-label={`Hide ${label}`}
-        className="absolute right-2 top-2 z-10 rounded-full p-1 text-muted-foreground/50 transition hover:bg-muted hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => onHide(cardId)}
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-      {children}
-    </div>
-  );
-}
 
 export function Dashboard() {
   const t = useTranslations('dashboard');
@@ -350,45 +322,10 @@ export function Dashboard() {
     );
   };
 
-  const dashboardCardLabel = useCallback((cardId: DashboardCardId) => {
-    const card = DASHBOARD_CARD_REGISTRY.find((item) => item.id === cardId);
-    return card ? tx(card.zh, card.en) : cardId;
-  }, [tx]);
-
-  const handleHideDashboardCard = useCallback(async (cardId: DashboardCardId) => {
-    const confirmed = window.confirm(tx('是否隐藏此卡片？隐藏后可在设置中恢复。', 'Hide this card? You can restore it in Settings.'));
-    if (!confirmed) return;
-
-    const nextLayout = hideDashboardCard(dashboardLayout, cardId);
-    try {
-      const result = await apiCall('settings', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'update-user-preferences',
-          preferences: { dashboardLayout: nextLayout },
-        }),
-      });
-      if (result.success) {
-        setDashboardLayout(normalizeDashboardLayoutPreference((result.data as { dashboardLayout?: unknown } | null)?.dashboardLayout ?? nextLayout));
-      } else {
-        alert(tx('保存 Dashboard 设置失败', 'Failed to save Dashboard settings'));
-      }
-    } catch {
-      alert(tx('保存 Dashboard 设置失败', 'Failed to save Dashboard settings'));
-    }
-  }, [dashboardLayout, tx]);
-
-  const wrapDashboardCard = (cardId: DashboardCardId, node: React.ReactNode) => (
-    <DashboardCardShell key={cardId} cardId={cardId} label={dashboardCardLabel(cardId)} onHide={handleHideDashboardCard}>
-      {node}
-    </DashboardCardShell>
-  );
-
   const renderDashboardCard = (cardId: DashboardCardId) => {
     const stat = statCards[cardId];
     if (stat) {
-      return wrapDashboardCard(
-        cardId,
+      return (
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>{stat.label}</CardDescription>
@@ -399,13 +336,12 @@ export function Dashboard() {
               <p className="text-right text-lg font-semibold text-gray-900">{stat.subValue}</p>
             )}
           </CardContent>
-        </Card>,
+        </Card>
       );
     }
 
     if (cardId === 'released-unpaid-invoices') {
-      return wrapDashboardCard(
-        cardId,
+      return (
         <Card>
           <CardHeader>
             <CardTitle>{tx('已放单未结清发票', 'Released Unpaid Invoices')}</CardTitle>
@@ -461,13 +397,12 @@ export function Dashboard() {
               </div>
             )}
           </CardContent>
-        </Card>,
+        </Card>
       );
     }
 
     if (cardId === 'customer-outstanding-ranking') {
-      return wrapDashboardCard(
-        cardId,
+      return (
         <Card>
           <CardHeader>
             <CardTitle>{tx('客户欠款排行', 'Customer Outstanding Ranking')}</CardTitle>
@@ -523,13 +458,12 @@ export function Dashboard() {
               </div>
             )}
           </CardContent>
-        </Card>,
+        </Card>
       );
     }
 
     if (cardId === 'recent-receipts') {
-      return wrapDashboardCard(
-        cardId,
+      return (
         <Card>
           <CardHeader>
             <CardTitle>{t('recentReceipts')}</CardTitle>
@@ -548,13 +482,12 @@ export function Dashboard() {
               {recentReceipts.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
-        </Card>,
+        </Card>
       );
     }
 
     if (cardId === 'recent-payment-details') {
-      return wrapDashboardCard(
-        cardId,
+      return (
         <Card>
           <CardHeader>
             <CardTitle>{t('recentDetails')}</CardTitle>
@@ -573,7 +506,7 @@ export function Dashboard() {
               {recentDetails.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
-        </Card>,
+        </Card>
       );
     }
 
@@ -588,21 +521,21 @@ export function Dashboard() {
     if (section.id === 'summary') {
       return (
         <div key={section.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          {section.cards.map((card) => renderDashboardCard(card.id))}
+          {section.cards.map((card) => <React.Fragment key={card.id}>{renderDashboardCard(card.id)}</React.Fragment>)}
         </div>
       );
     }
     if (section.id === 'analysis') {
       return (
         <div key={section.id} className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {section.cards.map((card) => renderDashboardCard(card.id))}
+          {section.cards.map((card) => <React.Fragment key={card.id}>{renderDashboardCard(card.id)}</React.Fragment>)}
         </div>
       );
     }
     if (section.id === 'recent') {
       return (
         <div key={section.id} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {section.cards.map((card) => renderDashboardCard(card.id))}
+          {section.cards.map((card) => <React.Fragment key={card.id}>{renderDashboardCard(card.id)}</React.Fragment>)}
         </div>
       );
     }

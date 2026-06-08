@@ -1,8 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { Dashboard } from './dashboard-view';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
-import { DEFAULT_DASHBOARD_LAYOUT, hideDashboardCard } from '@/lib/dashboard-layout-preference';
+import { DEFAULT_DASHBOARD_LAYOUT } from '@/lib/dashboard-layout-preference';
 import { useStore } from '@/lib/store';
 
 jest.mock('@/components/workspace/shared', () => ({
@@ -232,9 +231,8 @@ describe('Dashboard customer outstanding status dialog', () => {
     expect(screen.queryByText('recentReceipts')).not.toBeInTheDocument();
   });
 
-  it('confirms before hiding a card and saves the changed account preference', async () => {
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
-    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+  it('does not render per-card hide buttons on the dashboard page', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
       if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
       if (endpoint === 'settings?view=user-preferences') return {
         success: true,
@@ -245,29 +243,15 @@ describe('Dashboard customer outstanding status dialog', () => {
           dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
         },
       };
-      if (endpoint === 'settings' && options?.method === 'POST') return {
-        success: true,
-        data: {
-          imageCompressionEnabled: true,
-          imageCompressionQualityFloor: 0.3,
-          ocrTargetMaxKb: 500,
-          dashboardLayout: hideDashboardCard(DEFAULT_DASHBOARD_LAYOUT, 'invoice-balance'),
-        },
-      };
       return { success: false };
     });
 
-    const user = userEvent.setup();
     await act(async () => {
       render(<Dashboard />);
     });
-    await user.click(await screen.findByRole('button', { name: 'Hide Invoice Balance' }));
 
-    expect(confirmSpy).toHaveBeenCalledWith('Hide this card? You can restore it in Settings.');
-    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.objectContaining({
-      method: 'POST',
-      body: expect.stringContaining('dashboardLayout'),
-    }));
-    confirmSpy.mockRestore();
+    expect(await screen.findByText(/Invoice Balance/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Hide / })).not.toBeInTheDocument();
+    expect(mockApiCall).not.toHaveBeenCalledWith('settings', expect.anything());
   });
 });

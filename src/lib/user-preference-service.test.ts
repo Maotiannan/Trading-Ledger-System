@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   DEFAULT_USER_IMAGE_COMPRESSION_PREFERENCE,
+  DEFAULT_USER_PREFERENCE_SETTINGS,
   getUserImageCompressionPreference,
   updateUserImageCompressionPreference,
 } from '@/lib/user-preference-service';
@@ -75,11 +76,13 @@ describe('user-preference-service', () => {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
+        dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
       },
       update: {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
+        dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
       },
     });
     expect(result).toEqual({
@@ -118,11 +121,13 @@ describe('user-preference-service', () => {
         imageCompressionEnabled: true,
         imageCompressionQualityFloor: 0.55,
         ocrTargetMaxKb: 900,
+        dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
       },
       update: {
         imageCompressionEnabled: true,
         imageCompressionQualityFloor: 0.55,
         ocrTargetMaxKb: 900,
+        dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
       },
     });
     expect(result).toEqual({

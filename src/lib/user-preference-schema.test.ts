@@ -14,4 +14,16 @@ describe('user preference schema contract', () => {
     expect(schema).not.toContain('userId                        String   @unique');
     expect(migration).not.toContain('UNIQUE INDEX `UserPreference_userId_key`(`userId`)');
   });
+
+  it('stores dashboard layout preferences on the account preference row', () => {
+    const schema = fs.readFileSync(path.join(process.cwd(), 'prisma/schema.prisma'), 'utf8');
+    const migration = fs.readFileSync(
+      path.join(process.cwd(), 'prisma/migrations/20260608090000_user_dashboard_layout_preference/migration.sql'),
+      'utf8',
+    );
+
+    expect(schema).toContain('dashboardLayout');
+    expect(schema).toContain('dashboardLayout               Json?');
+    expect(migration).toContain('ADD COLUMN `dashboardLayout` JSON NULL');
+  });
 });

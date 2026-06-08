@@ -163,6 +163,7 @@ model UserPreference {
   imageCompressionEnabled       Boolean  @default(true)
   imageCompressionQualityFloor  Decimal  @default(0.30) @db.Decimal(3, 2)
   ocrTargetMaxKb                Int      @default(500)
+  dashboardLayout               Json?
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
 

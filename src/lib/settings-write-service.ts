@@ -18,6 +18,8 @@ import {
 import {
   updateUserImageCompressionPreference,
   type UserImageCompressionPreference,
+  updateUserPreferences,
+  type UserPreferenceSettings,
 } from '@/lib/user-preference-service';
 
 const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'all'] as const;
@@ -190,6 +192,33 @@ export async function updateCurrentUserImageCompressionPreferences(
   const preferences = await updateUserImageCompressionPreference(
     currentUser,
     payload as Partial<UserImageCompressionPreference>,
+  );
+
+  return {
+    message: '用户偏好已更新',
+    preferences,
+  };
+}
+
+export async function updateCurrentUserPreferences(
+  currentUser: CurrentUser,
+  payload: unknown
+): Promise<{
+  message: string;
+  preferences: UserPreferenceSettings;
+}> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '用户偏好格式错误',
+      detail: { payload },
+    });
+  }
+
+  const preferences = await updateUserPreferences(
+    currentUser,
+    payload as Partial<UserPreferenceSettings>,
   );
 
   return {

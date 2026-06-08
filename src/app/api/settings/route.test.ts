@@ -40,6 +40,7 @@ jest.mock('@/lib/settings-read-service', () => ({
   listSettings: jest.fn(),
   listSystemSettingsAuditExportLogs: jest.fn(),
   listSystemSettingsAuditLogs: jest.fn(),
+  getCurrentUserPreferences: jest.fn(),
   getCurrentUserImageCompressionPreferences: jest.fn(),
 }));
 
@@ -56,7 +57,8 @@ jest.mock('@/lib/settings-write-service', () => {
 
 import { GET, POST } from '@/app/api/settings/route';
 import { db } from '@/lib/db';
-import { getCurrentUserImageCompressionPreferences } from '@/lib/settings-read-service';
+import { DEFAULT_DASHBOARD_LAYOUT } from '@/lib/dashboard-layout-preference';
+import { getCurrentUserPreferences } from '@/lib/settings-read-service';
 
 const mockDb = db as unknown as {
   userPreference: {
@@ -64,7 +66,7 @@ const mockDb = db as unknown as {
     upsert: jest.Mock;
   };
 };
-const mockGetCurrentUserImageCompressionPreferences = getCurrentUserImageCompressionPreferences as jest.Mock;
+const mockGetCurrentUserPreferences = getCurrentUserPreferences as jest.Mock;
 
 describe('settings route user preferences branch', () => {
   let consoleErrorSpy: jest.SpyInstance;
@@ -79,10 +81,11 @@ describe('settings route user preferences branch', () => {
   });
 
   it('returns current user preferences for user-preferences view', async () => {
-    mockGetCurrentUserImageCompressionPreferences.mockResolvedValueOnce({
+    mockGetCurrentUserPreferences.mockResolvedValueOnce({
       imageCompressionEnabled: true,
       imageCompressionQualityFloor: 0.3,
       ocrTargetMaxKb: 500,
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     });
 
     const response = await GET({
@@ -92,7 +95,7 @@ describe('settings route user preferences branch', () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(mockGetCurrentUserImageCompressionPreferences).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockGetCurrentUserPreferences).toHaveBeenCalledWith(expect.objectContaining({
       id: 'user-1',
     }));
     expect(json.success).toBe(true);
@@ -100,6 +103,7 @@ describe('settings route user preferences branch', () => {
       imageCompressionEnabled: true,
       imageCompressionQualityFloor: 0.3,
       ocrTargetMaxKb: 500,
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     });
   });
 
@@ -110,6 +114,7 @@ describe('settings route user preferences branch', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: 640,
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
       createdAt: new Date('2026-05-04T10:00:00.000Z'),
       updatedAt: new Date('2026-05-04T10:00:00.000Z'),
     });
@@ -141,11 +146,13 @@ describe('settings route user preferences branch', () => {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
+        dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
       },
       update: {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
+        dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
       },
     });
     expect(json.success).toBe(true);
@@ -153,7 +160,51 @@ describe('settings route user preferences branch', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: 0.45,
       ocrTargetMaxKb: 640,
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     });
+  });
+
+  it('updates dashboard layout through update-user-preferences action', async () => {
+    const nextLayout = {
+      sections: [
+        { id: 'summary', visible: true, cards: [{ id: 'invoice-balance', visible: false }] },
+      ],
+    };
+    mockDb.userPreference.findUnique.mockResolvedValueOnce(null);
+    mockDb.userPreference.upsert.mockResolvedValueOnce({
+      userId: 'user-1',
+      imageCompressionEnabled: true,
+      imageCompressionQualityFloor: '0.30',
+      ocrTargetMaxKb: 500,
+      dashboardLayout: nextLayout,
+      createdAt: new Date('2026-05-04T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T10:00:00.000Z'),
+    });
+
+    const response = await POST({
+      headers: {
+        get(name: string) {
+          return name === 'content-type' ? 'application/json' : null;
+        },
+      },
+      async text() {
+        return JSON.stringify({
+          action: 'update-user-preferences',
+          preferences: {
+            dashboardLayout: nextLayout,
+          },
+        });
+      },
+    } as never);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockDb.userPreference.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-1' },
+      update: expect.objectContaining({ dashboardLayout: expect.any(Object) }),
+    }));
+    expect(json.success).toBe(true);
+    expect(json.data.dashboardLayout.sections[0].cards[0]).toEqual({ id: 'invoice-balance', visible: false });
   });
 
   it('maps invalid preference payloads to BAD_REQUEST through real validation', async () => {

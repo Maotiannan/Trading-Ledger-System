@@ -6,7 +6,7 @@ import { resolveRequestLocale } from '@/lib/api-response-locale';
 import { createApiSuccessResponse, localizeApiSuccessMessage } from '@/lib/api-success-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import {
-  getCurrentUserImageCompressionPreferences,
+  getCurrentUserPreferences,
   listAllSystemSettingsAuditLogs,
   listSettings,
   listSystemSettingsAuditExportLogs,
@@ -16,7 +16,7 @@ import {
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
-  updateCurrentUserImageCompressionPreferences,
+  updateCurrentUserPreferences,
   updateSystemSettings,
 } from '@/lib/settings-write-service';
 import { logger } from '@/lib/logger';
@@ -68,7 +68,7 @@ export const GET = withAuth(async (_request, currentUser) => {
   try {
     const view = _request.nextUrl.searchParams.get('view');
     if (view === 'user-preferences') {
-      const data = await getCurrentUserImageCompressionPreferences(currentUser);
+      const data = await getCurrentUserPreferences(currentUser);
       return createApiSuccessResponse({ data, message: '用户偏好已加载' }, _request);
     }
 
@@ -180,7 +180,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (action === 'update-user-preferences') {
-      const result = await updateCurrentUserImageCompressionPreferences(currentUser, body?.preferences);
+      const result = await updateCurrentUserPreferences(currentUser, body?.preferences);
       return createApiSuccessResponse({
         message: result.message,
         data: result.preferences,

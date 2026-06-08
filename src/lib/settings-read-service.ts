@@ -8,7 +8,12 @@ import {
   editableSystemSettingKeys,
   getSystemSettingsWithDefaults,
 } from '@/lib/system-settings';
-import { getUserImageCompressionPreference, type UserImageCompressionPreference } from '@/lib/user-preference-service';
+import {
+  getUserImageCompressionPreference,
+  getUserPreferences,
+  type UserImageCompressionPreference,
+  type UserPreferenceSettings,
+} from '@/lib/user-preference-service';
 
 const purgeModuleKeys = ['invoice', 'receipt', 'detail', 'swift', 'customer', 'all'] as const;
 type PurgeModuleKey = typeof purgeModuleKeys[number];
@@ -437,6 +442,12 @@ export async function getCurrentUserImageCompressionPreferences(
   currentUser: CurrentUser
 ): Promise<UserImageCompressionPreference> {
   return getUserImageCompressionPreference(currentUser);
+}
+
+export async function getCurrentUserPreferences(
+  currentUser: CurrentUser
+): Promise<UserPreferenceSettings> {
+  return getUserPreferences(currentUser);
 }
 
 export async function listSystemSettingsAuditLogs(

@@ -55,6 +55,12 @@ type DashboardReleasedInvoice = {
   releaseDate: string;
   daysSinceRelease: number;
   outstanding: number;
+  orders: Array<{
+    orderId: string;
+    orderNo: string;
+    amount: number;
+    outstanding: number;
+  }>;
 };
 
 type DashboardCustomerOutstanding = {
@@ -109,6 +115,7 @@ export function Dashboard() {
   const [releasedInvoicePage, setReleasedInvoicePage] = useState(1);
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
+  const [selectedReleasedInvoice, setSelectedReleasedInvoice] = useState<DashboardReleasedInvoice | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const loadSummary = useCallback(async () => {
     const requestToken = dashboardRequestGuard.nextToken();
@@ -217,24 +224,6 @@ export function Dashboard() {
     }
   };
 
-  const renderCustomerStatusBadges = (customer: DashboardCustomerOutstanding) => (
-    <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap">
-      {customer.statusSubtotals.inTransit > 0 && (
-        <Badge variant="outline" className="w-fit border-amber-300 bg-amber-50 text-amber-800">
-          {tx(`运输中：${formatUsdAmount(customer.statusSubtotals.inTransit)}`, `In Transit: ${formatUsdAmount(customer.statusSubtotals.inTransit)}`)}
-        </Badge>
-      )}
-      {customer.statusSubtotals.released > 0 && (
-        <Badge variant="outline" className="w-fit border-green-300 bg-green-50 text-green-800">
-          {tx(`已放单：${formatUsdAmount(customer.statusSubtotals.released)}`, `Released: ${formatUsdAmount(customer.statusSubtotals.released)}`)}
-        </Badge>
-      )}
-      {customer.statusSubtotals.inTransit <= 0 && customer.statusSubtotals.released <= 0 && (
-        <span className="text-muted-foreground">-</span>
-      )}
-    </div>
-  );
-
   const renderCustomerOrderStatusSection = (
     title: string,
     orders: DashboardCustomerOutstanding['orders'],
@@ -261,7 +250,7 @@ export function Dashboard() {
               <TableRow>
                 <TableHead>ORDER NO</TableHead>
                 <TableHead>INV NO</TableHead>
-                {isReleased && <TableHead>{tx('放单已过天数', 'Days Since Release')}</TableHead>}
+                {isReleased && <TableHead>{tx('天数', 'Days')}</TableHead>}
                 <TableHead>{tx('余额', 'Balance')}</TableHead>
               </TableRow>
             </TableHeader>
@@ -351,7 +340,15 @@ export function Dashboard() {
                 <TableBody>
                   {paginatedReleasedInvoices.map((invoice) => (
                     <TableRow key={invoice.id}>
-                      <TableCell className="font-medium">{invoice.invNo}</TableCell>
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="font-medium text-blue-700 underline-offset-2 hover:underline"
+                          onClick={() => setSelectedReleasedInvoice(invoice)}
+                        >
+                          {invoice.invNo}
+                        </button>
+                      </TableCell>
                       <TableCell>{new Date(invoice.releaseDate).toLocaleDateString()}</TableCell>
                       <TableCell>{invoice.daysSinceRelease}</TableCell>
                       <TableCell className="font-medium text-red-600">{formatUsdAmount(invoice.outstanding)}</TableCell>
@@ -390,13 +387,12 @@ export function Dashboard() {
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
-                    <TableRow>
-                      <TableHead>ORDER_NAME</TableHead>
-                      <TableHead>{tx('未结清订单数', 'Unpaid Orders')}</TableHead>
-                      <TableHead>{tx('状态', 'Status')}</TableHead>
-                      <TableHead>{tx('欠款合计', 'Outstanding Total')}</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableRow>
+                    <TableHead>ORDER_NAME</TableHead>
+                    <TableHead>{tx('未结清订单数', 'Unpaid Orders')}</TableHead>
+                    <TableHead>{tx('欠款合计', 'Outstanding Total')}</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {paginatedCustomerOutstanding.map((customer) => (
                     <TableRow key={customer.customerKey}>
@@ -412,13 +408,12 @@ export function Dashboard() {
                         </button>
                       </TableCell>
                       <TableCell>{customer.orders.length}</TableCell>
-                      <TableCell>{renderCustomerStatusBadges(customer)}</TableCell>
                       <TableCell className="font-medium text-red-600">{formatUsdAmount(customer.totalOutstanding)}</TableCell>
                     </TableRow>
                   ))}
                   {customerOutstanding.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                      <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
                         {tx('暂无客户欠款', 'No customer outstanding balance')}
                       </TableCell>
                     </TableRow>
@@ -495,17 +490,59 @@ export function Dashboard() {
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
             {renderCustomerOrderStatusSection(
-              tx('运输中', 'In Transit'),
-              selectedCustomerOrdersByStatus.inTransit,
-              selectedCustomer?.statusSubtotals.inTransit ?? 0,
-              'inTransit',
-            )}
-            {renderCustomerOrderStatusSection(
               tx('已放单', 'Released'),
               selectedCustomerOrdersByStatus.released,
               selectedCustomer?.statusSubtotals.released ?? 0,
               'released',
             )}
+            {renderCustomerOrderStatusSection(
+              tx('运输中', 'In Transit'),
+              selectedCustomerOrdersByStatus.inTransit,
+              selectedCustomer?.statusSubtotals.inTransit ?? 0,
+              'inTransit',
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedReleasedInvoice} onOpenChange={(open) => {
+        if (!open) setSelectedReleasedInvoice(null);
+      }}>
+        <DialogContent className="flex max-h-[calc(100vh-24px)] max-w-3xl flex-col">
+          <DialogHeader>
+            <DialogTitle>{selectedReleasedInvoice?.invNo}</DialogTitle>
+            <DialogDescription>
+              {tx('该发票下所有 ORDER_NAME，按 OUT STANDING 从高到低排序', 'All ORDER_NAME rows under this invoice, sorted by OUT STANDING from high to low')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ORDER_NAME</TableHead>
+                    <TableHead>INV AMOUNT</TableHead>
+                    <TableHead>OUT STANDING</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(selectedReleasedInvoice?.orders ?? []).map((order) => (
+                    <TableRow key={order.orderId}>
+                      <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
+                      <TableCell>{formatUsdAmount(order.amount)}</TableCell>
+                      <TableCell className="font-medium text-red-600">{formatUsdAmount(order.outstanding)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {(selectedReleasedInvoice?.orders.length ?? 0) === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                        {tx('暂无订单', 'No orders')}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -36,12 +36,13 @@
 - 系统安全和性能完成一轮加固：生产密钥不再允许公开占位符、默认管理员弱密码被拒绝、首页统计和订单匹配减少不必要的全量扫描、关键余额计算统一按金额精度处理
 - 工程类型检查和服务端日志完成进一步收口：隐式 any 已禁用，服务端日志统一结构化并自动脱敏
 - 本地日常更新已固化为一键安全重建：运行 `scripts/rebuild-local-app.sh` 即可重建 app、刷新维护服务并做基础健康检查
-- Dashboard 客户欠款排行可点开客户查看 `In Transit / Released` 分类订单，分类内显示小计；已放单订单显示放单已过天数
+- Dashboard 客户欠款排行保持简洁三列表格；点开客户可查看 `Released / In Transit` 分类订单，点开已放单发票号可查看该发票下订单明细
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
-- Dashboard 客户欠款排行弹窗新增运输中/已放单分类：未维护 release date 的订单归入 `In Transit`，已维护 release date 的订单归入 `Released` 并显示放单天数和分类小计
+- Dashboard 客户欠款排行弹窗新增已放单/运输中分类：外层排行保持 `ORDER_NAME / Unpaid Orders / Outstanding Total` 三列；弹窗中 `Released` 在上、`In Transit` 在下，并显示分类小计和已放单天数
+- Dashboard 已放单未结清发票的 `INV NO` 可点开查看该发票下所有 `ORDER_NAME / INV AMOUNT / OUT STANDING`，并按 `OUT STANDING` 从高到低排序
 
 ### 0.1 上一里程碑
 - 本地一键安全重建脚本已落地，日常功能修复或小改动可以用统一流程重建，不再手工拼 Docker 命令
@@ -181,8 +182,8 @@
 ## 当前版本重点
 
 ### v1.0.175
-- Dashboard 客户欠款排行新增状态提示：可看到每个客户未收金额中运输中和已放单分别占多少。
-- 点击客户名称后，弹窗按 `In Transit / Released` 分区展示订单；`Released` 订单显示放单已经过去的天数。
+- Dashboard 客户欠款排行外层保持原三列；点击客户名称后，弹窗按 `Released / In Transit` 分区展示订单。
+- `Released Unpaid Invoices` 中的 `INV NO` 可点开查看该发票下所有订单明细，并按 `OUT STANDING` 从高到低排序。
 
 ### v1.0.173
 - 新增 `scripts/rebuild-local-app.sh` 一键安全重建脚本。

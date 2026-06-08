@@ -167,6 +167,14 @@ describe('dashboard-summary-service', () => {
         releaseDate: '2026-05-01T00:00:00.000Z',
         daysSinceRelease: 7,
         outstanding: 750,
+        orders: [
+          {
+            orderId: 'order-1',
+            orderNo: 'SUPER DT2-09',
+            amount: 1000,
+            outstanding: 750,
+          },
+        ],
       },
     ]);
     expect(summary.customerOutstanding).toEqual([

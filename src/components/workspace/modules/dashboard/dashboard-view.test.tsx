@@ -53,7 +53,29 @@ function makeSummary() {
     pendingDeletion: 0,
     recentReceipts: [],
     recentDetails: [],
-    releasedInvoices: [],
+    releasedInvoices: [
+      {
+        id: 'invoice-released',
+        invNo: 'L25MH090002',
+        releaseDate: '2026-05-01T00:00:00.000Z',
+        daysSinceRelease: 7,
+        outstanding: 1000,
+        orders: [
+          {
+            orderId: 'order-high',
+            orderNo: 'SUPER DT2-09',
+            amount: 1500,
+            outstanding: 750,
+          },
+          {
+            orderId: 'order-low',
+            orderNo: 'SUPER DT2-08',
+            amount: 500,
+            outstanding: 250,
+          },
+        ],
+      },
+    ],
     customerOutstanding: [
       {
         customerKey: 'customer:super-dt2',
@@ -108,21 +130,46 @@ describe('Dashboard customer outstanding status dialog', () => {
     });
 
     const customerButton = await screen.findByRole('button', { name: 'SUPER DT2' });
-    expect(screen.getByText('In Transit: $250')).toBeInTheDocument();
-    expect(screen.getByText('Released: $750')).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
+    expect(screen.queryByText('In Transit: $250')).not.toBeInTheDocument();
+    expect(screen.queryByText('Released: $750')).not.toBeInTheDocument();
 
     fireEvent.click(customerButton);
 
     await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
     const dialog = screen.getByRole('dialog');
 
-    expect(within(dialog).getByText('In Transit')).toBeInTheDocument();
+    const releasedLabel = within(dialog).getByText('Released');
+    const inTransitLabel = within(dialog).getByText('In Transit');
+
+    expect(releasedLabel.compareDocumentPosition(inTransitLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(releasedLabel).toBeInTheDocument();
     expect(within(dialog).getByText('Subtotal: $250')).toBeInTheDocument();
     expect(within(dialog).getByText('SUPER DT2-10')).toBeInTheDocument();
-    expect(within(dialog).getByText('Released')).toBeInTheDocument();
+    expect(inTransitLabel).toBeInTheDocument();
     expect(within(dialog).getByText('Subtotal: $750')).toBeInTheDocument();
     expect(within(dialog).getByText('SUPER DT2-09')).toBeInTheDocument();
-    expect(within(dialog).getByText('Days Since Release')).toBeInTheDocument();
+    expect(within(dialog).getByText('Days')).toBeInTheDocument();
     expect(within(dialog).getByText('7')).toBeInTheDocument();
+  });
+
+  it('opens released invoice order rows from the invoice number', async () => {
+    await act(async () => {
+      render(<Dashboard />);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'L25MH090002' }));
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    const dialog = screen.getByRole('dialog');
+    const highOrder = within(dialog).getByText('SUPER DT2-09');
+    const lowOrder = within(dialog).getByText('SUPER DT2-08');
+
+    expect(within(dialog).getByText('ORDER_NAME')).toBeInTheDocument();
+    expect(within(dialog).getByText('INV AMOUNT')).toBeInTheDocument();
+    expect(within(dialog).getByText('OUT STANDING')).toBeInTheDocument();
+    expect(highOrder.compareDocumentPosition(lowOrder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(dialog).getByText('$1,500')).toBeInTheDocument();
+    expect(within(dialog).getByText('$750')).toBeInTheDocument();
   });
 });

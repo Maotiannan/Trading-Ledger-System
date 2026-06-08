@@ -37,6 +37,12 @@ export type DashboardSummary = {
     releaseDate: string;
     daysSinceRelease: number;
     outstanding: number;
+    orders: Array<{
+      orderId: string;
+      orderNo: string;
+      amount: number;
+      outstanding: number;
+    }>;
   }>;
   customerOutstanding: Array<{
     customerKey: string;
@@ -213,6 +219,14 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
         releaseDate: invoice.releaseDate.toISOString(),
         daysSinceRelease,
         outstanding: invoiceOutstanding,
+        orders: invoice.orders
+          .map((order) => ({
+            orderId: order.id,
+            orderNo: formatOrderNameDisplay(order.orderNo),
+            amount: Number(moneyToNumber(order.amount).toFixed(2)),
+            outstanding: Number(Math.max(moneyToNumber(order.orderBalance), 0).toFixed(2)),
+          }))
+          .sort((a, b) => b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo)),
       });
     }
   }

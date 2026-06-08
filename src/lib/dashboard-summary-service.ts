@@ -37,16 +37,29 @@ export type DashboardSummary = {
     releaseDate: string;
     daysSinceRelease: number;
     outstanding: number;
+    orders: Array<{
+      orderId: string;
+      orderNo: string;
+      amount: number;
+      outstanding: number;
+    }>;
   }>;
   customerOutstanding: Array<{
     customerKey: string;
     customerLabel: string;
     totalOutstanding: number;
+    statusSubtotals: {
+      inTransit: number;
+      released: number;
+    };
     orders: Array<{
       orderId: string;
       orderNo: string;
       invNo: string;
       outstanding: number;
+      statusGroup: 'IN_TRANSIT' | 'RELEASED';
+      releaseDate: string | null;
+      daysSinceRelease: number | null;
     }>;
   }>;
 };
@@ -166,18 +179,34 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
       const customerLabel = formatOrderNameDisplay(order.customerName || order.customerMark || order.orderNo);
       const customerKey = order.customerId ? `customer:${order.customerId}` : `order:${order.id}`;
       const existing = customerOutstandingMap.get(customerKey);
+      const daysSinceRelease = invoice.releaseDate
+        ? Math.max(0, Math.floor((now - invoice.releaseDate.getTime()) / 86_400_000))
+        : null;
+      const statusGroup = invoice.releaseDate ? 'RELEASED' : 'IN_TRANSIT';
       const entry = existing || {
         customerKey,
         customerLabel,
         totalOutstanding: 0,
+        statusSubtotals: {
+          inTransit: 0,
+          released: 0,
+        },
         orders: [],
       };
       entry.totalOutstanding += outstanding;
+      if (statusGroup === 'RELEASED') {
+        entry.statusSubtotals.released += outstanding;
+      } else {
+        entry.statusSubtotals.inTransit += outstanding;
+      }
       entry.orders.push({
         orderId: order.id,
         orderNo: formatOrderNameDisplay(order.orderNo),
         invNo: invoice.invNo,
         outstanding,
+        statusGroup,
+        releaseDate: invoice.releaseDate ? invoice.releaseDate.toISOString() : null,
+        daysSinceRelease,
       });
       customerOutstandingMap.set(customerKey, entry);
     }
@@ -190,6 +219,14 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
         releaseDate: invoice.releaseDate.toISOString(),
         daysSinceRelease,
         outstanding: invoiceOutstanding,
+        orders: invoice.orders
+          .map((order) => ({
+            orderId: order.id,
+            orderNo: formatOrderNameDisplay(order.orderNo),
+            amount: Number(moneyToNumber(order.amount).toFixed(2)),
+            outstanding: Number(Math.max(moneyToNumber(order.orderBalance), 0).toFixed(2)),
+          }))
+          .sort((a, b) => b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo)),
       });
     }
   }
@@ -204,9 +241,16 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     .map((entry) => ({
       ...entry,
       totalOutstanding: Number(entry.totalOutstanding.toFixed(2)),
+      statusSubtotals: {
+        inTransit: Number(entry.statusSubtotals.inTransit.toFixed(2)),
+        released: Number(entry.statusSubtotals.released.toFixed(2)),
+      },
       orders: entry.orders
         .map((order) => ({ ...order, outstanding: Number(order.outstanding.toFixed(2)) }))
-        .sort((a, b) => b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo)),
+        .sort((a, b) => {
+          if (a.statusGroup !== b.statusGroup) return a.statusGroup === 'IN_TRANSIT' ? -1 : 1;
+          return b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo);
+        }),
     }))
     .sort((a, b) => b.totalOutstanding - a.totalOutstanding || a.customerLabel.localeCompare(b.customerLabel));
 

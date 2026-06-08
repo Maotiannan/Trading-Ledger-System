@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { DEFAULT_DASHBOARD_LAYOUT, type DashboardLayoutPreference } from '@/lib/dashboard-layout-preference';
 import type {
   BranchPurgeTarget,
   PasswordFormState,
@@ -12,6 +13,7 @@ import type {
   UserImageCompressionPreferenceField,
   UserImageCompressionPreferenceFieldValue,
   UserImageCompressionPreferenceDraft,
+  UserPreferenceSettingsDraft,
 } from '../types';
 import { defaultUserImageCompressionPreferenceDraft } from '../types';
 import { buildEmptySettingsAuditFilters, defaultSettingsAuditMeta } from '../read-model';
@@ -19,6 +21,11 @@ import { buildEmptySettingsAuditFilters, defaultSettingsAuditMeta } from '../rea
 function assertNever(value: never): never {
   throw new Error(`Unhandled user preference field: ${String(value)}`);
 }
+
+const defaultUserPreferenceSettingsDraft: UserPreferenceSettingsDraft = {
+  ...defaultUserImageCompressionPreferenceDraft,
+  dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+};
 
 export function useSettingsForms() {
   const [loading, setLoading] = useState(false);
@@ -30,7 +37,7 @@ export function useSettingsForms() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
-  const [userPreferences, setUserPreferences] = useState<UserImageCompressionPreferenceDraft>(defaultUserImageCompressionPreferenceDraft);
+  const [userPreferences, setUserPreferences] = useState<UserPreferenceSettingsDraft>(defaultUserPreferenceSettingsDraft);
   const [canEditConfig, setCanEditConfig] = useState(false);
   const [canViewAudit, setCanViewAudit] = useState(false);
   const [canPurgeBranch, setCanPurgeBranch] = useState(false);
@@ -88,6 +95,10 @@ export function useSettingsForms() {
           return assertNever(key);
       }
     });
+  };
+
+  const updateDashboardLayoutPreference = (dashboardLayout: DashboardLayoutPreference) => {
+    setUserPreferences((prev) => ({ ...prev, dashboardLayout }));
   };
 
   const togglePurgeModule = (moduleKey: string, checked: boolean) => {
@@ -170,6 +181,7 @@ export function useSettingsForms() {
     setPwd,
     updateConfigField,
     updateUserPreferenceField,
+    updateDashboardLayoutPreference,
     togglePurgeModule,
     defaultSettingsAuditMeta,
   };

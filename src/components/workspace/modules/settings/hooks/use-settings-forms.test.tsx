@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { DEFAULT_DASHBOARD_LAYOUT, hideDashboardCard } from '@/lib/dashboard-layout-preference';
 import { useSettingsForms } from './use-settings-forms';
 
 describe('useSettingsForms', () => {
@@ -44,6 +45,16 @@ describe('useSettingsForms', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+    });
+
+    const hiddenLayout = hideDashboardCard(DEFAULT_DASHBOARD_LAYOUT, 'invoice-balance');
+    act(() => {
+      result.current.updateDashboardLayoutPreference(hiddenLayout);
+    });
+    expect(result.current.userPreferences.dashboardLayout.sections[0].cards[0]).toEqual({
+      id: 'invoice-balance',
+      visible: false,
     });
 
     act(() => {

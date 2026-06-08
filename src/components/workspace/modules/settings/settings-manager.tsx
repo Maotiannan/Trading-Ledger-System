@@ -8,6 +8,7 @@ import { APP_VERSION } from '@/lib/app-version';
 import {
   BranchPurgeCard,
   CollapsibleSettingsSection,
+  DashboardSettingsCard,
   ExcelTokenCard,
   PasswordSettingsCard,
   SettingsAuditCard,
@@ -88,6 +89,7 @@ export function SettingsManager() {
     setPwd,
     updateConfigField,
     updateUserPreferenceField,
+    updateDashboardLayoutPreference,
     togglePurgeModule,
   } = useSettingsForms();
 
@@ -249,6 +251,17 @@ export function SettingsManager() {
           preferences={userPreferences}
           tx={tx}
           onPreferenceFieldChange={updateUserPreferenceField}
+          onSavePreferences={handleSaveUserPreferences}
+        />
+      </CollapsibleSettingsSection>
+
+      <CollapsibleSettingsSection title={tx('Dashboard 设置', 'Dashboard Settings')}>
+        <DashboardSettingsCard
+          loading={userPreferencesLoading}
+          saving={savingUserPreferences}
+          layout={userPreferences.dashboardLayout}
+          tx={tx}
+          onLayoutChange={updateDashboardLayoutPreference}
           onSavePreferences={handleSaveUserPreferences}
         />
       </CollapsibleSettingsSection>

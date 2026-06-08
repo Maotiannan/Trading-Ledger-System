@@ -4,9 +4,11 @@ import {
   purgeBranchBusinessData,
   purgeBusinessData,
   testSettingsOcr,
+  updateCurrentUserPreferences,
   updateSystemSettings,
 } from '@/lib/settings-write-service';
 import {
+  getCurrentUserPreferences,
   getCurrentUserImageCompressionPreferences,
   listSettings,
   listAllSystemSettingsAuditLogs,
@@ -29,6 +31,7 @@ jest.mock('@/lib/db', () => ({
     },
     userPreference: {
       findUnique: jest.fn(),
+      upsert: jest.fn(),
     },
     systemSetting: {
       findMany: jest.fn(),
@@ -108,7 +111,7 @@ function makeUser(overrides: Partial<{
 
 const mockDb = db as unknown as {
   user: { findMany: jest.Mock; findUnique: jest.Mock };
-  userPreference: { findUnique: jest.Mock };
+  userPreference: { findUnique: jest.Mock; upsert: jest.Mock };
   systemSetting: { findMany: jest.Mock; upsert: jest.Mock };
   detailItem: { deleteMany: jest.Mock; updateMany: jest.Mock };
   receiptHistory: { deleteMany: jest.Mock };
@@ -236,6 +239,62 @@ describe('settings-service', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: 0.45,
       ocrTargetMaxKb: 768,
+    });
+  });
+
+  it('returns default dashboard layout with image preferences for the current user', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce(null);
+
+    const result = await getCurrentUserPreferences(makeUser({ id: 'user-without-dashboard-preference' }));
+
+    expect(result.imageCompressionEnabled).toBe(true);
+    expect(result.dashboardLayout.sections.map((section) => section.id)).toEqual(['summary', 'analysis', 'recent']);
+    expect(result.dashboardLayout.sections[0].cards.map((card) => card.id)).toContain('invoice-balance');
+  });
+
+  it('updates dashboard layout without resetting image compression preferences', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce({
+      userId: 'user-with-dashboard-preference',
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: '0.75',
+      ocrTargetMaxKb: 800,
+      dashboardLayout: null,
+    });
+    mockDb.userPreference.upsert.mockResolvedValueOnce({
+      userId: 'user-with-dashboard-preference',
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: '0.75',
+      ocrTargetMaxKb: 800,
+      dashboardLayout: {
+        sections: [{ id: 'summary', visible: true, cards: [{ id: 'invoice-balance', visible: false }] }],
+      },
+    });
+
+    const result = await updateCurrentUserPreferences(makeUser({ id: 'user-with-dashboard-preference' }), {
+      dashboardLayout: {
+        sections: [{ id: 'summary', visible: true, cards: [{ id: 'invoice-balance', visible: false }] }],
+      },
+    });
+
+    expect(result.preferences.imageCompressionEnabled).toBe(false);
+    expect(result.preferences.imageCompressionQualityFloor).toBe(0.75);
+    expect(result.preferences.dashboardLayout.sections[0].cards[0]).toEqual({ id: 'invoice-balance', visible: false });
+    expect(mockDb.userPreference.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 'user-with-dashboard-preference' },
+      update: expect.objectContaining({ dashboardLayout: expect.any(Object) }),
+    }));
+  });
+
+  it('rejects dashboard layouts that move a card into the wrong section', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce(null);
+
+    await expect(updateCurrentUserPreferences(makeUser(), {
+      dashboardLayout: {
+        sections: [{ id: 'summary', visible: true, cards: [{ id: 'released-unpaid-invoices', visible: true }] }],
+      },
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'BAD_REQUEST',
     });
   });
 

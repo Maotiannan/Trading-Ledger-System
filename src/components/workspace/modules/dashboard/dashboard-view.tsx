@@ -13,6 +13,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  DASHBOARD_CARD_REGISTRY,
+  hideDashboardCard,
+  normalizeDashboardLayoutPreference,
+  type DashboardCardId,
+  type DashboardLayoutPreference,
+} from '@/lib/dashboard-layout-preference';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import {
   CustomerCandidate,
@@ -84,6 +91,32 @@ type DashboardCustomerOutstanding = {
 
 const DASHBOARD_LIST_PAGE_SIZE = 10;
 
+function DashboardCardShell({
+  cardId,
+  label,
+  children,
+  onHide,
+}: {
+  cardId: DashboardCardId;
+  label: string;
+  children: React.ReactNode;
+  onHide: (cardId: DashboardCardId) => void;
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label={`Hide ${label}`}
+        className="absolute right-2 top-2 z-10 rounded-full p-1 text-muted-foreground/50 transition hover:bg-muted hover:text-foreground focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => onHide(cardId)}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
 export function Dashboard() {
   const t = useTranslations('dashboard');
   const tx = useUiText();
@@ -112,6 +145,7 @@ export function Dashboard() {
     releasedInvoices: DashboardReleasedInvoice[];
     customerOutstanding: DashboardCustomerOutstanding[];
   } | null>(null);
+  const [dashboardLayout, setDashboardLayout] = useState<DashboardLayoutPreference>(() => normalizeDashboardLayoutPreference(null));
   const [releasedInvoicePage, setReleasedInvoicePage] = useState(1);
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
@@ -129,6 +163,21 @@ export function Dashboard() {
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+
+  const loadDashboardPreferences = useCallback(async () => {
+    try {
+      const result = await apiCall('settings?view=user-preferences');
+      if (result.success && result.data) {
+        setDashboardLayout(normalizeDashboardLayoutPreference((result.data as { dashboardLayout?: unknown }).dashboardLayout));
+      }
+    } catch {
+      setDashboardLayout(normalizeDashboardLayoutPreference(null));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDashboardPreferences();
+  }, [loadDashboardPreferences]);
 
   const normalInvoices = invoices.filter((i) => i.invNo !== 'Un_Associated' && i.invNo !== 'DEPOSIT_POOL');
   const unpaidTotal = normalInvoices.reduce((sum, inv) => sum + Math.max(inv.invBalance, 0), 0);
@@ -180,12 +229,34 @@ export function Dashboard() {
     setCustomerOutstandingPage((page) => Math.min(page, customerOutstandingTotalPages));
   }, [customerOutstandingTotalPages]);
   
-  const stats = [
-    { label: tx(`账单总数 (${invoiceCount})`, `Invoice Balance (${invoiceCount})`), value: formatUsdAmount(summary?.unpaidTotal ?? unpaidTotal), color: 'text-blue-600' },
-    { label: t('pendingReceipts'), value: pendingReceipts, subValue: formatUsdAmount(pendingReceiptsAmount), color: 'text-yellow-600' },
-    { label: t('waitingSwift'), value: waitingSwift, color: 'text-orange-600' },
-    { label: t('pendingDeletion'), value: pendingDeletion, color: 'text-red-600' },
-  ];
+  const statCards: Partial<Record<DashboardCardId, {
+    label: string;
+    value: string | number;
+    subValue?: string;
+    color: string;
+  }>> = {
+    'invoice-balance': {
+      label: tx(`账单总数 (${invoiceCount})`, `Invoice Balance (${invoiceCount})`),
+      value: formatUsdAmount(summary?.unpaidTotal ?? unpaidTotal),
+      color: 'text-blue-600',
+    },
+    'pending-receipts': {
+      label: t('pendingReceipts'),
+      value: pendingReceipts,
+      subValue: formatUsdAmount(pendingReceiptsAmount),
+      color: 'text-yellow-600',
+    },
+    'waiting-swift': {
+      label: t('waitingSwift'),
+      value: waitingSwift,
+      color: 'text-orange-600',
+    },
+    'pending-approvals': {
+      label: tx('待审批', 'Pending Approvals'),
+      value: pendingDeletion,
+      color: 'text-red-600',
+    },
+  };
 
   const handleExport = async (format: 'excel' | 'pdf') => {
     try {
@@ -279,48 +350,62 @@ export function Dashboard() {
     );
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-bold">{t('title')}</h2>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => handleExport('excel')}
-            disabled={exporting !== null}
-            data-testid="dashboard-export-excel"
-          >
-            {exporting === 'excel' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {t('exportExcel')}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleExport('pdf')}
-            disabled={exporting !== null}
-            data-testid="dashboard-export-pdf"
-          >
-            {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-            {t('exportPdf')}
-          </Button>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label}>
-            <CardHeader className="pb-2">
-              <CardDescription>{stat.label}</CardDescription>
-            </CardHeader>
-            <CardContent className={stat.subValue ? 'flex items-end justify-between gap-3' : undefined}>
-              <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
-              {stat.subValue && (
-                <p className="text-right text-lg font-semibold text-gray-900">{stat.subValue}</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+  const dashboardCardLabel = useCallback((cardId: DashboardCardId) => {
+    const card = DASHBOARD_CARD_REGISTRY.find((item) => item.id === cardId);
+    return card ? tx(card.zh, card.en) : cardId;
+  }, [tx]);
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+  const handleHideDashboardCard = useCallback(async (cardId: DashboardCardId) => {
+    const confirmed = window.confirm(tx('是否隐藏此卡片？隐藏后可在设置中恢复。', 'Hide this card? You can restore it in Settings.'));
+    if (!confirmed) return;
+
+    const nextLayout = hideDashboardCard(dashboardLayout, cardId);
+    try {
+      const result = await apiCall('settings', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'update-user-preferences',
+          preferences: { dashboardLayout: nextLayout },
+        }),
+      });
+      if (result.success) {
+        setDashboardLayout(normalizeDashboardLayoutPreference((result.data as { dashboardLayout?: unknown } | null)?.dashboardLayout ?? nextLayout));
+      } else {
+        alert(tx('保存 Dashboard 设置失败', 'Failed to save Dashboard settings'));
+      }
+    } catch {
+      alert(tx('保存 Dashboard 设置失败', 'Failed to save Dashboard settings'));
+    }
+  }, [dashboardLayout, tx]);
+
+  const wrapDashboardCard = (cardId: DashboardCardId, node: React.ReactNode) => (
+    <DashboardCardShell key={cardId} cardId={cardId} label={dashboardCardLabel(cardId)} onHide={handleHideDashboardCard}>
+      {node}
+    </DashboardCardShell>
+  );
+
+  const renderDashboardCard = (cardId: DashboardCardId) => {
+    const stat = statCards[cardId];
+    if (stat) {
+      return wrapDashboardCard(
+        cardId,
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>{stat.label}</CardDescription>
+          </CardHeader>
+          <CardContent className={stat.subValue ? 'flex items-end justify-between gap-3' : undefined}>
+            <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
+            {stat.subValue && (
+              <p className="text-right text-lg font-semibold text-gray-900">{stat.subValue}</p>
+            )}
+          </CardContent>
+        </Card>,
+      );
+    }
+
+    if (cardId === 'released-unpaid-invoices') {
+      return wrapDashboardCard(
+        cardId,
         <Card>
           <CardHeader>
             <CardTitle>{tx('已放单未结清发票', 'Released Unpaid Invoices')}</CardTitle>
@@ -376,8 +461,13 @@ export function Dashboard() {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card>,
+      );
+    }
 
+    if (cardId === 'customer-outstanding-ranking') {
+      return wrapDashboardCard(
+        cardId,
         <Card>
           <CardHeader>
             <CardTitle>{tx('客户欠款排行', 'Customer Outstanding Ranking')}</CardTitle>
@@ -433,10 +523,13 @@ export function Dashboard() {
               </div>
             )}
           </CardContent>
-        </Card>
-      </div>
+        </Card>,
+      );
+    }
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    if (cardId === 'recent-receipts') {
+      return wrapDashboardCard(
+        cardId,
         <Card>
           <CardHeader>
             <CardTitle>{t('recentReceipts')}</CardTitle>
@@ -455,8 +548,13 @@ export function Dashboard() {
               {recentReceipts.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
-        </Card>
+        </Card>,
+      );
+    }
 
+    if (cardId === 'recent-payment-details') {
+      return wrapDashboardCard(
+        cardId,
         <Card>
           <CardHeader>
             <CardTitle>{t('recentDetails')}</CardTitle>
@@ -475,8 +573,68 @@ export function Dashboard() {
               {recentDetails.length === 0 && <p className="text-gray-500 text-center py-4">{t('empty')}</p>}
             </ScrollArea>
           </CardContent>
-        </Card>
+        </Card>,
+      );
+    }
+
+    return null;
+  };
+
+  const visibleDashboardSections = dashboardLayout.sections
+    .map((section) => ({ ...section, cards: section.cards.filter((card) => card.visible) }))
+    .filter((section) => section.visible && section.cards.length > 0);
+
+  const renderDashboardSection = (section: DashboardLayoutPreference['sections'][number]) => {
+    if (section.id === 'summary') {
+      return (
+        <div key={section.id} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {section.cards.map((card) => renderDashboardCard(card.id))}
+        </div>
+      );
+    }
+    if (section.id === 'analysis') {
+      return (
+        <div key={section.id} className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {section.cards.map((card) => renderDashboardCard(card.id))}
+        </div>
+      );
+    }
+    if (section.id === 'recent') {
+      return (
+        <div key={section.id} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {section.cards.map((card) => renderDashboardCard(card.id))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-2xl font-bold">{t('title')}</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => handleExport('excel')}
+            disabled={exporting !== null}
+            data-testid="dashboard-export-excel"
+          >
+            {exporting === 'excel' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {t('exportExcel')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleExport('pdf')}
+            disabled={exporting !== null}
+            data-testid="dashboard-export-pdf"
+          >
+            {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {t('exportPdf')}
+          </Button>
+        </div>
       </div>
+      {visibleDashboardSections.map(renderDashboardSection)}
 
       <Dialog open={!!selectedCustomer} onOpenChange={(open) => {
         if (!open) setSelectedCustomer(null);

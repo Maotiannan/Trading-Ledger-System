@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Dashboard } from './dashboard-view';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
+import { DEFAULT_DASHBOARD_LAYOUT, hideDashboardCard } from '@/lib/dashboard-layout-preference';
 import { useStore } from '@/lib/store';
 
 jest.mock('@/components/workspace/shared', () => ({
@@ -171,5 +173,98 @@ describe('Dashboard customer outstanding status dialog', () => {
     expect(highOrder.compareDocumentPosition(lowOrder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(dialog).getByText('$1,500')).toBeInTheDocument();
     expect(within(dialog).getByText('$750')).toBeInTheDocument();
+  });
+
+  it('does not render hidden dashboard cards or empty sections', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
+      if (endpoint === 'settings?view=user-preferences') return {
+        success: true,
+        data: {
+          imageCompressionEnabled: true,
+          imageCompressionQualityFloor: 0.3,
+          ocrTargetMaxKb: 500,
+          dashboardLayout: {
+            sections: [
+              {
+                id: 'summary',
+                visible: true,
+                cards: [
+                  { id: 'invoice-balance', visible: false },
+                  { id: 'pending-receipts', visible: false },
+                  { id: 'waiting-swift', visible: false },
+                  { id: 'pending-approvals', visible: false },
+                ],
+              },
+              {
+                id: 'analysis',
+                visible: true,
+                cards: [
+                  { id: 'released-unpaid-invoices', visible: true },
+                  { id: 'customer-outstanding-ranking', visible: false },
+                ],
+              },
+              {
+                id: 'recent',
+                visible: true,
+                cards: [
+                  { id: 'recent-receipts', visible: false },
+                  { id: 'recent-payment-details', visible: false },
+                ],
+              },
+            ],
+          },
+        },
+      };
+      return { success: false };
+    });
+
+    await act(async () => {
+      render(<Dashboard />);
+    });
+
+    expect(await screen.findByText('Released Unpaid Invoices')).toBeInTheDocument();
+    expect(screen.queryByText(/Invoice Balance/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Customer Outstanding Ranking')).not.toBeInTheDocument();
+    expect(screen.queryByText('recentReceipts')).not.toBeInTheDocument();
+  });
+
+  it('confirms before hiding a card and saves the changed account preference', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
+      if (endpoint === 'settings?view=user-preferences') return {
+        success: true,
+        data: {
+          imageCompressionEnabled: true,
+          imageCompressionQualityFloor: 0.3,
+          ocrTargetMaxKb: 500,
+          dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+        },
+      };
+      if (endpoint === 'settings' && options?.method === 'POST') return {
+        success: true,
+        data: {
+          imageCompressionEnabled: true,
+          imageCompressionQualityFloor: 0.3,
+          ocrTargetMaxKb: 500,
+          dashboardLayout: hideDashboardCard(DEFAULT_DASHBOARD_LAYOUT, 'invoice-balance'),
+        },
+      };
+      return { success: false };
+    });
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<Dashboard />);
+    });
+    await user.click(await screen.findByRole('button', { name: 'Hide Invoice Balance' }));
+
+    expect(confirmSpy).toHaveBeenCalledWith('Hide this card? You can restore it in Settings.');
+    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('dashboardLayout'),
+    }));
+    confirmSpy.mockRestore();
   });
 });

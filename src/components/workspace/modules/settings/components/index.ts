@@ -1,5 +1,6 @@
 export * from './branch-purge-card';
 export * from './collapsible-settings-section';
+export * from './dashboard-settings-card';
 export * from './excel-token-card';
 export * from './password-settings-card';
 export * from './settings-audit-card';

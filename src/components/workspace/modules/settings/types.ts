@@ -1,3 +1,5 @@
+import type { DashboardLayoutPreference } from '@/lib/dashboard-layout-preference';
+
 export type BranchPurgeTarget = {
   id: string;
   email: string;
@@ -38,10 +40,18 @@ export type UserImageCompressionPreference = {
   ocrTargetMaxKb: number;
 };
 
+export type UserPreferenceSettings = UserImageCompressionPreference & {
+  dashboardLayout: DashboardLayoutPreference;
+};
+
 export type UserImageCompressionPreferenceDraft = {
   imageCompressionEnabled: boolean;
   imageCompressionQualityFloor: string;
   ocrTargetMaxKb: string;
+};
+
+export type UserPreferenceSettingsDraft = UserImageCompressionPreferenceDraft & {
+  dashboardLayout: DashboardLayoutPreference;
 };
 
 export type UserImageCompressionPreferenceFieldValueMap = {

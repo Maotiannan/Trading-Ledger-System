@@ -15,6 +15,7 @@ import {
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
 } from '@/components/workspace/shared';
+import { DEFAULT_DASHBOARD_LAYOUT } from '@/lib/dashboard-layout-preference';
 
 jest.mock('@/components/workspace/shared', () => {
   return {
@@ -88,6 +89,7 @@ describe('useSettingsActions', () => {
         imageCompressionEnabled: true,
         imageCompressionQualityFloor: '0.3',
         ocrTargetMaxKb: '500',
+        dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
       },
       config: { DETAIL_RECEIPT_MATCH_TOLERANCE: '5' },
       branchPurgeTargets: [{ id: 'sales-1', email: 'sales@example.com', name: 'Sales', level: 3, role: 'SALES', parentId: 'admin-1' }],
@@ -1019,6 +1021,7 @@ describe('useSettingsActions', () => {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
+        dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
       },
     });
 
@@ -1033,6 +1036,7 @@ describe('useSettingsActions', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     });
   });
 
@@ -1042,6 +1046,7 @@ describe('useSettingsActions', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     };
     mockApiCall.mockResolvedValueOnce({ success: true, message: 'saved' });
 
@@ -1059,6 +1064,7 @@ describe('useSettingsActions', () => {
           imageCompressionEnabled: false,
           imageCompressionQualityFloor: 0.45,
           ocrTargetMaxKb: 640,
+          dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
         },
       }),
     });
@@ -1073,6 +1079,7 @@ describe('useSettingsActions', () => {
       imageCompressionEnabled: true,
       imageCompressionQualityFloor: '0.',
       ocrTargetMaxKb: '',
+      dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
     };
 
     const { result } = renderHook(() => useSettingsActions(deps));

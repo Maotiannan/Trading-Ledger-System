@@ -27,6 +27,7 @@ jest.mock('./components', () => {
   return {
     ...actual,
     BranchPurgeCard: () => <div>BranchPurgeBody</div>,
+    DashboardSettingsCard: () => <div>DashboardSettingsBody</div>,
     ExcelTokenCard: () => <div>ExcelTokenBody</div>,
     PasswordSettingsCard: () => <div>PasswordSettingsBody</div>,
     SettingsAuditCard: () => <div>SettingsAuditBody</div>,
@@ -79,7 +80,12 @@ describe('SettingsManager', () => {
       setError: jest.fn(),
       config: {},
       setConfig: jest.fn(),
-      userPreferences: { imageCompressionEnabled: true, imageCompressionQualityFloor: 0.3, imageCompressionTargetMaxKb: 500 },
+      userPreferences: {
+        imageCompressionEnabled: true,
+        imageCompressionQualityFloor: '0.3',
+        ocrTargetMaxKb: '500',
+        dashboardLayout: { sections: [] },
+      },
       setUserPreferences: jest.fn(),
       canEditConfig: true,
       setCanEditConfig: jest.fn(),
@@ -125,6 +131,7 @@ describe('SettingsManager', () => {
       setPwd: jest.fn(),
       updateConfigField: jest.fn(),
       updateUserPreferenceField: jest.fn(),
+      updateDashboardLayoutPreference: jest.fn(),
       togglePurgeModule: jest.fn(),
     });
     mockUseSettingsActions.mockReturnValue({

@@ -2,6 +2,10 @@
 
 import { useCallback } from 'react';
 import { apiCall, getApiErrorMessage, getApiResponseErrorMessage, peekPrefetchedApiResult, rememberPrefetchedApiResult } from '@/components/workspace/shared';
+import {
+  normalizeDashboardLayoutPreference,
+  validateDashboardLayoutPreferenceForSave,
+} from '@/lib/dashboard-layout-preference';
 import type {
   BranchPurgeTarget,
   PasswordFormState,
@@ -12,6 +16,8 @@ import type {
   SettingsAuditMeta,
   UserImageCompressionPreference,
   UserImageCompressionPreferenceDraft,
+  UserPreferenceSettings,
+  UserPreferenceSettingsDraft,
 } from '../types';
 import {
   defaultUserImageCompressionPreference,
@@ -36,7 +42,7 @@ export type SettingsActionDeps = {
   canPurgeBranch: boolean;
   config: Record<string, string>;
   canViewAudit: boolean;
-  userPreferences: UserImageCompressionPreferenceDraft;
+  userPreferences: UserPreferenceSettingsDraft;
   branchPurgeTargets: BranchPurgeTarget[];
   purgeForm: PurgeFormState;
   pwd: PasswordFormState;
@@ -56,7 +62,7 @@ export type SettingsActionDeps = {
   setMessage: (value: string | null) => void;
   setError: (value: string | null) => void;
   setConfig: (value: Record<string, string>) => void;
-  setUserPreferences: (value: UserImageCompressionPreferenceDraft) => void;
+  setUserPreferences: (value: UserPreferenceSettingsDraft) => void;
   setCanEditConfig: (value: boolean) => void;
   setCanViewAudit: (value: boolean) => void;
   setCanPurgeBranch: (value: boolean) => void;
@@ -123,12 +129,15 @@ export function useSettingsActions({
   setPurgeForm,
   setPwd,
 }: SettingsActionDeps) {
-  const normalizeUserPreferences = useCallback((payload: unknown): UserImageCompressionPreferenceDraft => {
+  const normalizeUserPreferences = useCallback((payload: unknown): UserPreferenceSettingsDraft => {
     if (!payload || typeof payload !== 'object') {
-      return defaultUserImageCompressionPreferenceDraft;
+      return {
+        ...defaultUserImageCompressionPreferenceDraft,
+        dashboardLayout: normalizeDashboardLayoutPreference(null),
+      };
     }
 
-    const source = payload as Partial<UserImageCompressionPreference>;
+    const source = payload as Partial<UserPreferenceSettings>;
     return {
       imageCompressionEnabled: typeof source.imageCompressionEnabled === 'boolean'
         ? source.imageCompressionEnabled
@@ -139,12 +148,13 @@ export function useSettingsActions({
       ocrTargetMaxKb: Number.isFinite(source.ocrTargetMaxKb)
         ? String(Number(source.ocrTargetMaxKb))
         : defaultUserImageCompressionPreferenceDraft.ocrTargetMaxKb,
+      dashboardLayout: normalizeDashboardLayoutPreference(source.dashboardLayout),
     };
   }, []);
 
   const validateUserPreferences = useCallback((
-    preferences: UserImageCompressionPreferenceDraft,
-  ): { ok: true; value: UserImageCompressionPreference } | { ok: false; error: string } => {
+    preferences: UserPreferenceSettingsDraft,
+  ): { ok: true; value: UserPreferenceSettings } | { ok: false; error: string } => {
     const qualityFloorText = preferences.imageCompressionQualityFloor.trim();
     const qualityFloor = qualityFloorText === '' ? Number.NaN : Number(qualityFloorText);
     if (
@@ -185,12 +195,23 @@ export function useSettingsActions({
       };
     }
 
+    let dashboardLayout;
+    try {
+      dashboardLayout = validateDashboardLayoutPreferenceForSave(preferences.dashboardLayout);
+    } catch {
+      return {
+        ok: false,
+        error: tx('Dashboard 设置格式错误', 'Dashboard settings are invalid'),
+      };
+    }
+
     return {
       ok: true,
       value: {
         imageCompressionEnabled: preferences.imageCompressionEnabled,
         imageCompressionQualityFloor: Number(qualityFloor.toFixed(2)),
         ocrTargetMaxKb,
+        dashboardLayout,
       },
     };
   }, [tx]);

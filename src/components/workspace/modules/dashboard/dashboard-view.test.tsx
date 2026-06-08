@@ -141,6 +141,9 @@ describe('Dashboard customer outstanding status dialog', () => {
     await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
     const dialog = screen.getByRole('dialog');
 
+    expect(within(dialog).getByText('Unpaid ORDER_NAME balances grouped by released and in-transit status.')).toBeInTheDocument();
+    expect(within(dialog).getByText('Total Unpaid: $1,000')).toBeInTheDocument();
+
     const releasedLabel = within(dialog).getByText('Released');
     const inTransitLabel = within(dialog).getByText('In Transit');
 

@@ -641,9 +641,16 @@ export function Dashboard() {
       }}>
         <DialogContent className="flex max-h-[calc(100vh-24px)] max-w-3xl flex-col">
           <DialogHeader>
-            <DialogTitle>{formatOrderNameDisplay(selectedCustomer?.customerLabel)}</DialogTitle>
+            <DialogTitle className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <span>{formatOrderNameDisplay(selectedCustomer?.customerLabel)}</span>
+              {selectedCustomer ? (
+                <span className="text-sm font-semibold text-red-600">
+                  {tx('未付总计', 'Total Unpaid')}: {formatUsdAmount(selectedCustomer.totalOutstanding)}
+                </span>
+              ) : null}
+            </DialogTitle>
             <DialogDescription>
-              {tx('按运输中和已放单分类查看该客户未付清 ORDER_NAME 余额', 'Unpaid ORDER_NAME balances grouped by transit and release status')}
+              {tx('按已放单和运输中分类查看该客户未付清 ORDER_NAME 余额', 'Unpaid ORDER_NAME balances grouped by released and in-transit status.')}
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">

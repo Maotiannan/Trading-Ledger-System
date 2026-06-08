@@ -37,10 +37,12 @@
 - 工程类型检查和服务端日志完成进一步收口：隐式 any 已禁用，服务端日志统一结构化并自动脱敏
 - 本地日常更新已固化为一键安全重建：运行 `scripts/rebuild-local-app.sh` 即可重建 app、刷新维护服务并做基础健康检查
 - Dashboard 客户欠款排行保持简洁三列表格；点开客户可查看 `Released / In Transit` 分类订单，点开已放单发票号可查看该发票下订单明细
+- Dashboard 卡片支持按账号个性化：可在卡片右上角隐藏，也可在设置中恢复、调整显示顺序
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- Dashboard 新增个人卡片设置：每个账号都可以隐藏不常用卡片，并在 `Settings -> Dashboard Settings` 中恢复或调整卡片顺序
 - Dashboard 客户欠款排行弹窗新增已放单/运输中分类：外层排行保持 `ORDER_NAME / Unpaid Orders / Outstanding Total` 三列；弹窗中 `Released` 在上、`In Transit` 在下，并显示分类小计和已放单天数
 - Dashboard 已放单未结清发票的 `INV NO` 可点开查看该发票下所有 `ORDER_NAME / INV AMOUNT / OUT STANDING`，并按 `OUT STANDING` 从高到低排序
 
@@ -182,6 +184,7 @@
 ## 当前版本重点
 
 ### v1.0.175
+- Dashboard 支持按账号保存卡片显示和排序：卡片右上角可隐藏，隐藏后可在设置中恢复。
 - Dashboard 客户欠款排行外层保持原三列；点击客户名称后，弹窗按 `Released / In Transit` 分区展示订单。
 - `Released Unpaid Invoices` 中的 `INV NO` 可点开查看该发票下所有订单明细，并按 `OUT STANDING` 从高到低排序。
 

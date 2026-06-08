@@ -8,6 +8,8 @@
 
 ## P0（本周必须完成）
 
+- [x] Dashboard 个人卡片布局设置落地：`UserPreference` 新增 `dashboardLayout` JSON 字段，复用 `/api/settings?view=user-preferences` 按账号读取和保存；新增 `dashboard-layout-preference` 共享注册表，集中定义 `summary / analysis / recent` 三个 section 与 8 个卡片，Settings 和 Dashboard 都只消费归一化后的布局，后续新增卡片必须先登记到该注册表。Dashboard 卡片右上角提供低干扰隐藏按钮，隐藏前中英文确认，空 section 自动不显示；Settings 新增 `Dashboard Settings` 折叠区，可调整 section/card 顺序和可见性。备份口径：该偏好只写 MySQL `UserPreference.dashboardLayout`，已纳入 `trading_ledger` dump，无新增 NAS/COS 媒体路径。补齐 schema/service/API/settings/dashboard 回归测试 ✅ 2026-06-08
+
 - [x] Dashboard 欠款排行弹窗分组：`dashboard-summary-service` 在客户欠款聚合中为每个未结清订单标记 `IN_TRANSIT / RELEASED`，按 `Invoice.releaseDate` 计算已放单天数，并返回每个客户的运输中/已放单小计；前端 `Customer Outstanding Ranking` 外层保持原三列表格，点击客户后按 `Released -> In Transit` 展示订单、分类小计和 Released 天数。`releasedInvoices` 同步返回发票下订单明细，点击 `INV NO` 可按 `OUT STANDING` 倒序查看 `ORDER_NAME / INV AMOUNT / OUT STANDING`。补齐 service 与 dashboard view 红绿回归测试 ✅ 2026-06-08
 
 - [x] 一键安全重建脚本固化：新增 `scripts/rebuild-local-app.sh`，把本地日常更新统一为“检查 `.env` 必要密钥 -> `docker compose config --quiet` -> `docker compose up -d --no-deps --build app` -> 刷新 `maintenance` -> app health check -> maintenance 清理接口检查 -> 最终容器状态输出”。脚本只重建 app 与维护服务，不执行 `docker compose down -v`、Docker volume 删除或上传目录清理；本地缺失/不安全的 `SESSION_SECRET` 和 `MAINTENANCE_JOB_TOKEN` 只在 `.env` 中生成，不向终端打印真实值。新增脚本安全契约测试，确保后续改脚本不会引入破坏性 Docker 命令 ✅ 2026-06-05

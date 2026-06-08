@@ -5,7 +5,7 @@
 ## 当前版本
 
 - 版本：`1.0.175`
-- 最近修复：Dashboard 客户欠款排行弹窗可按运输中和已放单分类查看订单；已放单发票号可点开查看订单明细。
+- 最近修复：Dashboard 卡片可按账号隐藏、恢复和调整顺序；客户欠款排行和已放单发票支持点开查看明细。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -30,7 +30,7 @@
 
 | 模块 | 用途 |
 |---|---|
-| Dashboard | 查看业务概览、待处理事项、欠款排行 |
+| Dashboard | 查看业务概览、待处理事项、欠款排行；支持按账号隐藏和排序卡片 |
 | Invoice Management | 创建发票、维护订单金额、查看 Outstanding |
 | Orders | 维护不参与财务余额的业务订单跟踪 |
 | Receipt Management | 上传收据、直接创建收据、生成签名收据 |
@@ -38,7 +38,7 @@
 | SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路 |
 | Approval | 审批删除申请和修改申请 |
 | Customer Management | 维护客户、ORDER_NAME、CONSIGNEE、绑定关系 |
-| Settings | 管理账号、系统配置、图片压缩、Excel Token、审计 |
+| Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、审计 |
 
 ## 推荐使用流程
 

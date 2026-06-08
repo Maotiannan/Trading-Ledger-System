@@ -68,7 +68,7 @@ describe('dashboard-summary-service', () => {
     jest.clearAllMocks();
     jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-05-08T00:00:00.000Z').getTime());
     mockGetOwnerVisibleIds.mockResolvedValue(['admin-1']);
-    mockDb.invoice.count.mockResolvedValue(2);
+    mockDb.invoice.count.mockResolvedValue(3);
     mockDb.receipt.count.mockResolvedValue(1);
     mockDb.receipt.aggregate.mockResolvedValue({ _sum: { usd: 9876.5 } });
     mockDb.detail.count.mockResolvedValue(1);
@@ -118,11 +118,27 @@ describe('dashboard-summary-service', () => {
           },
         ],
       },
+      {
+        id: 'invoice-3',
+        invNo: 'L25MH090004',
+        releaseDate: null,
+        orders: [
+          {
+            id: 'order-3',
+            orderNo: 'Super Dt2-10',
+            customerId: 'customer-super-dt2',
+            customerName: 'super dt2',
+            customerMark: 'SDT2',
+            amount: 250,
+            orderBalance: 250,
+          },
+        ],
+      },
     ]);
 
     const summary = await getDashboardSummary(makeUser() as never);
 
-    expect(summary.unpaidTotal).toBe(750);
+    expect(summary.unpaidTotal).toBe(1000);
     expect(summary.pendingReceiptsAmount).toBe(9876.5);
     expect(mockDb.receipt.aggregate).toHaveBeenCalledWith({
       where: {
@@ -157,13 +173,29 @@ describe('dashboard-summary-service', () => {
       {
         customerKey: 'customer:customer-super-dt2',
         customerLabel: 'SUPER DT2',
-        totalOutstanding: 750,
+        totalOutstanding: 1000,
+        statusSubtotals: {
+          inTransit: 250,
+          released: 750,
+        },
         orders: [
+          {
+            orderId: 'order-3',
+            orderNo: 'SUPER DT2-10',
+            invNo: 'L25MH090004',
+            outstanding: 250,
+            statusGroup: 'IN_TRANSIT',
+            releaseDate: null,
+            daysSinceRelease: null,
+          },
           {
             orderId: 'order-1',
             orderNo: 'SUPER DT2-09',
             invNo: 'L25MH090002',
             outstanding: 750,
+            statusGroup: 'RELEASED',
+            releaseDate: '2026-05-01T00:00:00.000Z',
+            daysSinceRelease: 7,
           },
         ],
       },

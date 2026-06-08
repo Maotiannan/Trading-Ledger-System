@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.173
-> 最后更新：2026-06-05
+> 当前版本：v1.0.175
+> 最后更新：2026-06-08
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 客户欠款状态分组：`dashboard-summary-service` 在客户欠款聚合中为每个未结清订单标记 `IN_TRANSIT / RELEASED`，按 `Invoice.releaseDate` 计算已放单天数，并返回每个客户的运输中/已放单小计；前端 `Customer Outstanding Ranking` 增加状态 badge，点击客户后按两类分区展示订单、分类小计和 Released 天数。补齐 service 与 dashboard view 红绿回归测试 ✅ 2026-06-08
 
 - [x] 一键安全重建脚本固化：新增 `scripts/rebuild-local-app.sh`，把本地日常更新统一为“检查 `.env` 必要密钥 -> `docker compose config --quiet` -> `docker compose up -d --no-deps --build app` -> 刷新 `maintenance` -> app health check -> maintenance 清理接口检查 -> 最终容器状态输出”。脚本只重建 app 与维护服务，不执行 `docker compose down -v`、Docker volume 删除或上传目录清理；本地缺失/不安全的 `SESSION_SECRET` 和 `MAINTENANCE_JOB_TOKEN` 只在 `.env` 中生成，不向终端打印真实值。新增脚本安全契约测试，确保后续改脚本不会引入破坏性 Docker 命令 ✅ 2026-06-05
 

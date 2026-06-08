@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -61,16 +61,22 @@ type DashboardCustomerOutstanding = {
   customerKey: string;
   customerLabel: string;
   totalOutstanding: number;
+  statusSubtotals: {
+    inTransit: number;
+    released: number;
+  };
   orders: Array<{
     orderId: string;
     orderNo: string;
     invNo: string;
     outstanding: number;
+    statusGroup: 'IN_TRANSIT' | 'RELEASED';
+    releaseDate: string | null;
+    daysSinceRelease: number | null;
   }>;
 };
 
 const DASHBOARD_LIST_PAGE_SIZE = 10;
-const DASHBOARD_CUSTOMER_ORDER_PAGE_SIZE = 5;
 
 export function Dashboard() {
   const t = useTranslations('dashboard');
@@ -103,7 +109,6 @@ export function Dashboard() {
   const [releasedInvoicePage, setReleasedInvoicePage] = useState(1);
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
-  const [selectedCustomerOrderPage, setSelectedCustomerOrderPage] = useState(1);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const loadSummary = useCallback(async () => {
     const requestToken = dashboardRequestGuard.nextToken();
@@ -144,7 +149,6 @@ export function Dashboard() {
 
   const releasedInvoiceTotalPages = Math.max(1, Math.ceil(releasedInvoices.length / DASHBOARD_LIST_PAGE_SIZE));
   const customerOutstandingTotalPages = Math.max(1, Math.ceil(customerOutstanding.length / DASHBOARD_LIST_PAGE_SIZE));
-  const selectedCustomerOrderTotalPages = Math.max(1, Math.ceil((selectedCustomer?.orders.length ?? 0) / DASHBOARD_CUSTOMER_ORDER_PAGE_SIZE));
   const paginatedReleasedInvoices = releasedInvoices.slice(
     (releasedInvoicePage - 1) * DASHBOARD_LIST_PAGE_SIZE,
     releasedInvoicePage * DASHBOARD_LIST_PAGE_SIZE,
@@ -153,10 +157,13 @@ export function Dashboard() {
     (customerOutstandingPage - 1) * DASHBOARD_LIST_PAGE_SIZE,
     customerOutstandingPage * DASHBOARD_LIST_PAGE_SIZE,
   );
-  const paginatedSelectedCustomerOrders = (selectedCustomer?.orders ?? []).slice(
-    (selectedCustomerOrderPage - 1) * DASHBOARD_CUSTOMER_ORDER_PAGE_SIZE,
-    selectedCustomerOrderPage * DASHBOARD_CUSTOMER_ORDER_PAGE_SIZE,
-  );
+  const selectedCustomerOrdersByStatus = useMemo(() => {
+    const orders = selectedCustomer?.orders ?? [];
+    return {
+      inTransit: orders.filter((order) => order.statusGroup === 'IN_TRANSIT'),
+      released: orders.filter((order) => order.statusGroup === 'RELEASED'),
+    };
+  }, [selectedCustomer]);
 
   useEffect(() => {
     setReleasedInvoicePage((page) => Math.min(page, releasedInvoiceTotalPages));
@@ -165,10 +172,6 @@ export function Dashboard() {
   useEffect(() => {
     setCustomerOutstandingPage((page) => Math.min(page, customerOutstandingTotalPages));
   }, [customerOutstandingTotalPages]);
-
-  useEffect(() => {
-    setSelectedCustomerOrderPage((page) => Math.min(page, selectedCustomerOrderTotalPages));
-  }, [selectedCustomerOrderTotalPages]);
   
   const stats = [
     { label: tx(`账单总数 (${invoiceCount})`, `Invoice Balance (${invoiceCount})`), value: formatUsdAmount(summary?.unpaidTotal ?? unpaidTotal), color: 'text-blue-600' },
@@ -212,6 +215,79 @@ export function Dashboard() {
     } finally {
       setExporting(null);
     }
+  };
+
+  const renderCustomerStatusBadges = (customer: DashboardCustomerOutstanding) => (
+    <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap">
+      {customer.statusSubtotals.inTransit > 0 && (
+        <Badge variant="outline" className="w-fit border-amber-300 bg-amber-50 text-amber-800">
+          {tx(`运输中：${formatUsdAmount(customer.statusSubtotals.inTransit)}`, `In Transit: ${formatUsdAmount(customer.statusSubtotals.inTransit)}`)}
+        </Badge>
+      )}
+      {customer.statusSubtotals.released > 0 && (
+        <Badge variant="outline" className="w-fit border-green-300 bg-green-50 text-green-800">
+          {tx(`已放单：${formatUsdAmount(customer.statusSubtotals.released)}`, `Released: ${formatUsdAmount(customer.statusSubtotals.released)}`)}
+        </Badge>
+      )}
+      {customer.statusSubtotals.inTransit <= 0 && customer.statusSubtotals.released <= 0 && (
+        <span className="text-muted-foreground">-</span>
+      )}
+    </div>
+  );
+
+  const renderCustomerOrderStatusSection = (
+    title: string,
+    orders: DashboardCustomerOutstanding['orders'],
+    subtotal: number,
+    variant: 'inTransit' | 'released',
+  ) => {
+    const isReleased = variant === 'released';
+    return (
+      <div className="rounded-md border">
+        <div className="flex flex-col gap-2 border-b bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <Badge
+            variant="outline"
+            className={isReleased ? 'w-fit border-green-300 bg-green-50 text-green-800' : 'w-fit border-amber-300 bg-amber-50 text-amber-800'}
+          >
+            {title}
+          </Badge>
+          <span className="font-semibold text-red-600">
+            {tx(`小计：${formatUsdAmount(subtotal)}`, `Subtotal: ${formatUsdAmount(subtotal)}`)}
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ORDER NO</TableHead>
+                <TableHead>INV NO</TableHead>
+                {isReleased && <TableHead>{tx('放单已过天数', 'Days Since Release')}</TableHead>}
+                <TableHead>{tx('余额', 'Balance')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.map((order) => (
+                <TableRow key={order.orderId}>
+                  <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
+                  <TableCell>{order.invNo}</TableCell>
+                  {isReleased && <TableCell>{order.daysSinceRelease ?? '-'}</TableCell>}
+                  <TableCell className="font-medium text-red-600">{formatUsdAmount(order.outstanding)}</TableCell>
+                </TableRow>
+              ))}
+              {orders.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={isReleased ? 4 : 3} className="py-6 text-center text-muted-foreground">
+                    {isReleased
+                      ? tx('暂无已放单未付清订单', 'No released unpaid orders')
+                      : tx('暂无运输中未付清订单', 'No in-transit unpaid orders')}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -314,12 +390,13 @@ export function Dashboard() {
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>ORDER_NAME</TableHead>
-                    <TableHead>{tx('未结清订单数', 'Unpaid Orders')}</TableHead>
-                    <TableHead>{tx('欠款合计', 'Outstanding Total')}</TableHead>
-                  </TableRow>
-                </TableHeader>
+                    <TableRow>
+                      <TableHead>ORDER_NAME</TableHead>
+                      <TableHead>{tx('未结清订单数', 'Unpaid Orders')}</TableHead>
+                      <TableHead>{tx('状态', 'Status')}</TableHead>
+                      <TableHead>{tx('欠款合计', 'Outstanding Total')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {paginatedCustomerOutstanding.map((customer) => (
                     <TableRow key={customer.customerKey}>
@@ -329,19 +406,19 @@ export function Dashboard() {
                           className="font-medium text-blue-700 underline-offset-2 hover:underline"
                           onClick={() => {
                             setSelectedCustomer(customer);
-                            setSelectedCustomerOrderPage(1);
                           }}
                         >
                           {formatOrderNameDisplay(customer.customerLabel)}
                         </button>
                       </TableCell>
                       <TableCell>{customer.orders.length}</TableCell>
+                      <TableCell>{renderCustomerStatusBadges(customer)}</TableCell>
                       <TableCell className="font-medium text-red-600">{formatUsdAmount(customer.totalOutstanding)}</TableCell>
                     </TableRow>
                   ))}
                   {customerOutstanding.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                      <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
                         {tx('暂无客户欠款', 'No customer outstanding balance')}
                       </TableCell>
                     </TableRow>
@@ -413,46 +490,23 @@ export function Dashboard() {
           <DialogHeader>
             <DialogTitle>{formatOrderNameDisplay(selectedCustomer?.customerLabel)}</DialogTitle>
             <DialogDescription>
-              {tx('该客户所有未付清 ORDER_NAME 的余额', 'All unpaid ORDER_NAME balances for this customer')}
+              {tx('按运输中和已放单分类查看该客户未付清 ORDER_NAME 余额', 'Unpaid ORDER_NAME balances grouped by transit and release status')}
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ORDER NO</TableHead>
-                    <TableHead>INV NO</TableHead>
-                    <TableHead>{tx('余额', 'Balance')}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedSelectedCustomerOrders.map((order) => (
-                    <TableRow key={order.orderId}>
-                      <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
-                      <TableCell>{order.invNo}</TableCell>
-                      <TableCell className="font-medium text-red-600">{formatUsdAmount(order.outstanding)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+            {renderCustomerOrderStatusSection(
+              tx('运输中', 'In Transit'),
+              selectedCustomerOrdersByStatus.inTransit,
+              selectedCustomer?.statusSubtotals.inTransit ?? 0,
+              'inTransit',
+            )}
+            {renderCustomerOrderStatusSection(
+              tx('已放单', 'Released'),
+              selectedCustomerOrdersByStatus.released,
+              selectedCustomer?.statusSubtotals.released ?? 0,
+              'released',
+            )}
           </div>
-          {(selectedCustomer?.orders.length ?? 0) > 0 && (
-            <DialogFooter className="items-center justify-between gap-2 sm:justify-between">
-              <span className="text-sm text-muted-foreground">
-                {tx(`第 ${selectedCustomerOrderPage} / ${selectedCustomerOrderTotalPages} 页`, `Page ${selectedCustomerOrderPage} / ${selectedCustomerOrderTotalPages}`)}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={selectedCustomerOrderPage === 1} onClick={() => setSelectedCustomerOrderPage((page) => Math.max(1, page - 1))}>
-                  {tx('上一页', 'Previous')}
-                </Button>
-                <Button variant="outline" size="sm" disabled={selectedCustomerOrderPage === selectedCustomerOrderTotalPages} onClick={() => setSelectedCustomerOrderPage((page) => Math.min(selectedCustomerOrderTotalPages, page + 1))}>
-                  {tx('下一页', 'Next')}
-                </Button>
-              </div>
-            </DialogFooter>
-          )}
         </DialogContent>
       </Dialog>
     </div>

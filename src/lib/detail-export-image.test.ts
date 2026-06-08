@@ -40,6 +40,7 @@ const viewModel: DetailExportViewModel = {
     { index: 6, mark: 'THP', orderNo: 'THP-04', type: 'Initial', amount: 3070 },
     { index: 7, mark: 'DEP', orderNo: 'DEP-01', type: 'Deposit', amount: 500 },
     { index: 8, mark: 'AMD', orderNo: 'AMD-05', type: 'Std', amount: 3000 },
+    { index: 9, mark: 'FULL', orderNo: 'FULL-01', type: 'Full payment', amount: 9000 },
   ],
 };
 
@@ -106,7 +107,7 @@ describe('detail-export-image', () => {
     expect(model.rows[0].type).toBe('Final');
   });
 
-  it('keeps a first payment as Final when it also clears the order', async () => {
+  it('classifies a first real-invoice payment that clears the order as Full payment', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([
       { id: 'order-first-final', orderBalance: 0 },
     ]);
@@ -125,7 +126,7 @@ describe('detail-export-image', () => {
       ],
     });
 
-    expect(model.rows[0].type).toBe('Final');
+    expect(model.rows[0].type).toBe('Full payment');
   });
 
   it('classifies a cleared real invoice balance as Final even before SWIFT is attached', async () => {
@@ -182,6 +183,7 @@ describe('detail-export-image', () => {
     expect(svg).toContain('Simagan');
     expect(svg).toContain('Simagan-07');
     expect(svg).toContain('Final');
+    expect(svg).toContain('Full payment');
     expect(svg).toContain('Initial');
     expect(svg).toContain('Deposit');
     expect(svg).toContain('Standard');
@@ -218,18 +220,19 @@ describe('detail-export-image', () => {
 
     expect(svg).toContain('width="720"');
     expect(svg).toContain('font-size="15" font-weight="700" dominant-baseline="middle" fill="#000000">Simagan');
-    expect(svg).toContain('font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">MARK');
-    expect(svg).toContain('font-size="13" fill="#000000" dominant-baseline="middle"><tspan');
+    expect(svg).toContain('fill="#415cc3"');
+    expect(svg).toContain('font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">MARK');
+    expect(svg).toContain('font-size="13" font-weight="700" fill="#000000" dominant-baseline="middle"><tspan');
     expect(svg).toContain('>Simagan-07</tspan>');
     expect(svg).toContain('font-size="12" font-weight="700" dominant-baseline="middle" fill="#000000">Standard');
     expect(svg).toContain('font-size="24" font-weight="700" fill="#415cc3">$101,326</text>');
     expect(svg).toContain('font-size="11" font-weight="700" fill="#000000" letter-spacing="1.1">TOTAL');
     expect(svg).toContain('font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.6">TOTAL TRANSFERRED');
-    expect(svg).toContain('font-size="15" fill="#cccccc">Mitty Group · Disbursement');
-    expect(svg).toContain('font-size="15" text-anchor="end" fill="#cccccc">20 records');
+    expect(svg).toContain('font-size="15" fill="#415cc3">Mitty Group · Disbursement');
+    expect(svg).toContain('font-size="15" text-anchor="end" fill="#415cc3">20 records');
   });
 
-  it('uses light blue date text and wraps long order numbers inside their table cell', () => {
+  it('uses blue date text and wraps long order numbers inside their table cell', () => {
     const svg = buildDetailExportSvg({
       ...viewModel,
       rows: [
@@ -243,11 +246,36 @@ describe('detail-export-image', () => {
       ],
     });
 
-    expect(svg).toContain(`fill="#7ea6ff">${viewModel.dateLabel}</text>`);
+    expect(svg).toContain(`fill="#415cc3">${viewModel.dateLabel}</text>`);
     expect(svg).toContain('<tspan');
     expect(svg).toContain('SUPER-DT2-10B/');
     expect(svg).toContain('SUPER-DT2-11B/');
     expect(svg).toContain('dominant-baseline="middle"');
+  });
+
+  it('renders table titles as white text on the same blue fill as the bottom total bar', () => {
+    const svg = buildDetailExportSvg(viewModel);
+
+    expect(svg).toContain(`x="24" y="166" width="672" height="42" fill="#415cc3"`);
+    expect(svg).toContain('font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">#</text>');
+    expect(svg).toContain('font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">MARK</text>');
+    expect(svg).toContain('font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">ORDER NO</text>');
+    expect(svg).toContain('font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">TYPE</text>');
+    expect(svg).toContain('font-size="16" font-weight="700" text-anchor="end" fill="#ffffff" letter-spacing="0.8">AMOUNT</text>');
+  });
+
+  it('renders Final and Full payment types in green', () => {
+    const svg = buildDetailExportSvg({
+      ...viewModel,
+      rows: [
+        { index: 1, mark: 'FIN', orderNo: 'FIN-01', type: 'Final', amount: 100 },
+        { index: 2, mark: 'FUL', orderNo: 'FUL-01', type: 'Full payment', amount: 200 },
+      ],
+    });
+
+    expect(svg).toContain('fill="#daf7e4"');
+    expect(svg).toContain('fill="#128a3a">Final</text>');
+    expect(svg).toContain('fill="#128a3a">Full payment</text>');
   });
 
   it('keeps spaces in order numbers while applying wrapped SVG text', () => {

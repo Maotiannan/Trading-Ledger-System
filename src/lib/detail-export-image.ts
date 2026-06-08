@@ -38,7 +38,7 @@ export type DetailExportRow = {
   index: number;
   mark: string;
   orderNo: string;
-  type: 'Initial' | 'Final' | 'Std' | 'Deposit';
+  type: 'Initial' | 'Final' | 'Full payment' | 'Std' | 'Deposit';
   amount: number;
 };
 
@@ -66,7 +66,6 @@ const LOGO_WIDTH = 245;
 const LOGO_HEIGHT = 45;
 const COLORS = {
   blue: '#415cc3',
-  dateBlue: '#7ea6ff',
   muted: '#999999',
   lightMuted: '#bbbbbb',
   border: '#eeeeee',
@@ -75,6 +74,8 @@ const COLORS = {
   pinkBg: '#fde8f2',
   indigo: '#415cc3',
   indigoBg: '#eaedfa',
+  green: '#128a3a',
+  greenBg: '#daf7e4',
 } as const;
 
 const TABLE_COLUMNS = {
@@ -223,6 +224,9 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
 
 function determineType(analysis: ResolvedItemAnalysis): DetailExportRow['type'] {
   if (!analysis.isPoolOrder && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
+    if (analysis.isFirstPayment && !analysis.isDepositPayment) {
+      return 'Full payment';
+    }
     return 'Final';
   }
   if (analysis.isFirstPayment) {
@@ -325,14 +329,16 @@ function buildWrappedOrderText(row: DetailExportRow, centerY: number) {
   const tspans = lines.map((line, index) => (
     `<tspan x="${TABLE_COLUMNS.orderNo}" y="${firstY + index * ORDER_LINE_HEIGHT}">${escapeXml(line)}</tspan>`
   )).join('');
-  return `<text class="root" x="${TABLE_COLUMNS.orderNo}" y="${centerY}" font-size="13" fill="#000000" dominant-baseline="middle">${tspans}</text>`;
+  return `<text class="root" x="${TABLE_COLUMNS.orderNo}" y="${centerY}" font-size="13" font-weight="700" fill="#000000" dominant-baseline="middle">${tspans}</text>`;
 }
 
 function buildTypeBadge(type: DetailExportRow['type'], x: number, centerY: number) {
-  if (type === 'Final') {
+  if (type === 'Final' || type === 'Full payment') {
+    const label = type === 'Full payment' ? 'Full payment' : 'Final';
+    const width = type === 'Full payment' ? 92 : 48;
     return `
-      <rect x="${x}" y="${centerY - 10.5}" width="48" height="21" rx="4" fill="${COLORS.pinkBg}" />
-      <text class="root" x="${x + 24}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.pink}">Final</text>
+      <rect x="${x}" y="${centerY - 10.5}" width="${width}" height="21" rx="4" fill="${COLORS.greenBg}" />
+      <text class="root" x="${x + width / 2}" y="${centerY}" font-size="11" font-weight="700" text-anchor="middle" dominant-baseline="middle" fill="${COLORS.green}">${label}</text>
     `;
   }
   if (type === 'Initial' || type === 'Deposit') {
@@ -365,7 +371,7 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
     nextRowTop = rowBottom;
     return `
       <line x1="${SIDE_PADDING}" y1="${rowBottom}" x2="${WIDTH - SIDE_PADDING}" y2="${rowBottom}" stroke="${COLORS.row}" stroke-width="1" />
-      <text class="root" x="${TABLE_COLUMNS.index}" y="${centerY}" font-size="11" dominant-baseline="middle" fill="#cccccc">${row.index}</text>
+      <text class="root" x="${TABLE_COLUMNS.index}" y="${centerY}" font-size="11" dominant-baseline="middle" fill="${COLORS.blue}">${row.index}</text>
       <text class="root" x="${TABLE_COLUMNS.mark}" y="${centerY}" font-size="15" font-weight="700" dominant-baseline="middle" fill="#000000">${escapeXml(row.mark)}</text>
       ${buildWrappedOrderText(row, centerY)}
       ${buildTypeBadge(row.type, TABLE_COLUMNS.type, centerY)}
@@ -384,7 +390,7 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
 
       <line x1="${SIDE_PADDING}" y1="${TOP_BORDER + HEADER_HEIGHT}" x2="${WIDTH - SIDE_PADDING}" y2="${TOP_BORDER + HEADER_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
       <image href="${logoDataUri}" x="${SIDE_PADDING + 10}" y="${TOP_BORDER + 26}" width="${LOGO_WIDTH}" height="${LOGO_HEIGHT}" preserveAspectRatio="xMinYMid meet" />
-      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${TOP_BORDER + 46}" font-size="12" text-anchor="end" fill="${COLORS.dateBlue}">${escapeXml(viewModel.dateLabel)}</text>
+      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${TOP_BORDER + 46}" font-size="12" text-anchor="end" fill="${COLORS.blue}">${escapeXml(viewModel.dateLabel)}</text>
 
       <line x1="${SIDE_PADDING + sheetWidth / 2}" y1="${TOP_BORDER + HEADER_HEIGHT}" x2="${SIDE_PADDING + sheetWidth / 2}" y2="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
       <line x1="${SIDE_PADDING}" y1="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" x2="${WIDTH - SIDE_PADDING}" y2="${TOP_BORDER + HEADER_HEIGHT + STATS_HEIGHT}" stroke="${COLORS.border}" stroke-width="1" />
@@ -393,11 +399,12 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
       <text class="root" x="${SIDE_PADDING + sheetWidth / 2 + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 21}" font-size="11" font-weight="700" fill="#000000" letter-spacing="1.1">TRANSACTIONS</text>
       <text class="root" x="${SIDE_PADDING + sheetWidth / 2 + 10}" y="${TOP_BORDER + HEADER_HEIGHT + 51}" font-size="24" font-weight="700" fill="${COLORS.blue}">${viewModel.transactionCount}</text>
 
-      <text class="root" x="${TABLE_COLUMNS.index}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">#</text>
-      <text class="root" x="${TABLE_COLUMNS.mark}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">MARK</text>
-      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">ORDER NO</text>
-      <text class="root" x="${TABLE_COLUMNS.type}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#000000" letter-spacing="0.8">TYPE</text>
-      <text class="root" x="${TABLE_COLUMNS.amount}" y="${tableStartY + 28}" font-size="16" font-weight="700" text-anchor="end" fill="#000000" letter-spacing="0.8">AMOUNT</text>
+      <rect x="${SIDE_PADDING}" y="${tableStartY}" width="${sheetWidth}" height="${TABLE_HEADER_HEIGHT}" fill="${COLORS.blue}" />
+      <text class="root" x="${TABLE_COLUMNS.index}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">#</text>
+      <text class="root" x="${TABLE_COLUMNS.mark}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">MARK</text>
+      <text class="root" x="${TABLE_COLUMNS.orderNo}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">ORDER NO</text>
+      <text class="root" x="${TABLE_COLUMNS.type}" y="${tableStartY + 28}" font-size="16" font-weight="700" fill="#ffffff" letter-spacing="0.8">TYPE</text>
+      <text class="root" x="${TABLE_COLUMNS.amount}" y="${tableStartY + 28}" font-size="16" font-weight="700" text-anchor="end" fill="#ffffff" letter-spacing="0.8">AMOUNT</text>
       <line x1="${SIDE_PADDING}" y1="${bodyStartY}" x2="${WIDTH - SIDE_PADDING}" y2="${bodyStartY}" stroke="${COLORS.border}" stroke-width="1" />
       ${rows}
 
@@ -405,8 +412,8 @@ export function buildDetailExportSvg(viewModel: DetailExportViewModel) {
       <text class="root" x="${SIDE_PADDING + 10}" y="${footerY + 34}" font-size="22" font-weight="700" fill="#ffffff" letter-spacing="0.6">TOTAL TRANSFERRED</text>
       <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${footerY + 34}" font-size="22" font-weight="700" text-anchor="end" fill="#ffffff">$${escapeXml(formatAmount(viewModel.totalAmount))}</text>
 
-      <text class="root" x="${SIDE_PADDING + 10}" y="${footnoteY + 22}" font-size="15" fill="#cccccc">${escapeXml(`${viewModel.footerAgentLabel} · Disbursement`)}</text>
-      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${footnoteY + 22}" font-size="15" text-anchor="end" fill="#cccccc">${escapeXml(`${viewModel.transactionCount} records`)}</text>
+      <text class="root" x="${SIDE_PADDING + 10}" y="${footnoteY + 22}" font-size="15" fill="${COLORS.blue}">${escapeXml(`${viewModel.footerAgentLabel} · Disbursement`)}</text>
+      <text class="root" x="${WIDTH - SIDE_PADDING - 10}" y="${footnoteY + 22}" font-size="15" text-anchor="end" fill="${COLORS.blue}">${escapeXml(`${viewModel.transactionCount} records`)}</text>
     </svg>
   `;
 }

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.173
-> 最后更新：2026-06-05
+> 当前版本：v1.0.174
+> 最后更新：2026-06-08
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail Export Pic` 视觉与类型规则调整：`DetailExportRow.type` 新增 `Full payment`，判定为真实订单首笔付款且订单余额已结清，优先级高于 `Final`；普通已结清非首笔继续显示 `Final`，定金首笔继续显示 `Deposit`。导出 SVG 表头改为与底部总计条一致的蓝底白字；日期、行号和底部 `Agent · Disbursement / records` 改为蓝色；`Final / Full payment` 改为绿色徽章；`ORDER NO` 列全部加粗并保持原有换行。补齐 `detail-export-image` 红绿回归，覆盖类型判定、颜色、表头、页脚和长订单号 ✅ 2026-06-08
 
 - [x] 一键安全重建脚本固化：新增 `scripts/rebuild-local-app.sh`，把本地日常更新统一为“检查 `.env` 必要密钥 -> `docker compose config --quiet` -> `docker compose up -d --no-deps --build app` -> 刷新 `maintenance` -> app health check -> maintenance 清理接口检查 -> 最终容器状态输出”。脚本只重建 app 与维护服务，不执行 `docker compose down -v`、Docker volume 删除或上传目录清理；本地缺失/不安全的 `SESSION_SECRET` 和 `MAINTENANCE_JOB_TOKEN` 只在 `.env` 中生成，不向终端打印真实值。新增脚本安全契约测试，确保后续改脚本不会引入破坏性 Docker 命令 ✅ 2026-06-05
 

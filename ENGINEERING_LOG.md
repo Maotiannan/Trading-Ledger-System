@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.176
-> 最后更新：2026-06-08
+> 当前版本：v1.0.177
+> 最后更新：2026-06-09
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail Export Pic` 样式分支安全移植：确认旧提交 `44721e0` 停留在 `feature/payment-detail-export-pic-style`，且该分支落后于 `main`，不能整分支合并。现只把 `src/lib/detail-export-image.ts` 与测试中的导出图样式改动移植到当前主线：日期、行号、底部 agent/records 改为主蓝色，表头新增主蓝底和白色标题，`ORDER NO` 列加粗，`Final` 与新增 `Full payment` 使用绿色徽章；首笔真实发票付款且付款后余额 `<= 5` 时分类为 `Full payment`。无新增数据库表、迁移、NAS/COS 路径或备份范围变更。补齐 `detail-export-image / detail-image-assets / detail route` 回归测试 ✅ 2026-06-09
 
 - [x] Dashboard 个人卡片布局设置落地：`UserPreference` 新增 `dashboardLayout` JSON 字段，复用 `/api/settings?view=user-preferences` 按账号读取和保存；新增 `dashboard-layout-preference` 共享注册表，集中定义 `summary / analysis / recent` 三个 section 与 8 个卡片，Settings 和 Dashboard 都只消费归一化后的布局，后续新增卡片必须先登记到该注册表。Dashboard 卡片右上角提供低干扰隐藏按钮，隐藏前中英文确认，空 section 自动不显示；Settings 新增 `Dashboard Settings` 折叠区，可调整 section/card 顺序和可见性。备份口径：该偏好只写 MySQL `UserPreference.dashboardLayout`，已纳入 `trading_ledger` dump，无新增 NAS/COS 媒体路径。补齐 schema/service/API/settings/dashboard 回归测试 ✅ 2026-06-08
 

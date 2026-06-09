@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.176
-> 最后更新：2026-06-08
+> 当前版本：v1.0.177
+> 最后更新：2026-06-09
 
 ## 当前状态
 
@@ -37,61 +37,65 @@
 - 工程类型检查和服务端日志完成进一步收口：隐式 any 已禁用，服务端日志统一结构化并自动脱敏
 - 本地日常更新已固化为一键安全重建：运行 `scripts/rebuild-local-app.sh` 即可重建 app、刷新维护服务并做基础健康检查
 - Dashboard 客户欠款排行保持简洁三列表格；点开客户可查看 `Released / In Transit` 分类订单，点开已放单发票号可查看该发票下订单明细
-- Dashboard 卡片支持按账号个性化：可在卡片右上角隐藏，也可在设置中恢复、调整显示顺序
+- Dashboard 卡片支持按账号个性化：可在设置中恢复、调整显示顺序
+- `Payment Detail Management` 导出付款明细图片已更新样式：日期、序号、底部说明改为蓝色，表头为蓝底白字，`Final / Full payment` 为绿色，`ORDER NO` 加粗
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- Payment Detail 导出图片样式更新：`Final` 和新增的 `Full payment` 使用绿色标识，表头改为蓝底白字，日期、序号、底部付款代理和记录数改为蓝色，`ORDER NO` 列加粗
+
+### 0.1 上一里程碑
 - Dashboard 新增个人卡片设置：每个账号都可以隐藏不常用卡片，并在 `Settings -> Dashboard Settings` 中恢复或调整卡片顺序
 - Dashboard 客户欠款排行弹窗新增已放单/运输中分类：外层排行保持 `ORDER_NAME / Unpaid Orders / Outstanding Total` 三列；弹窗中 `Released` 在上、`In Transit` 在下，并显示分类小计和已放单天数
 - Dashboard 已放单未结清发票的 `INV NO` 可点开查看该发票下所有 `ORDER_NAME / INV AMOUNT / OUT STANDING`，并按 `OUT STANDING` 从高到低排序
 
-### 0.1 上一里程碑
+### 0.2 上一里程碑
 - 本地一键安全重建脚本已落地，日常功能修复或小改动可以用统一流程重建，不再手工拼 Docker 命令
 
-### 0.2 上一里程碑
+### 0.3 上一里程碑
 - 代码审计第二轮工程收口完成：类型检查更严格，服务端日志更规范，敏感字段不会直接进入普通日志
 
-### 0.3 上一里程碑
+### 0.4 上一里程碑
 - 代码审计第一轮修复完成：安全配置、管理员初始化、限流、Dashboard 统计、订单匹配和关键余额计算已补自动化回归
 - CI、Docker 和本地启动脚本统一到 Node 22；未使用的 `next-auth` 依赖已移除
 - 上传 `.txt` 文件会检查真实文本内容，不再只看扩展名
 
-### 0.4 上一里程碑
+### 0.5 上一里程碑
 - README 已重新收口为用户可读说明，只保留系统用途、模块、流程、权限、数据安全和启动方式
 - 详细数据文件、上传目录和外部接口说明已移到 `docs/data-and-integrations.md`
 
-### 0.5 上一里程碑
+### 0.6 上一里程碑
 - 补齐 `Generate Signed Receipt` 的完整复合订单精确输入分支，例如直接输入 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 也会实时算出正确余额
 
-### 0.6 上一里程碑
+### 0.7 上一里程碑
 - 修复 `Generate Signed Receipt` 中复合订单显示旧余额的问题，例如 `PIKIN-19_B/PIKIN-19B/PIKIN-21` 会按真实已收款重新计算余额
 - 签名收据完成后会自动重算对应订单余额，避免后续页面继续读到旧余额
 - `SIGNING_PENDING` 待签名收据不再计入订单余额，未签完的临时记录不会影响客户欠款判断
 
-### 0.7 上一里程碑
+### 0.8 上一里程碑
 - `CONSIGNEE Management` 新增“设为默认”，可把任意一个收货人设为客户默认收货人
 - 删除 `CONSIGNEE` 改为小垃圾桶图标，减少弹窗占位
 
-### 0.8 上一里程碑
+### 0.9 上一里程碑
 - 修复客户管理新增 `CONSIGNEE` 失败后按钮一直转圈的问题
 - `CONSIGNEE` 现在支持长文本保存，系统使用哈希去重，不再因为内容过长被拒绝
 
-### 0.9 上一里程碑
+### 0.10 上一里程碑
 - 客户资料支持多个 `CONSIGNEE`，点击客户列表里的 `CONSIGNEE` 文本即可打开管理弹窗
 - 弹窗内可以新增或删除不同 `CONSIGNEE`，旧的主 `Customer.consignee` 字段继续保留用于历史兼容
 - 新增 `POST /api/customers/order-consignee/write`，外部系统可按 `ORDER NO` 写入对应客户的 `CONSIGNEE`，重复写入同一值会幂等成功
 
-### 0.10 上一里程碑
+### 0.11 上一里程碑
 - `Payment Detail Management` 的 `Export Pic` 图片中，`Deposit` 现在使用与 `Initial` 一致的蓝色文字和浅蓝底色
 - 每次点击 `Export Pic` 下载付款明细图片时，系统都会重新生成图片，并覆盖服务器端小眼睛预览图，避免旧图继续显示
 
-### 0.11 上一里程碑
+### 0.12 上一里程碑
 - `Payment Detail Management` 的 `Export Pic` 图片中，首笔付款如果关联的是定金收据，`TYPE` 列显示 `Deposit`
 - 非定金首笔仍显示 `Initial`；已结清规则和普通 `Standard` 规则保持不变
 - 导出图右上角日期改为浅蓝色，过长 `ORDER NO` 会在本列内自动换行，不再遮挡后续列
 
-### 0.12 上一里程碑
+### 0.13 上一里程碑
 - `Generate Signed Receipt` 的收据号重新从 `0010000` 起按 7 位编号递增
 - 收据号由后端事务内原子分配，弹窗只显示预览，不再允许前端手动改号，也不再按最近 10 条收据取最大值
 - `Payment Detail Management` 的小眼睛对所有付款明细可用：无上传图的明细会自动生成并保存 `Export Pic` 图片，有上传图的明细会统一按金额、日期和付款代理重命名
@@ -99,59 +103,59 @@
 - 所有主要搜索框支持按 Enter 强制搜索，包含客户、账单、收据、付款明细、SWIFT、Orders、Approval 及弹窗内搜索
 - 原有输入时自动搜索和点击查询逻辑保持不变，Enter 只补充一次当前输入值的主动查询
 
-### 0.11 上一里程碑
+### 0.14 上一里程碑
 - `Create Payment Detail Directly` 中 `Manual detail rows` 标题本身就是展开入口
 - 已移除额外的灰色说明文字和单独的 `Expand manual rows` 按钮，减少弹窗里的重复控件
 
-### 0.12 上一里程碑
+### 0.15 上一里程碑
 - `Create Payment Detail Directly` 弹窗在日期下方新增 `AGENT` 选择，只显示系统已维护付款代理的 `company name`
 - 通过该弹窗创建的付款明细会保存付款代理，并在 `Payment Detail - 日期` 卡片右侧显示对应公司名
 - `Manual detail rows` 默认折叠，手机端先展示更短的选择区；需要手动补录时点击展开再添加明细行
 
-### 0.13 上一里程碑
+### 0.16 上一里程碑
 - `Create Payment Detail Directly` 弹窗已改为手机友好的三段式布局：顶部标题、可滚动内容、底部固定操作区
 - 底部操作区新增 `Total` 总计，自动汇总已勾选收据和手动新增明细行的金额
 - 手机浏览器中 `Cancel / Create` 按钮保持在弹窗底部可见，不再被收据列表挤出边框
 
-### 0.14 上一里程碑
+### 0.17 上一里程碑
 - 新增 `POST /api/sync/customers/by-orders`，外部 agent 可批量提交多个 `ORDER NO` 查询客户资料
 - 接口返回客户名称、显示名称、地址、电话、CONSIGNEE、MARK、ORDER_NAME 列表、信用额度等客户相关字段
 - 匹配规则复用系统现有规则：优先财务订单精确/别名/复合订单命中，匹配不到再按 `ORDER_NAME` 忽略空格规则推导
 
-### 0.15 上一里程碑
+### 0.18 上一里程碑
 - 重复 `Receipt No.` 保存失败时，系统会提示“收据号已存在，请换一个编号”，不再只显示 `Server error`
 
-### 0.16 上一里程碑
+### 0.19 上一里程碑
 - `Create Payment Detail Directly` 的可加入收据列表已精简为只显示 `ORDER NO` 和收据金额，减少手机端信息拥挤
 - 收据搜索框同步改为按 `ORDER NO` 搜索，避免显示字段和搜索口径不一致
 
-### 0.17 上一里程碑
+### 0.20 上一里程碑
 - `Payment Detail Management -> Create Payment Detail Directly` 支持勾选 `SR_Received` 收据直接加入同一张付款明细
 - 手动新增明细行仍保留；勾选收据为只读行，后端提交时会再次确认收据状态仍可加入
 - 直接创建弹窗已优化手机和桌面布局：收据列表可搜索、可滚动，底部操作按钮固定可见
 
-### 0.18 上一里程碑
+### 0.21 上一里程碑
 - `Receipt Management` 右上角动作按钮顺序调整为 `Create Directly -> Generate Signed Receipt -> Upload Receipt`，仅调整视觉排序，不改变权限或弹窗逻辑
 - `Payment Detail Management -> Payment Agent Management` 中点击 `New / 新增` 会进入空白新建表单
 - 付款代理管理弹窗桌面端使用稳定两栏布局，右侧信息和附件区独立滚动，减少被截断的问题
 
-### 0.19 上一里程碑
+### 0.22 上一里程碑
 - 新增 `GET /api/sync/customers?since=<cursor>`，用于外部系统增量同步客户资料
 - 同步返回 `customers / deleted / disabled / nextCursor / hasMore`；当前系统没有停用客户字段，`disabled` 暂为空数组
 - 删除客户由于系统当前是硬删除，会从审计日志生成 `DELETED` 标记，确保外部系统能删除本地缓存
 - 接口沿用现有权限范围：`ADMIN` 同步全部客户，`SALES` 同步自己绑定范围，`USER` 不开放
 
-### 0.20 上一里程碑
+### 0.23 上一里程碑
 - `Orders / 订单管理` 页面只保留用户可操作信息，不再展示“不影响财务匹配”等工程说明
 - 新建订单弹窗和订单列表对超长客户名做截断与悬停完整提示，手机和桌面弹窗不会被长文本撑宽
 - 菜单、标题、按钮、表头、状态、空状态和保存提示完成中文化
 
-### 0.21 上一里程碑
+### 0.24 上一里程碑
 - `Orders` 页面已新增独立业务订单跟踪表，不参与发票、收据、余额等财务匹配逻辑
 - 新建 `ORDER` 时会查重财务订单和别名，已存在则拒绝创建
 - `DEPOSIT` 自动按对应收据/定金池汇总展示；`PI STATUS / SYSTEM NOTED` 仅上级 `ADMIN` 可维护
 
-### 0.22 上一里程碑
+### 0.25 上一里程碑
 - `Receipt Management` 中已完成的收据可重新绑定到正确订单和发票
 - 重绑后关联的付款明细行会同步显示新的 `ORDER NO / MARK`
 - 订单余额会自动按旧订单和新订单重新计算，已签收状态不会被回退

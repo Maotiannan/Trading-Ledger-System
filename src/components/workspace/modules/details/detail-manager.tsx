@@ -31,6 +31,10 @@ import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 import type { DetailDirectSelectableReceipt, PaymentAgentSummary } from './types';
 import { Building2, Plus, Upload } from 'lucide-react';
 
+function formatDetailPreviewImageName(name: string) {
+  return name.replace(/^payment-detail(?=[_.-])/i, 'Payment-Detail');
+}
+
 export function DetailManager() {
   const tx = useUiText();
   const locale = useLocale();
@@ -429,7 +433,7 @@ export function DetailManager() {
         onViewImage={(detail) => {
           setViewingImage({
             url: `/api/detail?action=preview-image&detailId=${encodeURIComponent(detail.id)}`,
-            name: detail.imageName || tx('付款明细图片', 'Payment detail image'),
+            name: detail.imageName ? formatDetailPreviewImageName(detail.imageName) : tx('付款明细图片', 'Payment detail image'),
           });
         }}
         onEditDetail={openEditDialog}

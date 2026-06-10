@@ -235,6 +235,84 @@ describe('DetailManager', () => {
     expect(screen.getByTestId('detail-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
   });
 
+  it('shows generated payment detail preview names with Payment-Detail title casing', async () => {
+    const setViewingImage = jest.fn();
+    mockUseDetailForms.mockReturnValue({
+      showUpload: false,
+      showDirectCreate: false,
+      ocrResult: null,
+      setOcrResult: jest.fn(),
+      imagePreview: null,
+      setImagePreview: jest.fn(),
+      selectedFile: null,
+      setSelectedFile: jest.fn(),
+      error: null,
+      setError: jest.fn(),
+      savedImagePath: null,
+      setSavedImagePath: jest.fn(),
+      ocrUploadStatus: 'idle',
+      setOcrUploadStatus: jest.fn(),
+      ocrUploadMessage: null,
+      setOcrUploadMessage: jest.fn(),
+      ocrUploadProgress: null,
+      setOcrUploadProgress: jest.fn(),
+      directDate: '2026-05-05',
+      setDirectDate: jest.fn(),
+      directSelectedReceiptIds: [],
+      setDirectSelectedReceiptIds: jest.fn(),
+      directItems: [{ mark: 'MAB-1', orderNo: 'MAB-1-01', amount: '120' }],
+      setDirectItems: jest.fn(),
+      expandedDetails: new Set(),
+      viewingImage: null,
+      setViewingImage,
+      handleShowUploadChange: jest.fn(),
+      handleShowDirectCreateChange: jest.fn(),
+      toggleDetail: jest.fn(),
+      resetDirectForm: jest.fn(),
+    });
+    mockUseStore.mockReturnValue({
+      details: [
+        {
+          id: 'detail-1',
+          agentId: 'agent-1',
+          date: '2026-05-04T00:00:00.000Z',
+          status: 'Waiting_SWIFT',
+          imageUrl: '/uploads/details/payment-detail_120_2026-05-04_mitty-group.jpg',
+          imageName: 'payment-detail_120_2026-05-04_mitty-group.jpg',
+          totalAmount: 120,
+          createdAt: '2026-05-04T00:00:00.000Z',
+          creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+          items: [],
+        },
+      ],
+      setDetails: jest.fn(),
+      user: { role: 'ADMIN' },
+    });
+
+    await act(async () => {
+      render(<DetailManager />);
+    });
+
+    const detailListProps = (globalThis as { __detailListProps?: DetailListProps }).__detailListProps;
+    detailListProps?.onViewImage({
+      id: 'detail-1',
+      agentId: 'agent-1',
+      date: '2026-05-04T00:00:00.000Z',
+      status: 'Waiting_SWIFT',
+      imageUrl: '/uploads/details/payment-detail_120_2026-05-04_mitty-group.jpg',
+      imageName: 'payment-detail_120_2026-05-04_mitty-group.jpg',
+      totalAmount: 120,
+      createdAt: '2026-05-04T00:00:00.000Z',
+      creator: { id: 'sales-1', name: 'Sales', email: 'sales@example.com' },
+      items: [],
+    } as never);
+
+    expect(setViewingImage).toHaveBeenCalledWith({
+      url: '/api/detail?action=preview-image&detailId=detail-1',
+      name: 'Payment-Detail_120_2026-05-04_mitty-group.jpg',
+    });
+  });
+
   it('loads SR_Received receipts when direct create opens and passes them into the dialog', async () => {
     mockUseDetailForms.mockReturnValue({
       showUpload: false,

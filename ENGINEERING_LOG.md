@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.177
-> 最后更新：2026-06-09
+> 当前版本：v1.0.178
+> 最后更新：2026-06-10
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Payment Detail Management` 图片预览标题规范化：小眼睛预览弹窗对 `payment-detail_...` 形式的历史/生成图片名称仅在显示层转换为 `Payment-Detail_...`；不修改数据库 `imageName/imageUrl`、NAS 真实文件名或路径，也不影响预览接口和下载。补齐 DetailManager 红绿回归测试 ✅ 2026-06-10
 
 - [x] `Payment Detail Export Pic` 样式分支安全移植：确认旧提交 `44721e0` 停留在 `feature/payment-detail-export-pic-style`，且该分支落后于 `main`，不能整分支合并。现只把 `src/lib/detail-export-image.ts` 与测试中的导出图样式改动移植到当前主线：日期、行号、底部 agent/records 改为主蓝色，表头新增主蓝底和白色标题，`ORDER NO` 列加粗，`Final` 与新增 `Full payment` 使用绿色徽章；首笔真实发票付款且付款后余额 `<= 5` 时分类为 `Full payment`。无新增数据库表、迁移、NAS/COS 路径或备份范围变更。补齐 `detail-export-image / detail-image-assets / detail route` 回归测试 ✅ 2026-06-09
 

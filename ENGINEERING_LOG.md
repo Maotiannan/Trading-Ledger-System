@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.179
+> 当前版本：v1.0.180
 > 最后更新：2026-06-22
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 签名收据底部签名行模板固化：将用户通过 `tools/receipt-signature-row-layout-editor.html` 导出的 `RECEIPT_SIGNATURE_ROW_LAYOUT` 写入 `template-geometry.ts`，并让 `receipt-canvas.tsx` 的 `Reçu par / Signature / Signature du payeur` 文本、签名图片与下划线全部从该布局常量读取；新增画布回归测试断言正式导出图按确认坐标绘制。无数据库、NAS/COS 路径或备份范围变更。测试：`npm test -- --runInBand src/components/workspace/modules/receipts/generator/template-geometry.test.ts src/components/workspace/modules/receipts/generator/receipt-canvas.test.tsx` ✅ 2026-06-22
 
 - [x] 签名收据底部签名行可视化排版工具：新增 `tools/receipt-signature-row-layout-editor.html`，用于在浏览器中拖拽/缩放 `Reçu par / Signature / Signature du payeur` 这一行的文本、签名样例和下划线，并导出 `RECEIPT_SIGNATURE_ROW_LAYOUT` JSON；新增 `tools/receipt-signature-row-layout-editor.contract.mjs` 做静态契约测试，确保后续 agent 不会改丢关键图层和导出入口。本次只新增本地辅助工具，未改正式收据模板、数据库、NAS/COS 路径或 Docker 服务。测试：`node tools/receipt-signature-row-layout-editor.contract.mjs` ✅ 2026-06-22
 

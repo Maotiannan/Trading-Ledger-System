@@ -7,7 +7,7 @@ import {
   RECEIPT_TEMPLATE_CANVAS,
   RECEIPT_TEMPLATE_HEADER_GRID,
   RECEIPT_TEMPLATE_LOGO_BLOCKS,
-  RECEIPT_TEMPLATE_SIGNATURE_SLOTS,
+  RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT,
   RECEIPT_TEMPLATE_TEXT_REGIONS,
   RECEIPT_TEMPLATE_WATERMARK,
 } from './template-geometry';
@@ -243,6 +243,51 @@ function drawLine(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: num
   ctx.stroke();
 }
 
+type SignatureRowTextLayer = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  fontSize: number;
+  fontWeight: number;
+  text: string;
+};
+
+type SignatureRowBoxLayer = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+function getSignatureRowLayerRect(rowLeft: number, rowTop: number, layer: SignatureRowBoxLayer) {
+  return {
+    x: rowLeft + layer.x,
+    y: rowTop + layer.y,
+    w: layer.w,
+    h: layer.h,
+  };
+}
+
+function getSignatureRowLayerBottom(layer: SignatureRowBoxLayer) {
+  return layer.y + layer.h;
+}
+
+function drawSignatureRowText(
+  ctx: CanvasRenderingContext2D,
+  rowLeft: number,
+  rowTop: number,
+  layer: SignatureRowTextLayer,
+  text: string,
+  options: { italic?: boolean } = {},
+) {
+  const rect = getSignatureRowLayerRect(rowLeft, rowTop, layer);
+  ctx.textAlign = 'left';
+  ctx.font = `${options.italic ? 'italic ' : ''}${layer.fontWeight} ${layer.fontSize}px Times New Roman`;
+  ctx.fillStyle = options.italic ? '#333333' : '#1a1a2e';
+  ctx.fillText(text, rect.x, rect.y);
+}
+
 async function drawReceiptCanvas(
   canvas: HTMLCanvasElement,
   layout: ReceiptGeneratorLayoutData,
@@ -286,7 +331,6 @@ async function drawReceiptCanvas(
   const amountBoxHeight = 28;
   const detailPaddingX = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight;
   const detailPaddingY = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.topBottom;
-  const signatureLabelGap = 18;
 
   const prepareContext = () => {
     ctx = getContext();
@@ -357,26 +401,16 @@ async function drawReceiptCanvas(
     measuredY = nextLineY + 7;
   });
   const receiverBlockY = measuredY + 10;
-  const receiverSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm);
-  const receiverSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm);
-  const payerSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm);
-  const payerSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm);
-  ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
-  const payerSigX = detailX + detailWidth - detailPaddingX - payerSigWidth;
-  const receiverSigX = Math.min(
-    payerSigX - 24 - receiverSigWidth,
-    detailInnerX + Math.max(180, ctx.measureText(layout.receivedBy).width + 48),
+  const signatureRowLeft = detailX;
+  const signatureRowTop = receiverBlockY - RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT.layers.receiverLabel.y;
+  const signatureRowBottom = signatureRowTop + Math.max(
+    ...Object.values(RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT.layers).map(getSignatureRowLayerBottom),
   );
-  const receiverSigTop = receiverBlockY + 8;
-  const receiverTextBottom = receiverBlockY + 20 + ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt);
-  const receiverSigBottom = receiverSigTop + receiverSigHeight + 1;
-  const payerSigTop = receiverBlockY + signatureLabelGap;
-  const payerBottom = payerSigTop + payerSigHeight + 1;
-  const detailHeight = Math.max(receiverTextBottom, receiverSigBottom, payerBottom) + detailPaddingY + 4 - detailY;
+  const detailHeight = signatureRowBottom + detailPaddingY + 4 - detailY;
 
   const requiredHeight = Math.max(
     RECEIPT_TEMPLATE_CANVAS.height,
-    Math.ceil(payerBottom + padding.bottom + 4),
+    Math.ceil(signatureRowBottom + padding.bottom + 4),
   );
 
   if (requiredHeight !== canvas.height) {
@@ -545,40 +579,34 @@ async function drawReceiptCanvas(
     rightValue: layout.paymentMode || 'Cash',
   });
 
-  ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
-  ctx.fillStyle = '#333333';
-  ctx.fillText('Reçu par :', detailInnerX, receiverBlockY);
-  ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
-  ctx.fillStyle = '#1a1a2e';
-  ctx.fillText(layout.receivedBy, detailInnerX, receiverBlockY + 20);
-
-  ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
-  ctx.fillStyle = '#333333';
-  ctx.textAlign = 'left';
-  ctx.fillText('Signature :', receiverSigX, receiverBlockY);
+  const signatureLayers = RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT.layers;
+  drawSignatureRowText(ctx, signatureRowLeft, signatureRowTop, signatureLayers.receiverLabel, signatureLayers.receiverLabel.text, { italic: true });
+  drawSignatureRowText(ctx, signatureRowLeft, signatureRowTop, signatureLayers.receiverName, layout.receivedBy);
+  drawSignatureRowText(ctx, signatureRowLeft, signatureRowTop, signatureLayers.receiverSignatureLabel, signatureLayers.receiverSignatureLabel.text, { italic: true });
+  const receiverSignatureRect = getSignatureRowLayerRect(signatureRowLeft, signatureRowTop, signatureLayers.receiverSignature);
   if (receiverSignatureSource) {
-    ctx.drawImage(receiverSignatureSource, receiverSigX, receiverSigTop, receiverSigWidth, receiverSigHeight);
+    ctx.drawImage(
+      receiverSignatureSource,
+      receiverSignatureRect.x,
+      receiverSignatureRect.y,
+      receiverSignatureRect.w,
+      receiverSignatureRect.h,
+    );
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
-  drawLine(
-    ctx,
-    receiverSigX,
-    receiverSigTop + receiverSigHeight,
-    receiverSigX + receiverSigWidth,
-    receiverSigTop + receiverSigHeight,
-  );
+  const receiverLineRect = getSignatureRowLayerRect(signatureRowLeft, signatureRowTop, signatureLayers.receiverLine);
+  drawLine(ctx, receiverLineRect.x, receiverLineRect.y, receiverLineRect.x + receiverLineRect.w, receiverLineRect.y);
 
-  ctx.textAlign = 'right';
-  ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
-  ctx.fillStyle = '#333333';
-  ctx.fillText('Signature du payeur :', payerSigX + payerSigWidth, receiverBlockY);
+  drawSignatureRowText(ctx, signatureRowLeft, signatureRowTop, signatureLayers.payerSignatureLabel, signatureLayers.payerSignatureLabel.text, { italic: true });
+  const payerSignatureRect = getSignatureRowLayerRect(signatureRowLeft, signatureRowTop, signatureLayers.payerSignature);
   if (payerSignatureSource) {
-    ctx.drawImage(payerSignatureSource, payerSigX, payerSigTop, payerSigWidth, payerSigHeight);
+    ctx.drawImage(payerSignatureSource, payerSignatureRect.x, payerSignatureRect.y, payerSignatureRect.w, payerSignatureRect.h);
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
-  drawLine(ctx, payerSigX, payerSigTop + payerSigHeight, payerSigX + payerSigWidth, payerSigTop + payerSigHeight);
+  const payerLineRect = getSignatureRowLayerRect(signatureRowLeft, signatureRowTop, signatureLayers.payerLine);
+  drawLine(ctx, payerLineRect.x, payerLineRect.y, payerLineRect.x + payerLineRect.w, payerLineRect.y);
   ctx.textAlign = 'left';
 }
 

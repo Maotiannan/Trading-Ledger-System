@@ -5,6 +5,7 @@ import {
   RECEIPT_TEMPLATE_LOGO_BLOCKS,
   RECEIPT_TEMPLATE_TEXT_REGIONS,
   RECEIPT_TEMPLATE_SIGNATURE_SLOTS,
+  RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT,
   RECEIPT_TEMPLATE_WATERMARK,
 } from '@/components/workspace/modules/receipts/generator/template-geometry';
 
@@ -95,6 +96,22 @@ describe('receipt generator approved template freeze', () => {
         heightMm: 17,
         offsetMm: { x: 0, y: 0 },
         placement: 'below-detail-box',
+      },
+    });
+
+    expect(RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT).toEqual({
+      schema: 'RECEIPT_SIGNATURE_ROW_LAYOUT',
+      version: 1,
+      stage: { width: 704, height: 112 },
+      layers: {
+        receiverLabel: { x: 12, y: 22, w: 88, h: 20, fontSize: 18, fontWeight: 400, text: 'Reçu par :' },
+        receiverName: { x: 12, y: 55, w: 250, h: 24, fontSize: 19, fontWeight: 700, text: 'Transferred via bank account' },
+        receiverSignatureLabel: { x: 280, y: 22, w: 98, h: 20, fontSize: 18, fontWeight: 400, text: 'Signature :' },
+        receiverSignature: { x: 280, y: 50, w: 196, h: 45 },
+        receiverLine: { x: 280, y: 100, w: 200, h: 1 },
+        payerSignatureLabel: { x: 490, y: 22, w: 170, h: 20, fontSize: 18, fontWeight: 400, text: 'Signature du payeur :' },
+        payerSignature: { x: 490, y: 50, w: 200, h: 46 },
+        payerLine: { x: 490, y: 100, w: 200, h: 1 },
       },
     });
   });

@@ -261,6 +261,58 @@ describe('ReceiptCanvas', () => {
     expect(payerSignatureX).toBeGreaterThan(450);
   });
 
+  it('uses the approved interactive signature row layout for labels, signatures, and underline positions', async () => {
+    const ref = createRef<ReceiptCanvasHandle>();
+
+    render(
+      <ReceiptCanvas
+        ref={ref}
+        layout={{
+          ...layout,
+          receivedBy: 'Transferred via bank account',
+        }}
+        receiverSignature="data:image/png;base64,receiver"
+        payerSignature="data:image/png;base64,payer"
+      />,
+    );
+
+    await ref.current?.exportBlob();
+
+    const recuParCall = fillTextCalls.find((call) => call.text === 'Reçu par :');
+    const receivedByCall = fillTextCalls.find((call) => call.text === 'Transferred via bank account');
+    const signatureCall = fillTextCalls.find((call) => call.text === 'Signature :');
+    const payerLabelCall = fillTextCalls.find((call) => call.text === 'Signature du payeur :');
+    expect(recuParCall).toBeDefined();
+    expect(receivedByCall).toBeDefined();
+    expect(signatureCall).toBeDefined();
+    expect(payerLabelCall).toBeDefined();
+
+    const rowTop = recuParCall!.y - 22;
+    expect(receivedByCall!.x).toBe(recuParCall!.x);
+    expect(receivedByCall!.y).toBe(rowTop + 55);
+    expect(signatureCall!.x - recuParCall!.x).toBe(268);
+    expect(signatureCall!.y).toBe(recuParCall!.y);
+    expect(payerLabelCall!.x - recuParCall!.x).toBe(478);
+    expect(payerLabelCall!.y).toBe(recuParCall!.y);
+
+    const signatureImageCalls = drawImage.mock.calls.slice(-2);
+    expect(Number(signatureImageCalls[0][1]) - recuParCall!.x).toBe(268);
+    expect(Number(signatureImageCalls[0][2])).toBe(rowTop + 50);
+    expect(Number(signatureImageCalls[0][3])).toBe(196);
+    expect(Number(signatureImageCalls[0][4])).toBe(45);
+    expect(Number(signatureImageCalls[1][1]) - recuParCall!.x).toBe(478);
+    expect(Number(signatureImageCalls[1][2])).toBe(rowTop + 50);
+    expect(Number(signatureImageCalls[1][3])).toBe(200);
+    expect(Number(signatureImageCalls[1][4])).toBe(46);
+
+    const receiverLine = strokeSegments.find((segment) => segment.from.x === recuParCall!.x + 268 && segment.to.x === recuParCall!.x + 468);
+    const payerLine = strokeSegments.find((segment) => segment.from.x === recuParCall!.x + 478 && segment.to.x === recuParCall!.x + 678);
+    expect(receiverLine?.from.y).toBe(rowTop + 100);
+    expect(receiverLine?.to.y).toBe(rowTop + 100);
+    expect(payerLine?.from.y).toBe(rowTop + 100);
+    expect(payerLine?.to.y).toBe(rowTop + 100);
+  });
+
   it('keeps amount label gaps and body values attached to each row label colon', async () => {
     const ref = createRef<ReceiptCanvasHandle>();
 

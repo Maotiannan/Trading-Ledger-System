@@ -8,7 +8,7 @@
 
 ## P0（本周必须完成）
 
-- [x] 签名收据底部签名行可视化排版工具：新增 `tools/receipt-signature-row-layout-editor.html`，用于在浏览器中拖拽/缩放 `Reçu par / Signature / Signature du payeur` 这一行的文本、签名样例和下划线，并导出 `RECEIPT_SIGNATURE_ROW_LAYOUT` JSON；新增 `tools/receipt-signature-row-layout-editor.test.mjs` 做静态契约测试，确保后续 agent 不会改丢关键图层和导出入口。本次只新增本地辅助工具，未改正式收据模板、数据库、NAS/COS 路径或 Docker 服务。测试：`node tools/receipt-signature-row-layout-editor.test.mjs` ✅ 2026-06-22
+- [x] 签名收据底部签名行可视化排版工具：新增 `tools/receipt-signature-row-layout-editor.html`，用于在浏览器中拖拽/缩放 `Reçu par / Signature / Signature du payeur` 这一行的文本、签名样例和下划线，并导出 `RECEIPT_SIGNATURE_ROW_LAYOUT` JSON；新增 `tools/receipt-signature-row-layout-editor.contract.mjs` 做静态契约测试，确保后续 agent 不会改丢关键图层和导出入口。本次只新增本地辅助工具，未改正式收据模板、数据库、NAS/COS 路径或 Docker 服务。测试：`node tools/receipt-signature-row-layout-editor.contract.mjs` ✅ 2026-06-22
 
 - [x] `Generate Signed Receipt` 付款类型与签名布局收口：弹窗新增 `Payment Type`（`Deposit / Full / Initial / Standard / Final`，默认 `Standard`）和 `Reçu par`（默认 `Mamadou Dian Diallo`，可选 `Transferred via bank account`）；后端创建签名 session 时标准化写入 `layoutSnapshot`，`Deposit` 会在事务内写入 `Receipt.isDeposit=true`，并把 `Reste à payer` 留空、`balanceAfter` 置空，避免定金收据进入普通余额公式。导出画布改为电话单行缩放、金额大写首字母大写，接收方签名移到收款人区域中部，付款方签名移到原接收方签名位置。补齐 receipt-generator layout/service/route/read/hook/dialog/canvas 回归测试 ✅ 2026-06-22
 

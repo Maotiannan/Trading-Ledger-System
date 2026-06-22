@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Receipt Signature Row Layout Editor</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M8 10h16M8 16h16M8 22h10' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --ink: #1a1a2e;
+      --muted: #667085;
+      --line: #555;
+      --panel: #ffffff;
+      --paper: #fbfbf7;
+      --blue: #2563eb;
+      --blue-soft: #e8f0ff;
+      --border: #d8dee9;
+      --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(37, 99, 235, 0.12), transparent 26rem),
+        linear-gradient(135deg, #f5f7fb 0%, #eef2f7 100%);
+      color: #111827;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    header {
+      padding: 22px clamp(16px, 4vw, 44px) 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(22px, 3vw, 34px);
+      letter-spacing: -0.03em;
+    }
+
+    .hint {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      padding: 14px clamp(16px, 4vw, 44px) 32px;
+    }
+
+    .workspace,
+    .panel {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .workspace {
+      padding: 18px;
+      overflow: auto;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .toolbar-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button,
+    select,
+    input,
+    textarea {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fff;
+      color: #111827;
+      font: inherit;
+    }
+
+    button {
+      padding: 9px 12px;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: #9db6f9;
+      background: var(--blue-soft);
+    }
+
+    .primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .primary:hover {
+      background: #1d4ed8;
+      color: #fff;
+    }
+
+    label {
+      display: grid;
+      gap: 5px;
+      color: #344054;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input,
+    select {
+      min-height: 38px;
+      padding: 8px 10px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 190px;
+      padding: 12px;
+      resize: vertical;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      tab-size: 2;
+    }
+
+    .stage-wrap {
+      min-width: 760px;
+      padding: 24px;
+      border-radius: 16px;
+      background:
+        linear-gradient(90deg, rgba(148, 163, 184, 0.16) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(148, 163, 184, 0.16) 1px, transparent 1px),
+        #e9eef6;
+      background-size: 20px 20px;
+    }
+
+    .receipt-stage {
+      position: relative;
+      width: 704px;
+      height: 112px;
+      transform-origin: top left;
+      overflow: hidden;
+      border: 2px solid #1a1a2e;
+      background: var(--paper);
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+      user-select: none;
+    }
+
+    .receipt-stage::before {
+      content: "PIKIN";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(92, 92, 166, 0.08);
+      font-family: "Times New Roman", Times, serif;
+      font-size: 92px;
+      font-weight: 900;
+      pointer-events: none;
+    }
+
+    .layer {
+      position: absolute;
+      min-width: 4px;
+      min-height: 4px;
+      outline: 1px dashed transparent;
+      cursor: move;
+      white-space: nowrap;
+    }
+
+    .layer.selected {
+      outline-color: var(--blue);
+      background: rgba(37, 99, 235, 0.08);
+    }
+
+    .text-layer {
+      color: var(--ink);
+      font-family: "Times New Roman", Times, serif;
+      line-height: 1.05;
+    }
+
+    .label-layer {
+      color: #333;
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .name-layer {
+      font-weight: 700;
+    }
+
+    .signature-layer svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .signature-layer path {
+      fill: none;
+      stroke: #111;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2.2;
+    }
+
+    .line-layer {
+      border-top: 1px solid var(--line);
+      height: 1px;
+    }
+
+    .resize-handle {
+      position: absolute;
+      right: -5px;
+      bottom: -5px;
+      width: 10px;
+      height: 10px;
+      border: 1px solid var(--blue);
+      border-radius: 50%;
+      background: #fff;
+      cursor: nwse-resize;
+      display: none;
+    }
+
+    .selected .resize-handle {
+      display: block;
+    }
+
+    .panel {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .small-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .status {
+      min-height: 18px;
+      color: #047857;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1060px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        order: -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Receipt Signature Row Layout Editor</h1>
+    <p class="hint">拖动元素调整位置；拖右下角圆点调整大小；选中后可用方向键微调。摆好后复制 JSON 发给我，我会按这个模板固化系统收据。</p>
+  </header>
+
+  <main>
+    <section class="workspace" aria-label="layout workspace">
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <label>
+            Zoom
+            <input id="zoom" type="range" min="0.75" max="1.6" step="0.05" value="1" />
+          </label>
+          <button id="reset-layout" type="button">Reset</button>
+          <button id="copy-config" type="button" class="primary">Copy JSON</button>
+          <button id="download-config" type="button">Download JSON</button>
+        </div>
+        <div class="small-note">坐标单位：px；编辑区域宽 704，高 112，对应收据底部签名行。</div>
+      </div>
+
+      <div class="stage-wrap">
+        <div id="receipt-stage" class="receipt-stage">
+          <div class="layer text-layer label-layer" data-layer="receiverLabel">Reçu par :<span class="resize-handle"></span></div>
+          <div class="layer text-layer name-layer" data-layer="receiverName">Transferred via bank account<span class="resize-handle"></span></div>
+          <div class="layer text-layer label-layer" data-layer="receiverSignatureLabel">Signature :<span class="resize-handle"></span></div>
+          <div class="layer signature-layer" data-layer="receiverSignature" aria-label="receiver signature sample">
+            <svg viewBox="0 0 220 70" preserveAspectRatio="none"><path d="M8,42 C35,12 62,11 92,52 C115,76 150,27 212,8" /></svg>
+            <span class="resize-handle"></span>
+          </div>
+          <div class="layer line-layer" data-layer="receiverLine"><span class="resize-handle"></span></div>
+          <div class="layer text-layer label-layer" data-layer="payerSignatureLabel">Signature du payeur :<span class="resize-handle"></span></div>
+          <div class="layer signature-layer" data-layer="payerSignature" aria-label="payer signature sample">
+            <svg viewBox="0 0 250 70" preserveAspectRatio="none"><path d="M8,38 C52,18 84,9 126,52 C160,84 193,25 244,6" /></svg>
+            <span class="resize-handle"></span>
+          </div>
+          <div class="layer line-layer" data-layer="payerLine"><span class="resize-handle"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <h2>Selected Layer</h2>
+      <label>
+        Layer
+        <select id="layer-select"></select>
+      </label>
+
+      <div class="field-grid">
+        <label>X <input id="control-x" type="number" step="1" /></label>
+        <label>Y <input id="control-y" type="number" step="1" /></label>
+        <label>W <input id="control-w" type="number" step="1" /></label>
+        <label>H <input id="control-h" type="number" step="1" /></label>
+        <label>Font <input id="control-font" type="number" step="1" /></label>
+        <label>Weight <input id="control-weight" type="number" step="100" /></label>
+        <label class="wide">Text <input id="control-text" type="text" /></label>
+      </div>
+
+      <div class="toolbar-group">
+        <button id="bring-front" type="button">Bring Front</button>
+        <button id="send-back" type="button">Send Back</button>
+        <button id="apply-import" type="button">Apply JSON</button>
+      </div>
+
+      <textarea id="config-output" spellcheck="false" aria-label="RECEIPT_SIGNATURE_ROW_LAYOUT JSON"></textarea>
+      <div id="status" class="status" role="status"></div>
+      <p class="small-note">如果你只想摆位置：拖动元素即可。需要精确时再改右侧数字。JSON 里的 `layers` 就是后续固化到系统模板的依据。</p>
+    </aside>
+  </main>
+
+  <script>
+    const DEFAULT_CONFIG = {
+      schema: 'RECEIPT_SIGNATURE_ROW_LAYOUT',
+      version: 1,
+      stage: { width: 704, height: 112 },
+      layers: {
+        receiverLabel: { x: 12, y: 22, w: 88, h: 20, fontSize: 18, fontWeight: 400, text: 'Reçu par :' },
+        receiverName: { x: 12, y: 43, w: 250, h: 24, fontSize: 21, fontWeight: 700, text: 'Transferred via bank account' },
+        receiverSignatureLabel: { x: 242, y: 22, w: 98, h: 20, fontSize: 18, fontWeight: 400, text: 'Signature :' },
+        receiverSignature: { x: 244, y: 45, w: 196, h: 45 },
+        receiverLine: { x: 244, y: 88, w: 198, h: 1 },
+        payerSignatureLabel: { x: 522, y: 22, w: 170, h: 20, fontSize: 18, fontWeight: 400, text: 'Signature du payeur :' },
+        payerSignature: { x: 466, y: 48, w: 230, h: 46 },
+        payerLine: { x: 466, y: 100, w: 230, h: 1 },
+      },
+    };
+
+    const stage = document.getElementById('receipt-stage');
+    const output = document.getElementById('config-output');
+    const statusEl = document.getElementById('status');
+    const layerSelect = document.getElementById('layer-select');
+    const controls = {
+      x: document.getElementById('control-x'),
+      y: document.getElementById('control-y'),
+      w: document.getElementById('control-w'),
+      h: document.getElementById('control-h'),
+      fontSize: document.getElementById('control-font'),
+      fontWeight: document.getElementById('control-weight'),
+      text: document.getElementById('control-text'),
+    };
+
+    let config = structuredClone(DEFAULT_CONFIG);
+    let selectedLayer = 'receiverSignature';
+    let dragState = null;
+
+    const layerEls = Array.from(stage.querySelectorAll('[data-layer]'));
+    const layerMap = Object.fromEntries(layerEls.map((el) => [el.dataset.layer, el]));
+
+    function round(value) {
+      return Math.round(Number(value) || 0);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+      if (message) {
+        window.clearTimeout(setStatus.timer);
+        setStatus.timer = window.setTimeout(() => {
+          statusEl.textContent = '';
+        }, 1800);
+      }
+    }
+
+    function exportConfig() {
+      output.value = JSON.stringify(config, null, 2);
+      return config;
+    }
+
+    function applyLayerStyle(name) {
+      const layer = config.layers[name];
+      const el = layerMap[name];
+      if (!layer || !el) return;
+
+      el.style.left = `${layer.x}px`;
+      el.style.top = `${layer.y}px`;
+      el.style.width = `${layer.w}px`;
+      el.style.height = `${layer.h}px`;
+      el.style.zIndex = String(layer.z || 1);
+
+      if (el.classList.contains('text-layer')) {
+        el.childNodes[0].nodeValue = layer.text || '';
+        el.style.fontSize = `${layer.fontSize || 18}px`;
+        el.style.fontWeight = String(layer.fontWeight || 400);
+      }
+    }
+
+    function applyConfig(nextConfig) {
+      if (!nextConfig || nextConfig.schema !== 'RECEIPT_SIGNATURE_ROW_LAYOUT') {
+        throw new Error('JSON schema must be RECEIPT_SIGNATURE_ROW_LAYOUT');
+      }
+      config = structuredClone(nextConfig);
+      for (const name of Object.keys(config.layers)) {
+        applyLayerStyle(name);
+      }
+      selectLayer(selectedLayer in config.layers ? selectedLayer : Object.keys(config.layers)[0]);
+      exportConfig();
+    }
+
+    function selectLayer(name) {
+      selectedLayer = name;
+      layerEls.forEach((el) => el.classList.toggle('selected', el.dataset.layer === name));
+      layerSelect.value = name;
+
+      const layer = config.layers[name];
+      controls.x.value = layer.x;
+      controls.y.value = layer.y;
+      controls.w.value = layer.w;
+      controls.h.value = layer.h;
+      controls.fontSize.value = layer.fontSize || '';
+      controls.fontWeight.value = layer.fontWeight || '';
+      controls.text.value = layer.text || '';
+      controls.fontSize.disabled = !('fontSize' in layer);
+      controls.fontWeight.disabled = !('fontWeight' in layer);
+      controls.text.disabled = !('text' in layer);
+    }
+
+    function updateLayerFromInputs() {
+      const layer = config.layers[selectedLayer];
+      layer.x = round(controls.x.value);
+      layer.y = round(controls.y.value);
+      layer.w = Math.max(1, round(controls.w.value));
+      layer.h = Math.max(1, round(controls.h.value));
+      if ('fontSize' in layer) layer.fontSize = Math.max(6, round(controls.fontSize.value));
+      if ('fontWeight' in layer) layer.fontWeight = Math.max(100, round(controls.fontWeight.value));
+      if ('text' in layer) layer.text = controls.text.value;
+      applyLayerStyle(selectedLayer);
+      exportConfig();
+    }
+
+    function nudgeSelected(dx, dy) {
+      const layer = config.layers[selectedLayer];
+      layer.x = clamp(layer.x + dx, -200, config.stage.width + 200);
+      layer.y = clamp(layer.y + dy, -120, config.stage.height + 120);
+      applyLayerStyle(selectedLayer);
+      selectLayer(selectedLayer);
+      exportConfig();
+    }
+
+    function beginPointer(event, mode, name) {
+      event.preventDefault();
+      event.stopPropagation();
+      selectLayer(name);
+      const layer = config.layers[name];
+      dragState = {
+        mode,
+        name,
+        startX: event.clientX,
+        startY: event.clientY,
+        layer: { ...layer },
+      };
+      stage.setPointerCapture(event.pointerId);
+    }
+
+    function movePointer(event) {
+      if (!dragState) return;
+      const layer = config.layers[dragState.name];
+      const zoom = Number(document.getElementById('zoom').value) || 1;
+      const dx = (event.clientX - dragState.startX) / zoom;
+      const dy = (event.clientY - dragState.startY) / zoom;
+
+      if (dragState.mode === 'move') {
+        layer.x = round(dragState.layer.x + dx);
+        layer.y = round(dragState.layer.y + dy);
+      } else {
+        layer.w = Math.max(1, round(dragState.layer.w + dx));
+        layer.h = Math.max(1, round(dragState.layer.h + dy));
+      }
+
+      applyLayerStyle(dragState.name);
+      selectLayer(dragState.name);
+      exportConfig();
+    }
+
+    function endPointer() {
+      dragState = null;
+    }
+
+    function shiftZ(delta) {
+      const layer = config.layers[selectedLayer];
+      layer.z = Math.max(1, (layer.z || 1) + delta);
+      applyLayerStyle(selectedLayer);
+      exportConfig();
+    }
+
+    Object.keys(config.layers).forEach((name) => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      layerSelect.appendChild(option);
+    });
+
+    layerEls.forEach((el) => {
+      const name = el.dataset.layer;
+      el.addEventListener('pointerdown', (event) => {
+        if (event.target.classList.contains('resize-handle')) {
+          beginPointer(event, 'resize', name);
+        } else {
+          beginPointer(event, 'move', name);
+        }
+      });
+    });
+
+    stage.addEventListener('pointermove', movePointer);
+    stage.addEventListener('pointerup', endPointer);
+    stage.addEventListener('pointercancel', endPointer);
+
+    layerSelect.addEventListener('change', () => selectLayer(layerSelect.value));
+    Object.values(controls).forEach((input) => input.addEventListener('input', updateLayerFromInputs));
+
+    document.getElementById('zoom').addEventListener('input', (event) => {
+      stage.style.transform = `scale(${event.target.value})`;
+    });
+
+    document.getElementById('reset-layout').addEventListener('click', () => {
+      applyConfig(DEFAULT_CONFIG);
+      setStatus('Reset complete');
+    });
+
+    document.getElementById('copy-config').addEventListener('click', async () => {
+      exportConfig();
+      await navigator.clipboard.writeText(output.value);
+      setStatus('JSON copied');
+    });
+
+    document.getElementById('download-config').addEventListener('click', () => {
+      exportConfig();
+      const blob = new Blob([output.value], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'receipt-signature-row-layout.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('apply-import').addEventListener('click', () => {
+      try {
+        applyConfig(JSON.parse(output.value));
+        setStatus('JSON applied');
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : 'Invalid JSON');
+      }
+    });
+
+    document.getElementById('bring-front').addEventListener('click', () => shiftZ(1));
+    document.getElementById('send-back').addEventListener('click', () => shiftZ(-1));
+
+    document.addEventListener('keydown', (event) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName || '')) return;
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key === 'ArrowLeft') nudgeSelected(-step, 0);
+      if (event.key === 'ArrowRight') nudgeSelected(step, 0);
+      if (event.key === 'ArrowUp') nudgeSelected(0, -step);
+      if (event.key === 'ArrowDown') nudgeSelected(0, step);
+    });
+
+    applyConfig(DEFAULT_CONFIG);
+    exportConfig();
+  </script>
+</body>
+</html>

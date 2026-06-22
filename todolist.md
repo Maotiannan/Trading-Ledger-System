@@ -42,10 +42,12 @@
 - `Payment Detail Management` 小眼睛预览弹窗中的系统图片名称统一显示为 `Payment-Detail_...`
 - `Generate Signed Receipt` 新增付款类型与 `Reçu par` 选择；定金收据会自动标记为定金，并留空 `Reste à payer`
 - `Payment Detail Management` 中已完成的付款明细，对 ADMIN 以下账号不再显示修改和删除入口
+- 已提供签名收据底部签名行的可视化排版工具，可先手动摆放位置，再把确认后的布局固化进正式模板
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- 新增签名收据底部签名行排版工具：可拖拽/缩放 `Reçu par / Signature / Signature du payeur` 这一行的位置，导出布局配置后再用于正式模板调整
 - Generate Signed Receipt 新增 `Deposit / Full / Initial / Standard / Final` 付款类型；不同类型会生成对应 Motif 文案，定金收据不再显示余额公式
 - 签名收据生成图优化：电话保持单行，金额大写首字母自动大写，签名位置调整为接收方签名靠近收款人、付款方签名在原接收方签名位置
 - Payment Detail 中 `RECEIVED` 状态的明细对 ADMIN 以下账号隐藏修改和删除按钮，减少已完成数据被误操作

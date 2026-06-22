@@ -346,9 +346,13 @@ describe('ReceiptCanvas', () => {
     const motifLabelCall = fillTextCalls.find((call) => call.text === 'Motif :');
     const motifValueCall = fillTextCalls.find((call) => call.text === layout.motif);
     const fraisLabelCall = fillTextCalls.find((call) => call.text === 'Frais : ');
+    const fraisValueCall = fillTextCalls.find((call) => call.text === 'Payé');
+    const paymentModeValueCall = fillTextCalls.find((call) => call.text === 'Espèces');
     expect(motifLabelCall).toBeDefined();
     expect(motifValueCall).toBeDefined();
     expect(fraisLabelCall).toBeDefined();
+    expect(fraisValueCall).toBeDefined();
+    expect(paymentModeValueCall).toBeDefined();
     expect(motifValueCall!.x).toBe(motifLabelCall!.x + 'Motif :'.length * 8 + 2);
     expect(fraisLabelCall!.x).toBeGreaterThan(motifValueCall!.x);
   });

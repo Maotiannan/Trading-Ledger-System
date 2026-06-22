@@ -5,6 +5,7 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { createApiError } from '@/lib/api-error';
 import {
   buildReceiptGeneratorLayout,
+  normalizeReceiptGeneratorFraisStatus,
   normalizeReceiptGeneratorPaymentMode,
   normalizeReceiptGeneratorPaymentType,
   normalizeReceiptGeneratorReceivedBy,
@@ -47,6 +48,7 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
     usdAmount: Number(session.usd),
     balanceBefore: session.balanceBefore === null ? null : Number(session.balanceBefore),
     paymentMode: normalizeReceiptGeneratorPaymentMode(snapshot?.paymentMode),
+    fraisStatus: normalizeReceiptGeneratorFraisStatus(snapshot?.fraisStatus),
     paymentType: normalizeReceiptGeneratorPaymentType(snapshot?.paymentType),
     receivedBy: normalizeReceiptGeneratorReceivedBy(snapshot?.receivedBy),
     generatedAt: session.createdAt,

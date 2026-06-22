@@ -9,10 +9,16 @@ import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { formatUsdAmount } from '@/lib/display-format';
 import {
   RECEIPT_GENERATOR_BANK_RECEIVED_BY,
+  RECEIPT_GENERATOR_FRAIS_STATUSES,
+  RECEIPT_GENERATOR_PAYMENT_MODES,
   RECEIPT_GENERATOR_PAYMENT_TYPES,
   RECEIPT_GENERATOR_RECEIVED_BY,
+  normalizeReceiptGeneratorFraisStatus,
+  normalizeReceiptGeneratorPaymentMode,
   normalizeReceiptGeneratorPaymentType,
   normalizeReceiptGeneratorReceivedBy,
+  type ReceiptGeneratorFraisStatus,
+  type ReceiptGeneratorPaymentMode,
   type ReceiptGeneratorPaymentType,
   type ReceiptGeneratorReceivedBy,
 } from '@/lib/receipt-generator-layout';
@@ -38,7 +44,8 @@ export type ReceiptGeneratorLaunchDialogProps = {
   orderNo: string;
   usdAmount: string;
   receiptNo: string;
-  paymentMode: 'Cash' | 'Transfer';
+  paymentMode: ReceiptGeneratorPaymentMode;
+  fraisStatus: ReceiptGeneratorFraisStatus;
   paymentType: ReceiptGeneratorPaymentType;
   receivedBy: ReceiptGeneratorReceivedBy;
   loadingContext: boolean;
@@ -50,7 +57,8 @@ export type ReceiptGeneratorLaunchDialogProps = {
   onOrderNoChange: (value: string) => void;
   onUsdAmountChange: (value: string) => void;
   onReceiptNoChange: (value: string) => void;
-  onPaymentModeChange: (value: 'Cash' | 'Transfer') => void;
+  onPaymentModeChange: (value: ReceiptGeneratorPaymentMode) => void;
+  onFraisStatusChange: (value: ReceiptGeneratorFraisStatus) => void;
   onPaymentTypeChange: (value: ReceiptGeneratorPaymentType) => void;
   onReceivedByChange: (value: ReceiptGeneratorReceivedBy) => void;
   onSubmit: () => void;
@@ -66,6 +74,7 @@ export function ReceiptGeneratorLaunchDialog({
   usdAmount,
   receiptNo,
   paymentMode,
+  fraisStatus,
   paymentType,
   receivedBy,
   loadingContext,
@@ -78,6 +87,7 @@ export function ReceiptGeneratorLaunchDialog({
   onUsdAmountChange,
   onReceiptNoChange,
   onPaymentModeChange,
+  onFraisStatusChange,
   onPaymentTypeChange,
   onReceivedByChange,
   onSubmit,
@@ -160,10 +170,25 @@ export function ReceiptGeneratorLaunchDialog({
               id="receipt-generator-payment-mode"
               className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={paymentMode}
-              onChange={(event) => onPaymentModeChange(event.target.value === 'Transfer' ? 'Transfer' : 'Cash')}
+              onChange={(event) => onPaymentModeChange(normalizeReceiptGeneratorPaymentMode(event.target.value))}
             >
-              <option value="Cash">Cash</option>
-              <option value="Transfer">Transfer</option>
+              {RECEIPT_GENERATOR_PAYMENT_MODES.map((mode) => (
+                <option key={mode} value={mode}>{mode}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="receipt-generator-frais">Frais</Label>
+            <select
+              id="receipt-generator-frais"
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={fraisStatus}
+              onChange={(event) => onFraisStatusChange(normalizeReceiptGeneratorFraisStatus(event.target.value))}
+            >
+              {RECEIPT_GENERATOR_FRAIS_STATUSES.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
             </select>
           </div>
 

@@ -74,7 +74,8 @@ describe('useReceiptGenerator', () => {
       result.current.setGeneratorOrderNo('MOBILE-01');
       result.current.setGeneratorUsdAmount('1234');
       result.current.setGeneratorReceiptNo('0010000');
-      result.current.setGeneratorPaymentMode('Transfer');
+      result.current.setGeneratorPaymentMode('Virement');
+      result.current.setGeneratorFraisStatus('Non payé');
     });
 
     await act(async () => {
@@ -88,7 +89,8 @@ describe('useReceiptGenerator', () => {
         action: 'create-session',
         orderNo: 'MOBILE-01',
         usdAmount: 1234,
-        paymentMode: 'Transfer',
+        paymentMode: 'Virement',
+        fraisStatus: 'Non payé',
         paymentType: 'Standard',
         receivedBy: 'Mamadou Dian Diallo',
       }),
@@ -142,7 +144,8 @@ describe('useReceiptGenerator', () => {
         action: 'create-session',
         orderNo: 'PIKIN-20',
         usdAmount: 2500,
-        paymentMode: 'Cash',
+        paymentMode: 'Espèces',
+        fraisStatus: 'Payé',
         paymentType: 'Standard',
         receivedBy: 'Mamadou Dian Diallo',
       }),
@@ -177,7 +180,8 @@ describe('useReceiptGenerator', () => {
         action: 'create-session',
         orderNo: 'SDT-02',
         usdAmount: 500,
-        paymentMode: 'Cash',
+        paymentMode: 'Espèces',
+        fraisStatus: 'Payé',
         paymentType: 'Deposit',
         receivedBy: 'Transferred via bank account',
       }),

@@ -187,7 +187,8 @@ describe('receipt-generator-service', () => {
     expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         layoutSnapshot: expect.objectContaining({
-          paymentMode: 'Transfer',
+          paymentMode: 'Virement',
+          fraisStatus: 'Payé',
         }),
       }),
     }));
@@ -212,6 +213,7 @@ describe('receipt-generator-service', () => {
       orderNo: 'Big Alpha-07',
       usdAmount: 500,
       paymentMode: 'Cash',
+      fraisStatus: 'Non payé',
       paymentType: 'Deposit',
       receivedBy: 'Transferred via bank account',
     });
@@ -227,6 +229,8 @@ describe('receipt-generator-service', () => {
         motif: 'Deposit for Big Alpha-07',
         layoutSnapshot: expect.objectContaining({
           paymentType: 'Deposit',
+          paymentMode: 'Espèces',
+          fraisStatus: 'Non payé',
           receivedBy: 'Transferred via bank account',
           resteAPayer: '',
           balanceAfter: null,

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.181
+> 当前版本：v1.0.182
 > 最后更新：2026-06-22
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Generate Signed Receipt` 法语收据选项扩展：`receipt-generator-layout` 新增单一来源 `RECEIPT_GENERATOR_PAYMENT_MODES = Espèces/Virement` 与 `RECEIPT_GENERATOR_FRAIS_STATUSES = Payé/Non payé`，并保留旧 `Cash/Transfer` snapshot 兼容映射；弹窗新增 `Frais` 下拉，`Mode de paiement` 改为法语选项，hook/API/service 透传 `fraisStatus` 并写入 `layoutSnapshot`；正式导出画布不再写死 `Paid/Cash`，改为使用 layout 中的 `fraisStatus/paymentMode`。无新增数据库表、NAS/COS 路径或备份范围。测试：`npm run typecheck`，`npm test -- --runInBand src/lib/receipt-generator-layout.test.ts src/lib/receipt-generator-service.test.ts src/lib/receipt-generator-read-service.test.ts src/app/api/receipt-generator/route.test.ts src/components/workspace/modules/receipts/hooks/use-receipt-generator.test.tsx src/components/workspace/modules/receipts/components/receipt-generator-launch-dialog.test.tsx src/components/workspace/modules/receipts/generator/receipt-canvas.test.tsx src/components/workspace/modules/receipts/generator/signing-view.test.tsx src/components/workspace/modules/receipts/receipt-manager.test.tsx` ✅ 2026-06-22
 
 - [x] `Generate Signed Receipt` 定金未登记订单回归修复：确认旧逻辑为“未录入过的 `ORDER NO` 创建定金收据后直接创建该订单并归入 `DEPOSIT_POOL`”。`receipt-generator-service` 现在只在 `paymentType=Deposit` 时允许 `lookupInvoiceOrderContext` 无 exact order 但有 inferred customer 的场景，并在同一事务中创建 `DEPOSIT_POOL` order、同步 order aliases、创建 `SIGNING_PENDING` receipt；`INV NO` 保持 `null`，`isDeposit=true`，余额公式继续留空。补齐 service 红绿回归，未新增数据库表、NAS/COS 路径或备份范围。测试：`npm run typecheck && npm run lint && npm test -- --runInBand src/lib/receipt-generator-service.test.ts src/lib/receipt-generator-read-service.test.ts src/app/api/receipt-generator/route.test.ts src/components/workspace/modules/receipts/hooks/use-receipt-generator.test.tsx src/lib/receipt-generator-layout.test.ts` ✅ 2026-06-22
 

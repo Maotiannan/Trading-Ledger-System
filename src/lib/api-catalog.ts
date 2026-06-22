@@ -121,7 +121,7 @@ export const apiCatalog: ApiModule[] = [
       { action: 'order-context', method: 'GET', description: 'Resolve exact order context for signed receipt generation', bodyExample: { orderNo: 'BIG-ALPHA-07', usdAmount: 2500 } },
       { action: 'session', method: 'GET', description: 'Load a signing session by sessionId', bodyExample: { sessionId: 'session-id' } },
       { action: 'resume-by-receipt', method: 'GET', description: 'Resume an open signing session by receiptId', bodyExample: { receiptId: 'receipt-id' } },
-      { action: 'create-session', method: 'POST', description: 'Create a SIGNING_PENDING receipt and signing session', bodyExample: { action: 'create-session', orderNo: 'BIG-ALPHA-07', usdAmount: 2500 } },
+      { action: 'create-session', method: 'POST', description: 'Create a SIGNING_PENDING receipt and signing session', bodyExample: { action: 'create-session', orderNo: 'BIG-ALPHA-07', usdAmount: 2500, paymentMode: 'Espèces', fraisStatus: 'Payé', paymentType: 'Standard' } },
       { action: 'finalize', method: 'POST', description: 'Finalize the signed receipt, store assets, and enter normal receipt flow (multipart form)', bodyExample: { action: 'finalize', sessionId: 'session-id', receiptImage: '<png>', receiverSignature: '<png>', payerSignature: '<png>' } },
     ],
   },

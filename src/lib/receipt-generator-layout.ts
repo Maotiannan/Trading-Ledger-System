@@ -4,8 +4,11 @@ import { formatUsdAmount } from '@/lib/display-format';
 export const RECEIPT_GENERATOR_RECEIVED_BY = 'Mamadou Dian Diallo';
 export const RECEIPT_GENERATOR_BANK_RECEIVED_BY = 'Transferred via bank account';
 export const RECEIPT_GENERATOR_PAYMENT_TYPES = ['Deposit', 'Full', 'Initial', 'Standard', 'Final'] as const;
+export const RECEIPT_GENERATOR_PAYMENT_MODES = ['Espèces', 'Virement'] as const;
+export const RECEIPT_GENERATOR_FRAIS_STATUSES = ['Payé', 'Non payé'] as const;
 export type ReceiptGeneratorPaymentType = typeof RECEIPT_GENERATOR_PAYMENT_TYPES[number];
-export type ReceiptGeneratorPaymentMode = 'Cash' | 'Transfer';
+export type ReceiptGeneratorPaymentMode = typeof RECEIPT_GENERATOR_PAYMENT_MODES[number];
+export type ReceiptGeneratorFraisStatus = typeof RECEIPT_GENERATOR_FRAIS_STATUSES[number];
 export type ReceiptGeneratorReceivedBy = typeof RECEIPT_GENERATOR_RECEIVED_BY | typeof RECEIPT_GENERATOR_BANK_RECEIVED_BY;
 
 type ReceiptGeneratorLayoutInput = {
@@ -19,6 +22,7 @@ type ReceiptGeneratorLayoutInput = {
   usdAmount: number;
   balanceBefore: number | null;
   paymentMode?: ReceiptGeneratorPaymentMode | null;
+  fraisStatus?: ReceiptGeneratorFraisStatus | null;
   paymentType?: ReceiptGeneratorPaymentType | null;
   receivedBy?: string | null;
   generatedAt?: Date;
@@ -41,6 +45,7 @@ export type ReceiptGeneratorLayoutData = {
   balanceAfter: number | null;
   resteAPayer: string;
   paymentMode: ReceiptGeneratorPaymentMode;
+  fraisStatus: ReceiptGeneratorFraisStatus;
   paymentType: ReceiptGeneratorPaymentType;
   receivedBy: string;
 };
@@ -114,7 +119,12 @@ export function normalizeReceiptGeneratorPaymentType(value: unknown): ReceiptGen
 }
 
 export function normalizeReceiptGeneratorPaymentMode(value: unknown): ReceiptGeneratorPaymentMode {
-  return value === 'Transfer' ? 'Transfer' : 'Cash';
+  if (value === 'Virement' || value === 'Transfer') return 'Virement';
+  return 'Espèces';
+}
+
+export function normalizeReceiptGeneratorFraisStatus(value: unknown): ReceiptGeneratorFraisStatus {
+  return value === 'Non payé' ? 'Non payé' : 'Payé';
 }
 
 export function normalizeReceiptGeneratorReceivedBy(value: unknown): ReceiptGeneratorReceivedBy {
@@ -143,6 +153,7 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
   const now = input.generatedAt || new Date();
   const paymentType = normalizeReceiptGeneratorPaymentType(input.paymentType);
   const paymentMode = normalizeReceiptGeneratorPaymentMode(input.paymentMode);
+  const fraisStatus = normalizeReceiptGeneratorFraisStatus(input.fraisStatus);
   const receivedBy = normalizeReceiptGeneratorReceivedBy(input.receivedBy);
   const balanceBefore = input.balanceBefore === null ? null : Number(input.balanceBefore);
   const isDeposit = paymentType === 'Deposit';
@@ -179,6 +190,7 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
     balanceAfter,
     resteAPayer,
     paymentMode,
+    fraisStatus,
     paymentType,
     receivedBy,
   };

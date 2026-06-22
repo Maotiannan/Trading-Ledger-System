@@ -239,6 +239,8 @@ export function ReceiptManager() {
     setGeneratorReceiptNo,
     generatorPaymentMode,
     setGeneratorPaymentMode,
+    generatorFraisStatus,
+    setGeneratorFraisStatus,
     generatorPaymentType,
     setGeneratorPaymentType,
     generatorReceivedBy,
@@ -546,6 +548,7 @@ export function ReceiptManager() {
         usdAmount={generatorUsdAmount}
         receiptNo={generatorReceiptNo}
         paymentMode={generatorPaymentMode}
+        fraisStatus={generatorFraisStatus}
         paymentType={generatorPaymentType}
         receivedBy={generatorReceivedBy}
         loadingContext={generatorContextLoading}
@@ -561,6 +564,7 @@ export function ReceiptManager() {
         onUsdAmountChange={setGeneratorUsdAmount}
         onReceiptNoChange={setGeneratorReceiptNo}
         onPaymentModeChange={setGeneratorPaymentMode}
+        onFraisStatusChange={setGeneratorFraisStatus}
         onPaymentTypeChange={setGeneratorPaymentType}
         onReceivedByChange={setGeneratorReceivedBy}
         onSubmit={createGeneratorSession}

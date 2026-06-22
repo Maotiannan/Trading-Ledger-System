@@ -17,7 +17,8 @@ describe('receipt-generator-layout', () => {
       clientTel: '628 38 63 63',
       usdAmount: 2500,
       balanceBefore: 34660,
-      paymentMode: 'Transfer',
+      paymentMode: 'Virement',
+      fraisStatus: 'Non payé',
       paymentType: 'Standard',
       receivedBy: 'Transferred via bank account',
       generatedAt: new Date('2026-04-27T01:02:03.000Z'),
@@ -27,7 +28,8 @@ describe('receipt-generator-layout', () => {
     expect(layout.motif).toBe('Payment for L25MH060523 Big Alpha-07');
     expect(layout.balanceAfter).toBe(32160);
     expect(layout.resteAPayer).toBe('$34,660 - $2,500 = $32,160');
-    expect(layout.paymentMode).toBe('Transfer');
+    expect(layout.paymentMode).toBe('Virement');
+    expect(layout.fraisStatus).toBe('Non payé');
     expect(layout.paymentType).toBe('Standard');
     expect(layout.receivedBy).toBe('Transferred via bank account');
   });
@@ -49,7 +51,7 @@ describe('receipt-generator-layout', () => {
     expect(layout.clientName).toBe('Alpha Oumar Diallo "Big Alpha"');
   });
 
-  it('defaults payment mode to Cash', () => {
+  it('defaults payment mode to Espèces and frais to Payé', () => {
     const layout = buildReceiptGeneratorLayout({
       receiptNo: '0001002',
       orderNo: 'MARY-01',
@@ -62,7 +64,25 @@ describe('receipt-generator-layout', () => {
       balanceBefore: 100,
     });
 
-    expect(layout.paymentMode).toBe('Cash');
+    expect(layout.paymentMode).toBe('Espèces');
+    expect(layout.fraisStatus).toBe('Payé');
+  });
+
+  it('maps legacy payment mode values to French receipt labels', () => {
+    const layout = buildReceiptGeneratorLayout({
+      receiptNo: '0001002',
+      orderNo: 'MARY-01',
+      invNo: 'L25MH060525',
+      customerMark: 'MARY',
+      customerCompanyName: null,
+      customerName: 'Mamadou Aliou Barry',
+      clientTel: '+224 620 07 11 76',
+      usdAmount: 20,
+      balanceBefore: 100,
+      paymentMode: 'Transfer' as never,
+    });
+
+    expect(layout.paymentMode).toBe('Virement');
   });
 
   it.each([

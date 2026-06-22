@@ -133,7 +133,8 @@ describe('receipt-generator route', () => {
           action: 'create-session',
           orderNo: 'PIKIN-20',
           usdAmount: 2500,
-          paymentMode: 'Cash',
+          paymentMode: 'Espèces',
+          fraisStatus: 'Non payé',
           paymentType: 'Standard',
           receivedBy: 'Mamadou Dian Diallo',
         };
@@ -146,7 +147,8 @@ describe('receipt-generator route', () => {
     expect(mockCreateReceiptGeneratorSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'admin-1' }), {
       orderNo: 'PIKIN-20',
       usdAmount: 2500,
-      paymentMode: 'Cash',
+      paymentMode: 'Espèces',
+      fraisStatus: 'Non payé',
       paymentType: 'Standard',
       receivedBy: 'Mamadou Dian Diallo',
     });

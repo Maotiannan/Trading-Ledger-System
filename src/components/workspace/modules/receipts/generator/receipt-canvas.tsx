@@ -29,7 +29,6 @@ const TEMPLATE_COMPANY_ADDRESS = [
   'Tél: Mamadou Dian Diallo: 622 49 12 86, 660 57 57 32.',
   'Email: grandtobusiness@gmail.com',
 ] as const;
-const TEMPLATE_FRAIS_LABEL = 'Paid';
 const TEMPLATE_RECEIPT_NUMBER_COLOR = '#e05a00';
 const TEMPLATE_SIGNATURE_LINE_COLOR = '#555';
 
@@ -385,13 +384,13 @@ async function drawReceiptCanvas(
   const fieldLineCounts = [
     wrapText(ctx, layout.clientName, measureFieldValueWidth('Reçu de M./Mme. :')).length,
     wrapText(ctx, layout.amountInWords, measureFieldValueWidth('La somme de :')).length,
-    wrapText(ctx, layout.motif, measureFieldValueWidth('Motif :', { rightLabel: 'Frais :', rightValue: TEMPLATE_FRAIS_LABEL })).length,
+    wrapText(ctx, layout.motif, measureFieldValueWidth('Motif :', { rightLabel: 'Frais :', rightValue: layout.fraisStatus || 'Payé' })).length,
     wrapText(
       ctx,
       layout.resteAPayer,
       measureFieldValueWidth('Reste à payer :', {
         rightLabel: 'Mode de paiement :',
-        rightValue: layout.paymentMode || 'Cash',
+        rightValue: layout.paymentMode || 'Espèces',
       }),
     ).length,
   ];
@@ -573,10 +572,10 @@ async function drawReceiptCanvas(
 
   drawField('Reçu de M./Mme. :', layout.clientName);
   drawField('La somme de :', layout.amountInWords);
-  drawField('Motif :', layout.motif, { rightLabel: 'Frais :', rightValue: TEMPLATE_FRAIS_LABEL });
+  drawField('Motif :', layout.motif, { rightLabel: 'Frais :', rightValue: layout.fraisStatus || 'Payé' });
   drawField('Reste à payer :', layout.resteAPayer, {
     rightLabel: 'Mode de paiement :',
-    rightValue: layout.paymentMode || 'Cash',
+    rightValue: layout.paymentMode || 'Espèces',
   });
 
   const signatureLayers = RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT.layers;

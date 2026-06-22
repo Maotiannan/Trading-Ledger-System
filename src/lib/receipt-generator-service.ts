@@ -15,6 +15,7 @@ import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { allocateNextReceiptNo } from '@/lib/receipt-number';
 import {
   buildReceiptGeneratorLayout,
+  normalizeReceiptGeneratorFraisStatus,
   normalizeReceiptGeneratorPaymentMode,
   normalizeReceiptGeneratorPaymentType,
   normalizeReceiptGeneratorReceivedBy,
@@ -168,7 +169,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
       clientTel: customer.phone || null,
       usdAmount,
       balanceBefore,
-      paymentMode: 'Cash',
+      paymentMode: 'Espèces',
   });
 
   return {
@@ -190,6 +191,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   orderNo: string;
   usdAmount: number;
   paymentMode?: string | null;
+  fraisStatus?: string | null;
   paymentType?: string | null;
   receivedBy?: string | null;
 }) {
@@ -200,6 +202,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   }
   const usdAmount = sanitizePositiveAmount(input.usdAmount);
   const paymentMode = normalizeReceiptGeneratorPaymentMode(input.paymentMode);
+  const fraisStatus = normalizeReceiptGeneratorFraisStatus(input.fraisStatus);
   const paymentType = normalizeReceiptGeneratorPaymentType(input.paymentType);
   const receivedBy = normalizeReceiptGeneratorReceivedBy(input.receivedBy);
   const isDeposit = paymentType === 'Deposit';
@@ -235,6 +238,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
         usdAmount,
         balanceBefore: creationContext.balanceBefore,
         paymentMode,
+        fraisStatus,
         paymentType,
         receivedBy,
       });

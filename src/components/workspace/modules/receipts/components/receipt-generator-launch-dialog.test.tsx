@@ -9,7 +9,8 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     orderNo: 'Big Alpha-07',
     usdAmount: '2500',
     receiptNo: '0010000',
-    paymentMode: 'Cash' as const,
+    paymentMode: 'Espèces' as const,
+    fraisStatus: 'Payé' as const,
     paymentType: 'Standard' as const,
     receivedBy: 'Mamadou Dian Diallo' as const,
     loadingContext: false,
@@ -22,6 +23,7 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     onUsdAmountChange: jest.fn(),
     onReceiptNoChange: jest.fn(),
     onPaymentModeChange: jest.fn(),
+    onFraisStatusChange: jest.fn(),
     onPaymentTypeChange: jest.fn(),
     onReceivedByChange: jest.fn(),
     onSubmit: jest.fn(),
@@ -93,17 +95,35 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     expect(screen.getByText('提交时由服务器原子分配，显示值仅作预览。')).toBeInTheDocument();
   });
 
-  it('shows payment type and receiver selectors with the required defaults and options', () => {
+  it('shows payment, frais, payment type, and receiver selectors with the required defaults and options', () => {
+    const onPaymentModeChange = jest.fn();
+    const onFraisStatusChange = jest.fn();
     const onPaymentTypeChange = jest.fn();
     const onReceivedByChange = jest.fn();
 
     render(
       <ReceiptGeneratorLaunchDialog
         {...defaultProps}
+        onPaymentModeChange={onPaymentModeChange}
+        onFraisStatusChange={onFraisStatusChange}
         onPaymentTypeChange={onPaymentTypeChange}
         onReceivedByChange={onReceivedByChange}
       />
     );
+
+    const paymentMode = screen.getByLabelText('支付方式');
+    expect(paymentMode).toHaveValue('Espèces');
+    expect(screen.getByRole('option', { name: 'Espèces' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Virement' })).toBeInTheDocument();
+    fireEvent.change(paymentMode, { target: { value: 'Virement' } });
+    expect(onPaymentModeChange).toHaveBeenCalledWith('Virement');
+
+    const frais = screen.getByLabelText('Frais');
+    expect(frais).toHaveValue('Payé');
+    expect(screen.getByRole('option', { name: 'Payé' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Non payé' })).toBeInTheDocument();
+    fireEvent.change(frais, { target: { value: 'Non payé' } });
+    expect(onFraisStatusChange).toHaveBeenCalledWith('Non payé');
 
     const paymentType = screen.getByLabelText('付款类型');
     expect(paymentType).toHaveValue('Standard');

@@ -38,7 +38,8 @@ type SessionPayload = {
     balanceBefore: number | null;
     balanceAfter: number | null;
     resteAPayer: string;
-    paymentMode: 'Cash' | 'Transfer';
+    paymentMode: 'Espèces' | 'Virement';
+    fraisStatus: 'Payé' | 'Non payé';
     paymentType: 'Deposit' | 'Full' | 'Initial' | 'Standard' | 'Final';
     receivedBy: string;
   };

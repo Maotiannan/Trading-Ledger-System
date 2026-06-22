@@ -92,15 +92,16 @@ export function ReceiptGeneratorLaunchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{tx('生成签名收据', 'Generate Signed Receipt')}</DialogTitle>
-          <DialogDescription>
-            {tx('先填写订单和金额，再进入签名窗口。签名前系统会先创建一条待签名收据记录。', 'Fill the order and amount first, then continue to the signing window. A pending receipt record will be created before signing.')}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden p-0 sm:max-w-2xl">
+        <div className="flex max-h-[90dvh] flex-col">
+          <DialogHeader className="shrink-0 border-b px-6 py-4">
+            <DialogTitle>{tx('生成签名收据', 'Generate Signed Receipt')}</DialogTitle>
+            <DialogDescription>
+              {tx('先填写订单和金额，再进入签名窗口。签名前系统会先创建一条待签名收据记录。', 'Fill the order and amount first, then continue to the signing window. A pending receipt record will be created before signing.')}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div data-testid="receipt-generator-scroll-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
           <div className="grid gap-2">
             <Label htmlFor="receipt-generator-receipt-no">{tx('收据号', 'Receipt No.')}</Label>
             <Input
@@ -213,12 +214,13 @@ export function ReceiptGeneratorLaunchDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter data-testid="receipt-generator-footer" className="shrink-0 border-t px-6 py-4 flex-col-reverse gap-2 sm:flex-row sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tx('取消', 'Cancel')}</Button>
           <Button onClick={onSubmit} disabled={creatingSession}>
             {creatingSession ? tx('创建中...', 'Creating...') : tx('进入签名', 'Continue to signing')}
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -121,4 +121,12 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     fireEvent.change(receivedBy, { target: { value: 'Transferred via bank account' } });
     expect(onReceivedByChange).toHaveBeenCalledWith('Transferred via bank account');
   });
+
+  it('keeps the form body scrollable and footer visible in constrained viewports', () => {
+    render(<ReceiptGeneratorLaunchDialog {...defaultProps} />);
+
+    expect(screen.getByRole('dialog')).toHaveClass('overflow-hidden', 'p-0');
+    expect(screen.getByTestId('receipt-generator-scroll-body')).toHaveClass('overflow-y-auto', 'flex-1');
+    expect(screen.getByTestId('receipt-generator-footer')).toHaveClass('shrink-0', 'border-t');
+  });
 });

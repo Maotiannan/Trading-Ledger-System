@@ -35,6 +35,7 @@ describe('DetailList', () => {
         details={[makeDetail()]}
         expandedDetails={new Set()}
         canEdit
+        isAdmin
         tx={tx}
         onToggleDetail={jest.fn()}
         onViewImage={jest.fn()}
@@ -54,6 +55,7 @@ describe('DetailList', () => {
         details={[makeDetail({ imageUrl: null, sourceMode: 'DIRECT' })]}
         expandedDetails={new Set()}
         canEdit
+        isAdmin
         tx={tx}
         onToggleDetail={jest.fn()}
         onViewImage={onViewImage}
@@ -66,5 +68,47 @@ describe('DetailList', () => {
     fireEvent.click(screen.getByTitle('查看图片'));
 
     expect(onViewImage).toHaveBeenCalledWith(expect.objectContaining({ id: 'detail-1' }));
+  });
+
+  it('hides edit and deletion actions for non-admin users after the payment detail is received', () => {
+    render(
+      <DetailList
+        details={[makeDetail({ status: 'RECEIVED' })]}
+        expandedDetails={new Set()}
+        canEdit
+        isAdmin={false}
+        tx={tx}
+        onToggleDetail={jest.fn()}
+        onViewImage={jest.fn()}
+        onEditDetail={jest.fn()}
+        onExportDetailPic={jest.fn()}
+        onDeleteDetail={jest.fn()}
+      />
+    );
+
+    expect(screen.queryByTitle('修改付款明细')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('申请删除')).not.toBeInTheDocument();
+    expect(screen.getByTitle('查看图片')).toBeInTheDocument();
+    expect(screen.getByTitle('导出图片')).toBeInTheDocument();
+  });
+
+  it('keeps edit and deletion actions visible for admin users after the payment detail is received', () => {
+    render(
+      <DetailList
+        details={[makeDetail({ status: 'RECEIVED' })]}
+        expandedDetails={new Set()}
+        canEdit
+        isAdmin
+        tx={tx}
+        onToggleDetail={jest.fn()}
+        onViewImage={jest.fn()}
+        onEditDetail={jest.fn()}
+        onExportDetailPic={jest.fn()}
+        onDeleteDetail={jest.fn()}
+      />
+    );
+
+    expect(screen.getByTitle('修改付款明细')).toBeInTheDocument();
+    expect(screen.getByTitle('申请删除')).toBeInTheDocument();
   });
 });

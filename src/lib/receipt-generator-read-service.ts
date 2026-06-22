@@ -3,7 +3,12 @@ import { db } from '@/lib/db';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { createApiError } from '@/lib/api-error';
-import { buildReceiptGeneratorLayout } from '@/lib/receipt-generator-layout';
+import {
+  buildReceiptGeneratorLayout,
+  normalizeReceiptGeneratorPaymentMode,
+  normalizeReceiptGeneratorPaymentType,
+  normalizeReceiptGeneratorReceivedBy,
+} from '@/lib/receipt-generator-layout';
 import { getSuggestedNextReceiptNo } from '@/lib/receipt-number';
 import {
   getReceiptGeneratorCustomerCompanyName,
@@ -41,7 +46,9 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
     clientTel: session.clientTel,
     usdAmount: Number(session.usd),
     balanceBefore: session.balanceBefore === null ? null : Number(session.balanceBefore),
-    paymentMode: snapshot?.paymentMode === 'Transfer' ? 'Transfer' : 'Cash',
+    paymentMode: normalizeReceiptGeneratorPaymentMode(snapshot?.paymentMode),
+    paymentType: normalizeReceiptGeneratorPaymentType(snapshot?.paymentType),
+    receivedBy: normalizeReceiptGeneratorReceivedBy(snapshot?.receivedBy),
     generatedAt: session.createdAt,
   });
 

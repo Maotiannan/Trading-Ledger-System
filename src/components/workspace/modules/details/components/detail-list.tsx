@@ -12,6 +12,7 @@ export type DetailListProps = {
   details: Detail[];
   expandedDetails: Set<string>;
   canEdit: boolean;
+  isAdmin: boolean;
   tx: (zh: string, en: string) => string;
   onToggleDetail: (detailId: string) => void;
   onViewImage: (detail: Detail) => void;
@@ -20,7 +21,7 @@ export type DetailListProps = {
   onDeleteDetail: (detailId: string) => void;
 };
 
-export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDetail, onViewImage, onEditDetail, onExportDetailPic, onDeleteDetail }: DetailListProps) {
+export function DetailList({ details, expandedDetails, canEdit, isAdmin, tx, onToggleDetail, onViewImage, onEditDetail, onExportDetailPic, onDeleteDetail }: DetailListProps) {
   if (details.length === 0) {
     return (
       <Card>
@@ -33,7 +34,10 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
 
   return (
     <div className="space-y-4">
-      {details.map((detail) => (
+      {details.map((detail) => {
+        const canEditThisDetail = canEdit && (detail.status !== 'RECEIVED' || isAdmin);
+        const canDeleteThisDetail = detail.status !== 'RECEIVED' || isAdmin;
+        return (
         <Card key={detail.id} className={detail.status === 'ERROR' ? 'border-red-500' : ''}>
           <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => onToggleDetail(detail.id)}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -74,7 +78,7 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
-                {canEdit && (
+                {canEditThisDetail && (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -100,17 +104,19 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
                     <Download className="h-4 w-4" />
                   </Button>
                 }
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onDeleteDetail(detail.id);
-                  }}
-                  title={tx('申请删除', 'Request deletion')}
-                >
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
+                {canDeleteThisDetail && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteDetail(detail.id);
+                    }}
+                    title={tx('申请删除', 'Request deletion')}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -144,7 +150,8 @@ export function DetailList({ details, expandedDetails, canEdit, tx, onToggleDeta
             </CardContent>
           )}
         </Card>
-      ))}
+      );
+      })}
     </div>
   );
 }

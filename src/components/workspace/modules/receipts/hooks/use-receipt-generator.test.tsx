@@ -89,6 +89,8 @@ describe('useReceiptGenerator', () => {
         orderNo: 'MOBILE-01',
         usdAmount: 1234,
         paymentMode: 'Transfer',
+        paymentType: 'Standard',
+        receivedBy: 'Mamadou Dian Diallo',
       }),
     }));
     expect(loadReceipts).not.toHaveBeenCalled();
@@ -141,6 +143,43 @@ describe('useReceiptGenerator', () => {
         orderNo: 'PIKIN-20',
         usdAmount: 2500,
         paymentMode: 'Cash',
+        paymentType: 'Standard',
+        receivedBy: 'Mamadou Dian Diallo',
+      }),
+    }));
+  });
+
+  it('posts selected payment type and receiver when creating a signing session', async () => {
+    mockApiCall.mockResolvedValue({
+      data: {
+        signingPath: '/receipt-generator/session-deposit',
+      },
+    });
+    const openSigningTargetImpl = jest.fn(() => ({ mode: 'popup' as const, popupOpened: true }));
+
+    const { result } = renderHook(() => useReceiptGenerator({ tx, loadReceipts, setError, openSigningTargetImpl }));
+
+    await act(async () => {
+      result.current.setShowGeneratorLaunch(true);
+      result.current.setGeneratorOrderNo('SDT-02');
+      result.current.setGeneratorUsdAmount('500');
+      result.current.setGeneratorPaymentType('Deposit');
+      result.current.setGeneratorReceivedBy('Transferred via bank account');
+    });
+
+    await act(async () => {
+      await result.current.createGeneratorSession();
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('receipt-generator', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'create-session',
+        orderNo: 'SDT-02',
+        usdAmount: 500,
+        paymentMode: 'Cash',
+        paymentType: 'Deposit',
+        receivedBy: 'Transferred via bank account',
       }),
     }));
   });

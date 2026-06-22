@@ -1,12 +1,16 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.178
-> 最后更新：2026-06-10
+> 当前版本：v1.0.179
+> 最后更新：2026-06-22
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] `Generate Signed Receipt` 付款类型与签名布局收口：弹窗新增 `Payment Type`（`Deposit / Full / Initial / Standard / Final`，默认 `Standard`）和 `Reçu par`（默认 `Mamadou Dian Diallo`，可选 `Transferred via bank account`）；后端创建签名 session 时标准化写入 `layoutSnapshot`，`Deposit` 会在事务内写入 `Receipt.isDeposit=true`，并把 `Reste à payer` 留空、`balanceAfter` 置空，避免定金收据进入普通余额公式。导出画布改为电话单行缩放、金额大写首字母大写，接收方签名移到收款人区域中部，付款方签名移到原接收方签名位置。补齐 receipt-generator layout/service/route/read/hook/dialog/canvas 回归测试 ✅ 2026-06-22
+
+- [x] `Payment Detail Management` 已完成明细权限收口：`DetailList` 增加当前账号 ADMIN 判断，`RECEIVED` 状态下对 ADMIN 以下账号隐藏 `Edit Payment Detail` 和 `Request Deletion`，ADMIN 及以上保持原有修改和删除入口；只改前端可见动作，不改变后端审批、删除和数据权限规则。补齐 DetailList 回归测试 ✅ 2026-06-22
 
 - [x] `Payment Detail Management` 图片预览标题规范化：小眼睛预览弹窗对 `payment-detail_...` 形式的历史/生成图片名称仅在显示层转换为 `Payment-Detail_...`；不修改数据库 `imageName/imageUrl`、NAS 真实文件名或路径，也不影响预览接口和下载。补齐 DetailManager 红绿回归测试 ✅ 2026-06-10
 

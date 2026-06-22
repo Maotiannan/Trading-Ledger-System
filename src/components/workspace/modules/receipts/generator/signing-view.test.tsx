@@ -66,6 +66,8 @@ describe('SigningView mobile signature flow', () => {
         balanceBefore: 34660,
         balanceAfter: 32160,
         resteAPayer: '$34,660 - $2,500 = $32,160#',
+        paymentMode: 'Cash',
+        paymentType: 'Standard',
         receivedBy: 'Mamadou Dian Diallo',
       },
     },

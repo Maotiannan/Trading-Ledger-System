@@ -198,7 +198,7 @@ describe('ReceiptCanvas', () => {
     expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalled();
   });
 
-  it('wraps long phone values with a fixed tel label and keeps payer signature inside the exported canvas bounds', async () => {
+  it('keeps long payer phone values on one line and keeps payer signature inside the exported canvas bounds', async () => {
     const ref = createRef<ReceiptCanvasHandle>();
     const longPhoneLayout = buildReceiptGeneratorLayout({
       receiptNo: '0001001',
@@ -224,13 +224,41 @@ describe('ReceiptCanvas', () => {
 
     await ref.current?.exportBlob();
 
-    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.startsWith('Tél:') || call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
-    expect(phoneDrawCalls.length).toBeGreaterThan(1);
-    expect(phoneDrawCalls[0]?.text.startsWith('Tél:')).toBe(true);
+    const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
+    expect(phoneDrawCalls.length).toBeGreaterThan(0);
+    expect([...new Set(phoneDrawCalls.map((call) => call.text))]).toEqual([
+      'Tél: 622 49 12 86 / 66484333516 / 6200711 / 657311550',
+    ]);
     const previewCanvas = container.querySelector('[data-testid="receipt-preview-canvas"]') as HTMLCanvasElement | null;
     expect(previewCanvas).not.toBeNull();
     const bottomLine = strokeSegments[strokeSegments.length - 1];
     expect(bottomLine.to.y).toBeLessThanOrEqual(previewCanvas!.height);
+  });
+
+  it('places receiver signature near Reçu par and moves payer signature to the former right-side signature area', async () => {
+    const ref = createRef<ReceiptCanvasHandle>();
+
+    render(
+      <ReceiptCanvas
+        ref={ref}
+        layout={layout}
+        receiverSignature="data:image/png;base64,receiver"
+        payerSignature="data:image/png;base64,payer"
+      />,
+    );
+
+    await ref.current?.exportBlob();
+
+    const receiverNameCall = fillTextCalls.find((call) => call.text === layout.receivedBy);
+    expect(receiverNameCall).toBeDefined();
+    const signatureImageCalls = drawImage.mock.calls.slice(-2);
+    expect(signatureImageCalls).toHaveLength(2);
+    const receiverSignatureX = Number(signatureImageCalls[0][1]);
+    const payerSignatureX = Number(signatureImageCalls[1][1]);
+
+    expect(receiverSignatureX).toBeGreaterThan(receiverNameCall!.x + 140);
+    expect(receiverSignatureX).toBeLessThan(payerSignatureX);
+    expect(payerSignatureX).toBeGreaterThan(450);
   });
 
   it('keeps amount label gaps and body values attached to each row label colon', async () => {

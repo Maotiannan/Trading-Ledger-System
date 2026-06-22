@@ -428,6 +428,7 @@ export function DetailManager() {
         details={details}
         expandedDetails={expandedDetails}
         canEdit={canEditDetails}
+        isAdmin={isAdmin}
         tx={tx}
         onToggleDetail={toggleDetail}
         onViewImage={(detail) => {

@@ -41,8 +41,6 @@ function ptToPx(pt: number) {
   return (pt * 96) / 72;
 }
 
-const RECEIPT_META_PHONE_LINE_HEIGHT = Math.ceil(ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt) * 1.35);
-
 function formatTemplateMoney(value: number) {
   return Math.round(Number(value) || 0).toLocaleString('en-US', {
     maximumFractionDigits: 0,
@@ -133,43 +131,28 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   return lines.length ? lines : [''];
 }
 
-function wrapPhoneText(text: string, maxCharsPerLine: number) {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized) return ['-'];
-
-  const lines: string[] = [];
-  let current = '';
-
-  for (const char of normalized) {
-    const isBreak = char === ' ';
-    const next = `${current}${char}`;
-    if (current && next.length > maxCharsPerLine) {
-      lines.push(current.trimEnd());
-      current = isBreak ? '' : char;
-      continue;
-    }
-    current = next;
-  }
-
-  if (current) {
-    lines.push(current.trimEnd());
-  }
-
-  return lines.length ? lines : ['-'];
+function normalizeSingleLineText(text: string | null | undefined) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  return normalized || '-';
 }
 
-function splitFixedWidthText(text: string, maxCharsPerLine: number) {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized) return ['-'];
-
-  const lines: string[] = [];
-  let cursor = 0;
-  while (cursor < normalized.length) {
-    lines.push(normalized.slice(cursor, cursor + maxCharsPerLine));
-    cursor += maxCharsPerLine;
+function drawFittedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  baseFontPt: number,
+  fontFamily = 'Times New Roman',
+  minFontPt = 5,
+) {
+  let fontPt = baseFontPt;
+  while (fontPt > minFontPt) {
+    ctx.font = `${fontPt}pt ${fontFamily}`;
+    if (ctx.measureText(text).width <= maxWidth) break;
+    fontPt -= 0.5;
   }
-
-  return lines.length ? lines : ['-'];
+  ctx.fillText(text, x, y);
 }
 
 function cropImageToAlphaBounds(image: HTMLImageElement, padding = 12) {
@@ -299,8 +282,6 @@ async function drawReceiptCanvas(
   const headerCenterX = headerLeftX + RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.left + headerGap;
   const headerRightX = headerCenterX + RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.center + headerGap;
   const headerTop = padding.top;
-  const metaWidth = RECEIPT_TEMPLATE_HEADER_GRID.columnsPx.right - 8;
-  const phoneLineHeight = RECEIPT_META_PHONE_LINE_HEIGHT;
   const fieldLineHeight = 21;
   const amountBoxHeight = 28;
   const detailPaddingX = RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.paddingPx.leftRight;
@@ -321,8 +302,7 @@ async function drawReceiptCanvas(
   prepareContext();
 
   ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
-  const phoneValue = layout.clientTel || '-';
-  const phoneLines = splitFixedWidthText(phoneValue, 14);
+  const phoneValue = normalizeSingleLineText(layout.clientTel);
 
   const titleY = 112;
   const amountY = 146;
@@ -379,16 +359,20 @@ async function drawReceiptCanvas(
   const receiverBlockY = measuredY + 10;
   const receiverSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.widthMm);
   const receiverSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.receiver.heightMm);
-  const receiverSigTop = receiverBlockY + signatureLabelGap;
-  const receiverTextBottom = receiverBlockY + 20 + ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt);
-  const receiverSigBottom = receiverSigTop + receiverSigHeight + 1;
-  const detailHeight = receiverSigBottom + detailPaddingY + 4 - detailY;
-
-  const payerLabelY = detailY + detailHeight + 12;
   const payerSigWidth = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.widthMm);
   const payerSigHeight = mmToPx(RECEIPT_TEMPLATE_SIGNATURE_SLOTS.payer.heightMm);
-  const payerSigTop = payerLabelY + signatureLabelGap;
+  ctx.font = `600 ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt}pt Times New Roman`;
+  const payerSigX = detailX + detailWidth - detailPaddingX - payerSigWidth;
+  const receiverSigX = Math.min(
+    payerSigX - 24 - receiverSigWidth,
+    detailInnerX + Math.max(180, ctx.measureText(layout.receivedBy).width + 48),
+  );
+  const receiverSigTop = receiverBlockY + 8;
+  const receiverTextBottom = receiverBlockY + 20 + ptToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.fieldFontPt);
+  const receiverSigBottom = receiverSigTop + receiverSigHeight + 1;
+  const payerSigTop = receiverBlockY + signatureLabelGap;
   const payerBottom = payerSigTop + payerSigHeight + 1;
+  const detailHeight = Math.max(receiverTextBottom, receiverSigBottom, payerBottom) + detailPaddingY + 4 - detailY;
 
   const requiredHeight = Math.max(
     RECEIPT_TEMPLATE_CANVAS.height,
@@ -461,12 +445,17 @@ async function drawReceiptCanvas(
   ctx.fillText('No: ', metaRightX - receiptNoWidth - 4, metaTopY + 2);
   const dateLine = `Date: ${layout.dateText}`;
   ctx.fillText(dateLine, metaRightX, metaTopY + 26);
-  const metaBlockLeftX = metaRightX - ctx.measureText(dateLine).width;
+  const metaColumnLeftX = headerRightX + 2;
+  const metaBlockLeftX = Math.min(metaRightX - ctx.measureText(dateLine).width, metaColumnLeftX);
   ctx.textAlign = 'left';
-  phoneLines.forEach((line, index) => {
-    const renderedLine = index === 0 ? `Tél: ${line}` : line;
-    ctx.fillText(renderedLine, metaBlockLeftX, metaTopY + 46 + index * phoneLineHeight);
-  });
+  drawFittedText(
+    ctx,
+    `Tél: ${phoneValue}`,
+    metaBlockLeftX,
+    metaTopY + 46,
+    metaRightX - metaBlockLeftX,
+    RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt,
+  );
   ctx.textAlign = 'center';
 
   ctx.textAlign = 'center';
@@ -563,11 +552,10 @@ async function drawReceiptCanvas(
   ctx.fillStyle = '#1a1a2e';
   ctx.fillText(layout.receivedBy, detailInnerX, receiverBlockY + 20);
 
-  const receiverSigX = detailX + detailWidth - detailPaddingX - receiverSigWidth;
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';
-  ctx.textAlign = 'right';
-  ctx.fillText('Signature :', receiverSigX + receiverSigWidth, receiverBlockY);
+  ctx.textAlign = 'left';
+  ctx.fillText('Signature :', receiverSigX, receiverBlockY);
   if (receiverSignatureSource) {
     ctx.drawImage(receiverSignatureSource, receiverSigX, receiverSigTop, receiverSigWidth, receiverSigHeight);
   }
@@ -581,16 +569,17 @@ async function drawReceiptCanvas(
     receiverSigTop + receiverSigHeight,
   );
 
-  ctx.textAlign = 'left';
+  ctx.textAlign = 'right';
   ctx.font = `italic ${RECEIPT_TEMPLATE_TEXT_REGIONS.detailBox.labelFontPt}pt Times New Roman`;
   ctx.fillStyle = '#333333';
-  ctx.fillText('Signature du payeur :', detailX, payerLabelY);
+  ctx.fillText('Signature du payeur :', payerSigX + payerSigWidth, receiverBlockY);
   if (payerSignatureSource) {
-    ctx.drawImage(payerSignatureSource, detailX, payerSigTop, payerSigWidth, payerSigHeight);
+    ctx.drawImage(payerSignatureSource, payerSigX, payerSigTop, payerSigWidth, payerSigHeight);
   }
   ctx.strokeStyle = TEMPLATE_SIGNATURE_LINE_COLOR;
   ctx.lineWidth = 1;
-  drawLine(ctx, detailX, payerSigTop + payerSigHeight, detailX + payerSigWidth, payerSigTop + payerSigHeight);
+  drawLine(ctx, payerSigX, payerSigTop + payerSigHeight, payerSigX + payerSigWidth, payerSigTop + payerSigHeight);
+  ctx.textAlign = 'left';
 }
 
 export const ReceiptCanvas = forwardRef<ReceiptCanvasHandle, ReceiptCanvasProps>(function ReceiptCanvas(

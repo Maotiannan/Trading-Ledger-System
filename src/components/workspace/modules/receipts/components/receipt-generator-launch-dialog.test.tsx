@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ReceiptGeneratorLaunchDialog } from './receipt-generator-launch-dialog';
 
 describe('ReceiptGeneratorLaunchDialog', () => {
@@ -10,6 +10,8 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     usdAmount: '2500',
     receiptNo: '0010000',
     paymentMode: 'Cash' as const,
+    paymentType: 'Standard' as const,
+    receivedBy: 'Mamadou Dian Diallo' as const,
     loadingContext: false,
     creatingSession: false,
     error: null,
@@ -20,6 +22,8 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     onUsdAmountChange: jest.fn(),
     onReceiptNoChange: jest.fn(),
     onPaymentModeChange: jest.fn(),
+    onPaymentTypeChange: jest.fn(),
+    onReceivedByChange: jest.fn(),
     onSubmit: jest.fn(),
   };
 
@@ -87,5 +91,34 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     expect(input).toHaveAttribute('readonly');
     expect(onReceiptNoChange).not.toHaveBeenCalled();
     expect(screen.getByText('提交时由服务器原子分配，显示值仅作预览。')).toBeInTheDocument();
+  });
+
+  it('shows payment type and receiver selectors with the required defaults and options', () => {
+    const onPaymentTypeChange = jest.fn();
+    const onReceivedByChange = jest.fn();
+
+    render(
+      <ReceiptGeneratorLaunchDialog
+        {...defaultProps}
+        onPaymentTypeChange={onPaymentTypeChange}
+        onReceivedByChange={onReceivedByChange}
+      />
+    );
+
+    const paymentType = screen.getByLabelText('付款类型');
+    expect(paymentType).toHaveValue('Standard');
+    expect(screen.getByRole('option', { name: 'Deposit' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Full' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Initial' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Standard' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Final' })).toBeInTheDocument();
+
+    fireEvent.change(paymentType, { target: { value: 'Deposit' } });
+    expect(onPaymentTypeChange).toHaveBeenCalledWith('Deposit');
+
+    const receivedBy = screen.getByLabelText('Reçu par');
+    expect(receivedBy).toHaveValue('Mamadou Dian Diallo');
+    fireEvent.change(receivedBy, { target: { value: 'Transferred via bank account' } });
+    expect(onReceivedByChange).toHaveBeenCalledWith('Transferred via bank account');
   });
 });

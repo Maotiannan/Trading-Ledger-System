@@ -173,6 +173,46 @@ describe('receipt-generator-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
+  it('persists deposit signed receipts as deposit records and stores the selected receiver in the layout snapshot', async () => {
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-deposit',
+      receiptNo: '0010000',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+    mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
+      id: 'session-deposit',
+      receiptId: 'receipt-deposit',
+      receiptNo: '0010000',
+      status: ReceiptGeneratorSessionStatus.PENDING,
+    });
+
+    await createReceiptGeneratorSession(makeUser(), {
+      orderNo: 'Big Alpha-07',
+      usdAmount: 500,
+      paymentMode: 'Cash',
+      paymentType: 'Deposit',
+      receivedBy: 'Transferred via bank account',
+    });
+
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        isDeposit: true,
+      }),
+    }));
+    expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        balanceAfter: null,
+        motif: 'Deposit for Big Alpha-07',
+        layoutSnapshot: expect.objectContaining({
+          paymentType: 'Deposit',
+          receivedBy: 'Transferred via bank account',
+          resteAPayer: '',
+          balanceAfter: null,
+        }),
+      }),
+    }));
+  });
+
   it('uses the customer profile name when the order row customerName is a fallback alias', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {

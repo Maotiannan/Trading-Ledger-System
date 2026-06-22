@@ -7,6 +7,15 @@ import { Label } from '@/components/ui/label';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { formatUsdAmount } from '@/lib/display-format';
+import {
+  RECEIPT_GENERATOR_BANK_RECEIVED_BY,
+  RECEIPT_GENERATOR_PAYMENT_TYPES,
+  RECEIPT_GENERATOR_RECEIVED_BY,
+  normalizeReceiptGeneratorPaymentType,
+  normalizeReceiptGeneratorReceivedBy,
+  type ReceiptGeneratorPaymentType,
+  type ReceiptGeneratorReceivedBy,
+} from '@/lib/receipt-generator-layout';
 
 type OrderContext = {
   invNo: string | null;
@@ -30,6 +39,8 @@ export type ReceiptGeneratorLaunchDialogProps = {
   usdAmount: string;
   receiptNo: string;
   paymentMode: 'Cash' | 'Transfer';
+  paymentType: ReceiptGeneratorPaymentType;
+  receivedBy: ReceiptGeneratorReceivedBy;
   loadingContext: boolean;
   creatingSession: boolean;
   error: string | null;
@@ -40,6 +51,8 @@ export type ReceiptGeneratorLaunchDialogProps = {
   onUsdAmountChange: (value: string) => void;
   onReceiptNoChange: (value: string) => void;
   onPaymentModeChange: (value: 'Cash' | 'Transfer') => void;
+  onPaymentTypeChange: (value: ReceiptGeneratorPaymentType) => void;
+  onReceivedByChange: (value: ReceiptGeneratorReceivedBy) => void;
   onSubmit: () => void;
 };
 
@@ -53,6 +66,8 @@ export function ReceiptGeneratorLaunchDialog({
   usdAmount,
   receiptNo,
   paymentMode,
+  paymentType,
+  receivedBy,
   loadingContext,
   creatingSession,
   error,
@@ -63,6 +78,8 @@ export function ReceiptGeneratorLaunchDialog({
   onUsdAmountChange,
   onReceiptNoChange,
   onPaymentModeChange,
+  onPaymentTypeChange,
+  onReceivedByChange,
   onSubmit,
 }: ReceiptGeneratorLaunchDialogProps) {
   const customerLabel = context?.customer
@@ -123,6 +140,20 @@ export function ReceiptGeneratorLaunchDialog({
           </div>
 
           <div className="grid gap-2">
+            <Label htmlFor="receipt-generator-payment-type">{tx('付款类型', 'Payment Type')}</Label>
+            <select
+              id="receipt-generator-payment-type"
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={paymentType}
+              onChange={(event) => onPaymentTypeChange(normalizeReceiptGeneratorPaymentType(event.target.value))}
+            >
+              {RECEIPT_GENERATOR_PAYMENT_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid gap-2">
             <Label htmlFor="receipt-generator-payment-mode">{tx('支付方式', 'Mode de paiement')}</Label>
             <select
               id="receipt-generator-payment-mode"
@@ -132,6 +163,19 @@ export function ReceiptGeneratorLaunchDialog({
             >
               <option value="Cash">Cash</option>
               <option value="Transfer">Transfer</option>
+            </select>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="receipt-generator-received-by">Reçu par</Label>
+            <select
+              id="receipt-generator-received-by"
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={receivedBy}
+              onChange={(event) => onReceivedByChange(normalizeReceiptGeneratorReceivedBy(event.target.value))}
+            >
+              <option value={RECEIPT_GENERATOR_RECEIVED_BY}>{RECEIPT_GENERATOR_RECEIVED_BY}</option>
+              <option value={RECEIPT_GENERATOR_BANK_RECEIVED_BY}>{RECEIPT_GENERATOR_BANK_RECEIVED_BY}</option>
             </select>
           </div>
 

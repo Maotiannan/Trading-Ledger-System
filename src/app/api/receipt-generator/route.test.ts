@@ -134,6 +134,8 @@ describe('receipt-generator route', () => {
           orderNo: 'PIKIN-20',
           usdAmount: 2500,
           paymentMode: 'Cash',
+          paymentType: 'Standard',
+          receivedBy: 'Mamadou Dian Diallo',
         };
       },
     };
@@ -145,6 +147,8 @@ describe('receipt-generator route', () => {
       orderNo: 'PIKIN-20',
       usdAmount: 2500,
       paymentMode: 'Cash',
+      paymentType: 'Standard',
+      receivedBy: 'Mamadou Dian Diallo',
     });
   });
 

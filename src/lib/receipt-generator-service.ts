@@ -13,7 +13,12 @@ import { createApiError } from '@/lib/api-error';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { allocateNextReceiptNo } from '@/lib/receipt-number';
-import { buildReceiptGeneratorLayout } from '@/lib/receipt-generator-layout';
+import {
+  buildReceiptGeneratorLayout,
+  normalizeReceiptGeneratorPaymentMode,
+  normalizeReceiptGeneratorPaymentType,
+  normalizeReceiptGeneratorReceivedBy,
+} from '@/lib/receipt-generator-layout';
 import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { runInTransaction } from '@/lib/transaction';
@@ -151,6 +156,8 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   orderNo: string;
   usdAmount: number;
   paymentMode?: string | null;
+  paymentType?: string | null;
+  receivedBy?: string | null;
 }) {
   requireGeneratorRole(currentUser);
   const orderNo = trimString(input.orderNo);
@@ -158,9 +165,12 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
     throw badRequest('ORDER NO 不能为空');
   }
   const usdAmount = sanitizePositiveAmount(input.usdAmount);
-  const paymentMode = input.paymentMode === 'Transfer' ? 'Transfer' : 'Cash';
+  const paymentMode = normalizeReceiptGeneratorPaymentMode(input.paymentMode);
+  const paymentType = normalizeReceiptGeneratorPaymentType(input.paymentType);
+  const receivedBy = normalizeReceiptGeneratorReceivedBy(input.receivedBy);
   const creationContext = await buildCreationContext(currentUser, orderNo, usdAmount);
   const effectiveOrderNo = creationContext.orderNo;
+  const isDeposit = paymentType === 'Deposit';
 
   let result;
   try {
@@ -177,6 +187,8 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
         usdAmount,
         balanceBefore: creationContext.balanceBefore,
         paymentMode,
+        paymentType,
+        receivedBy,
       });
 
       const receipt = await tx.receipt.create({
@@ -189,6 +201,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
           orderNo: effectiveOrderNo,
           payer: finalizedLayout.clientName,
           status: ReceiptStatus.SIGNING_PENDING,
+          isDeposit,
           customerId: creationContext.customerId,
           customerMark: creationContext.customerMark,
           customerName: creationContext.customerName,

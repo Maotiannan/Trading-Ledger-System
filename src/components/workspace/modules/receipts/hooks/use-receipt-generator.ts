@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiCall, getErrorMessage } from '@/components/workspace/shared';
+import {
+  RECEIPT_GENERATOR_RECEIVED_BY,
+  type ReceiptGeneratorPaymentType,
+  type ReceiptGeneratorReceivedBy,
+} from '@/lib/receipt-generator-layout';
 
 type ReceiptGeneratorContext = {
   orderNo: string;
@@ -56,6 +61,8 @@ export function useReceiptGenerator(params: {
   const [generatorUsdAmount, setGeneratorUsdAmount] = useState('');
   const [generatorReceiptNo, setGeneratorReceiptNo] = useState('');
   const [generatorPaymentMode, setGeneratorPaymentMode] = useState<ReceiptPaymentMode>('Cash');
+  const [generatorPaymentType, setGeneratorPaymentType] = useState<ReceiptGeneratorPaymentType>('Standard');
+  const [generatorReceivedBy, setGeneratorReceivedBy] = useState<ReceiptGeneratorReceivedBy>(RECEIPT_GENERATOR_RECEIVED_BY);
   const [generatorContext, setGeneratorContext] = useState<ReceiptGeneratorContext>(null);
   const [generatorContextLoading, setGeneratorContextLoading] = useState(false);
   const [generatorCreating, setGeneratorCreating] = useState(false);
@@ -161,6 +168,8 @@ export function useReceiptGenerator(params: {
     setGeneratorUsdAmount('');
     setGeneratorReceiptNo('');
     setGeneratorPaymentMode('Cash');
+    setGeneratorPaymentType('Standard');
+    setGeneratorReceivedBy(RECEIPT_GENERATOR_RECEIVED_BY);
     setGeneratorContext(null);
     setGeneratorContextLoading(false);
     setGeneratorCreating(false);
@@ -187,6 +196,8 @@ export function useReceiptGenerator(params: {
           orderNo: generatorContext?.orderNo?.trim() || generatorOrderNo.trim(),
           usdAmount: Number(generatorUsdAmount),
           paymentMode: generatorPaymentMode,
+          paymentType: generatorPaymentType,
+          receivedBy: generatorReceivedBy,
         }),
       });
       const signingPath = result.data?.signingPath;
@@ -208,7 +219,7 @@ export function useReceiptGenerator(params: {
     } finally {
       setGeneratorCreating(false);
     }
-  }, [generatorContext, generatorOrderNo, generatorPaymentMode, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
+  }, [generatorContext, generatorOrderNo, generatorPaymentMode, generatorPaymentType, generatorReceivedBy, generatorUsdAmount, loadReceipts, openSigningTargetImpl, resetGeneratorState, setError, tx]);
 
   const resumeGeneratorSession = useCallback(async (receiptId: string) => {
     try {
@@ -241,6 +252,10 @@ export function useReceiptGenerator(params: {
     setGeneratorReceiptNo,
     generatorPaymentMode,
     setGeneratorPaymentMode,
+    generatorPaymentType,
+    setGeneratorPaymentType,
+    generatorReceivedBy,
+    setGeneratorReceivedBy,
     generatorContext,
     generatorContextLoading,
     generatorCreating,

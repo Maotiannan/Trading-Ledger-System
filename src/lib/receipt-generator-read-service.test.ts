@@ -221,6 +221,8 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.receiptStatus).toBe('SIGNING_PENDING');
     expect(result.data.layout.clientName).toBe('Alpha Trading SARL "Big Alpha"');
     expect(result.data.layout.paymentMode).toBe('Transfer');
+    expect(result.data.layout.paymentType).toBe('Standard');
+    expect(result.data.layout.receivedBy).toBe('Mamadou Dian Diallo');
   });
 
   it('resolves a pending generator session by receiptId', async () => {

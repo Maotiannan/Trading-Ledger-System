@@ -13,7 +13,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { allocateNextReceiptNo } from '@/lib/receipt-number';
 import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
-import { updateOrderBalance } from '@/lib/matching';
+import { ensureDepositPoolInvoice, updateOrderBalance } from '@/lib/matching';
 import {
   createReceiptGeneratorSession,
   finalizeReceiptGeneratorSession,
@@ -29,6 +29,17 @@ jest.mock('@/lib/db', () => ({
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+    },
+    invoice: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
+    order: {
+      create: jest.fn(),
+    },
+    orderAlias: {
+      deleteMany: jest.fn(),
+      createMany: jest.fn(),
     },
     uploadedAsset: {
       createMany: jest.fn(),
@@ -58,6 +69,7 @@ jest.mock('@/lib/receipt-generator-image', () => ({
 }));
 
 jest.mock('@/lib/matching', () => ({
+  ensureDepositPoolInvoice: jest.fn(),
   updateOrderBalance: jest.fn(),
 }));
 
@@ -80,12 +92,16 @@ function makeUser(role: UserRole = UserRole.ADMIN) {
 const mockDb = db as unknown as {
   receipt: { create: jest.Mock; update: jest.Mock };
   receiptGeneratorSession: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+  invoice: { findFirst: jest.Mock; create: jest.Mock };
+  order: { create: jest.Mock };
+  orderAlias: { deleteMany: jest.Mock; createMany: jest.Mock };
   uploadedAsset: { createMany: jest.Mock };
   $transaction: jest.Mock;
 };
 const mockLookupInvoiceOrderContext = lookupInvoiceOrderContext as jest.Mock;
 const mockAllocateNextReceiptNo = allocateNextReceiptNo as jest.Mock;
 const mockSaveReceiptGeneratorArtifact = saveReceiptGeneratorArtifact as jest.Mock;
+const mockEnsureDepositPoolInvoice = ensureDepositPoolInvoice as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
@@ -97,8 +113,14 @@ describe('receipt-generator-service', () => {
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockAllocateNextReceiptNo.mockResolvedValue('0010000');
+    mockEnsureDepositPoolInvoice.mockResolvedValue('deposit-pool-invoice');
     mockUpdateOrderBalance.mockResolvedValue(undefined);
     mockRm.mockResolvedValue(undefined);
+    mockDb.invoice.findFirst.mockResolvedValue({ id: 'deposit-pool-invoice', invNo: 'DEPOSIT_POOL' });
+    mockDb.invoice.create.mockResolvedValue({ id: 'deposit-pool-invoice', invNo: 'DEPOSIT_POOL' });
+    mockDb.order.create.mockResolvedValue({ id: 'order-deposit-pool', orderNo: 'AKD-01' });
+    mockDb.orderAlias.deleteMany.mockResolvedValue({ count: 0 });
+    mockDb.orderAlias.createMany.mockResolvedValue({ count: 1 });
     mockLookupInvoiceOrderContext.mockResolvedValue({
       data: {
         derivedOrderName: 'Big Alpha',
@@ -211,6 +233,81 @@ describe('receipt-generator-service', () => {
         }),
       }),
     }));
+  });
+
+  it('creates a deposit-pool order when a deposit signed receipt has customer context but no invoice order yet', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'AKD',
+        inferredCustomer: {
+          id: 'customer-akd',
+          mark: 'A K D',
+          orderName: 'AKD',
+          companyName: null,
+          name: 'Abdoulaye Diallo',
+          phone: '+224 622 05 71 47',
+          city: 'Conakry',
+        },
+        exactMatches: [],
+      },
+    });
+    mockDb.receipt.create.mockResolvedValueOnce({
+      id: 'receipt-akd-deposit',
+      receiptNo: '0010000',
+      status: ReceiptStatus.SIGNING_PENDING,
+    });
+    mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
+      id: 'session-akd-deposit',
+      receiptId: 'receipt-akd-deposit',
+      receiptNo: '0010000',
+      status: ReceiptGeneratorSessionStatus.PENDING,
+    });
+
+    const result = await createReceiptGeneratorSession(makeUser(), {
+      orderNo: 'AKD-01',
+      usdAmount: 1000,
+      paymentType: 'Deposit',
+    });
+
+    expect(mockDb.order.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        invoiceId: 'deposit-pool-invoice',
+        orderNo: 'AKD-01',
+        amount: 0,
+        customerId: 'customer-akd',
+        customerMark: 'A K D',
+        customerName: 'Abdoulaye Diallo',
+        customerPhone: '+224 622 05 71 47',
+        needsCustomerFix: false,
+      }),
+    }));
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderId: 'order-deposit-pool',
+        orderNo: 'AKD-01',
+        invNo: null,
+        isDeposit: true,
+        payer: 'Abdoulaye Diallo "A K D"',
+        needsCustomerFix: false,
+      }),
+    }));
+    expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        orderNo: 'AKD-01',
+        invNo: null,
+        balanceBefore: null,
+        balanceAfter: null,
+        motif: 'Deposit for AKD-01',
+        layoutSnapshot: expect.objectContaining({
+          receiptNo: '0010000',
+          orderNo: 'AKD-01',
+          invNo: null,
+          paymentType: 'Deposit',
+          resteAPayer: '',
+        }),
+      }),
+    }));
+    expect(result.data.signingPath).toBe('/receipt-generator/session-akd-deposit');
   });
 
   it('uses the customer profile name when the order row customerName is a fallback alias', async () => {

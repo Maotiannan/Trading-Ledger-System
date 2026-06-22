@@ -23,7 +23,8 @@ import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { runInTransaction } from '@/lib/transaction';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
-import { updateOrderBalance } from '@/lib/matching';
+import { ensureDepositPoolInvoice, updateOrderBalance } from '@/lib/matching';
+import { syncOrderAliases } from '@/lib/order-alias-db';
 import { resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
 import {
   getReceiptGeneratorCustomerCompanyName,
@@ -79,6 +80,36 @@ function trimString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+async function createDepositOrderForGenerator(tx: Prisma.TransactionClient, params: {
+  orderNo: string;
+  usd: number;
+  customerId: string;
+  customerMark: string;
+  customerName: string;
+  customerPhone: string | null;
+  customerCity: string | null;
+  currentUserId: string;
+}) {
+  const invoiceId = await ensureDepositPoolInvoice(params.currentUserId, tx);
+  const created = await tx.order.create({
+    data: {
+      invoiceId,
+      orderNo: params.orderNo,
+      amount: 0,
+      orderBalance: -params.usd,
+      createdBy: params.currentUserId,
+      customerId: params.customerId,
+      customerMark: params.customerMark,
+      customerName: params.customerName,
+      customerPhone: params.customerPhone,
+      customerCity: params.customerCity,
+      needsCustomerFix: false,
+    },
+  });
+  await syncOrderAliases(tx, created.id, params.orderNo);
+  return created.id;
+}
+
 function fileToBuffer(file: File) {
   if (typeof file.arrayBuffer === 'function') {
     return file.arrayBuffer().then((data) => Buffer.from(data));
@@ -86,7 +117,9 @@ function fileToBuffer(file: File) {
   return new Response(file).arrayBuffer().then((data) => Buffer.from(data));
 }
 
-async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string, usdAmount: number) {
+async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string, usdAmount: number, options: {
+  allowDepositPoolOrder?: boolean;
+} = {}) {
   const context = await lookupInvoiceOrderContext(currentUser, rawOrderNo);
   const exactMatches = Array.isArray(context.data?.exactMatches) ? context.data.exactMatches : [];
   const latestMatch = exactMatches[0] || null;
@@ -112,7 +145,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
         }
       : null;
 
-  if (!latestMatch) {
+  if (!latestMatch && !options.allowDepositPoolOrder) {
     throw badRequest('未找到对应订单，无法生成签名收据', { orderNo: rawOrderNo });
   }
   if (!customer?.id || !customer?.mark || !customer?.name) {
@@ -122,12 +155,13 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
     });
   }
 
-  const balanceBefore = Number(latestMatch.orderBalance || 0);
-  const matchedOrderNo = latestMatch.orderNo || rawOrderNo;
+  const balanceBefore = latestMatch ? Number(latestMatch.orderBalance || 0) : null;
+  const matchedOrderNo = latestMatch?.orderNo || rawOrderNo;
+  const matchedInvNo = latestMatch?.invoice?.invNo || null;
   const layout = buildReceiptGeneratorLayout({
       receiptNo: 'PENDING',
       orderNo: matchedOrderNo,
-      invNo: latestMatch.invoice?.invNo || null,
+      invNo: matchedInvNo,
       customerMark: customer.mark,
       customerCompanyName: customer.companyName || null,
       customerName: customer.name,
@@ -138,9 +172,9 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
   });
 
   return {
-    orderId: latestMatch.id,
+    orderId: latestMatch?.id || null,
     orderNo: matchedOrderNo,
-    invNo: latestMatch.invoice?.invNo || null,
+    invNo: matchedInvNo,
     customerId: customer.id,
     customerMark: customer.mark,
     customerCompanyName: customer.companyName || null,
@@ -168,14 +202,28 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
   const paymentMode = normalizeReceiptGeneratorPaymentMode(input.paymentMode);
   const paymentType = normalizeReceiptGeneratorPaymentType(input.paymentType);
   const receivedBy = normalizeReceiptGeneratorReceivedBy(input.receivedBy);
-  const creationContext = await buildCreationContext(currentUser, orderNo, usdAmount);
-  const effectiveOrderNo = creationContext.orderNo;
   const isDeposit = paymentType === 'Deposit';
+  const creationContext = await buildCreationContext(currentUser, orderNo, usdAmount, {
+    allowDepositPoolOrder: isDeposit,
+  });
+  const effectiveOrderNo = creationContext.orderNo;
 
   let result;
   try {
     result = await runInTransaction(async (tx) => {
       const receiptNo = await allocateNextReceiptNo(tx);
+      const orderId = creationContext.orderId || (isDeposit
+        ? await createDepositOrderForGenerator(tx, {
+            orderNo: effectiveOrderNo,
+            usd: usdAmount,
+            customerId: creationContext.customerId,
+            customerMark: creationContext.customerMark,
+            customerName: creationContext.customerName,
+            customerPhone: creationContext.customerPhone,
+            customerCity: creationContext.customerCity,
+            currentUserId: currentUser.id,
+          })
+        : null);
       const finalizedLayout = buildReceiptGeneratorLayout({
         receiptNo,
         orderNo: effectiveOrderNo,
@@ -208,7 +256,7 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
           customerPhone: creationContext.customerPhone,
           customerCity: creationContext.customerCity,
           needsCustomerFix: false,
-          orderId: creationContext.orderId,
+          orderId,
           createdBy: currentUser.id,
           note: '签名收据待完成',
         },

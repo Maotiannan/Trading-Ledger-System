@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.182
-> 最后更新：2026-06-22
+> 当前版本：v1.0.183
+> 最后更新：2026-06-23
 
 ## 当前状态
 
@@ -46,10 +46,12 @@
 - 签名收据底部签名行已按人工确认模板固化：`Reçu par` 在左、收款方签名居中、付款方签名在右，并保留下划线位置
 - `Generate Signed Receipt` 的 `Deposit` 类型恢复旧规则：客户可匹配但订单尚未登记时，也会创建待签名收据并自动进入定金订单池
 - `Generate Signed Receipt` 可选择 `Frais`（默认 `Payé`，可选 `Non payé`）和法语付款方式（默认 `Espèces`，可选 `Virement`），生成图片同步显示选择结果
+- `Generate Signed Receipt` 输入 `ORDER NO` 和金额后，会自动建议 `Deposit / Full / Initial / Standard / Final` 付款类型；用户仍可手动改选
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- Generate Signed Receipt 新增付款类型自动诊断：按订单历史正式收据、是否定金池、输入金额后的预计余额自动回填付款类型；签名前临时收据不参与历史判断，用户可继续手动修改
 - Generate Signed Receipt 新增 `Frais` 和法语 `Mode de paiement` 选择；旧的 `Cash / Transfer` 会自动兼容为 `Espèces / Virement`
 - 修复 `Deposit` 签名收据误报“未找到对应订单”的问题；未登记订单会自动创建到 `DEPOSIT_POOL`，`INV NO` 保持空白
 - 签名收据底部签名行已按确认后的可视化模板固化，正式生成图会使用新位置

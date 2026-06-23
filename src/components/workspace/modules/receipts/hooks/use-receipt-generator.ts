@@ -6,6 +6,7 @@ import {
   RECEIPT_GENERATOR_FRAIS_STATUSES,
   RECEIPT_GENERATOR_PAYMENT_MODES,
   RECEIPT_GENERATOR_RECEIVED_BY,
+  normalizeReceiptGeneratorPaymentType,
   type ReceiptGeneratorFraisStatus,
   type ReceiptGeneratorPaymentMode,
   type ReceiptGeneratorPaymentType,
@@ -24,6 +25,7 @@ type ReceiptGeneratorContext = {
     city: string | null;
   } | null;
   balanceBefore: number | null;
+  suggestedPaymentType?: ReceiptGeneratorPaymentType | null;
   preview?: {
     balanceAfter: number | null;
   } | null;
@@ -72,6 +74,7 @@ export function useReceiptGenerator(params: {
   const [generatorCreating, setGeneratorCreating] = useState(false);
   const [generatorError, setGeneratorError] = useState<string | null>(null);
   const lastLookupToken = useRef(0);
+  const generatorPaymentTypeTouched = useRef(false);
 
   const channel = useMemo(() => {
     if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return null;
@@ -150,6 +153,9 @@ export function useReceiptGenerator(params: {
         if (suggestedOrderNo && suggestedOrderNo !== orderNo) {
           setGeneratorOrderNo((prev) => (prev.trim() === orderNo ? suggestedOrderNo : prev));
         }
+        if (!generatorPaymentTypeTouched.current && context?.suggestedPaymentType) {
+          setGeneratorPaymentType(normalizeReceiptGeneratorPaymentType(context.suggestedPaymentType));
+        }
         setGeneratorContext(context);
         setGeneratorError(null);
       } catch (error) {
@@ -174,11 +180,27 @@ export function useReceiptGenerator(params: {
     setGeneratorPaymentMode(RECEIPT_GENERATOR_PAYMENT_MODES[0]);
     setGeneratorFraisStatus(RECEIPT_GENERATOR_FRAIS_STATUSES[0]);
     setGeneratorPaymentType('Standard');
+    generatorPaymentTypeTouched.current = false;
     setGeneratorReceivedBy(RECEIPT_GENERATOR_RECEIVED_BY);
     setGeneratorContext(null);
     setGeneratorContextLoading(false);
     setGeneratorCreating(false);
     setGeneratorError(null);
+  }, []);
+
+  const updateGeneratorOrderNo = useCallback((value: string) => {
+    generatorPaymentTypeTouched.current = false;
+    setGeneratorOrderNo(value);
+  }, []);
+
+  const updateGeneratorUsdAmount = useCallback((value: string) => {
+    generatorPaymentTypeTouched.current = false;
+    setGeneratorUsdAmount(value);
+  }, []);
+
+  const updateGeneratorPaymentType = useCallback((value: ReceiptGeneratorPaymentType) => {
+    generatorPaymentTypeTouched.current = true;
+    setGeneratorPaymentType(value);
   }, []);
 
   const createGeneratorSession = useCallback(async () => {
@@ -251,9 +273,9 @@ export function useReceiptGenerator(params: {
     showGeneratorLaunch,
     setShowGeneratorLaunch,
     generatorOrderNo,
-    setGeneratorOrderNo,
+    setGeneratorOrderNo: updateGeneratorOrderNo,
     generatorUsdAmount,
-    setGeneratorUsdAmount,
+    setGeneratorUsdAmount: updateGeneratorUsdAmount,
     generatorReceiptNo,
     setGeneratorReceiptNo,
     generatorPaymentMode,
@@ -261,7 +283,7 @@ export function useReceiptGenerator(params: {
     generatorFraisStatus,
     setGeneratorFraisStatus,
     generatorPaymentType,
-    setGeneratorPaymentType,
+    setGeneratorPaymentType: updateGeneratorPaymentType,
     generatorReceivedBy,
     setGeneratorReceivedBy,
     generatorContext,

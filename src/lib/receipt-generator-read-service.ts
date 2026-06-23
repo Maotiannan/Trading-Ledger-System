@@ -1,4 +1,4 @@
-import { ReceiptGeneratorSessionStatus, UserRole } from '@prisma/client';
+import { ReceiptGeneratorSessionStatus, ReceiptStatus, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
@@ -15,6 +15,12 @@ import {
   getReceiptGeneratorCustomerCompanyName,
   getReceiptGeneratorCustomerName,
 } from '@/lib/receipt-generator-customer';
+import {
+  classifyPaymentType,
+  DEPOSIT_POOL_INVOICE_NO,
+  mapPaymentTypeClassificationToReceiptGenerator,
+  SYSTEM_POOL_INVOICE_NOS,
+} from '@/lib/payment-type-classifier';
 import type { CurrentUser } from '@/lib/request-auth';
 
 function badRequest(message: string, detail?: unknown) {
@@ -69,6 +75,49 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
   };
 }
 
+async function suggestReceiptGeneratorPaymentType(input: {
+  latestMatch: {
+    id: string;
+    orderBalance: unknown;
+    invoice?: { invNo?: string | null } | null;
+  } | null;
+  hasCustomer: boolean;
+  usdAmount?: number;
+}) {
+  if (!input.latestMatch) {
+    return input.hasCustomer ? 'Deposit' : null;
+  }
+
+  const invNo = input.latestMatch.invoice?.invNo ?? null;
+  const numericBalanceBefore = Number(input.latestMatch.orderBalance || 0);
+  const numericAmount = Number(input.usdAmount);
+  const hasAmount = Number.isFinite(numericAmount) && numericAmount > 0;
+  const predictedBalanceAfter = hasAmount
+    ? Number((numericBalanceBefore - numericAmount).toFixed(2))
+    : null;
+
+  const firstFormalReceipt = await db.receipt.findFirst({
+    where: {
+      orderId: input.latestMatch.id,
+      status: { not: ReceiptStatus.SIGNING_PENDING },
+    },
+    select: { id: true },
+    orderBy: [
+      { createdAt: 'asc' },
+      { id: 'asc' },
+    ],
+  });
+
+  const classification = classifyPaymentType({
+    balanceAfter: predictedBalanceAfter,
+    isPoolOrder: Boolean(invNo && SYSTEM_POOL_INVOICE_NOS.has(invNo)),
+    isDepositPayment: invNo === DEPOSIT_POOL_INVOICE_NO,
+    isFirstPayment: !firstFormalReceipt,
+  });
+
+  return mapPaymentTypeClassificationToReceiptGenerator(classification);
+}
+
 export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUser, orderNo: string, usdAmount?: number) {
   assertGeneratorRole(currentUser);
 
@@ -109,6 +158,11 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
   const matchedOrderNo = latestMatch?.orderNo || String(orderNo || '').trim();
 
   const balanceBefore = latestMatch ? Number(latestMatch.orderBalance || 0) : null;
+  const suggestedPaymentType = await suggestReceiptGeneratorPaymentType({
+    latestMatch,
+    hasCustomer: Boolean(customer),
+    usdAmount,
+  });
   const receiptPreview = latestMatch && customer
     ? buildReceiptGeneratorLayout({
         receiptNo: 'PENDING',
@@ -131,6 +185,7 @@ export async function lookupReceiptGeneratorOrderContext(currentUser: CurrentUse
       customer,
       balanceBefore,
       exactMatchCount: exactMatches.length,
+      suggestedPaymentType,
       preview: receiptPreview,
     },
     message: '签名收据订单上下文已加载',

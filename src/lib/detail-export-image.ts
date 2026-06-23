@@ -6,6 +6,12 @@ import { ReceiptStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { formatOrderNameDisplay } from '@/lib/display-format';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
+import {
+  classifyPaymentType,
+  DEPOSIT_POOL_INVOICE_NO,
+  SYSTEM_POOL_INVOICE_NOS,
+  type PaymentTypeClassification,
+} from '@/lib/payment-type-classifier';
 
 type DetailExportSourceItem = {
   mark: string | null;
@@ -38,7 +44,7 @@ export type DetailExportRow = {
   index: number;
   mark: string;
   orderNo: string;
-  type: 'Initial' | 'Final' | 'Full payment' | 'Std' | 'Deposit';
+  type: PaymentTypeClassification;
   amount: number;
 };
 
@@ -148,9 +154,6 @@ type ResolvedItemAnalysis = {
   isFirstPayment: boolean;
 };
 
-const SYSTEM_POOL_INVOICE_NOS = new Set(['DEPOSIT_POOL', 'Un_Associated']);
-const DEPOSIT_POOL_INVOICE_NO = 'DEPOSIT_POOL';
-
 async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedItemAnalysis[]> {
   const resolvedOrderIds = await Promise.all(detail.items.map(async (item) => {
     if (item.receipt?.orderId) return item.receipt.orderId;
@@ -222,22 +225,6 @@ async function analyzeDetailItems(detail: DetailExportSource): Promise<ResolvedI
   });
 }
 
-function determineType(analysis: ResolvedItemAnalysis): DetailExportRow['type'] {
-  if (!analysis.isPoolOrder && typeof analysis.orderBalance === 'number' && analysis.orderBalance <= 5) {
-    if (analysis.isFirstPayment && !analysis.isDepositPayment) {
-      return 'Full payment';
-    }
-    return 'Final';
-  }
-  if (analysis.isFirstPayment) {
-    if (analysis.isDepositPayment) {
-      return 'Deposit';
-    }
-    return 'Initial';
-  }
-  return 'Std';
-}
-
 export async function buildDetailExportViewModel(detail: DetailExportSource): Promise<DetailExportViewModel> {
   const rowsAnalysis = await analyzeDetailItems(detail);
   const rows = detail.items.map((item, index) => {
@@ -253,7 +240,12 @@ export async function buildDetailExportViewModel(detail: DetailExportSource): Pr
       index: index + 1,
       mark: normalizeText(item.mark).toUpperCase(),
       orderNo: formatOrderNameDisplay(item.orderNo || item.receipt?.orderNo),
-      type: determineType(analysis),
+      type: classifyPaymentType({
+        balanceAfter: analysis.orderBalance,
+        isPoolOrder: analysis.isPoolOrder,
+        isDepositPayment: analysis.isDepositPayment,
+        isFirstPayment: analysis.isFirstPayment,
+      }),
       amount,
     } satisfies DetailExportRow;
   });

@@ -10,6 +10,9 @@ import {
 
 jest.mock('@/lib/db', () => ({
   db: {
+    receipt: {
+      findFirst: jest.fn(),
+    },
     receiptGeneratorSession: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -38,6 +41,9 @@ function makeUser(role: UserRole = UserRole.ADMIN) {
 }
 
 const mockDb = db as unknown as {
+  receipt: {
+    findFirst: jest.Mock;
+  };
   receiptGeneratorSession: {
     findUnique: jest.Mock;
     findFirst: jest.Mock;
@@ -115,6 +121,95 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.balanceBefore).toBe(34660);
     expect(result.data.preview?.balanceAfter).toBe(32160);
     expect(result.data.preview?.clientName).toBe('Alpha Trading SARL "Big Alpha"');
+    expect(result.data.suggestedPaymentType).toBe('Initial');
+    expect(mockDb.receipt.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        orderId: 'order-2',
+        status: { not: ReceiptStatus.SIGNING_PENDING },
+      }),
+    }));
+  });
+
+  it('suggests Full when the first formal payment clears a matched order', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'FULL',
+        inferredCustomer: null,
+        exactMatches: [
+          {
+            id: 'order-full',
+            orderNo: 'FULL-01',
+            orderBalance: 2500,
+            customerId: 'customer-full',
+            customerMark: 'FULL',
+            customerName: 'Full Customer',
+            customerPhone: '620000001',
+            customerCity: 'Conakry',
+            needsCustomerFix: false,
+            customer: { companyName: 'Full Company' },
+            invoice: { id: 'inv-full', invNo: 'INV-FULL', createdAt: new Date('2026-05-07T00:00:00Z') },
+          },
+        ],
+      },
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce(null);
+
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'FULL-01', 2500);
+
+    expect(result.data.suggestedPaymentType).toBe('Full');
+  });
+
+  it('suggests Final when an existing formal receipt exists and the current payment clears the order', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'FINAL',
+        inferredCustomer: null,
+        exactMatches: [
+          {
+            id: 'order-final',
+            orderNo: 'FINAL-01',
+            orderBalance: 1200,
+            customerId: 'customer-final',
+            customerMark: 'FINAL',
+            customerName: 'Final Customer',
+            customerPhone: '620000002',
+            customerCity: 'Conakry',
+            needsCustomerFix: false,
+            customer: { companyName: 'Final Company' },
+            invoice: { id: 'inv-final', invNo: 'INV-FINAL', createdAt: new Date('2026-05-07T00:00:00Z') },
+          },
+        ],
+      },
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-old' });
+
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'FINAL-01', 1200);
+
+    expect(result.data.suggestedPaymentType).toBe('Final');
+  });
+
+  it('suggests Deposit when no exact order exists but a customer is inferred', async () => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({
+      data: {
+        derivedOrderName: 'AKD',
+        inferredCustomer: {
+          id: 'customer-akd',
+          mark: 'A K D',
+          orderName: 'AKD',
+          companyName: null,
+          name: 'Abdoulaye Diallo',
+          phone: '+224 622 05 71 47',
+          city: 'Conakry',
+        },
+        exactMatches: [],
+      },
+    });
+
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'AKD-01', 500);
+
+    expect(result.data.invNo).toBeNull();
+    expect(result.data.suggestedPaymentType).toBe('Deposit');
+    expect(mockDb.receipt.findFirst).not.toHaveBeenCalled();
   });
 
   it('prefers the customer profile name over the order row customerName for signed receipts', async () => {

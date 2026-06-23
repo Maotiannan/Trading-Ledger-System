@@ -217,4 +217,65 @@ describe('useReceiptGenerator', () => {
     expect(result.current.generatorContext?.invNo).toBe('L25MH060992C');
     jest.useRealTimers();
   });
+
+  it('auto-fills payment type from the order context suggestion', async () => {
+    jest.useFakeTimers();
+    mockApiCall.mockResolvedValue({
+      data: {
+        orderNo: 'FULL-01',
+        invNo: 'INV-FULL',
+        customer: { id: 'customer-full', mark: 'FULL', name: 'Full Customer', phone: '620000001' },
+        balanceBefore: 2500,
+        suggestedPaymentType: 'Full',
+        preview: { balanceAfter: 0 },
+      },
+    });
+    const { result } = renderHook(() => useReceiptGenerator({ tx, loadReceipts, setError }));
+
+    await act(async () => {
+      result.current.setShowGeneratorLaunch(true);
+      result.current.setGeneratorOrderNo('FULL-01');
+      result.current.setGeneratorUsdAmount('2500');
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.generatorPaymentType).toBe('Full');
+    jest.useRealTimers();
+  });
+
+  it('does not overwrite a manually selected payment type with a later context suggestion', async () => {
+    jest.useFakeTimers();
+    mockApiCall.mockResolvedValue({
+      data: {
+        orderNo: 'FULL-01',
+        invNo: 'INV-FULL',
+        customer: { id: 'customer-full', mark: 'FULL', name: 'Full Customer', phone: '620000001' },
+        balanceBefore: 2500,
+        suggestedPaymentType: 'Full',
+        preview: { balanceAfter: 0 },
+      },
+    });
+    const { result } = renderHook(() => useReceiptGenerator({ tx, loadReceipts, setError }));
+
+    await act(async () => {
+      result.current.setShowGeneratorLaunch(true);
+      result.current.setGeneratorOrderNo('FULL-01');
+      result.current.setGeneratorUsdAmount('2500');
+      result.current.setGeneratorPaymentType('Deposit');
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.generatorPaymentType).toBe('Deposit');
+    jest.useRealTimers();
+  });
 });

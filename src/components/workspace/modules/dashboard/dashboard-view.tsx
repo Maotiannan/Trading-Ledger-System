@@ -87,6 +87,22 @@ type DashboardCustomerOutstanding = {
   }>;
 };
 
+type DashboardReceiptSearchItem = {
+  id: string;
+  orderNo: string;
+  date: string | null;
+  amount: number;
+  status: string;
+};
+
+type DashboardReceiptSearchResult = {
+  matched: boolean;
+  inputOrderNo: string;
+  matchedOrderNo: string | null;
+  items: DashboardReceiptSearchItem[];
+  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number };
+};
+
 const DASHBOARD_LIST_PAGE_SIZE = 10;
 
 export function Dashboard() {
@@ -122,6 +138,12 @@ export function Dashboard() {
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
   const [selectedReleasedInvoice, setSelectedReleasedInvoice] = useState<DashboardReleasedInvoice | null>(null);
+  const [orderReceiptSearchInput, setOrderReceiptSearchInput] = useState('');
+  const [orderReceiptSearchQuery, setOrderReceiptSearchQuery] = useState('');
+  const [orderReceiptSearchPage, setOrderReceiptSearchPage] = useState(1);
+  const [orderReceiptSearchResult, setOrderReceiptSearchResult] = useState<DashboardReceiptSearchResult | null>(null);
+  const [orderReceiptSearchLoading, setOrderReceiptSearchLoading] = useState(false);
+  const [orderReceiptSearchError, setOrderReceiptSearchError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const loadSummary = useCallback(async () => {
     const requestToken = dashboardRequestGuard.nextToken();
@@ -267,6 +289,60 @@ export function Dashboard() {
     }
   };
 
+  const loadOrderReceiptSearch = useCallback(async (orderNo: string, page: number) => {
+    const trimmed = orderNo.trim();
+    if (!trimmed) {
+      setOrderReceiptSearchResult(null);
+      setOrderReceiptSearchError(tx('请输入 ORDER NO', 'Please enter ORDER NO'));
+      return;
+    }
+
+    setOrderReceiptSearchLoading(true);
+    setOrderReceiptSearchError(null);
+    try {
+      const endpoint = `dashboard/receipt-search?orderNo=${encodeURIComponent(trimmed)}&page=${page}`;
+      const result = await apiCall(endpoint);
+      if (result.success && result.data) {
+        setOrderReceiptSearchResult(result.data as DashboardReceiptSearchResult);
+        setOrderReceiptSearchQuery(trimmed);
+        setOrderReceiptSearchPage(page);
+      } else {
+        setOrderReceiptSearchError(tx('查询失败，请稍后重试', 'Search failed, please retry'));
+      }
+    } catch {
+      setOrderReceiptSearchError(tx('查询失败，请稍后重试', 'Search failed, please retry'));
+    } finally {
+      setOrderReceiptSearchLoading(false);
+    }
+  }, [tx]);
+
+  const handleOrderReceiptSearch = useCallback(() => {
+    void loadOrderReceiptSearch(orderReceiptSearchInput, 1);
+  }, [loadOrderReceiptSearch, orderReceiptSearchInput]);
+
+  const renderPaginationFooter = (params: {
+    page: number;
+    totalPages: number;
+    totalItems: number;
+    onPrevious: () => void;
+    onNext: () => void;
+  }) => {
+    if (params.totalItems <= 0) {
+      return <div data-testid="dashboard-card-pagination-placeholder" className="h-9" />;
+    }
+    return (
+      <div data-testid="dashboard-card-pagination" className="mt-auto flex items-center justify-end gap-2 pt-3 text-sm">
+        <Button variant="outline" size="sm" disabled={params.page === 1} onClick={params.onPrevious}>
+          {tx('上一页', 'Previous')}
+        </Button>
+        <span>{tx(`第 ${params.page} / ${params.totalPages} 页`, `Page ${params.page} / ${params.totalPages}`)}</span>
+        <Button variant="outline" size="sm" disabled={params.page === params.totalPages} onClick={params.onNext}>
+          {tx('下一页', 'Next')}
+        </Button>
+      </div>
+    );
+  };
+
   const renderCustomerOrderStatusSection = (
     title: string,
     orders: DashboardCustomerOutstanding['orders'],
@@ -347,7 +423,7 @@ export function Dashboard() {
             <CardTitle>{tx('已放单未结清发票', 'Released Unpaid Invoices')}</CardTitle>
             <CardDescription>{tx('按放单已过去天数从久到近排序', 'Sorted by days since release, oldest first')}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="flex min-h-[520px] flex-col space-y-3">
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
@@ -385,17 +461,13 @@ export function Dashboard() {
                 </TableBody>
               </Table>
             </div>
-            {releasedInvoices.length > 0 && (
-              <div className="flex items-center justify-end gap-2 text-sm">
-                <Button variant="outline" size="sm" disabled={releasedInvoicePage === 1} onClick={() => setReleasedInvoicePage((page) => Math.max(1, page - 1))}>
-                  {tx('上一页', 'Previous')}
-                </Button>
-                <span>{tx(`第 ${releasedInvoicePage} / ${releasedInvoiceTotalPages} 页`, `Page ${releasedInvoicePage} / ${releasedInvoiceTotalPages}`)}</span>
-                <Button variant="outline" size="sm" disabled={releasedInvoicePage === releasedInvoiceTotalPages} onClick={() => setReleasedInvoicePage((page) => Math.min(releasedInvoiceTotalPages, page + 1))}>
-                  {tx('下一页', 'Next')}
-                </Button>
-              </div>
-            )}
+            {renderPaginationFooter({
+              page: releasedInvoicePage,
+              totalPages: releasedInvoiceTotalPages,
+              totalItems: releasedInvoices.length,
+              onPrevious: () => setReleasedInvoicePage((page) => Math.max(1, page - 1)),
+              onNext: () => setReleasedInvoicePage((page) => Math.min(releasedInvoiceTotalPages, page + 1)),
+            })}
           </CardContent>
         </Card>
       );
@@ -408,7 +480,7 @@ export function Dashboard() {
             <CardTitle>{tx('客户欠款排行', 'Customer Outstanding Ranking')}</CardTitle>
             <CardDescription>{tx('按客人 ORDER_NAME 汇总所有未结清余额', 'Outstanding balance grouped by customer ORDER_NAME')}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="flex min-h-[520px] flex-col space-y-3">
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader>
@@ -446,17 +518,96 @@ export function Dashboard() {
                 </TableBody>
               </Table>
             </div>
-            {customerOutstanding.length > 0 && (
-              <div className="flex items-center justify-end gap-2 text-sm">
-                <Button variant="outline" size="sm" disabled={customerOutstandingPage === 1} onClick={() => setCustomerOutstandingPage((page) => Math.max(1, page - 1))}>
-                  {tx('上一页', 'Previous')}
-                </Button>
-                <span>{tx(`第 ${customerOutstandingPage} / ${customerOutstandingTotalPages} 页`, `Page ${customerOutstandingPage} / ${customerOutstandingTotalPages}`)}</span>
-                <Button variant="outline" size="sm" disabled={customerOutstandingPage === customerOutstandingTotalPages} onClick={() => setCustomerOutstandingPage((page) => Math.min(customerOutstandingTotalPages, page + 1))}>
-                  {tx('下一页', 'Next')}
-                </Button>
+            {renderPaginationFooter({
+              page: customerOutstandingPage,
+              totalPages: customerOutstandingTotalPages,
+              totalItems: customerOutstanding.length,
+              onPrevious: () => setCustomerOutstandingPage((page) => Math.max(1, page - 1)),
+              onNext: () => setCustomerOutstandingPage((page) => Math.min(customerOutstandingTotalPages, page + 1)),
+            })}
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (cardId === 'order-receipt-search') {
+      const page = orderReceiptSearchResult?.pagination.page ?? orderReceiptSearchPage;
+      const totalPages = orderReceiptSearchResult?.pagination.totalPages ?? 1;
+      const totalItems = orderReceiptSearchResult?.pagination.totalItems ?? 0;
+      const receiptRows = orderReceiptSearchResult?.items ?? [];
+      return (
+        <Card data-testid="dashboard-order-receipt-search-card" className="flex min-h-[520px] flex-col">
+          <CardHeader>
+            <CardTitle>{tx('订单收据查询', 'Order Receipt Search')}</CardTitle>
+            <CardDescription>{tx('输入 ORDER NO 查询该订单对应收据', 'Search receipts by matched ORDER NO')}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="dashboard-order-receipt-search-input">ORDER NO</Label>
+                <Input
+                  id="dashboard-order-receipt-search-input"
+                  value={orderReceiptSearchInput}
+                  onChange={(event) => setOrderReceiptSearchInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') handleOrderReceiptSearch();
+                  }}
+                  placeholder="PIKIN-20"
+                />
               </div>
+              <Button onClick={handleOrderReceiptSearch} disabled={orderReceiptSearchLoading}>
+                {orderReceiptSearchLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                {tx('查询', 'Search')}
+              </Button>
+            </div>
+
+            {orderReceiptSearchError && (
+              <Alert variant="destructive"><AlertDescription>{orderReceiptSearchError}</AlertDescription></Alert>
             )}
+            {orderReceiptSearchResult && !orderReceiptSearchResult.matched && (
+              <Alert variant="destructive"><AlertDescription>{tx('ORDER NO 未找到', 'ORDER NO not found')}</AlertDescription></Alert>
+            )}
+            {orderReceiptSearchResult?.matchedOrderNo && (
+              <p className="text-sm text-muted-foreground">
+                {tx(`匹配 ORDER NO：${formatOrderNameDisplay(orderReceiptSearchResult.matchedOrderNo)}`, `Matched ORDER NO: ${formatOrderNameDisplay(orderReceiptSearchResult.matchedOrderNo)}`)}
+              </p>
+            )}
+
+            <div className="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ORDER NO</TableHead>
+                    <TableHead>{tx('日期', 'Date')}</TableHead>
+                    <TableHead>{tx('金额', 'Amount')}</TableHead>
+                    <TableHead>{tx('状态', 'Status')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {receiptRows.map((receipt) => (
+                    <TableRow key={receipt.id}>
+                      <TableCell className="font-medium">{formatOrderNameDisplay(receipt.orderNo)}</TableCell>
+                      <TableCell>{receipt.date ? new Date(receipt.date).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell className="font-medium">{formatUsdAmount(receipt.amount)}</TableCell>
+                      <TableCell><Badge>{receipt.status}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                  {Array.from({ length: Math.max(0, DASHBOARD_LIST_PAGE_SIZE - receiptRows.length) }).map((_, index) => (
+                    <TableRow key={`empty-${index}`} className="h-10">
+                      <TableCell colSpan={4}>&nbsp;</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {renderPaginationFooter({
+              page,
+              totalPages,
+              totalItems,
+              onPrevious: () => void loadOrderReceiptSearch(orderReceiptSearchQuery, Math.max(1, page - 1)),
+              onNext: () => void loadOrderReceiptSearch(orderReceiptSearchQuery, Math.min(totalPages, page + 1)),
+            })}
           </CardContent>
         </Card>
       );

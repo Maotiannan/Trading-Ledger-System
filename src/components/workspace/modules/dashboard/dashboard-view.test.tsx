@@ -131,7 +131,9 @@ describe('Dashboard customer outstanding status dialog', () => {
     });
 
     const customerButton = await screen.findByRole('button', { name: 'SUPER DT2' });
-    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
+    const rankingTable = screen.getByRole('columnheader', { name: 'ORDER_NAME' }).closest('table');
+    expect(rankingTable).not.toBeNull();
+    expect(within(rankingTable as HTMLTableElement).queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
     expect(screen.queryByText('In Transit: $250')).not.toBeInTheDocument();
     expect(screen.queryByText('Released: $750')).not.toBeInTheDocument();
 
@@ -253,5 +255,80 @@ describe('Dashboard customer outstanding status dialog', () => {
     expect(await screen.findByText(/Invoice Balance/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Hide / })).not.toBeInTheDocument();
     expect(mockApiCall).not.toHaveBeenCalledWith('settings', expect.anything());
+  });
+
+  it('searches receipts by ORDER NO from the dashboard card and reuses the query on pagination', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
+      if (endpoint === 'settings?view=user-preferences') return { success: true, data: { dashboardLayout: DEFAULT_DASHBOARD_LAYOUT } };
+      if (endpoint === 'dashboard/receipt-search?orderNo=PIKIN-20&page=1') return {
+        success: true,
+        data: {
+          matched: true,
+          inputOrderNo: 'PIKIN-20',
+          matchedOrderNo: 'PIKIN-20',
+          items: [{ id: 'receipt-1', orderNo: 'PIKIN-20', date: '2026-06-20T00:00:00.000Z', amount: 2500, status: 'SR_Received' }],
+          pagination: { page: 1, pageSize: 10, totalItems: 11, totalPages: 2 },
+        },
+      };
+      if (endpoint === 'dashboard/receipt-search?orderNo=PIKIN-20&page=2') return {
+        success: true,
+        data: {
+          matched: true,
+          inputOrderNo: 'PIKIN-20',
+          matchedOrderNo: 'PIKIN-20',
+          items: [{ id: 'receipt-2', orderNo: 'PIKIN-20', date: null, amount: 3000, status: 'RECEIVED' }],
+          pagination: { page: 2, pageSize: 10, totalItems: 11, totalPages: 2 },
+        },
+      };
+      return { success: false };
+    });
+
+    await act(async () => {
+      render(<Dashboard />);
+    });
+
+    const card = await screen.findByTestId('dashboard-order-receipt-search-card');
+    fireEvent.change(within(card).getByLabelText('ORDER NO'), { target: { value: 'PIKIN-20' } });
+    fireEvent.click(within(card).getByRole('button', { name: 'Search' }));
+
+    expect(await within(card).findByText('Matched ORDER NO: PIKIN-20')).toBeInTheDocument();
+    expect(within(card).getByText('$2,500')).toBeInTheDocument();
+    expect(screen.getAllByTestId('dashboard-card-pagination')).toHaveLength(3);
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Next' }));
+
+    expect(await within(card).findByText('$3,000')).toBeInTheDocument();
+    expect(mockApiCall).toHaveBeenCalledWith('dashboard/receipt-search?orderNo=PIKIN-20&page=2');
+  });
+
+  it('shows not found when ORDER NO matching fails and supports Enter search', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
+      if (endpoint === 'settings?view=user-preferences') return { success: true, data: { dashboardLayout: DEFAULT_DASHBOARD_LAYOUT } };
+      if (endpoint === 'dashboard/receipt-search?orderNo=UNKNOWN-01&page=1') return {
+        success: true,
+        data: {
+          matched: false,
+          inputOrderNo: 'UNKNOWN-01',
+          matchedOrderNo: null,
+          items: [],
+          pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 },
+        },
+      };
+      return { success: false };
+    });
+
+    await act(async () => {
+      render(<Dashboard />);
+    });
+
+    const card = await screen.findByTestId('dashboard-order-receipt-search-card');
+    const input = within(card).getByLabelText('ORDER NO');
+    fireEvent.change(input, { target: { value: 'UNKNOWN-01' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+
+    expect(await within(card).findByText('ORDER NO not found')).toBeInTheDocument();
+    expect(mockApiCall).toHaveBeenCalledWith('dashboard/receipt-search?orderNo=UNKNOWN-01&page=1');
   });
 });

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.183
-> 最后更新：2026-06-23
+> 当前版本：v1.0.184
+> 最后更新：2026-06-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard ORDER 收据查询卡片：新增 `order-receipt-search` Dashboard 卡片注册项，按账号参与 Dashboard 设置中的显示/排序；新增 `/api/dashboard/receipt-search` 和 `dashboard-receipt-search-service`，输入 `ORDER NO` 后先复用现有精确/alias/复合订单匹配规则，匹配不到不原始搜索收据，匹配到后按可见权限查询该订单收据；前端卡片支持按钮和 Enter 查询、10 条分页，并把 Dashboard 现有列表卡片分页固定到底部。无新增数据库表、NAS/COS 路径或备份范围。测试：`dashboard-layout-preference / dashboard-receipt-search-service / dashboard receipt-search route / dashboard-view` 红绿回归 ✅ 2026-06-28
 
 - [x] `Generate Signed Receipt` 付款类型自动诊断：新增 `payment-type-classifier` 共享分类器，把 Payment Detail Export Pic 原有 `Initial / Std / Final / Full payment / Deposit` 判断抽出为单一规则；`lookupReceiptGeneratorOrderContext()` 在订单上下文中按预计付款后余额、正式收据历史和 `DEPOSIT_POOL` 状态返回 `suggestedPaymentType`，并继续排除 `SIGNING_PENDING` 临时收据；前端 hook 自动回填 `Payment Type`，但用户手动改选后不再被当前上下文刷新覆盖。无新增数据库表、NAS/COS 路径或备份范围。测试：先确认新增测试失败，再通过 `npm test -- --runInBand src/lib/payment-type-classifier.test.ts src/lib/detail-export-image.test.ts src/lib/receipt-generator-read-service.test.ts src/components/workspace/modules/receipts/hooks/use-receipt-generator.test.tsx`，`npm run typecheck` ✅ 2026-06-23
 

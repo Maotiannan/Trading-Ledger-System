@@ -30,6 +30,26 @@ jest.mock('@/lib/store', () => ({
   useStore: jest.fn(),
 }));
 
+jest.mock('@/components/workspace/modules/receipts/components/receipt-image-preview-dialog', () => ({
+  ReceiptImagePreviewDialog: ({ image }: {
+    image: null | {
+      url: string;
+      orderNo: string;
+      invNo: string;
+      creator: string;
+    };
+  }) => (
+    image ? (
+      <div role="dialog">
+        <div>Bound ORDER NO: {image.orderNo}</div>
+        <div>Bound invoice: {image.invNo}</div>
+        <div>Creator: {image.creator}</div>
+        <img src={image.url} alt="Receipt image" />
+      </div>
+    ) : null
+  ),
+}));
+
 jest.mock('next-intl', () => ({
   useLocale: jest.fn(() => 'en'),
   useTranslations: jest.fn(() => (key: string, values?: Record<string, unknown>) => {
@@ -267,7 +287,19 @@ describe('Dashboard customer outstanding status dialog', () => {
           matched: true,
           inputOrderNo: 'PIKIN-20',
           matchedOrderNo: 'PIKIN-20',
-          items: [{ id: 'receipt-1', orderNo: 'PIKIN-20', date: '2026-06-20T00:00:00.000Z', amount: 2500, status: 'SR_Received' }],
+          items: [{
+            id: 'receipt-1',
+            orderNo: 'PIKIN-20',
+            invNo: 'L25MH090002',
+            boundInvNo: 'L25MH090002',
+            date: '2026-06-20T00:00:00.000Z',
+            amount: 2500,
+            status: 'SR_Received',
+            imageUrl: '/upload/images/receipts/ocr/pikin.jpg',
+            imageName: 'pikin.jpg',
+            creatorName: 'Sales User',
+            creatorEmail: 'sales@example.com',
+          }],
           pagination: { page: 1, pageSize: 10, totalItems: 11, totalPages: 2 },
         },
       };
@@ -277,7 +309,19 @@ describe('Dashboard customer outstanding status dialog', () => {
           matched: true,
           inputOrderNo: 'PIKIN-20',
           matchedOrderNo: 'PIKIN-20',
-          items: [{ id: 'receipt-2', orderNo: 'PIKIN-20', date: null, amount: 3000, status: 'RECEIVED' }],
+          items: [{
+            id: 'receipt-2',
+            orderNo: 'PIKIN-20',
+            invNo: null,
+            boundInvNo: null,
+            date: null,
+            amount: 3000,
+            status: 'RECEIVED',
+            imageUrl: null,
+            imageName: null,
+            creatorName: null,
+            creatorEmail: null,
+          }],
           pagination: { page: 2, pageSize: 10, totalItems: 11, totalPages: 2 },
         },
       };
@@ -294,11 +338,18 @@ describe('Dashboard customer outstanding status dialog', () => {
 
     expect(await within(card).findByText('Matched ORDER NO: PIKIN-20')).toBeInTheDocument();
     expect(within(card).getByText('$2,500')).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'PIKIN-20' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Bound ORDER NO: PIKIN-20')).toBeInTheDocument();
+    expect(screen.getByText('Bound invoice: L25MH090002')).toBeInTheDocument();
+    expect(screen.getByText('Creator: Sales User')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Receipt image' })).toHaveAttribute('src', '/upload/images/receipts/ocr/pikin.jpg');
     expect(screen.getAllByTestId('dashboard-card-pagination')).toHaveLength(3);
 
     fireEvent.click(within(card).getByRole('button', { name: 'Next' }));
 
     expect(await within(card).findByText('$3,000')).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'PIKIN-20' })).not.toBeInTheDocument();
     expect(mockApiCall).toHaveBeenCalledWith('dashboard/receipt-search?orderNo=PIKIN-20&page=2');
   });
 

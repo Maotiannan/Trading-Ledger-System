@@ -20,6 +20,10 @@ import {
 } from '@/lib/dashboard-layout-preference';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import {
+  ReceiptImagePreviewDialog,
+  type ReceiptImagePreviewInfo,
+} from '@/components/workspace/modules/receipts/components/receipt-image-preview-dialog';
+import {
   CustomerCandidate,
   IMPORT_RESULT_PAGE_SIZE,
   apiCall,
@@ -90,9 +94,15 @@ type DashboardCustomerOutstanding = {
 type DashboardReceiptSearchItem = {
   id: string;
   orderNo: string;
+  invNo: string | null;
+  boundInvNo: string | null;
   date: string | null;
   amount: number;
   status: string;
+  imageUrl: string | null;
+  imageName: string | null;
+  creatorName: string | null;
+  creatorEmail: string | null;
 };
 
 type DashboardReceiptSearchResult = {
@@ -138,6 +148,7 @@ export function Dashboard() {
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
   const [selectedReleasedInvoice, setSelectedReleasedInvoice] = useState<DashboardReleasedInvoice | null>(null);
+  const [viewingReceiptImage, setViewingReceiptImage] = useState<ReceiptImagePreviewInfo | null>(null);
   const [orderReceiptSearchInput, setOrderReceiptSearchInput] = useState('');
   const [orderReceiptSearchQuery, setOrderReceiptSearchQuery] = useState('');
   const [orderReceiptSearchPage, setOrderReceiptSearchPage] = useState(1);
@@ -586,7 +597,25 @@ export function Dashboard() {
                 <TableBody>
                   {receiptRows.map((receipt) => (
                     <TableRow key={receipt.id}>
-                      <TableCell className="font-medium">{formatOrderNameDisplay(receipt.orderNo)}</TableCell>
+                      <TableCell className="font-medium">
+                        {receipt.imageUrl ? (
+                          <button
+                            type="button"
+                            className="text-left font-medium text-blue-700 underline-offset-2 hover:underline"
+                            onClick={() => setViewingReceiptImage({
+                              url: getDisplayImageUrl(receipt.imageUrl as string),
+                              alt: tx('收据图片', 'Receipt image'),
+                              orderNo: receipt.orderNo || '-',
+                              invNo: receipt.boundInvNo || receipt.invNo || '-',
+                              creator: receipt.creatorName || receipt.creatorEmail || '-',
+                            })}
+                          >
+                            {formatOrderNameDisplay(receipt.orderNo)}
+                          </button>
+                        ) : (
+                          formatOrderNameDisplay(receipt.orderNo)
+                        )}
+                      </TableCell>
                       <TableCell>{receipt.date ? new Date(receipt.date).toLocaleDateString() : '-'}</TableCell>
                       <TableCell className="font-medium">{formatUsdAmount(receipt.amount)}</TableCell>
                       <TableCell><Badge>{receipt.status}</Badge></TableCell>
@@ -795,6 +824,14 @@ export function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ReceiptImagePreviewDialog
+        image={viewingReceiptImage}
+        tx={tx}
+        onOpenChange={(open) => {
+          if (!open) setViewingReceiptImage(null);
+        }}
+      />
     </div>
   );
 }

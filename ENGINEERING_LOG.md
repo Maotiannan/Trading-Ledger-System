@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.184
+> 当前版本：v1.0.185
 > 最后更新：2026-06-28
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard ORDER 收据查询图片预览：`dashboard-receipt-search-service` 在保持原 ORDER NO 匹配、权限和分页逻辑不变的前提下，补齐 `imageUrl / imageName / invNo / boundInvNo / creator` 预览字段；Dashboard `Order Receipt Search` 结果中只有带图片的 `ORDER NO` 渲染为可点击按钮，并复用 `ReceiptImagePreviewDialog` 展示已绑定 ORDER NO、发票号、创建者和收据图片。无新增数据库表、NAS/COS 路径或备份范围。测试：先确认 Dashboard 组件测试因 ORDER NO 不可点击失败，再通过 `dashboard-receipt-search-service / dashboard-view` 红绿回归 ✅ 2026-06-28
 
 - [x] Dashboard ORDER 收据查询卡片：新增 `order-receipt-search` Dashboard 卡片注册项，按账号参与 Dashboard 设置中的显示/排序；新增 `/api/dashboard/receipt-search` 和 `dashboard-receipt-search-service`，输入 `ORDER NO` 后先复用现有精确/alias/复合订单匹配规则，匹配不到不原始搜索收据，匹配到后按可见权限查询该订单收据；前端卡片支持按钮和 Enter 查询、10 条分页，并把 Dashboard 现有列表卡片分页固定到底部。无新增数据库表、NAS/COS 路径或备份范围。测试：`dashboard-layout-preference / dashboard-receipt-search-service / dashboard receipt-search route / dashboard-view` 红绿回归 ✅ 2026-06-28
 

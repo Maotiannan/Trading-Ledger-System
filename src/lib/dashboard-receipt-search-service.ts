@@ -8,9 +8,15 @@ export const DASHBOARD_RECEIPT_SEARCH_PAGE_SIZE = 10 as const;
 export type DashboardReceiptSearchItem = {
   id: string;
   orderNo: string;
+  invNo: string | null;
+  boundInvNo: string | null;
   date: string | null;
   amount: number;
   status: string;
+  imageUrl: string | null;
+  imageName: string | null;
+  creatorName: string | null;
+  creatorEmail: string | null;
 };
 
 export type DashboardReceiptSearchResult = {
@@ -80,7 +86,19 @@ export async function searchDashboardReceiptsByOrderNo(
     db.receipt.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }],
-      select: { id: true, orderNo: true, date: true, createdAt: true, usd: true, status: true },
+      select: {
+        id: true,
+        orderNo: true,
+        invNo: true,
+        date: true,
+        createdAt: true,
+        usd: true,
+        status: true,
+        imageUrl: true,
+        imageName: true,
+        creator: { select: { name: true, email: true } },
+        order: { select: { invoice: { select: { invNo: true } } } },
+      },
     }),
   ]);
 
@@ -100,9 +118,15 @@ export async function searchDashboardReceiptsByOrderNo(
     items: sortedRows.slice(start, start + DASHBOARD_RECEIPT_SEARCH_PAGE_SIZE).map((row) => ({
       id: row.id,
       orderNo: row.orderNo || matchedOrder.orderNo,
+      invNo: row.invNo,
+      boundInvNo: row.order?.invoice?.invNo || row.invNo || null,
       date: effectiveReceiptDate(row).toISOString(),
       amount: Number(row.usd),
       status: row.status,
+      imageUrl: row.imageUrl,
+      imageName: row.imageName,
+      creatorName: row.creator?.name || null,
+      creatorEmail: row.creator?.email || null,
     })),
     pagination: {
       page,

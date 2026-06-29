@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
+import { StatusMultiSelectFilter } from '@/components/workspace/modules/shared/status-multi-select-filter';
+import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
@@ -31,6 +33,25 @@ import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 import type { DetailDirectSelectableReceipt, PaymentAgentSummary } from './types';
 import { Building2, Plus, Upload } from 'lucide-react';
 
+const detailStatusOptions = ['Waiting_SWIFT', 'Bank_Transfer', 'RECEIVED', 'ERROR'] as const;
+const defaultDetailStatuses = detailStatusOptions.filter((status) => status !== 'RECEIVED');
+
+type DetailFilterState = {
+  search: string;
+  statuses: string[];
+  dateFrom: string;
+  dateTo: string;
+  amount: string;
+};
+
+const defaultDetailFilters: DetailFilterState = {
+  search: '',
+  statuses: defaultDetailStatuses,
+  dateFrom: '',
+  dateTo: '',
+  amount: '',
+};
+
 function formatDetailPreviewImageName(name: string) {
   return name.replace(/^payment-detail(?=[_.-])/i, 'Payment-Detail');
 }
@@ -40,10 +61,14 @@ export function DetailManager() {
   const locale = useLocale();
   const { details, setDetails, user } = useStore();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>(defaultDetailStatuses);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [amount, setAmount] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState<DetailFilterState>(defaultDetailFilters);
+  const [filterRequestVersion, setFilterRequestVersion] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const { pageSize, pageSizeOptions, savePageSize } = useListPageSizePreference('detail');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showAgentManager, setShowAgentManager] = useState(false);
   const [editingDetailId, setEditingDetailId] = useState<string | null>(null);
@@ -134,18 +159,24 @@ export function DetailManager() {
     }
   }, [directReceiptRequestGuard, tx, setError]);
 
-  const loadDetails = useCallback(async (searchOverride?: string) => {
+  const loadDetails = useCallback(async () => {
     const requestToken = detailRequestGuard.nextToken();
     const params = new URLSearchParams();
-    const trimmedSearch = (searchOverride ?? search).trim();
+    const trimmedSearch = appliedFilters.search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
-    if (statusFilter) params.set('status', statusFilter);
-    if (dateFrom) params.set('dateFrom', dateFrom);
-    if (dateTo) params.set('dateTo', dateTo);
-    if (amount) params.set('amount', amount);
+    for (const status of appliedFilters.statuses) params.append('status', status);
+    if (appliedFilters.dateFrom) params.set('dateFrom', appliedFilters.dateFrom);
+    if (appliedFilters.dateTo) params.set('dateTo', appliedFilters.dateTo);
+    if (appliedFilters.amount) params.set('amount', appliedFilters.amount);
     const query = params.toString();
     const endpoint = `detail${query ? `?${query}` : ''}`;
-    const canUsePrefetch = !trimmedSearch && !statusFilter && !dateFrom && !dateTo && !amount;
+    const canUsePrefetch =
+      !trimmedSearch &&
+      appliedFilters.statuses.length === defaultDetailStatuses.length &&
+      appliedFilters.statuses.every((status) => defaultDetailStatuses.includes(status as typeof defaultDetailStatuses[number])) &&
+      !appliedFilters.dateFrom &&
+      !appliedFilters.dateTo &&
+      !appliedFilters.amount;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof details }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && detailRequestGuard.isLatest(requestToken)) {
       setDetails(cachedResult.data);
@@ -158,11 +189,11 @@ export function DetailManager() {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [amount, dateFrom, dateTo, detailRequestGuard, details, search, setDetails, statusFilter]);
+  }, [appliedFilters, detailRequestGuard, details, setDetails]);
 
   useEffect(() => {
     loadDetails();
-  }, [loadDetails]);
+  }, [filterRequestVersion, loadDetails]);
 
   useEffect(() => {
     void loadAgents();
@@ -352,6 +383,57 @@ export function DetailManager() {
     anchor.click();
   };
 
+  const resetToFirstPage = () => setCurrentPage(1);
+
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter((prev) => {
+      const next = prev.includes(status) ? prev.filter((item) => item !== status) : [...prev, status];
+      return detailStatusOptions.filter((option) => next.includes(option));
+    });
+    resetToFirstPage();
+  };
+
+  const toggleAllStatuses = () => {
+    setStatusFilter((prev) => (
+      prev.length === detailStatusOptions.length ? [] : [...detailStatusOptions]
+    ));
+    resetToFirstPage();
+  };
+
+  const applyFilters = (searchOverride?: string) => {
+    setAppliedFilters({
+      search: searchOverride ?? search,
+      statuses: statusFilter,
+      dateFrom,
+      dateTo,
+      amount,
+    });
+    resetToFirstPage();
+    setFilterRequestVersion((version) => version + 1);
+  };
+
+  const resetFilters = () => {
+    setSearch('');
+    setStatusFilter(defaultDetailStatuses);
+    setDateFrom('');
+    setDateTo('');
+    setAmount('');
+    setAppliedFilters(defaultDetailFilters);
+    resetToFirstPage();
+    setFilterRequestVersion((version) => version + 1);
+  };
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    savePageSize(nextPageSize);
+    setCurrentPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(details.length / pageSize));
+  const paginatedDetails = details.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const statusSummary = statusFilter.length === detailStatusOptions.length
+    ? tx('全部状态', 'All statuses')
+    : tx(`已选 ${statusFilter.length} 个状态`, `${statusFilter.length} statuses`);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -385,47 +467,44 @@ export function DetailManager() {
           <Input
             placeholder={tx('搜索唛头/单号', 'Search mark/order no.')}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }}
             onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
               setSearch(value);
-              void loadDetails(value);
+              applyFilters(value);
             })}
           />
         )}
         renderFilters={() => (
           <>
-            <select className="border rounded-md px-3 py-2 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">{tx('全部状态', 'All statuses')}</option>
-              <option value="Waiting_SWIFT">Waiting_SWIFT</option>
-              <option value="Bank_Transfer">Bank_Transfer</option>
-              <option value="RECEIVED">RECEIVED</option>
-              <option value="ERROR">ERROR</option>
-            </select>
-            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            <MoneyInput placeholder={tx('准确总金额', 'Exact total amount')} value={amount} onValueChange={setAmount} />
+            <StatusMultiSelectFilter
+              label={tx('状态筛选', 'Status Filter')}
+              summary={statusSummary}
+              allLabel={tx('全部状态', 'All statuses')}
+              options={detailStatusOptions.map((status) => ({ value: status }))}
+              selected={statusFilter}
+              onToggleStatus={toggleStatusFilter}
+              onToggleAll={toggleAllStatuses}
+            />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
+            <MoneyInput placeholder={tx('准确总金额', 'Exact total amount')} value={amount} onValueChange={(value) => { setAmount(value); resetToFirstPage(); }} />
           </>
         )}
         renderActions={() => (
-          <div className="flex justify-end md:col-span-3 lg:col-span-6">
+          <div className="flex flex-col gap-2 md:col-span-3 lg:col-span-6 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => {
-                setSearch('');
-                setStatusFilter('');
-                setDateFrom('');
-                setDateTo('');
-                setAmount('');
-              }}
+              onClick={resetFilters}
             >
               {tx('重置筛选', 'Reset Filters')}
             </Button>
+            <Button onClick={() => applyFilters()}>{tx('查询', 'Search')}</Button>
           </div>
         )}
       />
 
       <DetailList
-        details={details}
+        details={paginatedDetails}
         expandedDetails={expandedDetails}
         canEdit={canEditDetails}
         isAdmin={isAdmin}
@@ -440,6 +519,14 @@ export function DetailManager() {
         onEditDetail={openEditDialog}
         onExportDetailPic={handleExportDetailPic}
         onDeleteDetail={handleDeleteDetail}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={details.length}
+        pageSize={pageSize}
+        pageSizeOptions={pageSizeOptions}
+        onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
+        onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+        onPageSizeChange={handlePageSizeChange}
       />
 
       <DetailUploadDialog

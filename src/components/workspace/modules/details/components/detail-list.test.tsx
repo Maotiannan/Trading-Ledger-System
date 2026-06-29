@@ -3,6 +3,16 @@ import { DetailList } from './detail-list';
 import type { Detail } from '@/lib/store';
 
 const tx = (zh: string, _en: string) => zh;
+const paginationProps = {
+  currentPage: 1,
+  totalPages: 1,
+  totalCount: 1,
+  pageSize: 10,
+  pageSizeOptions: [5, 10, 20, 50],
+  onPreviousPage: jest.fn(),
+  onNextPage: jest.fn(),
+  onPageSizeChange: jest.fn(),
+};
 
 function makeDetail(overrides: Partial<Detail> = {}): Detail {
   return {
@@ -42,6 +52,7 @@ describe('DetailList', () => {
         onEditDetail={jest.fn()}
         onExportDetailPic={jest.fn()}
         onDeleteDetail={jest.fn()}
+        {...paginationProps}
       />
     );
 
@@ -62,6 +73,7 @@ describe('DetailList', () => {
         onEditDetail={jest.fn()}
         onExportDetailPic={jest.fn()}
         onDeleteDetail={jest.fn()}
+        {...paginationProps}
       />
     );
 
@@ -83,6 +95,7 @@ describe('DetailList', () => {
         onEditDetail={jest.fn()}
         onExportDetailPic={jest.fn()}
         onDeleteDetail={jest.fn()}
+        {...paginationProps}
       />
     );
 
@@ -105,10 +118,35 @@ describe('DetailList', () => {
         onEditDetail={jest.fn()}
         onExportDetailPic={jest.fn()}
         onDeleteDetail={jest.fn()}
+        {...paginationProps}
       />
     );
 
     expect(screen.getByTitle('修改付款明细')).toBeInTheDocument();
     expect(screen.getByTitle('申请删除')).toBeInTheDocument();
+  });
+
+  it('renders rows per page controls and emits page size changes', () => {
+    const onPageSizeChange = jest.fn();
+    render(
+      <DetailList
+        details={[makeDetail()]}
+        expandedDetails={new Set()}
+        canEdit
+        isAdmin
+        tx={tx}
+        onToggleDetail={jest.fn()}
+        onViewImage={jest.fn()}
+        onEditDetail={jest.fn()}
+        onExportDetailPic={jest.fn()}
+        onDeleteDetail={jest.fn()}
+        {...paginationProps}
+        onPageSizeChange={onPageSizeChange}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '20' } });
+
+    expect(onPageSizeChange).toHaveBeenCalledWith(20);
   });
 });

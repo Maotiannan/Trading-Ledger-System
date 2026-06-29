@@ -26,4 +26,16 @@ describe('user preference schema contract', () => {
     expect(schema).toContain('dashboardLayout               Json?');
     expect(migration).toContain('ADD COLUMN `dashboardLayout` JSON NULL');
   });
+
+  it('stores list page size preferences on the account preference row', () => {
+    const schema = fs.readFileSync(path.join(process.cwd(), 'prisma/schema.prisma'), 'utf8');
+    const migration = fs.readFileSync(
+      path.join(process.cwd(), 'prisma/migrations/20260629120000_user_list_page_size_preference/migration.sql'),
+      'utf8',
+    );
+
+    expect(schema).toContain('listPageSizes');
+    expect(schema).toContain('listPageSizes                 Json?');
+    expect(migration).toContain('ADD COLUMN `listPageSizes` JSON NULL');
+  });
 });

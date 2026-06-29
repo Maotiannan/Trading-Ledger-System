@@ -6,6 +6,11 @@ import {
   normalizeDashboardLayoutPreference,
   validateDashboardLayoutPreferenceForSave,
 } from '@/lib/dashboard-layout-preference';
+import {
+  DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
+  normalizeListPageSizePreference,
+  validateListPageSizePreference,
+} from '@/lib/list-page-size-preference';
 import type {
   BranchPurgeTarget,
   PasswordFormState,
@@ -134,6 +139,7 @@ export function useSettingsActions({
       return {
         ...defaultUserImageCompressionPreferenceDraft,
         dashboardLayout: normalizeDashboardLayoutPreference(null),
+        listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
       };
     }
 
@@ -149,6 +155,7 @@ export function useSettingsActions({
         ? String(Number(source.ocrTargetMaxKb))
         : defaultUserImageCompressionPreferenceDraft.ocrTargetMaxKb,
       dashboardLayout: normalizeDashboardLayoutPreference(source.dashboardLayout),
+      listPageSizes: normalizeListPageSizePreference(source.listPageSizes),
     };
   }, []);
 
@@ -205,6 +212,16 @@ export function useSettingsActions({
       };
     }
 
+    let listPageSizes;
+    try {
+      listPageSizes = validateListPageSizePreference(preferences.listPageSizes);
+    } catch {
+      return {
+        ok: false,
+        error: tx('列表分页设置格式错误', 'List page size settings are invalid'),
+      };
+    }
+
     return {
       ok: true,
       value: {
@@ -212,6 +229,7 @@ export function useSettingsActions({
         imageCompressionQualityFloor: Number(qualityFloor.toFixed(2)),
         ocrTargetMaxKb,
         dashboardLayout,
+        listPageSizes,
       },
     };
   }, [tx]);

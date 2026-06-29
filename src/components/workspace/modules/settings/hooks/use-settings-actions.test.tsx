@@ -16,6 +16,7 @@ import {
   rememberPrefetchedApiResult,
 } from '@/components/workspace/shared';
 import { DEFAULT_DASHBOARD_LAYOUT } from '@/lib/dashboard-layout-preference';
+import { DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE } from '@/lib/list-page-size-preference';
 
 jest.mock('@/components/workspace/shared', () => {
   return {
@@ -90,6 +91,7 @@ describe('useSettingsActions', () => {
         imageCompressionQualityFloor: '0.3',
         ocrTargetMaxKb: '500',
         dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+        listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
       },
       config: { DETAIL_RECEIPT_MATCH_TOLERANCE: '5' },
       branchPurgeTargets: [{ id: 'sales-1', email: 'sales@example.com', name: 'Sales', level: 3, role: 'SALES', parentId: 'admin-1' }],
@@ -1022,6 +1024,7 @@ describe('useSettingsActions', () => {
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
         dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+        listPageSizes: { detail: 20, swift: 50 },
       },
     });
 
@@ -1037,6 +1040,7 @@ describe('useSettingsActions', () => {
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
       dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+      listPageSizes: { detail: 20, swift: 50 },
     });
   });
 
@@ -1047,6 +1051,7 @@ describe('useSettingsActions', () => {
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
       dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+      listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
     };
     mockApiCall.mockResolvedValueOnce({ success: true, message: 'saved' });
 
@@ -1065,6 +1070,7 @@ describe('useSettingsActions', () => {
           imageCompressionQualityFloor: 0.45,
           ocrTargetMaxKb: 640,
           dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+          listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
         },
       }),
     });
@@ -1080,6 +1086,7 @@ describe('useSettingsActions', () => {
       imageCompressionQualityFloor: '0.',
       ocrTargetMaxKb: '',
       dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+      listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
     };
 
     const { result } = renderHook(() => useSettingsActions(deps));

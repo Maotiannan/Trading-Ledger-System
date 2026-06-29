@@ -4,6 +4,7 @@ import type { Detail } from '@/lib/store';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { ChevronDown, ChevronRight, Download, Eye, Pencil, Trash2 } from 'lucide-react';
@@ -19,9 +20,36 @@ export type DetailListProps = {
   onEditDetail: (detail: Detail) => void;
   onExportDetailPic: (detailId: string) => void;
   onDeleteDetail: (detailId: string) => void;
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  pageSize: number;
+  pageSizeOptions: readonly number[];
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+  onPageSizeChange: (pageSize: number) => void;
 };
 
-export function DetailList({ details, expandedDetails, canEdit, isAdmin, tx, onToggleDetail, onViewImage, onEditDetail, onExportDetailPic, onDeleteDetail }: DetailListProps) {
+export function DetailList({
+  details,
+  expandedDetails,
+  canEdit,
+  isAdmin,
+  tx,
+  onToggleDetail,
+  onViewImage,
+  onEditDetail,
+  onExportDetailPic,
+  onDeleteDetail,
+  currentPage,
+  totalPages,
+  totalCount,
+  pageSize,
+  pageSizeOptions,
+  onPreviousPage,
+  onNextPage,
+  onPageSizeChange,
+}: DetailListProps) {
   if (details.length === 0) {
     return (
       <Card>
@@ -152,6 +180,37 @@ export function DetailList({ details, expandedDetails, canEdit, isAdmin, tx, onT
         </Card>
       );
       })}
+      {totalCount > 0 && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-between gap-3 px-4 py-4 sm:flex-row">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="detail-page-size">{tx('每页条数', 'Rows per page')}</Label>
+              <select
+                id="detail-page-size"
+                aria-label={tx('每页条数', 'Rows per page')}
+                className="border rounded-md px-3 py-2 text-sm"
+                value={String(pageSize)}
+                onChange={(event) => onPageSizeChange(Number(event.target.value))}
+              >
+                {pageSizeOptions.map((size) => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={onPreviousPage} disabled={currentPage === 1}>
+                {tx('上一页', 'Previous')}
+              </Button>
+              <span className="text-sm text-gray-600">
+                {tx(`第 ${currentPage} / ${totalPages} 页 (共 ${totalCount} 条)`, `Page ${currentPage} / ${totalPages} (Total ${totalCount})`)}
+              </span>
+              <Button variant="outline" size="sm" onClick={onNextPage} disabled={currentPage === totalPages}>
+                {tx('下一页', 'Next')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

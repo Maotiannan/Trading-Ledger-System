@@ -60,11 +60,17 @@ function parseDetailEditablePatch(value: unknown): DetailEditablePatch {
   };
 }
 
+function parseDetailStatuses(searchParams: URLSearchParams): DetailStatus[] {
+  return searchParams
+    .getAll('status')
+    .filter((status): status is DetailStatus => Object.values(DetailStatus).includes(status as DetailStatus));
+}
+
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action') || '';
-    const status = searchParams.get('status') as DetailStatus | null;
+    const statuses = parseDetailStatuses(searchParams);
     const search = searchParams.get('search') || '';
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
@@ -230,7 +236,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       buildDetailVisibilityWhere(ownerIds),
     ];
 
-    if (status) filters.push({ status });
+    if (statuses.length === 1) filters.push({ status: statuses[0] });
+    if (statuses.length > 1) filters.push({ status: { in: statuses } });
     if (search) assertSearchLength(search);
     if (dateFrom || dateTo) {
       filters.push({

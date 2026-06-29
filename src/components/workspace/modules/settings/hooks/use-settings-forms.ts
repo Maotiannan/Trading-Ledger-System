@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DEFAULT_DASHBOARD_LAYOUT, type DashboardLayoutPreference } from '@/lib/dashboard-layout-preference';
+import { DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE } from '@/lib/list-page-size-preference';
 import type {
   BranchPurgeTarget,
   PasswordFormState,
@@ -25,6 +26,7 @@ function assertNever(value: never): never {
 const defaultUserPreferenceSettingsDraft: UserPreferenceSettingsDraft = {
   ...defaultUserImageCompressionPreferenceDraft,
   dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+  listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
 };
 
 export function useSettingsForms() {

@@ -48,10 +48,30 @@ jest.mock('@/lib/swift-edit-request-service', () => ({
   listSwiftEditRequests: jest.fn(),
 }));
 
-import { POST } from '@/app/api/swift/route';
+jest.mock('@/lib/db', () => ({
+  db: {
+    swift: {
+      findMany: jest.fn(),
+    },
+  },
+}));
+
+jest.mock('@/lib/user-hierarchy', () => ({
+  getHierarchyScope: jest.fn(),
+}));
+
+import { db } from '@/lib/db';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { GET, POST } from '@/app/api/swift/route';
 import { listSwiftEditRequests, requestSwiftEdit, reviewSwiftEdit } from '@/lib/swift-edit-request-service';
 import { createSwiftRecord, markSwiftReceived, updateSwiftRecord } from '@/lib/swift-service';
 
+const mockDb = db as unknown as {
+  swift: {
+    findMany: jest.Mock;
+  };
+};
+const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockCreateSwiftRecord = createSwiftRecord as jest.Mock;
 const mockRequestSwiftEdit = requestSwiftEdit as jest.Mock;
 const mockReviewSwiftEdit = reviewSwiftEdit as jest.Mock;
@@ -72,6 +92,10 @@ function buildJsonRequest(payload: Record<string, unknown>) {
   } as never;
 }
 
+function buildGetRequest(url: string) {
+  return { url } as never;
+}
+
 describe('swift route edit-approval actions', () => {
   let consoleErrorSpy: jest.SpyInstance;
 
@@ -87,6 +111,9 @@ describe('swift route edit-approval actions', () => {
       parentId: null,
       createdById: null,
     };
+    mockGetHierarchyScope.mockResolvedValue({
+      ownerVisibleIds: new Set(['admin-1', 'sales-1']),
+    });
   });
 
   afterEach(() => {
@@ -137,6 +164,33 @@ describe('swift route edit-approval actions', () => {
     });
     expect(json.success).toBe(true);
     expect(json.message).toMatch(/等待管理员同意/);
+  });
+
+  it('filters swifts by selected status parameters including legacy error rows', async () => {
+    mockDb.swift.findMany.mockResolvedValueOnce([]);
+
+    const response = await GET(buildGetRequest('https://example.com/api/swift?status=Bank_Transfer&status=ERROR'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockDb.swift.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        AND: expect.arrayContaining([
+          {
+            OR: [
+              { status: 'Bank_Transfer', hasError: false },
+              {
+                OR: [
+                  { status: 'ERROR' },
+                  { hasError: true },
+                ],
+              },
+            ],
+          },
+        ]),
+      }),
+    }));
+    expect(json.success).toBe(true);
   });
 
   it('routes admin swift update through updateSwiftRecord', async () => {

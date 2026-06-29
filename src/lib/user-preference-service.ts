@@ -7,6 +7,12 @@ import {
   validateDashboardLayoutPreferenceForSave,
   type DashboardLayoutPreference,
 } from '@/lib/dashboard-layout-preference';
+import {
+  DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
+  normalizeListPageSizePreference,
+  validateListPageSizePreference,
+  type UserListPageSizePreference,
+} from '@/lib/list-page-size-preference';
 import type { CurrentUser } from '@/lib/request-auth';
 
 export type UserImageCompressionPreference = {
@@ -17,6 +23,7 @@ export type UserImageCompressionPreference = {
 
 export type UserPreferenceSettings = UserImageCompressionPreference & {
   dashboardLayout: DashboardLayoutPreference;
+  listPageSizes: UserListPageSizePreference;
 };
 
 export const DEFAULT_USER_IMAGE_COMPRESSION_PREFERENCE: UserImageCompressionPreference = Object.freeze({
@@ -28,10 +35,14 @@ export const DEFAULT_USER_IMAGE_COMPRESSION_PREFERENCE: UserImageCompressionPref
 export const DEFAULT_USER_PREFERENCE_SETTINGS: UserPreferenceSettings = Object.freeze({
   ...DEFAULT_USER_IMAGE_COMPRESSION_PREFERENCE,
   dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+  listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
 });
 
 type UpdateUserImageCompressionPreferenceInput = Partial<UserImageCompressionPreference>;
-type UpdateUserPreferenceSettingsInput = Partial<UserImageCompressionPreference & { dashboardLayout: unknown }>;
+type UpdateUserPreferenceSettingsInput = Partial<UserImageCompressionPreference & {
+  dashboardLayout: unknown;
+  listPageSizes: unknown;
+}>;
 
 const MIN_IMAGE_COMPRESSION_QUALITY_FLOOR = 0.3;
 const MAX_IMAGE_COMPRESSION_QUALITY_FLOOR = 1;
@@ -43,12 +54,14 @@ function normalizePreferenceRow(row: {
   imageCompressionQualityFloor: unknown;
   ocrTargetMaxKb: number;
   dashboardLayout?: Prisma.JsonValue | null;
+  listPageSizes?: Prisma.JsonValue | null;
 }): UserPreferenceSettings {
   return {
     imageCompressionEnabled: row.imageCompressionEnabled,
     imageCompressionQualityFloor: Number(row.imageCompressionQualityFloor),
     ocrTargetMaxKb: row.ocrTargetMaxKb,
     dashboardLayout: normalizeDashboardLayoutPreference(row.dashboardLayout ?? null),
+    listPageSizes: normalizeListPageSizePreference(row.listPageSizes ?? null),
   };
 }
 
@@ -123,6 +136,19 @@ function validateDashboardLayout(value: unknown): DashboardLayoutPreference {
   }
 }
 
+function validateListPageSizes(value: unknown): UserListPageSizePreference {
+  try {
+    return validateListPageSizePreference(value);
+  } catch (error) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '列表分页设置格式错误',
+      detail: { listPageSizes: value, error: error instanceof Error ? error.message : String(error) },
+    });
+  }
+}
+
 export async function getUserPreferences(currentUser: CurrentUser): Promise<UserPreferenceSettings> {
   const preference = await db.userPreference.findUnique({
     where: { userId: currentUser.id },
@@ -160,9 +186,13 @@ export async function updateUserPreferences(
     dashboardLayout: Object.prototype.hasOwnProperty.call(input, 'dashboardLayout')
       ? validateDashboardLayout(input.dashboardLayout)
       : currentPreference.dashboardLayout,
+    listPageSizes: Object.prototype.hasOwnProperty.call(input, 'listPageSizes')
+      ? validateListPageSizes(input.listPageSizes)
+      : currentPreference.listPageSizes,
   };
 
   const dashboardLayout = nextPreference.dashboardLayout as unknown as Prisma.InputJsonValue;
+  const listPageSizes = nextPreference.listPageSizes as unknown as Prisma.InputJsonValue;
   const savedPreference = await db.userPreference.upsert({
     where: { userId: currentUser.id },
     create: {
@@ -171,12 +201,14 @@ export async function updateUserPreferences(
       imageCompressionQualityFloor: nextPreference.imageCompressionQualityFloor,
       ocrTargetMaxKb: nextPreference.ocrTargetMaxKb,
       dashboardLayout,
+      listPageSizes,
     },
     update: {
       imageCompressionEnabled: nextPreference.imageCompressionEnabled,
       imageCompressionQualityFloor: nextPreference.imageCompressionQualityFloor,
       ocrTargetMaxKb: nextPreference.ocrTargetMaxKb,
       dashboardLayout,
+      listPageSizes,
     },
   });
 

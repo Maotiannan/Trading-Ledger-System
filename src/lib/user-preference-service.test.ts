@@ -4,6 +4,7 @@ import {
   DEFAULT_USER_IMAGE_COMPRESSION_PREFERENCE,
   DEFAULT_USER_PREFERENCE_SETTINGS,
   getUserImageCompressionPreference,
+  updateUserPreferences,
   updateUserImageCompressionPreference,
 } from '@/lib/user-preference-service';
 
@@ -59,6 +60,8 @@ describe('user-preference-service', () => {
       imageCompressionEnabled: false,
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: 640,
+      dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+      listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       createdAt: new Date('2026-05-04T10:00:00.000Z'),
       updatedAt: new Date('2026-05-04T10:00:00.000Z'),
     });
@@ -77,12 +80,14 @@ describe('user-preference-service', () => {
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
         dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+        listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       },
       update: {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
         dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+        listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       },
     });
     expect(result).toEqual({
@@ -98,6 +103,8 @@ describe('user-preference-service', () => {
       imageCompressionEnabled: true,
       imageCompressionQualityFloor: '0.55',
       ocrTargetMaxKb: 700,
+      dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+      listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       createdAt: new Date('2026-05-04T10:00:00.000Z'),
       updatedAt: new Date('2026-05-04T10:00:00.000Z'),
     });
@@ -106,6 +113,8 @@ describe('user-preference-service', () => {
       imageCompressionEnabled: true,
       imageCompressionQualityFloor: '0.55',
       ocrTargetMaxKb: 900,
+      dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+      listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       createdAt: new Date('2026-05-04T10:00:00.000Z'),
       updatedAt: new Date('2026-05-04T11:00:00.000Z'),
     });
@@ -122,12 +131,14 @@ describe('user-preference-service', () => {
         imageCompressionQualityFloor: 0.55,
         ocrTargetMaxKb: 900,
         dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+        listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       },
       update: {
         imageCompressionEnabled: true,
         imageCompressionQualityFloor: 0.55,
         ocrTargetMaxKb: 900,
         dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+        listPageSizes: DEFAULT_USER_PREFERENCE_SETTINGS.listPageSizes,
       },
     });
     expect(result).toEqual({
@@ -189,5 +200,43 @@ describe('user-preference-service', () => {
     });
 
     expect(mockDb.userPreference.upsert).not.toHaveBeenCalled();
+  });
+
+  it('updates list page size preferences without changing image preferences', async () => {
+    mockDb.userPreference.findUnique.mockResolvedValueOnce({
+      userId: 'user-1',
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: '0.45',
+      ocrTargetMaxKb: 640,
+      dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+      listPageSizes: { detail: 10, swift: 10 },
+      createdAt: new Date('2026-05-04T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T10:00:00.000Z'),
+    });
+    mockDb.userPreference.upsert.mockResolvedValueOnce({
+      userId: 'user-1',
+      imageCompressionEnabled: false,
+      imageCompressionQualityFloor: '0.45',
+      ocrTargetMaxKb: 640,
+      dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
+      listPageSizes: { detail: 20, swift: 50 },
+      createdAt: new Date('2026-05-04T10:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T11:00:00.000Z'),
+    });
+
+    const result = await updateUserPreferences(makeCurrentUser(), {
+      listPageSizes: { detail: 20, swift: 50 },
+    });
+
+    expect(mockDb.userPreference.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({
+        imageCompressionEnabled: false,
+        imageCompressionQualityFloor: 0.45,
+        ocrTargetMaxKb: 640,
+        listPageSizes: { detail: 20, swift: 50 },
+      }),
+    }));
+    expect(result.listPageSizes).toEqual({ detail: 20, swift: 50 });
+    expect(result.imageCompressionEnabled).toBe(false);
   });
 });

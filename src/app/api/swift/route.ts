@@ -50,6 +50,38 @@ function isPdfUpload(file: File): boolean {
   return mime === 'application/pdf' || name.endsWith('.pdf');
 }
 
+function parseSwiftStatuses(searchParams: URLSearchParams): SwiftStatus[] {
+  return searchParams
+    .getAll('status')
+    .filter((status): status is SwiftStatus => Object.values(SwiftStatus).includes(status as SwiftStatus));
+}
+
+function buildSwiftStatusWhere(statuses: SwiftStatus[]): Record<string, unknown> | null {
+  if (statuses.length === 0) return null;
+
+  const statusSet = new Set(statuses);
+  const filters: Record<string, unknown>[] = [];
+  const normalStatuses = statuses.filter((status) => status !== SwiftStatus.ERROR);
+  if (normalStatuses.length === 1) {
+    filters.push({ status: normalStatuses[0], hasError: false });
+  }
+  if (normalStatuses.length > 1) {
+    filters.push({ status: { in: normalStatuses }, hasError: false });
+  }
+  if (statusSet.has(SwiftStatus.ERROR)) {
+    filters.push({
+      OR: [
+        { status: SwiftStatus.ERROR },
+        { hasError: true },
+      ],
+    });
+  }
+
+  if (filters.length === 0) return null;
+  if (filters.length === 1) return filters[0];
+  return { OR: filters };
+}
+
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { searchParams } = new URL(request.url);
@@ -60,6 +92,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const minAmount = searchParams.get('minAmount');
     const maxAmount = searchParams.get('maxAmount');
     const hasError = searchParams.get('hasError');
+    const statuses = parseSwiftStatuses(searchParams);
 
     const scope = await getHierarchyScope(currentUser);
     const ownerIds = Array.from(scope.ownerVisibleIds);
@@ -88,6 +121,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     if (hasError === 'true' || hasError === 'false') {
       filters.push({ hasError: hasError === 'true' });
     }
+    const statusWhere = buildSwiftStatusWhere(statuses);
+    if (statusWhere) filters.push(statusWhere);
     const where = filters.length === 1 ? filters[0] : { AND: filters };
 
     const swifts = await db.swift.findMany({

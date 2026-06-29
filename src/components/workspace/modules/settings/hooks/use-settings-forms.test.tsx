@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { DEFAULT_DASHBOARD_LAYOUT, hideDashboardCard } from '@/lib/dashboard-layout-preference';
+import { DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE } from '@/lib/list-page-size-preference';
 import { useSettingsForms } from './use-settings-forms';
 
 describe('useSettingsForms', () => {
@@ -46,6 +47,7 @@ describe('useSettingsForms', () => {
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
       dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+      listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
     });
 
     const hiddenLayout = hideDashboardCard(DEFAULT_DASHBOARD_LAYOUT, 'invoice-balance');

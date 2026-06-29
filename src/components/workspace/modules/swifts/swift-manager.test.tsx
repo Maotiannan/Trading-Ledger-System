@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SwiftManager } from './swift-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
@@ -212,5 +212,55 @@ describe('SwiftManager', () => {
     fireEvent.click(screen.getByRole('button', { name: '筛选' }));
 
     expect(screen.getByTestId('swift-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
+  });
+
+  it('loads swifts with non-received statuses by default and applies RECEIVED when selected', async () => {
+    await act(async () => {
+      render(<SwiftManager />);
+    });
+
+    await waitFor(() => {
+      expect(mockApiCall).toHaveBeenCalledWith('swift?status=Bank_Transfer&status=ERROR');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '状态筛选' }));
+    fireEvent.click(screen.getByLabelText('RECEIVED'));
+    fireEvent.click(screen.getByRole('button', { name: '查询' }));
+
+    await waitFor(() => {
+      expect(mockApiCall).toHaveBeenCalledWith('swift?status=Bank_Transfer&status=ERROR&status=RECEIVED');
+    });
+  });
+
+  it('uses and persists the account swift page size preference', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint === 'settings?view=user-preferences') {
+        return { success: true, data: { listPageSizes: { detail: 10, swift: 20 } } };
+      }
+      if (endpoint === 'settings' && options?.method === 'POST') {
+        return { success: true, data: { listPageSizes: { detail: 10, swift: 50 } } };
+      }
+      return { success: true, data: [] };
+    });
+
+    await act(async () => {
+      render(<SwiftManager />);
+    });
+
+    await waitFor(() => {
+      expect((globalThis as { __swiftListProps?: SwiftListProps }).__swiftListProps?.pageSize).toBe(20);
+    });
+
+    await act(async () => {
+      (globalThis as { __swiftListProps?: SwiftListProps }).__swiftListProps?.onPageSizeChange(50);
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update-user-preferences',
+        preferences: { listPageSizes: { detail: 10, swift: 50 } },
+      }),
+    }));
   });
 });

@@ -1,4 +1,5 @@
 import type { DashboardLayoutPreference } from '@/lib/dashboard-layout-preference';
+import type { UserListPageSizePreference } from '@/lib/list-page-size-preference';
 
 export type BranchPurgeTarget = {
   id: string;
@@ -42,6 +43,7 @@ export type UserImageCompressionPreference = {
 
 export type UserPreferenceSettings = UserImageCompressionPreference & {
   dashboardLayout: DashboardLayoutPreference;
+  listPageSizes: UserListPageSizePreference;
 };
 
 export type UserImageCompressionPreferenceDraft = {
@@ -52,6 +54,7 @@ export type UserImageCompressionPreferenceDraft = {
 
 export type UserPreferenceSettingsDraft = UserImageCompressionPreferenceDraft & {
   dashboardLayout: DashboardLayoutPreference;
+  listPageSizes: UserListPageSizePreference;
 };
 
 export type UserImageCompressionPreferenceFieldValueMap = {

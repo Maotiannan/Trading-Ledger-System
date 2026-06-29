@@ -364,6 +364,23 @@ describe('detail route edit-approval actions', () => {
     ]);
   });
 
+  it('filters detail list by repeated status parameters', async () => {
+    mockDb.detail.findMany.mockResolvedValueOnce([]);
+
+    const response = await GET(buildGetRequest('https://example.com/api/detail?status=Waiting_SWIFT&status=ERROR'));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockDb.detail.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        AND: expect.arrayContaining([
+          { status: { in: ['Waiting_SWIFT', 'ERROR'] } },
+        ]),
+      }),
+    }));
+    expect(json.success).toBe(true);
+  });
+
   it('previews detail edit order matches against existing workflow receipts', async () => {
     mockFindMatchingReceipt.mockResolvedValueOnce('receipt-bank');
     mockDb.receipt.findUnique.mockResolvedValueOnce({

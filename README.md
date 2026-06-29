@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.185`
-- 最近更新：Dashboard 的 ORDER NO 收据查询结果支持直接点击查看收据图片。
+- 版本：`1.0.186`
+- 最近更新：Payment Detail 和 SWIFT 默认隐藏已完成记录，支持多选状态筛选和按账号保存每页条数。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -34,8 +34,8 @@
 | Invoice Management | 创建发票、维护订单金额、查看 Outstanding |
 | Orders | 维护不参与财务余额的业务订单跟踪 |
 | Receipt Management | 上传收据、直接创建收据、生成签名收据 |
-| Payment Detail Management | 上传或创建付款明细，导出付款明细图片 |
-| SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路 |
+| Payment Detail Management | 上传或创建付款明细，导出付款明细图片；默认聚焦未完成明细 |
+| SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路；默认聚焦未完成水单 |
 | Approval | 审批删除申请和修改申请 |
 | Customer Management | 维护客户、ORDER_NAME、CONSIGNEE、绑定关系 |
 | Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、审计 |

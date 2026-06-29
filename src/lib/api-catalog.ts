@@ -129,7 +129,7 @@ export const apiCatalog: ApiModule[] = [
     endpoint: '/api/detail',
     description: 'Payment detail OCR and lifecycle',
     actions: [
-      { action: 'list', method: 'GET', description: 'List payment details; supports exact amount filtering with amount=<usd>' },
+      { action: 'list', method: 'GET', description: 'List payment details; supports repeated status filters and exact amount filtering with amount=<usd>' },
       { action: 'recognize', method: 'POST', description: 'OCR recognize detail', bodyExample: { action: 'recognize', imageBase64: 'data:image/jpeg;base64,...' } },
       { action: 'confirm', method: 'POST', description: 'Confirm recognized detail', bodyExample: { action: 'confirm', detail: {} } },
       { action: 'direct-create', method: 'POST', description: 'Create detail directly without OCR', bodyExample: { action: 'direct-create', items: [{ orderNo: 'ORDER-001', amount: 100 }] } },
@@ -145,7 +145,7 @@ export const apiCatalog: ApiModule[] = [
     endpoint: '/api/swift',
     description: 'SWIFT OCR and lifecycle',
     actions: [
-      { action: 'list', method: 'GET', description: 'List swifts; supports exact amount filtering with amount=<usd>' },
+      { action: 'list', method: 'GET', description: 'List swifts; supports repeated status filters and exact amount filtering with amount=<usd>' },
       { action: 'recognize', method: 'POST', description: 'OCR recognize swift', bodyExample: { action: 'recognize', imageBase64: 'data:image/jpeg;base64,...' } },
       { action: 'confirm', method: 'POST', description: 'Confirm recognized swift', bodyExample: { action: 'confirm', swift: {} } },
       { action: 'direct-create', method: 'POST', description: 'Create swift directly without OCR', bodyExample: { action: 'direct-create', detailId: 'detail-id', amount: 100 } },

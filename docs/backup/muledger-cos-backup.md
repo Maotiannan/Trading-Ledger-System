@@ -9,7 +9,7 @@ Back up these two business data areas:
 - MySQL database: `trading_ledger`
 - NAS upload directory: `/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload`
 
-The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout`; no separate media backup path is required for Dashboard layout settings.
+The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout` and `UserPreference.listPageSizes`; no separate media backup path is required for Dashboard layout or list pagination settings.
 
 Do not treat Docker containers, `.next`, `node_modules`, or test output as business backup data.
 

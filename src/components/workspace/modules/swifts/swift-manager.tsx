@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
+import { StatusMultiSelectFilter } from '@/components/workspace/modules/shared/status-multi-select-filter';
+import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
@@ -24,6 +26,25 @@ import type { SwiftEditablePatch } from '@/lib/swift-edit-types';
 import type { SwiftDetailOption } from './types';
 import { Plus, Upload } from 'lucide-react';
 
+const swiftStatusOptions = ['Bank_Transfer', 'ERROR', 'RECEIVED'] as const;
+const defaultSwiftStatuses = swiftStatusOptions.filter((status) => status !== 'RECEIVED');
+
+type SwiftFilterState = {
+  search: string;
+  statuses: string[];
+  dateFrom: string;
+  dateTo: string;
+  amount: string;
+};
+
+const defaultSwiftFilters: SwiftFilterState = {
+  search: '',
+  statuses: defaultSwiftStatuses,
+  dateFrom: '',
+  dateTo: '',
+  amount: '',
+};
+
 export function SwiftManager() {
   const tx = useUiText();
   const locale = useLocale();
@@ -31,10 +52,14 @@ export function SwiftManager() {
   const [waitingDetailsOptions, setWaitingDetailsOptions] = useState<SwiftDetailOption[]>([]);
   const [waitingDetailsLoading, setWaitingDetailsLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string[]>(defaultSwiftStatuses);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [amount, setAmount] = useState('');
-  const [hasErrorFilter, setHasErrorFilter] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState<SwiftFilterState>(defaultSwiftFilters);
+  const [filterRequestVersion, setFilterRequestVersion] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const { pageSize, pageSizeOptions, savePageSize } = useListPageSizePreference('swift');
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingSwiftId, setEditingSwiftId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<SwiftEditablePatch>({
@@ -76,18 +101,24 @@ export function SwiftManager() {
   } = useSwiftForms();
   const swiftRequestGuard = useLatestRequestGuard();
 
-  const loadSwifts = useCallback(async (searchOverride?: string) => {
+  const loadSwifts = useCallback(async () => {
     const requestToken = swiftRequestGuard.nextToken();
     const params = new URLSearchParams();
-    const trimmedSearch = (searchOverride ?? search).trim();
+    const trimmedSearch = appliedFilters.search.trim();
     if (trimmedSearch) params.set('search', trimmedSearch);
-    if (dateFrom) params.set('dateFrom', dateFrom);
-    if (dateTo) params.set('dateTo', dateTo);
-    if (amount) params.set('amount', amount);
-    if (hasErrorFilter) params.set('hasError', hasErrorFilter);
+    for (const status of appliedFilters.statuses) params.append('status', status);
+    if (appliedFilters.dateFrom) params.set('dateFrom', appliedFilters.dateFrom);
+    if (appliedFilters.dateTo) params.set('dateTo', appliedFilters.dateTo);
+    if (appliedFilters.amount) params.set('amount', appliedFilters.amount);
     const query = params.toString();
     const endpoint = `swift${query ? `?${query}` : ''}`;
-    const canUsePrefetch = !trimmedSearch && !dateFrom && !dateTo && !amount && !hasErrorFilter;
+    const canUsePrefetch =
+      !trimmedSearch &&
+      appliedFilters.statuses.length === defaultSwiftStatuses.length &&
+      appliedFilters.statuses.every((status) => defaultSwiftStatuses.includes(status as typeof defaultSwiftStatuses[number])) &&
+      !appliedFilters.dateFrom &&
+      !appliedFilters.dateTo &&
+      !appliedFilters.amount;
     const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof swifts }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && swiftRequestGuard.isLatest(requestToken)) {
       setSwifts(cachedResult.data);
@@ -100,11 +131,11 @@ export function SwiftManager() {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [amount, dateFrom, dateTo, hasErrorFilter, search, setSwifts, swiftRequestGuard, swifts]);
+  }, [appliedFilters, setSwifts, swiftRequestGuard, swifts]);
 
   useEffect(() => {
     loadSwifts();
-  }, [loadSwifts]);
+  }, [filterRequestVersion, loadSwifts]);
 
   const {
     uploading,
@@ -216,6 +247,57 @@ export function SwiftManager() {
     return 'Bank_Transfer';
   };
 
+  const resetToFirstPage = () => setCurrentPage(1);
+
+  const toggleStatusFilter = (status: string) => {
+    setStatusFilter((prev) => {
+      const next = prev.includes(status) ? prev.filter((item) => item !== status) : [...prev, status];
+      return swiftStatusOptions.filter((option) => next.includes(option));
+    });
+    resetToFirstPage();
+  };
+
+  const toggleAllStatuses = () => {
+    setStatusFilter((prev) => (
+      prev.length === swiftStatusOptions.length ? [] : [...swiftStatusOptions]
+    ));
+    resetToFirstPage();
+  };
+
+  const applyFilters = (searchOverride?: string) => {
+    setAppliedFilters({
+      search: searchOverride ?? search,
+      statuses: statusFilter,
+      dateFrom,
+      dateTo,
+      amount,
+    });
+    resetToFirstPage();
+    setFilterRequestVersion((version) => version + 1);
+  };
+
+  const resetFilters = () => {
+    setSearch('');
+    setStatusFilter(defaultSwiftStatuses);
+    setDateFrom('');
+    setDateTo('');
+    setAmount('');
+    setAppliedFilters(defaultSwiftFilters);
+    resetToFirstPage();
+    setFilterRequestVersion((version) => version + 1);
+  };
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    savePageSize(nextPageSize);
+    setCurrentPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(swifts.length / pageSize));
+  const paginatedSwifts = swifts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const statusSummary = statusFilter.length === swiftStatusOptions.length
+    ? tx('全部状态', 'All statuses')
+    : tx(`已选 ${statusFilter.length} 个状态`, `${statusFilter.length} statuses`);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -245,45 +327,44 @@ export function SwiftManager() {
           <Input
             placeholder={tx('搜索汇款人/收款人/账号', 'Search sender/receiver/account')}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); resetToFirstPage(); }}
             onKeyDown={(event) => submitSearchOnEnter(event, (value) => {
               setSearch(value);
-              void loadSwifts(value);
+              applyFilters(value);
             })}
           />
         )}
         renderFilters={() => (
           <>
-            <select className="border rounded-md px-3 py-2 text-sm" value={hasErrorFilter} onChange={(e) => setHasErrorFilter(e.target.value)}>
-              <option value="">{tx('全部状态', 'All statuses')}</option>
-              <option value="true">{tx('仅异常', 'Errors only')}</option>
-              <option value="false">{tx('仅正常', 'Normal only')}</option>
-            </select>
-            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            <MoneyInput placeholder={tx('准确金额', 'Exact amount')} value={amount} onValueChange={setAmount} />
+            <StatusMultiSelectFilter
+              label={tx('状态筛选', 'Status Filter')}
+              summary={statusSummary}
+              allLabel={tx('全部状态', 'All statuses')}
+              options={swiftStatusOptions.map((status) => ({ value: status }))}
+              selected={statusFilter}
+              onToggleStatus={toggleStatusFilter}
+              onToggleAll={toggleAllStatuses}
+            />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('开始日期', 'Start date')} aria-label={tx('开始日期', 'Start date')} value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); resetToFirstPage(); }} />
+            <Input type="date" lang={locale === 'en' ? 'en-CA' : 'zh-CN'} title={tx('结束日期', 'End date')} aria-label={tx('结束日期', 'End date')} value={dateTo} onChange={(e) => { setDateTo(e.target.value); resetToFirstPage(); }} />
+            <MoneyInput placeholder={tx('准确金额', 'Exact amount')} value={amount} onValueChange={(value) => { setAmount(value); resetToFirstPage(); }} />
           </>
         )}
         renderActions={() => (
-          <div className="flex justify-end md:col-span-3 lg:col-span-6">
+          <div className="flex flex-col gap-2 md:col-span-3 lg:col-span-6 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => {
-                setSearch('');
-                setDateFrom('');
-                setDateTo('');
-                setAmount('');
-                setHasErrorFilter('');
-              }}
+              onClick={resetFilters}
             >
               {tx('重置筛选', 'Reset Filters')}
             </Button>
+            <Button onClick={() => applyFilters()}>{tx('查询', 'Search')}</Button>
           </div>
         )}
       />
 
       <SwiftList
-        swifts={swifts}
+        swifts={paginatedSwifts}
         isAdmin={isAdmin}
         canEdit={canEditSwifts}
         tx={tx}
@@ -298,6 +379,14 @@ export function SwiftManager() {
         onEditSwift={openEditDialog}
         onMarkReceived={handleMarkSwiftReceived}
         onDeleteSwift={handleDeleteSwift}
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalCount={swifts.length}
+        pageSize={pageSize}
+        pageSizeOptions={pageSizeOptions}
+        onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
+        onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+        onPageSizeChange={handlePageSizeChange}
       />
 
         <SwiftUploadDialog

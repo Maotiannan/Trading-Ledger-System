@@ -235,6 +235,60 @@ describe('DetailManager', () => {
     expect(screen.getByTestId('detail-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
   });
 
+  it('loads payment details with non-received statuses by default and applies RECEIVED when selected', async () => {
+    await act(async () => {
+      render(<DetailManager />);
+    });
+
+    await waitFor(() => {
+      expect(mockApiCall).toHaveBeenCalledWith('detail?status=Waiting_SWIFT&status=Bank_Transfer&status=ERROR');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '状态筛选' }));
+    const receivedStatus = screen.getByLabelText('RECEIVED') as HTMLInputElement;
+    fireEvent.click(receivedStatus);
+    await waitFor(() => {
+      expect(receivedStatus.checked).toBe(true);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '查询' }));
+
+    await waitFor(() => {
+      expect(mockApiCall).toHaveBeenCalledWith('detail?status=Waiting_SWIFT&status=Bank_Transfer&status=RECEIVED&status=ERROR');
+    });
+  });
+
+  it('uses and persists the account payment detail page size preference', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint === 'settings?view=user-preferences') {
+        return { success: true, data: { listPageSizes: { detail: 20, swift: 10 } } };
+      }
+      if (endpoint === 'settings' && options?.method === 'POST') {
+        return { success: true, data: { listPageSizes: { detail: 50, swift: 10 } } };
+      }
+      return { success: true, data: [] };
+    });
+
+    await act(async () => {
+      render(<DetailManager />);
+    });
+
+    await waitFor(() => {
+      expect((globalThis as { __detailListProps?: DetailListProps }).__detailListProps?.pageSize).toBe(20);
+    });
+
+    await act(async () => {
+      (globalThis as { __detailListProps?: DetailListProps }).__detailListProps?.onPageSizeChange(50);
+    });
+
+    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update-user-preferences',
+        preferences: { listPageSizes: { detail: 50, swift: 10 } },
+      }),
+    }));
+  });
+
   it('shows generated payment detail preview names with Payment-Detail title casing', async () => {
     const setViewingImage = jest.fn();
     mockUseDetailForms.mockReturnValue({

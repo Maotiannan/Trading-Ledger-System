@@ -58,6 +58,7 @@ jest.mock('@/lib/settings-write-service', () => {
 import { GET, POST } from '@/app/api/settings/route';
 import { db } from '@/lib/db';
 import { DEFAULT_DASHBOARD_LAYOUT } from '@/lib/dashboard-layout-preference';
+import { DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE } from '@/lib/list-page-size-preference';
 import { getCurrentUserPreferences } from '@/lib/settings-read-service';
 
 const mockDb = db as unknown as {
@@ -147,12 +148,14 @@ describe('settings route user preferences branch', () => {
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
         dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+        listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
       },
       update: {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
         dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+        listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
       },
     });
     expect(json.success).toBe(true);
@@ -161,6 +164,7 @@ describe('settings route user preferences branch', () => {
       imageCompressionQualityFloor: 0.45,
       ocrTargetMaxKb: 640,
       dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
+      listPageSizes: DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
     });
   });
 

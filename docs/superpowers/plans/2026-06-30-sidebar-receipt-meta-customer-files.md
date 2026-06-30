@@ -35,6 +35,8 @@
 
 ### Task 2: Receipt Meta Layout Editor
 
+> Superseded by `tools/receipt-full-meta-layout-editor.html`, which uses the complete generated receipt as a locked background and exports absolute receipt coordinates.
+
 **Files:**
 - Create: `tools/receipt-meta-layout-editor.html`
 - Modify: `README.md` only if needed to point human operators to the editor.

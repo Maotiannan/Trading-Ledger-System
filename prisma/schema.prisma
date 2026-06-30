@@ -50,6 +50,7 @@ enum UploadedAssetAttachmentType {
   SWIFT
   RECEIPT_GENERATOR_SESSION
   PAYMENT_AGENT_FILE
+  CUSTOMER_FILE
 }
 
 enum UploadedAssetCategory {
@@ -60,6 +61,7 @@ enum UploadedAssetCategory {
   RECEIPT_GENERATOR_FINAL
   RECEIPT_GENERATOR_SIGNATURE
   AGENT_FILE
+  CUSTOMER_FILE
 }
 
 // 付款明细状态枚举

@@ -122,7 +122,10 @@ export function Sidebar() {
   }, [activeView, pathname, prefetchMenuItem, router, setNavigationPendingView]);
 
   return (
-    <div className={`bg-white dark:bg-gray-800 border-r h-screen flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
+    <div
+      data-testid="workspace-sidebar"
+      className={`sticky top-0 h-dvh max-h-dvh shrink-0 overflow-hidden bg-white dark:bg-gray-800 border-r flex flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}
+    >
       <div className={`p-4 border-b ${collapsed ? 'flex justify-center' : ''}`}>
         <div className={`flex items-start ${collapsed ? 'flex-col items-center gap-3' : 'justify-between gap-3'}`}>
           <div className={collapsed ? 'flex flex-col items-center gap-2' : ''}>
@@ -163,7 +166,7 @@ export function Sidebar() {
           </div>
         </div>
       )}
-      <nav className="flex-1 p-2">
+      <nav data-testid="workspace-sidebar-nav" className="min-h-0 flex-1 overflow-y-auto p-2">
         {visibleMenuItems.map((item) => {
           const itemPending = pendingView === item.id;
           return (

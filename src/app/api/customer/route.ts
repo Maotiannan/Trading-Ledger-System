@@ -27,6 +27,11 @@ import {
   listCustomerConsignees,
   setCustomerConsigneePrimary,
 } from '@/lib/customer-consignee-service';
+import {
+  deleteCustomerCompanyFile,
+  listCustomerCompanyFiles,
+  recognizeAndAttachCustomerCompanyFile,
+} from '@/lib/customer-company-file-service';
 import { logger } from '@/lib/logger';
 
 function trimStr(value: unknown): string {
@@ -138,6 +143,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     return createApiSuccessResponse(result, request);
   }
 
+  if (action === 'company-files') {
+    const result = await listCustomerCompanyFiles(currentUser, trimStr(searchParams.get('customerId')));
+    return createApiSuccessResponse(result, request);
+  }
+
   if (action === 'import-template') {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('customer_import');
@@ -190,6 +200,19 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
       const action = trimStr(formData.get('action'));
+      if (action === 'recognize-company-file') {
+        const file = formData.get('file');
+        if (!(file instanceof File)) {
+          return badRequest('请上传客户公司文件', apiErrorCodes.INVALID_FILE_TYPE, undefined, request);
+        }
+        const result = await recognizeAndAttachCustomerCompanyFile({
+          currentUser,
+          customerId: trimStr(formData.get('customerId')),
+          file,
+        });
+        return createApiSuccessResponse(result, request);
+      }
+
       if (action !== 'import-excel') {
         return badRequest('未知上传操作', apiErrorCodes.INVALID_ACTION, { action }, request);
       }
@@ -325,6 +348,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         data: localizeCustomerResponseData(toSalesView(result.data as Record<string, unknown>, result.showExtended), request),
         message: result.message,
       }, request);
+    }
+
+    if (action === 'delete-company-file') {
+      const result = await deleteCustomerCompanyFile(currentUser, trimStr(body.assetId));
+      return createApiSuccessResponse(result, request);
     }
 
     if (action === 'delete') {

@@ -5,6 +5,8 @@ import { useStore } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   apiCall,
+  apiUploadCall,
+  getApiErrorMessage,
   getErrorMessage,
   peekPrefetchedApiResult,
   rememberPrefetchedApiResult,
@@ -26,6 +28,7 @@ import {
   type CustomerOrderHistory,
 } from './components';
 import type { CustomerOwnerOption } from './types';
+import type { CustomerCompanyFileOverwriteProposal, CustomerCompanyFileSummary } from './types';
 import { useCustomerActions, useCustomerForms, useCustomerImportColumns } from './hooks';
 
 function normalizePhoneToken(value: unknown): string {
@@ -64,6 +67,10 @@ export function CustomerManager() {
   const [consigneeLoading, setConsigneeLoading] = useState(false);
   const [consigneeSubmitting, setConsigneeSubmitting] = useState(false);
   const [consigneeError, setConsigneeError] = useState('');
+  const [companyFiles, setCompanyFiles] = useState<CustomerCompanyFileSummary[]>([]);
+  const [companyFileUploading, setCompanyFileUploading] = useState(false);
+  const [companyFileError, setCompanyFileError] = useState('');
+  const [companyFileProposal, setCompanyFileProposal] = useState<CustomerCompanyFileOverwriteProposal | null>(null);
   const customerRequestGuard = useLatestRequestGuard();
   const {
     customerImportInputRef,
@@ -231,6 +238,127 @@ export function CustomerManager() {
       return rowTokens.some((token) => phoneTokens.includes(token));
     });
   })();
+  const editingCustomerId = editing ? String(editing.id || '') : '';
+
+  const loadCompanyFiles = useCallback(async (customerId: string) => {
+    const id = customerId.trim();
+    if (!id) {
+      setCompanyFiles([]);
+      return;
+    }
+    try {
+      const result = await apiCall(`customer?action=company-files&customerId=${encodeURIComponent(id)}`);
+      if (result.success && Array.isArray(result.data)) {
+        setCompanyFiles(result.data as CustomerCompanyFileSummary[]);
+      }
+    } catch (error) {
+      setCompanyFileError(getApiErrorMessage(error, tx('加载客户公司文件失败', 'Failed to load customer company files.')));
+    }
+  }, [tx]);
+
+  useEffect(() => {
+    if (!editingCustomerId) {
+      setCompanyFiles((prev) => (prev.length > 0 ? [] : prev));
+      setCompanyFileError((prev) => (prev ? '' : prev));
+      setCompanyFileProposal((prev) => (prev ? null : prev));
+      return;
+    }
+    void loadCompanyFiles(editingCustomerId);
+  }, [editingCustomerId, loadCompanyFiles]);
+
+  const buildCompanyFileProposal = useCallback((ocrResult: Record<string, unknown>) => {
+    const labels = {
+      companyName: 'COMPANY_NAME',
+      companyAddress: 'COMPANY_ADDRESS',
+      city: 'CITY',
+    } as const;
+    const keys = Object.keys(labels) as Array<keyof typeof labels>;
+    const proposalFields: CustomerCompanyFileOverwriteProposal['fields'] = [];
+    const directPatch: Partial<typeof form> = {};
+
+    for (const key of keys) {
+      const nextValue = String(ocrResult[key] || '').trim();
+      if (!nextValue) continue;
+      const currentValue = String(form[key] || '').trim();
+      if (!currentValue) {
+        directPatch[key] = nextValue;
+      } else if (currentValue !== nextValue) {
+        proposalFields.push({
+          key,
+          label: labels[key],
+          currentValue,
+          nextValue,
+          selected: true,
+        });
+      }
+    }
+
+    if (Object.keys(directPatch).length > 0) {
+      setForm((prev) => ({ ...prev, ...directPatch }));
+    }
+    setCompanyFileProposal(proposalFields.length > 0 ? { fields: proposalFields } : null);
+  }, [form, setForm]);
+
+  const handleCompanyFileUpload = useCallback(async (file: File) => {
+    const customerId = editing ? String(editing.id || '') : '';
+    if (!customerId) return;
+    setCompanyFileUploading(true);
+    setCompanyFileError('');
+    try {
+      const formData = new FormData();
+      formData.append('action', 'recognize-company-file');
+      formData.append('customerId', customerId);
+      formData.append('file', file);
+      const result = await apiUploadCall('customer', formData);
+      if (!result.success) throw result;
+      await loadCompanyFiles(customerId);
+      const data = (result.data && typeof result.data === 'object') ? result.data as Record<string, unknown> : {};
+      const ocrResult = (data.ocrResult && typeof data.ocrResult === 'object') ? data.ocrResult as Record<string, unknown> : {};
+      const recognitionMessage = String(data.recognitionMessage || '').trim();
+      if (recognitionMessage) {
+        setCompanyFileError(recognitionMessage);
+      }
+      buildCompanyFileProposal(ocrResult);
+    } catch (error) {
+      setCompanyFileError(getApiErrorMessage(error, tx('上传客户公司文件失败', 'Failed to upload customer company file.')));
+    } finally {
+      setCompanyFileUploading(false);
+    }
+  }, [buildCompanyFileProposal, editing, loadCompanyFiles, tx]);
+
+  const handleCompanyFileDelete = useCallback(async (assetId: string) => {
+    const customerId = editing ? String(editing.id || '') : '';
+    if (!customerId || !assetId) return;
+    setCompanyFileUploading(true);
+    setCompanyFileError('');
+    try {
+      const result = await apiCall('customer', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete-company-file', assetId }),
+      });
+      if (!result.success) throw result;
+      await loadCompanyFiles(customerId);
+    } catch (error) {
+      setCompanyFileError(getApiErrorMessage(error, tx('删除客户公司文件失败', 'Failed to delete customer company file.')));
+    } finally {
+      setCompanyFileUploading(false);
+    }
+  }, [editing, loadCompanyFiles, tx]);
+
+  const applyCompanyFileOcrProposal = useCallback((keys: Array<CustomerCompanyFileOverwriteProposal['fields'][number]['key']>) => {
+    if (!companyFileProposal) return;
+    const selected = new Set(keys);
+    const patch: Partial<typeof form> = {};
+    for (const field of companyFileProposal.fields) {
+      if (selected.has(field.key)) {
+        patch[field.key] = field.nextValue;
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      setForm((prev) => ({ ...prev, ...patch }));
+    }
+    setCompanyFileProposal(null);
+  }, [companyFileProposal, setForm]);
 
   const openOrderNameHistory = async (row: Record<string, unknown>, orderName: string) => {
     const customerId = String(row.id || '').trim();
@@ -459,9 +587,17 @@ export function CustomerManager() {
         tx={tx}
         phoneConflict={formPhoneConflict}
         phoneConflictMessage={phoneConflictMessage}
+        companyFiles={companyFiles}
+        companyFileUploading={companyFileUploading}
+        companyFileError={companyFileError}
+        companyFileProposal={companyFileProposal}
         onOpenChange={setShowCreate}
         onFormChange={(updater) => setForm(updater)}
         onSubmit={handleCreateOrUpdate}
+        onCompanyFileUpload={handleCompanyFileUpload}
+        onCompanyFileDelete={handleCompanyFileDelete}
+        onApplyCompanyFileOcrProposal={applyCompanyFileOcrProposal}
+        onDismissCompanyFileOcrProposal={() => setCompanyFileProposal(null)}
       />
 
       <CustomerFixDialog

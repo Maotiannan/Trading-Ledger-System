@@ -100,6 +100,22 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/customer',
+    description: 'Customer management, import, company file attachment, and customer master data OCR',
+    actions: [
+      { action: 'list', method: 'GET', description: 'List visible customers; supports search=<text>' },
+      { action: 'owner-options', method: 'GET', description: 'List owner candidates for customer binding' },
+      { action: 'order-history', method: 'GET', description: 'Show invoice/order/receipt history for one customer ORDER_NAME', bodyExample: { customerId: 'customer-id', orderName: 'MAB-1' } },
+      { action: 'consignees', method: 'GET', description: 'List CONSIGNEE records for one customer', bodyExample: { customerId: 'customer-id' } },
+      { action: 'company-files', method: 'GET', description: 'List company files attached to one customer', bodyExample: { customerId: 'customer-id' } },
+      { action: 'recognize-company-file', method: 'POST', description: 'Multipart upload a customer company file, save it to NAS, attach it to the customer, and OCR companyName/companyAddress/city when supported', bodyExample: { action: 'recognize-company-file', customerId: 'customer-id', file: '<multipart image/pdf/txt/office file>' } },
+      { action: 'delete-company-file', method: 'POST', description: 'Delete a customer company file attachment and remove the NAS source file', bodyExample: { action: 'delete-company-file', assetId: 'uploaded-asset-id' } },
+      { action: 'create', method: 'POST', description: 'Create customer', bodyExample: { action: 'create', mark: 'MAB-1', orderName: 'MAB-1', name: 'Customer', phone: '224...', city: 'Conakry' } },
+      { action: 'update', method: 'POST', description: 'Update customer', bodyExample: { action: 'update', id: 'customer-id', mark: 'MAB-1', orderName: 'MAB-1', name: 'Customer', phone: '224...', city: 'Conakry' } },
+      { action: 'delete', method: 'POST', description: 'Delete customer (admin)', bodyExample: { action: 'delete', id: 'customer-id' } },
+    ],
+  },
+  {
     endpoint: '/api/receipt',
     description: 'Receipt OCR and lifecycle',
     actions: [

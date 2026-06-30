@@ -1,4 +1,4 @@
-import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult } from '@/lib/types';
+import { ReceiptOcrResult, DetailOcrResult, SwiftOcrResult, CustomerCompanyFileOcrResult } from '@/lib/types';
 import { getSystemSettings } from '@/lib/system-settings';
 import { normalizeSwiftOcrResult } from '@/lib/swift-normalization';
 import { logger } from '@/lib/logger';
@@ -637,6 +637,58 @@ export async function recognizeSwift(imageBase64: string): Promise<SwiftOcrResul
 
   const raw = await runVisionRequest<SwiftOcrResult>('swift', imageBase64, prompt, fallback);
   return normalizeSwiftOcrResult(raw);
+}
+
+export async function recognizeCustomerCompanyDocument(ocrInput: string): Promise<CustomerCompanyFileOcrResult> {
+  const prompt = `请识别这份客户公司资料文件，提取客户档案需要回填的公司信息，以JSON格式返回：
+{
+  "companyName": "公司名称；优先读取营业执照、公司抬头、Company Name、Business Name、Raison sociale等字段",
+  "companyAddress": "公司地址；优先读取Address、Adresse、注册地址、营业地址等字段，保留完整地址",
+  "city": "城市；从地址或单独City/Ville字段提取城市名称"
+}
+
+要求：
+1. 只提取文件中明确出现或能从地址直接判断的信息，不要编造。
+2. 如果公司名称有多种写法，选择正式/完整写法。
+3. 如果地址包含国家、省区、城市和街道，companyAddress保留完整地址，city只返回城市。
+4. 如果某个字段无法识别，返回null。
+5. 只返回JSON，不要其他文字。`;
+
+  const fallback: CustomerCompanyFileOcrResult = {
+    companyName: null,
+    companyAddress: null,
+    city: null,
+  };
+
+  return runVisionRequest<CustomerCompanyFileOcrResult>('customer-company-file', ocrInput, prompt, fallback);
+}
+
+export async function recognizeCustomerCompanyText(text: string): Promise<CustomerCompanyFileOcrResult> {
+  const trimmed = String(text || '').trim();
+  const prompt = `请从以下客户公司资料文本中提取客户档案需要回填的公司信息，以JSON格式返回：
+{
+  "companyName": "公司名称；优先读取营业执照、公司抬头、Company Name、Business Name、Raison sociale等字段",
+  "companyAddress": "公司地址；优先读取Address、Adresse、注册地址、营业地址等字段，保留完整地址",
+  "city": "城市；从地址或单独City/Ville字段提取城市名称"
+}
+
+要求：
+1. 只提取文本中明确出现或能从地址直接判断的信息，不要编造。
+2. 如果公司名称有多种写法，选择正式/完整写法。
+3. 如果地址包含国家、省区、城市和街道，companyAddress保留完整地址，city只返回城市。
+4. 如果某个字段无法识别，返回null。
+5. 只返回JSON，不要其他文字。
+
+文本：
+${trimmed.slice(0, 12000)}`;
+
+  const fallback: CustomerCompanyFileOcrResult = {
+    companyName: null,
+    companyAddress: null,
+    city: null,
+  };
+
+  return runTextRequest<CustomerCompanyFileOcrResult>('customer-company-file-text', prompt, fallback);
 }
 
 export async function recognizeSwiftPdf(file: File): Promise<SwiftOcrResult> {

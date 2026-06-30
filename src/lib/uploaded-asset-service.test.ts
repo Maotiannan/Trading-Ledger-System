@@ -205,6 +205,34 @@ describe('uploaded-asset-service', () => {
     expect(result.path).toMatch(/\/upload\/images\/swifts\/ocr\/.+\.pdf$/);
   });
 
+  it('stages customer company PDFs as generic files attached under the customer upload directory', async () => {
+    const pdfBytes = Buffer.from('%PDF-1.5\n1 0 obj\n<<>>\nendobj\n');
+    const file = {
+      name: 'company.pdf',
+      type: 'application/pdf',
+      size: pdfBytes.byteLength,
+      arrayBuffer: async () => pdfBytes.buffer.slice(
+        pdfBytes.byteOffset,
+        pdfBytes.byteOffset + pdfBytes.byteLength,
+      ),
+    } as File;
+
+    const result = await stageUploadedAsset({
+      file,
+      category: UploadedAssetCategory.CUSTOMER_FILE,
+      createdBy: 'user-1',
+    });
+
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        category: UploadedAssetCategory.CUSTOMER_FILE,
+        mimeType: 'application/pdf',
+        name: 'company.pdf',
+      }),
+    }));
+    expect(result.path).toMatch(/\/upload\/images\/customers\/files\/.+\.pdf$/);
+  });
+
   it('compensates the uploaded file when asset registration fails', async () => {
     const pngBytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
     const file = {
@@ -237,5 +265,6 @@ describe('uploaded-asset-service', () => {
     expect(uploadedAssetSubDirForCategory(UploadedAssetCategory.SWIFT_OCR)).toBe('swifts/ocr');
     expect(uploadedAssetSubDirForCategory(UploadedAssetCategory.RECEIPT_GENERATOR_FINAL)).toBe('receipts/generated');
     expect(uploadedAssetSubDirForCategory(UploadedAssetCategory.RECEIPT_GENERATOR_SIGNATURE)).toBe('receipts/generated/signatures');
+    expect(uploadedAssetSubDirForCategory(UploadedAssetCategory.CUSTOMER_FILE)).toBe('customers/files');
   });
 });

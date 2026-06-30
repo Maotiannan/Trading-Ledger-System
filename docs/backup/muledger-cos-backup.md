@@ -26,6 +26,7 @@ The backup script syncs the full NAS upload directory to `media/upload/` in COS.
 | `images/receipts/generated/` | finalized generated signed receipt images |
 | `images/receipts/generated/signatures/` | generated receipt signature artifacts |
 | `images/agents/files/` | payment agent attachment files |
+| `images/customers/files/` | customer company files uploaded from Customer Management |
 
 If code adds a new `UploadedAssetCategory`, generated report directory, or file upload subpath, add it to this table and confirm it is under `UPLOAD_HOST_DIR`.
 

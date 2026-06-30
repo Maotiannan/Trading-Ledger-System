@@ -117,7 +117,8 @@ export async function stageUploadedAsset(input: {
 
 function isGenericUploadedAssetCategory(category: UploadedAssetCategory): boolean {
   return category === UploadedAssetCategory.AGENT_FILE
-    || category === UploadedAssetCategory.SWIFT_OCR;
+    || category === UploadedAssetCategory.SWIFT_OCR
+    || category === UploadedAssetCategory.CUSTOMER_FILE;
 }
 
 export function uploadedAssetSubDirForCategory(category: UploadedAssetCategory): string {
@@ -136,6 +137,8 @@ export function uploadedAssetSubDirForCategory(category: UploadedAssetCategory):
       return 'receipts/generated/signatures';
     case UploadedAssetCategory.AGENT_FILE:
       return 'agents/files';
+    case UploadedAssetCategory.CUSTOMER_FILE:
+      return 'customers/files';
   }
 
   const exhaustiveCheck: never = category;

@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.186`
-- 最近更新：Payment Detail 和 SWIFT 默认隐藏已完成记录，支持多选状态筛选和按账号保存每页条数。
+- 版本：`1.0.187`
+- 最近更新：侧边栏固定显示；客户编辑支持追加保存公司文件并识别公司名称、地址和城市；新增签名收据 No/Date/Tél 对齐模板编辑器。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -37,7 +37,7 @@
 | Payment Detail Management | 上传或创建付款明细，导出付款明细图片；默认聚焦未完成明细 |
 | SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路；默认聚焦未完成水单 |
 | Approval | 审批删除申请和修改申请 |
-| Customer Management | 维护客户、ORDER_NAME、CONSIGNEE、绑定关系 |
+| Customer Management | 维护客户、ORDER_NAME、CONSIGNEE、绑定关系和客户公司文件 |
 | Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、审计 |
 
 ## 推荐使用流程
@@ -69,7 +69,7 @@
 系统业务数据主要分两类：
 
 - MySQL `trading_ledger`：客户、发票、订单、收据、付款明细、SWIFT、审批、配置、审计。
-- NAS 上传目录：收据图片、付款明细图片、SWIFT 图片/PDF、签名收据图片、付款代理附件。
+- NAS 上传目录：收据图片、付款明细图片、SWIFT 图片/PDF、签名收据图片、付款代理附件、客户公司文件。
 
 不要随意执行会删除数据的 Docker 命令，例如：
 

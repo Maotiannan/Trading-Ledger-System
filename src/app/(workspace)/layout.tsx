@@ -40,15 +40,15 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-dvh min-h-dvh overflow-hidden bg-gray-50 dark:bg-gray-900">
       <Sidebar />
-      <div className="relative flex-1 min-w-0">
+      <div className="relative flex min-h-0 flex-1 min-w-0 flex-col">
         {navigationPendingView && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-1 bg-slate-200/70 dark:bg-slate-700/60" data-testid="workspace-main-progress">
             <div className="h-full w-1/2 animate-pulse bg-slate-900/80 dark:bg-white/80" />
           </div>
         )}
-        <main className="flex-1 p-6 overflow-auto">{children}</main>
+        <main className="h-full flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>
   );

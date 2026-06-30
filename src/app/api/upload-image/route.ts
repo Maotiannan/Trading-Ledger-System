@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { UploadedAssetCategory } from '@prisma/client';
+import { UploadedAssetAttachmentType, UploadedAssetCategory, UploadedAssetStatus } from '@prisma/client';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { getCurrentUser } from '@/lib/request-auth';
@@ -91,7 +91,31 @@ export async function GET(request: NextRequest) {
         select: { id: true },
       }),
     ]);
+    let customerFileAllowed = false;
     if (!receipt && !detail && !swift && !agentFile) {
+      const customerFile = await db.uploadedAsset.findFirst({
+        where: {
+          path: rawPath,
+          category: UploadedAssetCategory.CUSTOMER_FILE,
+          attachedType: UploadedAssetAttachmentType.CUSTOMER_FILE,
+          status: UploadedAssetStatus.ATTACHED,
+          attachedId: { not: null },
+        },
+        select: { attachedId: true },
+      });
+      if (customerFile?.attachedId) {
+        const customer = await db.customer.findFirst({
+          where: {
+            id: customerFile.attachedId,
+            ownerId: { in: ownerIds },
+          },
+          select: { id: true },
+        });
+        customerFileAllowed = Boolean(customer);
+      }
+    }
+
+    if (!receipt && !detail && !swift && !agentFile && !customerFileAllowed) {
       return createApiErrorResponse({ code: apiErrorCodes.FILE_ACCESS_DENIED, status: 403, message: '无权访问该图片' }, request);
     }
 

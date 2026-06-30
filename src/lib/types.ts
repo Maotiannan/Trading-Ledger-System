@@ -66,6 +66,13 @@ export interface SwiftOcrResult {
   receiverAccount: string | null;
 }
 
+// 客户公司文件AI识别结果
+export interface CustomerCompanyFileOcrResult {
+  companyName: string | null;
+  companyAddress: string | null;
+  city: string | null;
+}
+
 // 收据确认输入
 export interface ConfirmReceiptInput {
   receiptNo: string | null;

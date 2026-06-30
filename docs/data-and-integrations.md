@@ -146,13 +146,14 @@ GET /api/upload-image?path=/upload/images/...
 | `/upload/images/receipts/generated/YYYY/MM` | Generate Signed Receipt | 最终签名收据图片 |
 | `/upload/images/receipts/generated/YYYY/MM/signatures` | Generate Signed Receipt | 收款方和付款方透明签名图片 |
 | `/upload/images/agents/files` | Payment Agent Management | 付款代理公司附件 |
+| `/upload/images/customers/files` | Customer Management | 客户公司文件附件 |
 | `/upload/images/<file>` | 历史入口 | 兼容旧上传路径，不建议新功能继续使用 |
 
 ## 上传文件支持类型
 
 普通业务图片上传支持 JPG、JPEG、PNG、WEBP、HEIC、HEIF。
 
-SWIFT 和 Payment Agent 附件额外支持 PDF、DOC、DOCX、XLS、XLSX、TXT。
+SWIFT、Payment Agent 附件和客户公司文件额外支持 PDF、DOC、DOCX、XLS、XLSX、TXT。客户公司文件的自动识别优先支持图片、PDF 和 TXT；Office 文件先保存绑定，暂不自动识别。
 
 系统会检查文件扩展名和文件内容是否匹配，避免伪装文件进入业务链路。
 

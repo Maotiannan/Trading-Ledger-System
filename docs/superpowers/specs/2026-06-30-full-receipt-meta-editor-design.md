@@ -74,3 +74,7 @@ The final stage height must match the generated locked background and may be gre
 - Confirm export/import round-trips without coordinate changes.
 - Confirm zoom does not alter exported coordinates.
 - Capture a browser screenshot for visual verification.
+
+## Approved Production Layout
+
+The operator-approved `RECEIPT_META_ABSOLUTE_LAYOUT` is now the single source for the six production Canvas layers. Labels use the stored sample text; receipt number, date, and telephone values remain dynamic. Telephone text stays on one line and shrinks to fit its approved width instead of wrapping.

@@ -3,6 +3,7 @@ import {
   RECEIPT_TEMPLATE_CANVAS,
   RECEIPT_TEMPLATE_HEADER_GRID,
   RECEIPT_TEMPLATE_LOGO_BLOCKS,
+  RECEIPT_TEMPLATE_META_ABSOLUTE_LAYOUT,
   RECEIPT_TEMPLATE_TEXT_REGIONS,
   RECEIPT_TEMPLATE_SIGNATURE_SLOTS,
   RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT,
@@ -112,6 +113,20 @@ describe('receipt generator approved template freeze', () => {
         payerSignatureLabel: { x: 490, y: 22, w: 170, h: 20, fontSize: 18, fontWeight: 400, text: 'Signature du payeur :' },
         payerSignature: { x: 490, y: 50, w: 200, h: 46 },
         payerLine: { x: 490, y: 100, w: 200, h: 1 },
+      },
+    });
+
+    expect(RECEIPT_TEMPLATE_META_ABSOLUTE_LAYOUT).toEqual({
+      schema: 'RECEIPT_META_ABSOLUTE_LAYOUT',
+      version: 1,
+      stage: { width: 720, height: 507 },
+      layers: {
+        receiptNoLabel: { x: 538, y: 100, w: 34, h: 18, fontSize: 14, fontWeight: 400, text: 'No:' },
+        receiptNoValue: { x: 575, y: 100, w: 92, h: 20, fontSize: 18, fontWeight: 400, text: '0010000' },
+        dateLabel: { x: 538, y: 125, w: 42, h: 18, fontSize: 14, fontWeight: 400, text: 'Date:' },
+        dateValue: { x: 575, y: 125, w: 95, h: 20, fontSize: 14, fontWeight: 400, text: '30/06/2026' },
+        telLabel: { x: 538, y: 150, w: 32, h: 18, fontSize: 14, fontWeight: 400, text: 'Tél:' },
+        telValue: { x: 575, y: 150, w: 115, h: 40, fontSize: 14, fontWeight: 400, text: '+224 622 05 71 47' },
       },
     });
   });

@@ -122,3 +122,25 @@ const defaultLayout = {
 - [ ] Remove browser artifacts and generated background files that are already embedded.
 - [ ] Run `git diff --check`.
 - [ ] Commit the editor and docs; do not push or rebuild Docker until the operator approves the exported layout.
+
+---
+
+### Task 5: Integrate The Approved Absolute Layout
+
+**Files:**
+- Modify: `src/components/workspace/modules/receipts/generator/template-geometry.ts`
+- Modify: `src/components/workspace/modules/receipts/generator/template-geometry.test.ts`
+- Modify: `src/components/workspace/modules/receipts/generator/receipt-canvas.tsx`
+- Modify: `src/components/workspace/modules/receipts/generator/receipt-canvas.test.tsx`
+- Modify: `tools/receipt-full-meta-layout-editor.html`
+
+**Interfaces:**
+- Consumes: the operator-approved `RECEIPT_META_ABSOLUTE_LAYOUT`.
+- Produces: identical No/Date/Tél placement in preview and exported PNG.
+
+- [x] Freeze the approved six-layer JSON in template geometry.
+- [x] Draw labels and dynamic values as separate absolute Canvas layers.
+- [x] Keep telephone text on one line and shrink it when necessary.
+- [x] Preserve all non-meta receipt geometry.
+- [x] Synchronize the editor defaults with the approved production layout.
+- [x] Run focused tests, full project checks, and visual sample verification.

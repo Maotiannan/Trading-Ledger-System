@@ -7,6 +7,7 @@ import {
   RECEIPT_TEMPLATE_CANVAS,
   RECEIPT_TEMPLATE_HEADER_GRID,
   RECEIPT_TEMPLATE_LOGO_BLOCKS,
+  RECEIPT_TEMPLATE_META_ABSOLUTE_LAYOUT,
   RECEIPT_TEMPLATE_SIGNATURE_ROW_LAYOUT,
   RECEIPT_TEMPLATE_TEXT_REGIONS,
   RECEIPT_TEMPLATE_WATERMARK,
@@ -135,23 +136,34 @@ function normalizeSingleLineText(text: string | null | undefined) {
   return normalized || '-';
 }
 
-function drawFittedText(
+type ReceiptMetaTextLayer = {
+  x: number;
+  y: number;
+  w: number;
+  fontSize: number;
+  fontWeight: number;
+};
+
+function drawReceiptMetaText(
   ctx: CanvasRenderingContext2D,
   text: string,
-  x: number,
-  y: number,
-  maxWidth: number,
-  baseFontPt: number,
-  fontFamily = 'Times New Roman',
-  minFontPt = 5,
+  layer: ReceiptMetaTextLayer,
+  color = '#1a1a2e',
 ) {
-  let fontPt = baseFontPt;
-  while (fontPt > minFontPt) {
-    ctx.font = `${fontPt}pt ${fontFamily}`;
-    if (ctx.measureText(text).width <= maxWidth) break;
-    fontPt -= 0.5;
+  let fontSize = layer.fontSize;
+  const minFontSize = 6;
+
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = color;
+  while (fontSize > minFontSize) {
+    ctx.font = `${layer.fontWeight} ${fontSize}px Times New Roman`;
+    if (ctx.measureText(text).width <= layer.w) break;
+    fontSize -= 0.5;
   }
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, layer.x, layer.y);
+  ctx.restore();
 }
 
 function cropImageToAlphaBounds(image: HTMLImageElement, padding = 12) {
@@ -466,30 +478,13 @@ async function drawReceiptCanvas(
     );
   }
 
-  const metaRightX = padding.left + contentWidth + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm.x);
-  const metaTopY = headerTop + RECEIPT_TEMPLATE_LOGO_BLOCKS.right.heightPx + mmToPx(1) + mmToPx(RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.offsetMm.y);
-  ctx.textAlign = 'right';
-  ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.numberFontPt}pt Times New Roman`;
-  ctx.fillStyle = TEMPLATE_RECEIPT_NUMBER_COLOR;
-  ctx.fillText(layout.receiptNo, metaRightX, metaTopY);
-  const receiptNoWidth = ctx.measureText(layout.receiptNo).width;
-  ctx.font = `${RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt}pt Times New Roman`;
-  ctx.fillStyle = '#1a1a2e';
-  ctx.fillText('No: ', metaRightX - receiptNoWidth - 4, metaTopY + 2);
-  const dateLine = `Date: ${layout.dateText}`;
-  ctx.fillText(dateLine, metaRightX, metaTopY + 26);
-  const metaColumnLeftX = headerRightX + 2;
-  const metaBlockLeftX = Math.min(metaRightX - ctx.measureText(dateLine).width, metaColumnLeftX);
-  ctx.textAlign = 'left';
-  drawFittedText(
-    ctx,
-    `Tél: ${phoneValue}`,
-    metaBlockLeftX,
-    metaTopY + 46,
-    metaRightX - metaBlockLeftX,
-    RECEIPT_TEMPLATE_TEXT_REGIONS.metaBlock.detailFontPt,
-  );
-  ctx.textAlign = 'center';
+  const metaLayers = RECEIPT_TEMPLATE_META_ABSOLUTE_LAYOUT.layers;
+  drawReceiptMetaText(ctx, metaLayers.receiptNoLabel.text, metaLayers.receiptNoLabel);
+  drawReceiptMetaText(ctx, layout.receiptNo, metaLayers.receiptNoValue, TEMPLATE_RECEIPT_NUMBER_COLOR);
+  drawReceiptMetaText(ctx, metaLayers.dateLabel.text, metaLayers.dateLabel);
+  drawReceiptMetaText(ctx, layout.dateText, metaLayers.dateValue);
+  drawReceiptMetaText(ctx, metaLayers.telLabel.text, metaLayers.telLabel);
+  drawReceiptMetaText(ctx, phoneValue, metaLayers.telValue);
 
   ctx.textAlign = 'center';
   ctx.font = `800 ${RECEIPT_TEMPLATE_TEXT_REGIONS.titleBlock.fontPt}pt Times New Roman`;

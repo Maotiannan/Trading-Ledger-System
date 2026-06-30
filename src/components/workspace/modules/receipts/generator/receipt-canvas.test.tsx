@@ -2,6 +2,7 @@ import React, { createRef } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ReceiptCanvas, type ReceiptCanvasHandle } from './receipt-canvas';
 import { buildReceiptGeneratorLayout } from '@/lib/receipt-generator-layout';
+import { RECEIPT_TEMPLATE_META_ABSOLUTE_LAYOUT } from './template-geometry';
 
 type FillTextCall = {
   text: string;
@@ -198,6 +199,43 @@ describe('ReceiptCanvas', () => {
     expect(HTMLCanvasElement.prototype.toBlob).toHaveBeenCalled();
   });
 
+  it('draws receipt number, date, and phone as separate layers at the approved absolute coordinates', async () => {
+    const ref = createRef<ReceiptCanvasHandle>();
+
+    render(
+      <ReceiptCanvas
+        ref={ref}
+        layout={layout}
+        receiverSignature="data:image/png;base64,receiver"
+        payerSignature="data:image/png;base64,payer"
+      />,
+    );
+
+    await ref.current?.exportBlob();
+
+    const { layers } = RECEIPT_TEMPLATE_META_ABSOLUTE_LAYOUT;
+    const expectedLayers = [
+      [layers.receiptNoLabel, layers.receiptNoLabel.text, '#1a1a2e'],
+      [layers.receiptNoValue, layout.receiptNo, '#e05a00'],
+      [layers.dateLabel, layers.dateLabel.text, '#1a1a2e'],
+      [layers.dateValue, layout.dateText, '#1a1a2e'],
+      [layers.telLabel, layers.telLabel.text, '#1a1a2e'],
+      [layers.telValue, layout.clientTel, '#1a1a2e'],
+    ] as const;
+
+    expectedLayers.forEach(([layer, text, fillStyle]) => {
+      expect(fillTextCalls).toContainEqual({
+        text,
+        x: layer.x,
+        y: layer.y,
+        fillStyle,
+        font: `${layer.fontWeight} ${layer.fontSize}px Times New Roman`,
+      });
+    });
+    expect(fillTextCalls.some((call) => call.text === `Date: ${layout.dateText}`)).toBe(false);
+    expect(fillTextCalls.some((call) => call.text === `Tél: ${layout.clientTel}`)).toBe(false);
+  });
+
   it('keeps long payer phone values on one line and keeps payer signature inside the exported canvas bounds', async () => {
     const ref = createRef<ReceiptCanvasHandle>();
     const longPhoneLayout = buildReceiptGeneratorLayout({
@@ -227,7 +265,7 @@ describe('ReceiptCanvas', () => {
     const phoneDrawCalls = fillTextCalls.filter((call) => call.text.includes('66484333516') || call.text.includes('657311550') || call.text.includes('6200711'));
     expect(phoneDrawCalls.length).toBeGreaterThan(0);
     expect([...new Set(phoneDrawCalls.map((call) => call.text))]).toEqual([
-      'Tél: 622 49 12 86 / 66484333516 / 6200711 / 657311550',
+      '622 49 12 86 / 66484333516 / 6200711 / 657311550',
     ]);
     const previewCanvas = container.querySelector('[data-testid="receipt-preview-canvas"]') as HTMLCanvasElement | null;
     expect(previewCanvas).not.toBeNull();

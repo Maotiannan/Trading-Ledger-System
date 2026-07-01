@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { ResponsiveFilterCard } from '@/components/workspace/modules/shared/responsive-filter-card';
+import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import {
   apiCall,
@@ -37,7 +38,6 @@ import { Plus, Upload, PenSquare } from 'lucide-react';
 
 const receiptStatusOptions = ['SIGNING_PENDING', 'SR_Received', 'Waiting_SWIFT', 'Bank_Transfer', 'RECEIVED'] as const;
 const defaultReceiptStatuses = receiptStatusOptions.filter((status) => status !== 'RECEIVED');
-const receiptPageSizeOptions = [30, 50, 100, 200] as const;
 
 type ReceiptFilterState = {
   search: string;
@@ -82,7 +82,7 @@ export function ReceiptManager() {
   
   // 分页
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(30);
+  const { pageSize, pageSizeOptions, savePageSize } = useListPageSizePreference('receipt');
   const totalPages = Math.max(1, Math.ceil(receipts.length / pageSize));
   const paginatedReceipts = receipts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const receiptRequestGuard = useLatestRequestGuard();
@@ -296,7 +296,7 @@ export function ReceiptManager() {
   };
 
   const handlePageSizeChange = (nextPageSize: number) => {
-    setPageSize(nextPageSize);
+    savePageSize(nextPageSize);
     setCurrentPage(1);
   };
 
@@ -538,7 +538,7 @@ export function ReceiptManager() {
         onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
         onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
         pageSize={pageSize}
-        pageSizeOptions={receiptPageSizeOptions}
+        pageSizeOptions={pageSizeOptions}
         onPageSizeChange={handlePageSizeChange}
       />
 

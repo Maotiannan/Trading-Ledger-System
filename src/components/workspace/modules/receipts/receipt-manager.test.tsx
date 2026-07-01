@@ -253,9 +253,18 @@ describe('ReceiptManager', () => {
     expect(screen.getByTestId('receipt-mobile-filter-content')).toHaveAttribute('data-expanded', 'true');
   });
 
-  it('resets to page 1 when the page size changes', async () => {
+  it('uses and persists the account receipt page size preference', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint === 'settings?view=user-preferences') {
+        return { success: true, data: { listPageSizes: { detail: 10, swift: 10, receipt: 20 } } };
+      }
+      if (endpoint === 'settings' && options?.method === 'POST') {
+        return { success: true, data: { listPageSizes: { detail: 10, swift: 10, receipt: 50 } } };
+      }
+      return { success: true, data: [] };
+    });
     mockUseStore.mockReturnValue({
-      receipts: Array.from({ length: 61 }, (_, index) => ({
+      receipts: Array.from({ length: 41 }, (_, index) => ({
         id: `receipt-${index}`,
         receiptNo: `R-${index}`,
         date: '2026-05-04',
@@ -283,6 +292,10 @@ describe('ReceiptManager', () => {
       render(<ReceiptManager />);
     });
 
+    await waitFor(() => {
+      expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSize).toBe(20);
+    });
+
     const receiptListProps = (globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps;
     await act(async () => {
       receiptListProps?.onNextPage();
@@ -290,11 +303,21 @@ describe('ReceiptManager', () => {
 
     expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.currentPage).toBe(2);
 
-    fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '100' } });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '50' } });
+      await Promise.resolve();
+    });
 
     expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.currentPage).toBe(1);
-    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSize).toBe(100);
-    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSizeOptions).toEqual([30, 50, 100, 200]);
+    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSize).toBe(50);
+    expect((globalThis as { __receiptListProps?: ReceiptListProps }).__receiptListProps?.pageSizeOptions).toEqual([5, 10, 20, 50]);
+    expect(mockApiCall).toHaveBeenCalledWith('settings', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'update-user-preferences',
+        preferences: { listPageSizes: { detail: 10, swift: 10, receipt: 50 } },
+      }),
+    }));
   });
 
   it('wires receipt edit affordances for sales-visible receipts and normalizes existing ISO dates', async () => {

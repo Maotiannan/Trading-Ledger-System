@@ -6,11 +6,13 @@ export type ListPageSizeOption = typeof LIST_PAGE_SIZE_OPTIONS[number];
 export type UserListPageSizePreference = {
   detail: ListPageSizeOption;
   swift: ListPageSizeOption;
+  receipt: ListPageSizeOption;
 };
 
 export const DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE: UserListPageSizePreference = Object.freeze({
   detail: DEFAULT_LIST_PAGE_SIZE,
   swift: DEFAULT_LIST_PAGE_SIZE,
+  receipt: 20,
 });
 
 function isListPageSizeOption(value: unknown): value is ListPageSizeOption {
@@ -29,6 +31,9 @@ export function normalizeListPageSizePreference(value: unknown): UserListPageSiz
     swift: isListPageSizeOption(source.swift)
       ? Number(source.swift) as ListPageSizeOption
       : DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE.swift,
+    receipt: isListPageSizeOption(source.receipt)
+      ? Number(source.receipt) as ListPageSizeOption
+      : DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE.receipt,
   };
 }
 

@@ -209,7 +209,7 @@ describe('user-preference-service', () => {
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: 640,
       dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
-      listPageSizes: { detail: 10, swift: 10 },
+      listPageSizes: { detail: 10, swift: 10, receipt: 20 },
       createdAt: new Date('2026-05-04T10:00:00.000Z'),
       updatedAt: new Date('2026-05-04T10:00:00.000Z'),
     });
@@ -219,7 +219,7 @@ describe('user-preference-service', () => {
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: 640,
       dashboardLayout: DEFAULT_USER_PREFERENCE_SETTINGS.dashboardLayout,
-      listPageSizes: { detail: 20, swift: 50 },
+      listPageSizes: { detail: 20, swift: 50, receipt: 20 },
       createdAt: new Date('2026-05-04T10:00:00.000Z'),
       updatedAt: new Date('2026-05-04T11:00:00.000Z'),
     });
@@ -233,10 +233,10 @@ describe('user-preference-service', () => {
         imageCompressionEnabled: false,
         imageCompressionQualityFloor: 0.45,
         ocrTargetMaxKb: 640,
-        listPageSizes: { detail: 20, swift: 50 },
+        listPageSizes: { detail: 20, swift: 50, receipt: 20 },
       }),
     }));
-    expect(result.listPageSizes).toEqual({ detail: 20, swift: 50 });
+    expect(result.listPageSizes).toEqual({ detail: 20, swift: 50, receipt: 20 });
     expect(result.imageCompressionEnabled).toBe(false);
   });
 });

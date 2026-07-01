@@ -260,10 +260,10 @@ describe('DetailManager', () => {
   it('uses and persists the account payment detail page size preference', async () => {
     mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
       if (endpoint === 'settings?view=user-preferences') {
-        return { success: true, data: { listPageSizes: { detail: 20, swift: 10 } } };
+        return { success: true, data: { listPageSizes: { detail: 20, swift: 10, receipt: 20 } } };
       }
       if (endpoint === 'settings' && options?.method === 'POST') {
-        return { success: true, data: { listPageSizes: { detail: 50, swift: 10 } } };
+        return { success: true, data: { listPageSizes: { detail: 50, swift: 10, receipt: 20 } } };
       }
       return { success: true, data: [] };
     });
@@ -284,7 +284,7 @@ describe('DetailManager', () => {
       method: 'POST',
       body: JSON.stringify({
         action: 'update-user-preferences',
-        preferences: { listPageSizes: { detail: 50, swift: 10 } },
+        preferences: { listPageSizes: { detail: 50, swift: 10, receipt: 20 } },
       }),
     }));
   });

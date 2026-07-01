@@ -235,10 +235,10 @@ describe('SwiftManager', () => {
   it('uses and persists the account swift page size preference', async () => {
     mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
       if (endpoint === 'settings?view=user-preferences') {
-        return { success: true, data: { listPageSizes: { detail: 10, swift: 20 } } };
+        return { success: true, data: { listPageSizes: { detail: 10, swift: 20, receipt: 20 } } };
       }
       if (endpoint === 'settings' && options?.method === 'POST') {
-        return { success: true, data: { listPageSizes: { detail: 10, swift: 50 } } };
+        return { success: true, data: { listPageSizes: { detail: 10, swift: 50, receipt: 20 } } };
       }
       return { success: true, data: [] };
     });
@@ -259,7 +259,7 @@ describe('SwiftManager', () => {
       method: 'POST',
       body: JSON.stringify({
         action: 'update-user-preferences',
-        preferences: { listPageSizes: { detail: 10, swift: 50 } },
+        preferences: { listPageSizes: { detail: 10, swift: 50, receipt: 20 } },
       }),
     }));
   });

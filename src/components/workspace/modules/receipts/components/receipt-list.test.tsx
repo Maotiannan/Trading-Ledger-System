@@ -64,10 +64,10 @@ describe('ReceiptList', () => {
     expect(screen.getAllByText('-').length).toBeGreaterThan(0);
   });
 
-  it('shows rows-per-page control next to bottom pagination controls', () => {
+  it('uses the shared compact pagination layout at the bottom', () => {
     render(
       <ReceiptList
-        receipts={Array.from({ length: 31 }, (_, index) => ({
+        receipts={Array.from({ length: 21 }, (_, index) => ({
           ...baseReceipt,
           id: `receipt-${index}`,
           receiptNo: `0001${String(index).padStart(3, '0')}`,
@@ -88,14 +88,17 @@ describe('ReceiptList', () => {
         onResumeSigning={() => undefined}
         onPreviousPage={() => undefined}
         onNextPage={() => undefined}
-        pageSize={30}
-        pageSizeOptions={[30, 50, 100, 200]}
+        pageSize={20}
+        pageSizeOptions={[5, 10, 20, 50]}
         onPageSizeChange={() => undefined}
       />,
     );
 
-    const pagination = screen.getByTestId('receipt-pagination-controls');
-    expect(pagination).toContainElement(screen.getByLabelText('每页条数'));
+    expect(screen.getByLabelText('每页条数')).toHaveValue('20');
+    expect(screen.getByRole('button', { name: '上一页' })).toHaveTextContent('←');
+    expect(screen.getByRole('button', { name: '下一页' })).toHaveTextContent('→');
+    expect(screen.getByText('1 / 2 (21)')).toBeInTheDocument();
+    expect(screen.getByTestId('list-pagination-content')).toHaveClass('flex-row', 'flex-nowrap');
   });
 
   it('hides RECEIVED edit/delete actions from sales users and keeps them visible for admins', () => {

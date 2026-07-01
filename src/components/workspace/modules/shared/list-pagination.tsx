@@ -1,0 +1,77 @@
+'use client';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+
+export type ListPaginationProps = {
+  idPrefix: string;
+  tx: (zh: string, en: string) => string;
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  pageSize: number;
+  pageSizeOptions: readonly number[];
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+  onPageSizeChange: (pageSize: number) => void;
+};
+
+export function ListPagination({
+  idPrefix,
+  tx,
+  currentPage,
+  totalPages,
+  totalCount,
+  pageSize,
+  pageSizeOptions,
+  onPreviousPage,
+  onNextPage,
+  onPageSizeChange,
+}: ListPaginationProps) {
+  const pageSizeLabel = tx('每页条数', 'Rows per page');
+  const previousLabel = tx('上一页', 'Previous');
+  const nextLabel = tx('下一页', 'Next');
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-between gap-3 px-4 py-4 sm:flex-row">
+        <div className="flex items-center gap-2">
+          <select
+            id={`${idPrefix}-page-size`}
+            aria-label={pageSizeLabel}
+            className="border rounded-md px-3 py-2 text-sm"
+            value={String(pageSize)}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {pageSizeOptions.map((size) => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={previousLabel}
+            onClick={onPreviousPage}
+            disabled={currentPage === 1}
+          >
+            ←
+          </Button>
+          <span className="min-w-[5.5rem] text-center text-sm text-gray-600">
+            {currentPage} / {totalPages} ({totalCount})
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label={nextLabel}
+            onClick={onNextPage}
+            disabled={currentPage === totalPages}
+          >
+            →
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

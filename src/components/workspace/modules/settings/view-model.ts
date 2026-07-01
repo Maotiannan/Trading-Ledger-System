@@ -4,6 +4,7 @@ import type {
   SettingsAuditFilterState,
   SettingsAuditMeta,
 } from './types';
+import { formatAppDateTime } from '@/lib/app-time';
 
 export type SettingsTx = (zh: string, en: string) => string;
 
@@ -71,7 +72,7 @@ function formatDateLabel(value: string) {
   if (Number.isNaN(nextDate.getTime())) {
     return value || '-';
   }
-  return nextDate.toLocaleString();
+  return formatAppDateTime(nextDate);
 }
 
 function displayAuditValue(value: string) {

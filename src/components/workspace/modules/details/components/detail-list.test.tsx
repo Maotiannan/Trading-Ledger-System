@@ -126,7 +126,7 @@ describe('DetailList', () => {
     expect(screen.getByTitle('申请删除')).toBeInTheDocument();
   });
 
-  it('renders rows per page controls and emits page size changes', () => {
+  it('renders compact pagination controls and emits page size changes', () => {
     const onPageSizeChange = jest.fn();
     render(
       <DetailList
@@ -144,6 +144,11 @@ describe('DetailList', () => {
         onPageSizeChange={onPageSizeChange}
       />
     );
+
+    expect(screen.getByText('1 / 1 (1)')).toBeInTheDocument();
+    expect(screen.queryByText('每页条数')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上一页' })).toHaveTextContent('←');
+    expect(screen.getByRole('button', { name: '下一页' })).toHaveTextContent('→');
 
     fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '20' } });
 

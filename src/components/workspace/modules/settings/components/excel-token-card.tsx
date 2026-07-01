@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { formatAppDateTime } from '@/lib/app-time';
 import { KeyRound, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import type { ExcelApiTokenSummary } from '../types';
 
@@ -24,7 +25,7 @@ function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '-';
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString();
+  return formatAppDateTime(date);
 }
 
 function activeToken(tokens: ExcelApiTokenSummary[]): ExcelApiTokenSummary | null {

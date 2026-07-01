@@ -60,6 +60,7 @@ describe('buildSettingsAuditViewModel', () => {
     expect(result.exportHistorySummaryItems[1]?.value).toBe('历史记录已加载到末尾');
     expect(result.auditRows[0]).toEqual(expect.objectContaining({
       actorEmail: 'admin@example.com',
+      createdAtLabel: '12/03/2026, 08:30',
       updatedKeys: ['OCR_DISABLED'],
     }));
     expect(result.auditRows[0]?.changes[0]).toEqual({
@@ -68,6 +69,7 @@ describe('buildSettingsAuditViewModel', () => {
       beforeValue: '-',
       afterValue: 'true',
     });
+    expect(result.exportHistoryRows[0]?.createdAtLabel).toBe('12/03/2026, 08:35');
     expect(result.exportHistoryRows[0]?.summaryItems[3]?.value).toBe('已截断');
     expect(result.exportHistoryRows[0]?.filterItems[0]?.value).toBe('-');
   });

@@ -1,4 +1,5 @@
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
+import { formatAppDate } from '@/lib/app-time';
 import { formatUsdAmount } from '@/lib/display-format';
 
 export const RECEIPT_GENERATOR_RECEIVED_BY = 'Mamadou Dian Diallo';
@@ -61,13 +62,7 @@ const TENS = [
 ];
 
 function formatGeneratorDate(date: Date): string {
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Shanghai',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-  return formatter.format(date);
+  return formatAppDate(date);
 }
 
 function toWordsBelowThousand(value: number): string {

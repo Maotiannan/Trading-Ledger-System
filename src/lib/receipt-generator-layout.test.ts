@@ -34,6 +34,23 @@ describe('receipt-generator-layout', () => {
     expect(layout.receivedBy).toBe('Transferred via bank account');
   });
 
+  it('formats generated receipt dates in Guinea time', () => {
+    const layout = buildReceiptGeneratorLayout({
+      receiptNo: '0010005',
+      orderNo: 'SDT-02',
+      invNo: 'L25MH123456',
+      customerMark: 'SDT',
+      customerCompanyName: 'SDT Trading',
+      customerName: 'Sadio',
+      clientTel: '+224 620 00 00 00',
+      usdAmount: 100,
+      balanceBefore: 1000,
+      generatedAt: new Date('2026-04-27T23:30:00.000Z'),
+    });
+
+    expect(layout.dateText).toBe('27/04/2026');
+  });
+
   it('falls back to customer name when company name is blank', () => {
     const layout = buildReceiptGeneratorLayout({
       receiptNo: '0001001',

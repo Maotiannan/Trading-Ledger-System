@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatAppDateTime } from '@/lib/app-time';
 import { formatUsdAmount } from '@/lib/display-format';
 
 export type OrderHistoryDialogProps = {
@@ -39,7 +40,7 @@ export function OrderHistoryDialog({ open, title, rows, tx, onOpenChange }: Orde
                   <TableCell>{formatUsdAmount(row.usd)}</TableCell>
                   <TableCell><Badge>{String(row.status || '-')}</Badge></TableCell>
                   <TableCell>{row.date ? new Date(String(row.date)).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : '-'}</TableCell>
+                  <TableCell>{formatAppDateTime(String(row.createdAt || ''))}</TableCell>
                 </TableRow>
               ))}
               {rows.length === 0 && (

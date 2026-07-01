@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiCall, useUiText } from '@/components/workspace/shared';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
+import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import type { ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
 import type { DetailEditRequestRow } from '@/lib/detail-edit-types';
@@ -399,7 +400,7 @@ export function DeletionManager() {
                   <TableCell>{request.requester?.name || request.requester?.email}</TableCell>
                   <TableCell>{request.reason || '-'}</TableCell>
                   <TableCell>{getStatusBadge(request.status)}</TableCell>
-                  <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell>{formatAppDate(request.createdAt)}</TableCell>
                   <TableCell>
                     {request.status === 'PENDING'
                       ? renderPendingActions(request.id, handleDeletionDecision)
@@ -441,7 +442,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
                     <td className="px-4 py-3">{renderReceiptChanges(request)}</td>
                     <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
-                    <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">{formatAppDate(request.requestedAt)}</td>
                     <td className="px-4 py-3">
                       {request.status === 'PENDING'
                         ? renderPendingActions(request.id, handleReceiptDecision)
@@ -483,7 +484,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
                     <td className="px-4 py-3">{renderDetailChanges(request)}</td>
                     <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
-                    <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">{formatAppDate(request.requestedAt)}</td>
                     <td className="px-4 py-3">
                       {request.status === 'PENDING'
                         ? renderPendingActions(request.id, handleDetailDecision)
@@ -525,7 +526,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{request.requestedByName || '-'}</td>
                     <td className="px-4 py-3">{renderSwiftChanges(request)}</td>
                     <td className="px-4 py-3">{getStatusBadge(request.status)}</td>
-                    <td className="px-4 py-3">{new Date(request.requestedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3">{formatAppDate(request.requestedAt)}</td>
                     <td className="px-4 py-3">
                       {request.status === 'PENDING'
                         ? renderPendingActions(request.id, handleSwiftDecision)

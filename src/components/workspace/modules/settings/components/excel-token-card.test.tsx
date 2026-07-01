@@ -38,6 +38,7 @@ describe('ExcelTokenCard', () => {
 
     expect(screen.getByDisplayValue('ml_prefix_secret')).toBeInTheDocument();
     expect(screen.getByText('prefix123')).toBeInTheDocument();
+    expect(screen.getByText('28/04/2026, 08:00')).toBeInTheDocument();
     expect(screen.getByText('=ML(A1,1) ORDER NAME')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /刷新/ }));

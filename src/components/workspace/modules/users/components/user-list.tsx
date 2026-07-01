@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatAppDate } from '@/lib/app-time';
 import { Key, Trash2 } from 'lucide-react';
 
 export type UserListProps = {
@@ -73,7 +74,7 @@ export function UserList({
                 </TableCell>
                 <TableCell>{row.level ?? '-'}</TableCell>
                 <TableCell>{row.parentId ? (usersById.get(row.parentId)?.email || row.parentId) : '-'}</TableCell>
-                <TableCell>{row.createdAt ? new Date(row.createdAt).toLocaleDateString() : '-'}</TableCell>
+                <TableCell>{formatAppDate(row.createdAt)}</TableCell>
                 <TableCell>
                   <Button size="sm" variant="ghost" onClick={() => onResetPassword(row.id)} title={tx('重置密码', 'Reset password')} disabled={!canManageTarget(row)}>
                     <Key className="h-4 w-4" />

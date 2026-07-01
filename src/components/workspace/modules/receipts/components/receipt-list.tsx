@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Check, Eye, PenSquare, Pencil, Trash2 } from 'lucide-react';
 
@@ -93,7 +94,7 @@ export function ReceiptList({
                 </TableCell>
                 <TableCell>{receipt.payer || '-'}</TableCell>
                 <TableCell>{getStatusBadge(receipt.status)}</TableCell>
-                <TableCell>{new Date(receipt.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell>{formatAppDate(receipt.createdAt)}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
                     {receipt.imageUrl && (

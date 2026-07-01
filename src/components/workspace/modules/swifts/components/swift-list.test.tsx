@@ -71,7 +71,7 @@ describe('SwiftList', () => {
     expect(screen.queryByTitle('签收SWIFT')).not.toBeInTheDocument();
   });
 
-  it('renders rows per page controls and emits page size changes', () => {
+  it('renders compact pagination controls and emits page size changes', () => {
     const onPageSizeChange = jest.fn();
     render(
       <SwiftList
@@ -88,6 +88,11 @@ describe('SwiftList', () => {
         onPageSizeChange={onPageSizeChange}
       />
     );
+
+    expect(screen.getByText('1 / 1 (1)')).toBeInTheDocument();
+    expect(screen.queryByText('每页条数')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上一页' })).toHaveTextContent('←');
+    expect(screen.getByRole('button', { name: '下一页' })).toHaveTextContent('→');
 
     fireEvent.change(screen.getByLabelText('每页条数'), { target: { value: '20' } });
 

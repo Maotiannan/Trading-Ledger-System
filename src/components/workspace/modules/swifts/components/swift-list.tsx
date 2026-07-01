@@ -5,9 +5,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { formatUsdAmount } from '@/lib/display-format';
 import { AlertTriangle, Check, Eye, Pencil, Trash2 } from 'lucide-react';
+import { ListPagination } from '../../shared/list-pagination';
 
 export type SwiftListProps = {
   swifts: Swift[];
@@ -128,35 +128,18 @@ export function SwiftList({
         );
       })}
       {totalCount > 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-between gap-3 px-4 py-4 sm:flex-row">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="swift-page-size">{tx('每页条数', 'Rows per page')}</Label>
-              <select
-                id="swift-page-size"
-                aria-label={tx('每页条数', 'Rows per page')}
-                className="border rounded-md px-3 py-2 text-sm"
-                value={String(pageSize)}
-                onChange={(event) => onPageSizeChange(Number(event.target.value))}
-              >
-                {pageSizeOptions.map((size) => (
-                  <option key={size} value={size}>{size}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onPreviousPage} disabled={currentPage === 1}>
-                {tx('上一页', 'Previous')}
-              </Button>
-              <span className="text-sm text-gray-600">
-                {tx(`第 ${currentPage} / ${totalPages} 页 (共 ${totalCount} 条)`, `Page ${currentPage} / ${totalPages} (Total ${totalCount})`)}
-              </span>
-              <Button variant="outline" size="sm" onClick={onNextPage} disabled={currentPage === totalPages}>
-                {tx('下一页', 'Next')}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <ListPagination
+          idPrefix="swift"
+          tx={tx}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
+          onPreviousPage={onPreviousPage}
+          onNextPage={onNextPage}
+          onPageSizeChange={onPageSizeChange}
+        />
       )}
     </div>
   );

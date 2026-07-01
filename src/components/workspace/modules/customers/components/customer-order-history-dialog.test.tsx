@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { CustomerOrderHistoryDialog } from './customer-order-history-dialog';
 
 describe('CustomerOrderHistoryDialog', () => {
@@ -15,7 +15,7 @@ describe('CustomerOrderHistoryDialog', () => {
         history={{
           orders: [{
             id: 'order-1',
-            orderNo: 'MAB-1-10',
+            orderNo: 'BIG ALPHA-10A/BIG ALPHA-10B',
             invNo: 'L25MH090001',
             amount: 1000,
             outstanding: 250,
@@ -23,20 +23,59 @@ describe('CustomerOrderHistoryDialog', () => {
           receipts: [{
             id: 'receipt-1',
             receiptNo: '0001001',
-            orderNo: 'MAB-1-10',
+            orderNo: 'BIG ALPHA-10A/BIG ALPHA-10B',
             invNo: 'L25MH090001',
             usd: 750,
             status: 'RECEIVED',
             date: '2026-05-07',
+            createdAt: '2026-05-08T10:12:30.000Z',
           }],
         }}
         onOpenChange={() => undefined}
       />,
     );
 
-    expect(screen.getByTestId('customer-order-history-grid')).toHaveClass('md:grid-cols-2');
-    expect(screen.getAllByText('MAB-1-10')).toHaveLength(2);
-    expect(screen.getByText('L25MH090001')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveClass('md:w-fit', 'md:max-w-[calc(100vw-32px)]');
+    expect(screen.getByTestId('customer-order-history-scroll')).toHaveClass('md:overflow-x-auto');
+    expect(screen.getByTestId('customer-order-history-grid')).toHaveClass(
+      'md:w-max',
+      'md:grid-cols-[max-content_max-content]',
+      'md:items-start',
+    );
+
+    const ordersTable = screen.getByTestId('customer-order-history-orders-table');
+    const receiptsTable = screen.getByTestId('customer-order-history-receipts-table');
+    expect(within(ordersTable).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+      'ORDER',
+      'INV NO',
+      'AMOUNT',
+      'O/S',
+    ]);
+    expect(within(receiptsTable).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual([
+      '创建时间',
+      'ORDER',
+      'USD',
+      'Status',
+      'Receipt',
+    ]);
+
+    const orderCells = screen.getAllByTestId('customer-order-history-order-value');
+    expect(orderCells).toHaveLength(2);
+    for (const cell of orderCells) {
+      expect(cell).toHaveClass('min-w-[13ch]');
+      expect(cell).not.toHaveClass('break-words');
+      expect(cell.textContent).toBe('BIG ALPHA-10A/BIG ALPHA-10B');
+      expect(cell.querySelectorAll('wbr')).toHaveLength(1);
+    }
+
+    expect(within(ordersTable).getByText('L25MH090001').closest('td')).toHaveClass('whitespace-nowrap');
+    expect(within(ordersTable).getByText('$1,000').closest('td')).toHaveClass('whitespace-nowrap');
+    expect(within(ordersTable).getByText('$250').closest('td')).toHaveClass('whitespace-nowrap');
+    expect(within(receiptsTable).getByText('$750').closest('td')).toHaveClass('whitespace-nowrap');
+    expect(within(receiptsTable).getByText('RECEIVED').closest('td')).toHaveClass('whitespace-nowrap');
+    expect(within(receiptsTable).getByText('0001001').closest('td')).toHaveClass('whitespace-nowrap');
+    expect(within(receiptsTable).getByText('08/05/2026').closest('td')).toHaveClass('whitespace-nowrap');
+
     expect(screen.getByText('$1,000')).toBeInTheDocument();
     expect(screen.getByText('$250')).toBeInTheDocument();
     expect(screen.getByText('0001001')).toBeInTheDocument();

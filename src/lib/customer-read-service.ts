@@ -265,6 +265,7 @@ export async function getCustomerOrderNameHistory(
         usd: Number(row.usd),
         status: row.status,
         date: toDateText(row.date),
+        createdAt: row.createdAt.toISOString(),
       })),
     },
     message: `客户ORDER_NAME历史已加载，共 ${orders.length} 条订单`,

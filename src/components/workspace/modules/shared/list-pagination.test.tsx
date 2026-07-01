@@ -24,6 +24,7 @@ describe('ListPagination', () => {
       />
     );
 
+    expect(screen.getByTestId('list-pagination-content')).toHaveClass('flex-row', 'flex-nowrap');
     expect(screen.getByText('1 / 2 (15)')).toBeInTheDocument();
     expect(screen.queryByText('每页条数')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '上一页' })).toHaveTextContent('←');

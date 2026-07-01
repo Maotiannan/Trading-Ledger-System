@@ -566,8 +566,8 @@ describe('customer-read-service', () => {
       },
     ]);
     expect(result.data.receipts).toEqual([
-      expect.objectContaining({ id: 'receipt-1', date: '2026-05-07', usd: 2500 }),
-      expect.objectContaining({ id: 'receipt-2', date: null, usd: 100 }),
+      expect.objectContaining({ id: 'receipt-1', date: '2026-05-07', usd: 2500, createdAt: '2026-05-07T10:12:30.000Z' }),
+      expect.objectContaining({ id: 'receipt-2', date: null, usd: 100, createdAt: '2026-05-08T10:12:30.000Z' }),
     ]);
     expect(result.message).toContain('1 条订单');
   });

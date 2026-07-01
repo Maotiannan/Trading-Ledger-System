@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.185
-> 最后更新：2026-06-28
+> 当前版本：v1.0.189
+> 最后更新：2026-07-01
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 分页与客户历史弹窗上线修复：确认 `Customer Management -> ORDER_NAME History` 桌面表格适配此前只存在于未合并 worktree，未进入 `main`；现将有效布局合入主线，弹窗桌面端按两张表内容宽度自适应，最大宽度限制为 `calc(100vw - 32px)`，超宽时只在弹窗内部横向滚动；`ORDER` 列按 `/` 允许断行，其余关键金额/编号/状态列保持不换行，`Outstanding` 改为 `O/S`，Recent Receipts 增加创建时间并把 Receipt 列移到最右。共享 `ListPagination` 移动端改为条数下拉与翻页控件同一行不换行。无数据库、NAS/COS 路径或备份范围变更。测试：`list-pagination / customer-order-history-dialog / customer-read-service` 红绿回归 ✅ 2026-07-01
 
 - [x] Dashboard ORDER 收据查询图片预览：`dashboard-receipt-search-service` 在保持原 ORDER NO 匹配、权限和分页逻辑不变的前提下，补齐 `imageUrl / imageName / invNo / boundInvNo / creator` 预览字段；Dashboard `Order Receipt Search` 结果中只有带图片的 `ORDER NO` 渲染为可点击按钮，并复用 `ReceiptImagePreviewDialog` 展示已绑定 ORDER NO、发票号、创建者和收据图片。无新增数据库表、NAS/COS 路径或备份范围。测试：先确认 Dashboard 组件测试因 ORDER NO 不可点击失败，再通过 `dashboard-receipt-search-service / dashboard-view` 红绿回归 ✅ 2026-06-28
 

@@ -34,8 +34,11 @@ export function ListPagination({
 
   return (
     <Card>
-      <CardContent className="flex flex-col items-center justify-between gap-3 px-4 py-4 sm:flex-row">
-        <div className="flex items-center gap-2">
+      <CardContent
+        data-testid="list-pagination-content"
+        className="flex flex-row flex-nowrap items-center justify-center gap-2 px-4 py-4"
+      >
+        <div className="flex shrink-0 items-center gap-2">
           <select
             id={`${idPrefix}-page-size`}
             aria-label={pageSizeLabel}
@@ -48,7 +51,7 @@ export function ListPagination({
             ))}
           </select>
         </div>
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex shrink-0 items-center justify-center gap-2">
           <Button
             variant="outline"
             size="sm"

@@ -5,17 +5,19 @@ Unify list pagination UI for Payment Detail and SWIFT, and standardize system-cr
 
 ## Scope
 - Add a reusable pagination component for list pages.
-- Replace Payment Detail Management and SWIFT Management bottom pagination with the shared component.
+- Replace Payment Detail Management, SWIFT Management, and Receipt Management bottom pagination with the shared component.
 - Add a global app time utility using `Africa/Conakry`.
 - Keep database timestamps stored as UTC/Date values. Only display and generated document formatting use Guinea time.
 - Update the signed receipt generator date formatter from the current hard-coded Shanghai timezone to the global app timezone.
 
 ## Pagination Behavior
 - Keep the page-size select control.
+- Receipt Management uses the global `5 / 10 / 20 / 50` page-size options, defaults to `20`, and persists the selected size with the current account.
 - Do not show visible `Rows per page` or `每页条数` text.
 - Keep accessible labels for page size and previous/next controls.
 - Previous and next visible labels are `←` and `→`.
 - Page summary format is `current / total (count)`, for example `1 / 2 (15)`.
+- Keep the page-size select, previous arrow, page summary, and next arrow on one non-wrapping row on mobile.
 - The component accepts injected text via the existing `tx(zh, en)` pattern.
 
 ## Time Behavior

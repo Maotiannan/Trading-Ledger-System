@@ -4,6 +4,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ListPagination } from '@/components/workspace/modules/shared/list-pagination';
 import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Loader2 } from 'lucide-react';
@@ -28,9 +29,18 @@ export type CustomerOrderHistoryReceipt = {
   createdAt: string;
 };
 
+export type CustomerOrderHistoryPagination = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
 export type CustomerOrderHistory = {
   orders: CustomerOrderHistoryOrder[];
+  orderPagination?: CustomerOrderHistoryPagination;
   receipts: CustomerOrderHistoryReceipt[];
+  receiptPagination?: CustomerOrderHistoryPagination;
 };
 
 export type CustomerOrderHistoryDialogProps = {
@@ -40,6 +50,14 @@ export type CustomerOrderHistoryDialogProps = {
   title: string;
   history: CustomerOrderHistory | null;
   tx: (zh: string, en: string) => string;
+  orderPageSizeOptions: readonly number[];
+  receiptPageSizeOptions: readonly number[];
+  onOrderPreviousPage: () => void;
+  onOrderNextPage: () => void;
+  onOrderPageSizeChange: (pageSize: number) => void;
+  onReceiptPreviousPage: () => void;
+  onReceiptNextPage: () => void;
+  onReceiptPageSizeChange: (pageSize: number) => void;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -68,6 +86,14 @@ export function CustomerOrderHistoryDialog({
   title,
   history,
   tx,
+  orderPageSizeOptions,
+  receiptPageSizeOptions,
+  onOrderPreviousPage,
+  onOrderNextPage,
+  onOrderPageSizeChange,
+  onReceiptPreviousPage,
+  onReceiptNextPage,
+  onReceiptPageSizeChange,
   onOpenChange,
 }: CustomerOrderHistoryDialogProps) {
   return (
@@ -128,6 +154,22 @@ export function CustomerOrderHistoryDialog({
                       </TableBody>
                     </Table>
                   </div>
+                  {history?.orderPagination && (
+                    <ListPagination
+                      idPrefix="customer-history-orders"
+                      tx={tx}
+                      currentPage={history.orderPagination.page}
+                      totalPages={history.orderPagination.totalPages}
+                      totalCount={history.orderPagination.totalItems}
+                      pageSize={history.orderPagination.pageSize}
+                      pageSizeOptions={orderPageSizeOptions}
+                      compact
+                      disabled={loading}
+                      onPreviousPage={onOrderPreviousPage}
+                      onNextPage={onOrderNextPage}
+                      onPageSizeChange={onOrderPageSizeChange}
+                    />
+                  )}
                 </section>
 
                 <section className="space-y-3 md:w-max">
@@ -163,6 +205,23 @@ export function CustomerOrderHistoryDialog({
                       </TableBody>
                     </Table>
                   </div>
+                  {history?.receiptPagination && (
+                    <ListPagination
+                      idPrefix="customer-history-receipts"
+                      tx={tx}
+                      currentPage={history.receiptPagination.page}
+                      totalPages={history.receiptPagination.totalPages}
+                      totalCount={history.receiptPagination.totalItems}
+                      pageSize={history.receiptPagination.pageSize}
+                      pageSizeOptions={receiptPageSizeOptions}
+                      compact
+                      disabled={loading}
+                      onPreviousPage={onReceiptPreviousPage}
+                      onNextPage={onReceiptNextPage}
+                      onPageSizeChange={onReceiptPageSizeChange}
+                    />
+                  )}
+
                 </section>
               </div>
             </div>

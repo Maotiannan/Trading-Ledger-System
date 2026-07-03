@@ -11,6 +11,8 @@ export type ListPaginationProps = {
   totalCount: number;
   pageSize: number;
   pageSizeOptions: readonly number[];
+  compact?: boolean;
+  disabled?: boolean;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onPageSizeChange: (pageSize: number) => void;
@@ -24,6 +26,8 @@ export function ListPagination({
   totalCount,
   pageSize,
   pageSizeOptions,
+  compact = false,
+  disabled = false,
   onPreviousPage,
   onNextPage,
   onPageSizeChange,
@@ -32,18 +36,15 @@ export function ListPagination({
   const previousLabel = tx('上一页', 'Previous');
   const nextLabel = tx('下一页', 'Next');
 
-  return (
-    <Card>
-      <CardContent
-        data-testid="list-pagination-content"
-        className="flex flex-row flex-nowrap items-center justify-center gap-2 px-4 py-4"
-      >
+  const controls = (
+    <>
         <div className="flex shrink-0 items-center gap-2">
           <select
             id={`${idPrefix}-page-size`}
             aria-label={pageSizeLabel}
             className="border rounded-md px-3 py-2 text-sm"
             value={String(pageSize)}
+            disabled={disabled}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
           >
             {pageSizeOptions.map((size) => (
@@ -57,7 +58,7 @@ export function ListPagination({
             size="sm"
             aria-label={previousLabel}
             onClick={onPreviousPage}
-            disabled={currentPage === 1}
+            disabled={disabled || currentPage === 1}
           >
             ←
           </Button>
@@ -69,11 +70,32 @@ export function ListPagination({
             size="sm"
             aria-label={nextLabel}
             onClick={onNextPage}
-            disabled={currentPage === totalPages}
+            disabled={disabled || currentPage === totalPages}
           >
             →
           </Button>
         </div>
+    </>
+  );
+
+  if (compact) {
+    return (
+      <div
+        data-testid="list-pagination-content"
+        className="flex flex-row flex-nowrap items-center justify-center gap-1.5 py-2"
+      >
+        {controls}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardContent
+        data-testid="list-pagination-content"
+        className="flex flex-row flex-nowrap items-center justify-center gap-2 px-4 py-4"
+      >
+        {controls}
       </CardContent>
     </Card>
   );

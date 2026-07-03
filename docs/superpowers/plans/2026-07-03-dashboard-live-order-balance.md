@@ -1,6 +1,6 @@
 # Dashboard Live Order Balance Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make Dashboard and balance-writing paths use a single backend balance source of truth, automatically correct stale `Order.orderBalance` cache values, and preserve an audit/log trail without adding a manual repair button.
 
@@ -53,7 +53,7 @@
 - Produces: `isReceiptIncludedInOrderBalance(status)`, `computeOrderBalanceFromReceipts(input)`, `compareStoredOrderBalance(input)`, and `normalizeOrderBalanceNumber(value)`.
 - Consumes: existing money helpers from `src/lib/money.ts` and `ReceiptStatus` enum.
 
-- [ ] **Step 1: Write failing tests for formula and statuses**
+- [x] **Step 1: Write failing tests for formula and statuses**
 
 Create tests proving:
 
@@ -69,7 +69,7 @@ expect(computeOrderBalanceFromReceipts({
 
 Also test that `SIGNING_PENDING` is ignored, and `SR_Received`, `Waiting_SWIFT`, `Bank_Transfer`, and `RECEIVED` are included.
 
-- [ ] **Step 2: Run the new test and verify RED**
+- [x] **Step 2: Run the new test and verify RED**
 
 Run:
 
@@ -79,7 +79,7 @@ npx jest src/lib/order-balance.test.ts --runInBand
 
 Expected: FAIL because the file does not exist.
 
-- [ ] **Step 3: Implement the pure module**
+- [x] **Step 3: Implement the pure module**
 
 Implementation rules:
 
@@ -88,7 +88,7 @@ Implementation rules:
 - Compare stored/computed at cent precision.
 - Return mismatch metadata with `stored`, `computed`, and `difference`.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run:
 
@@ -120,7 +120,7 @@ git commit -m "feat: add order balance kernel"
 - Produces: `calculateLiveOrderBalance(orderId, client)`, `updateOrderBalance(orderId, client, options?)`, `repairOrderBalanceCacheIfNeeded(orderContext, client, options?)`.
 - Keeps existing `matching.calculateOrderBalance()` and `matching.updateOrderBalance()` exports as compatibility wrappers.
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Test cases:
 
@@ -130,7 +130,7 @@ Test cases:
 - second repair call after cache is already correct performs no update.
 - mismatch repair records `ORDER_BALANCE_CACHE_REPAIR` audit metadata and `logger.warn` structured detail.
 
-- [ ] **Step 2: Run service tests and verify RED**
+- [x] **Step 2: Run service tests and verify RED**
 
 Run:
 
@@ -140,7 +140,7 @@ npx jest src/lib/order-balance-service.test.ts --runInBand
 
 Expected: FAIL because the service does not exist.
 
-- [ ] **Step 3: Implement service and wrapper refactor**
+- [x] **Step 3: Implement service and wrapper refactor**
 
 Implementation rules:
 
@@ -149,7 +149,7 @@ Implementation rules:
 - Keep the existing function signatures in `matching.ts` working for old callers.
 - Do not add a POST repair API.
 
-- [ ] **Step 4: Run focused tests and commit**
+- [x] **Step 4: Run focused tests and commit**
 
 Run:
 
@@ -178,7 +178,7 @@ git commit -m "feat: centralize order balance persistence"
 - Consumes: Task 1 pure balance helpers and Task 2 repair helper.
 - Produces: Dashboard summary values based on computed balances only.
 
-- [ ] **Step 1: Write failing Dashboard tests**
+- [x] **Step 1: Write failing Dashboard tests**
 
 Add tests proving:
 
@@ -188,7 +188,7 @@ Add tests proving:
 - same computed value is used for Dashboard total, customer subtotal, and order row.
 - visible order mismatches call automatic repair helper; invisible orders are not touched because they are not returned by the visibility-filtered invoice query.
 
-- [ ] **Step 2: Run Dashboard tests and verify RED**
+- [x] **Step 2: Run Dashboard tests and verify RED**
 
 Run:
 
@@ -198,7 +198,7 @@ npx jest src/lib/dashboard-summary-service.test.ts --runInBand
 
 Expected: FAIL because Dashboard still trusts stored `orderBalance` and does not select receipts.
 
-- [ ] **Step 3: Refactor Dashboard summary**
+- [x] **Step 3: Refactor Dashboard summary**
 
 Implementation rules:
 
@@ -208,7 +208,7 @@ Implementation rules:
 - If stored/computed mismatch, call the repair helper for that order. Do not block the summary response on audit/log failures.
 - Keep existing sort/order behavior unless it depended on stale balances.
 
-- [ ] **Step 4: Run Dashboard tests and commit**
+- [x] **Step 4: Run Dashboard tests and commit**
 
 Run:
 
@@ -238,14 +238,14 @@ git commit -m "fix: compute dashboard balances from receipts"
 **Interfaces:**
 - Consumes: Task 1 pure kernel and Task 2 persistence helper.
 
-- [ ] **Step 1: Add or update failing tests around duplicate formula call sites**
+- [x] **Step 1: Add or update failing tests around duplicate formula call sites**
 
 Target existing tests where practical:
 
 - invoice list read returns live balance with pending receipt ignored.
 - deletion/order alias recalculation delegates to the unified update helper.
 
-- [ ] **Step 2: Run focused tests and verify RED where behavior currently differs or implementation still duplicates formula**
+- [x] **Step 2: Run focused tests and verify RED where behavior currently differs or implementation still duplicates formula**
 
 Run relevant Jest tests:
 
@@ -253,7 +253,7 @@ Run relevant Jest tests:
 npx jest src/lib/invoice-read-service.test.ts src/lib/deletion-service.test.ts --runInBand
 ```
 
-- [ ] **Step 3: Refactor duplicate formula call sites**
+- [x] **Step 3: Refactor duplicate formula call sites**
 
 Implementation rules:
 
@@ -261,7 +261,7 @@ Implementation rules:
 - Replace manual receipt-sum update in deletion/order alias helper with `updateOrderBalance()` using the current transaction/client where available.
 - Do not widen visibility beyond the caller's existing query.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run:
 
@@ -289,7 +289,7 @@ git commit -m "refactor: reuse order balance calculation"
 **Interfaces:**
 - Consumes: compatibility wrapper `updateOrderBalance()`.
 
-- [ ] **Step 1: Verify write-path tests cover the wrapper call**
+- [x] **Step 1: Verify write-path tests cover the wrapper call**
 
 Check and update tests for:
 
@@ -300,13 +300,13 @@ Check and update tests for:
 - `src/lib/invoice-service.test.ts`
 - `src/lib/invoice-write.test.ts`
 
-- [ ] **Step 2: Move unsafe post-commit balance updates into transactions when low-risk**
+- [x] **Step 2: Move unsafe post-commit balance updates into transactions when low-risk**
 
 For each modified path, prefer passing the current transaction client to `updateOrderBalance(orderId, tx)`.
 
 If a path cannot be safely moved in this batch, leave behavior intact but make it call the unified helper and document the remaining post-commit boundary in `ENGINEERING_LOG.md`.
 
-- [ ] **Step 3: Run focused service tests**
+- [x] **Step 3: Run focused service tests**
 
 Run:
 
@@ -316,7 +316,7 @@ npx jest src/lib/receipt-service.test.ts src/lib/receipt-generator-service.test.
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/lib src/app/api ENGINEERING_LOG.md
@@ -333,7 +333,7 @@ git commit -m "test: guard order balance write paths"
 - Modify: `package.json`
 - Modify: `package-lock.json`
 
-- [ ] **Step 1: Update engineering notes**
+- [x] **Step 1: Update engineering notes**
 
 Record:
 
@@ -343,11 +343,11 @@ Record:
 - no backup scope change because no schema or media path changed.
 - remaining balance write-path boundaries if any were intentionally not moved into transactions.
 
-- [ ] **Step 2: Bump version to `1.0.191`**
+- [x] **Step 2: Bump version to `1.0.191`**
 
 Use npm version tooling or edit both package files consistently.
 
-- [ ] **Step 3: Run focused and full verification**
+- [x] **Step 3: Run focused and full verification**
 
 Run:
 
@@ -361,7 +361,7 @@ npm run build
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md ENGINEERING_LOG.md package.json package-lock.json

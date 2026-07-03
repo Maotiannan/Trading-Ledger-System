@@ -1,6 +1,6 @@
 # Customer ORDER_NAME History Sorting And Pagination Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Sort customer historical orders by the confirmed balance/release/ship rules, sort receipts by creation time, and add independent account-persisted pagination to both history tables.
 
@@ -53,7 +53,7 @@
 - Produces: `CUSTOMER_HISTORY_PAGE_SIZE_OPTIONS`, `CustomerHistoryPagination`, `normalizeCustomerHistoryPagination()`, `sortCustomerHistoryOrders()`, and `paginateCustomerHistoryRows()`.
 - Consumes: plain values only; this module must not import Prisma or access the database.
 
-- [ ] **Step 1: Write failing sorting and pagination tests**
+- [x] **Step 1: Write failing sorting and pagination tests**
 
 Create test rows covering both balance groups and all three date subgroups:
 
@@ -101,7 +101,7 @@ describe('customer order history pagination', () => {
 });
 ```
 
-- [ ] **Step 2: Run the new tests and verify failure**
+- [x] **Step 2: Run the new tests and verify failure**
 
 Run:
 
@@ -111,7 +111,7 @@ npx jest src/lib/customer-order-history-pagination.test.ts --runInBand
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement the pure module**
+- [x] **Step 3: Implement the pure module**
 
 Implement the confirmed comparator with stable tie breakers:
 
@@ -175,7 +175,7 @@ export function sortCustomerHistoryOrders<T extends SortableHistoryOrder>(rows: 
 
 Add normalization and clamped slicing. Invalid page size must use the supplied account default only when that default is one of `5/10/15/20`; otherwise use `10`.
 
-- [ ] **Step 4: Run tests and verify pass**
+- [x] **Step 4: Run tests and verify pass**
 
 Run:
 
@@ -185,7 +185,7 @@ npx jest src/lib/customer-order-history-pagination.test.ts --runInBand
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the pure business unit**
+- [x] **Step 5: Commit the pure business unit**
 
 ```bash
 git add src/lib/customer-order-history-pagination.ts src/lib/customer-order-history-pagination.test.ts
@@ -207,7 +207,7 @@ git commit -m "feat: add customer history sorting rules"
 - Consumes: `getUserPreferences(currentUser).listPageSizes.customerHistoryOrders` and `.customerHistoryReceipts`.
 - Produces: `data.orders`, `data.orderPagination`, `data.receipts`, and `data.receiptPagination`.
 
-- [ ] **Step 1: Extend service tests with invoice dates, receipt count, and metadata**
+- [x] **Step 1: Extend service tests with invoice dates, receipt count, and metadata**
 
 Add `receipt.count` to the mocked database and assert:
 
@@ -233,7 +233,7 @@ expect(mockDb.receipt.findMany).toHaveBeenCalledWith(expect.objectContaining({
 
 Add a service case with more than one order page and assert the final order IDs match Task 1's business ordering before slicing.
 
-- [ ] **Step 2: Run service tests and verify failure**
+- [x] **Step 2: Run service tests and verify failure**
 
 Run:
 
@@ -243,7 +243,7 @@ npx jest src/lib/customer-read-service.test.ts --runInBand
 
 Expected: FAIL because pagination metadata, invoice dates, and receipt count paging are absent.
 
-- [ ] **Step 3: Extend `getCustomerOrderNameHistory`**
+- [x] **Step 3: Extend `getCustomerOrderNameHistory`**
 
 Change the input to accept:
 
@@ -281,7 +281,7 @@ For receipts:
 3. Query only the current page with `skip`, `take`, and `orderBy: [{ createdAt: 'desc' }, { id: 'asc' }]`.
 4. Return both pagination objects.
 
-- [ ] **Step 4: Add an API route test for account defaults and request overrides**
+- [x] **Step 4: Add an API route test for account defaults and request overrides**
 
 Mock `withAuth`, `getCustomerOrderNameHistory`, and `getUserPreferences`. Verify:
 
@@ -320,7 +320,7 @@ expect(mockGetCustomerOrderNameHistory).toHaveBeenCalledWith(
 );
 ```
 
-- [ ] **Step 5: Update the customer route**
+- [x] **Step 5: Update the customer route**
 
 In the `action === 'order-history'` branch:
 
@@ -329,7 +329,7 @@ In the `action === 'order-history'` branch:
 3. Forward the two account default page sizes.
 4. Keep existing authentication and customer access checks unchanged.
 
-- [ ] **Step 6: Run service and route tests**
+- [x] **Step 6: Run service and route tests**
 
 Run:
 
@@ -339,7 +339,7 @@ npx jest src/lib/customer-read-service.test.ts src/app/api/customer/route.test.t
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit the API deliverable**
+- [x] **Step 7: Commit the API deliverable**
 
 ```bash
 git add src/lib/customer-read-service.ts src/lib/customer-read-service.test.ts src/app/api/customer/route.ts src/app/api/customer/route.test.ts
@@ -361,7 +361,7 @@ git commit -m "feat: paginate customer order history API"
 - Produces: `getListPageSizeOptions(key)` so existing consumers retain `5/10/20/50`.
 - Produces: `useListPageSizePreference(key)` result with `pageSize`, `pageSizeOptions`, `savePageSize`, and `saveError`.
 
-- [ ] **Step 1: Write failing preference model tests**
+- [x] **Step 1: Write failing preference model tests**
 
 Assert exact defaults and per-key options:
 
@@ -387,7 +387,7 @@ expect(() => validateListPageSizePreference({
 })).toThrow('Invalid list page size for customerHistoryOrders');
 ```
 
-- [ ] **Step 2: Run model tests and verify failure**
+- [x] **Step 2: Run model tests and verify failure**
 
 Run:
 
@@ -397,7 +397,7 @@ npx jest src/lib/list-page-size-preference.test.ts --runInBand
 
 Expected: FAIL because the new keys and key-specific options do not exist.
 
-- [ ] **Step 3: Implement per-key option validation**
+- [x] **Step 3: Implement per-key option validation**
 
 Keep existing options unchanged and add:
 
@@ -427,7 +427,7 @@ export function getListPageSizeOptions(key: keyof UserListPageSizePreference): r
 
 Normalize and validate each key against its own option list.
 
-- [ ] **Step 4: Write hook tests for loading, saving, and failed persistence**
+- [x] **Step 4: Write hook tests for loading, saving, and failed persistence**
 
 Mock `apiCall`. Assert the hook:
 
@@ -436,7 +436,7 @@ Mock `apiCall`. Assert the hook:
 - saves the complete preference object
 - keeps the local value and exposes a readable error after a failed save
 
-- [ ] **Step 5: Update the shared hook**
+- [x] **Step 5: Update the shared hook**
 
 Use `getListPageSizeOptions(key)` instead of the global option constant. Add a `saveError` state:
 
@@ -462,7 +462,7 @@ const savePageSize = useCallback((nextPageSize: number) => {
 
 Existing Detail, SWIFT, and Receipt call sites do not need behavior changes.
 
-- [ ] **Step 6: Run preference tests**
+- [x] **Step 6: Run preference tests**
 
 Run:
 
@@ -472,7 +472,7 @@ npx jest src/lib/list-page-size-preference.test.ts src/components/workspace/modu
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit preference support**
+- [x] **Step 7: Commit preference support**
 
 ```bash
 git add src/lib/list-page-size-preference.ts src/lib/list-page-size-preference.test.ts src/components/workspace/modules/shared/use-list-page-size-preference.ts src/components/workspace/modules/shared/use-list-page-size-preference.test.tsx
@@ -491,7 +491,7 @@ git commit -m "feat: persist customer history page sizes"
 - Produces: optional props `compact?: boolean` and `disabled?: boolean`.
 - Existing callers without these props preserve the current card presentation.
 
-- [ ] **Step 1: Add failing compact-mode tests**
+- [x] **Step 1: Add failing compact-mode tests**
 
 Render:
 
@@ -519,7 +519,7 @@ Assert:
 - select and both buttons are disabled
 - summary remains `1 / 2 (15)`
 
-- [ ] **Step 2: Run component test and verify failure**
+- [x] **Step 2: Run component test and verify failure**
 
 Run:
 
@@ -529,7 +529,7 @@ npx jest src/components/workspace/modules/shared/list-pagination.test.tsx --runI
 
 Expected: FAIL because compact and disabled props do not exist.
 
-- [ ] **Step 3: Implement a shared controls body**
+- [x] **Step 3: Implement a shared controls body**
 
 Extract the existing select/buttons into one internal controls element. Return:
 
@@ -559,7 +559,7 @@ return (
 
 Apply `disabled` to the select and combine it with the existing first/last-page button conditions.
 
-- [ ] **Step 4: Run shared pagination tests**
+- [x] **Step 4: Run shared pagination tests**
 
 Run:
 
@@ -569,7 +569,7 @@ npx jest src/components/workspace/modules/shared/list-pagination.test.tsx --runI
 
 Expected: PASS with both legacy and compact cases.
 
-- [ ] **Step 5: Commit the reusable UI unit**
+- [x] **Step 5: Commit the reusable UI unit**
 
 ```bash
 git add src/components/workspace/modules/shared/list-pagination.tsx src/components/workspace/modules/shared/list-pagination.test.tsx
@@ -592,7 +592,7 @@ git commit -m "feat: add compact shared pagination mode"
 - Consumes: compact pagination mode from Task 4.
 - Produces: independently paged Historical Orders and Recent Receipts tables.
 
-- [ ] **Step 1: Extend dialog types and write failing rendering tests**
+- [x] **Step 1: Extend dialog types and write failing rendering tests**
 
 Add:
 
@@ -625,7 +625,7 @@ onReceiptPageSizeChange: (pageSize: number) => void;
 
 Assert two compact pagination controls render, contain `[5, 10, 15, 20]`, invoke only their own callbacks, and keep the existing table header order and desktop layout classes.
 
-- [ ] **Step 2: Run dialog tests and verify failure**
+- [x] **Step 2: Run dialog tests and verify failure**
 
 Run:
 
@@ -635,13 +635,13 @@ npx jest src/components/workspace/modules/customers/components/customer-order-hi
 
 Expected: FAIL because the dialog does not render pagination.
 
-- [ ] **Step 3: Render independent compact pagers**
+- [x] **Step 3: Render independent compact pagers**
 
 Place one `ListPagination compact` immediately below each table. Use that list's metadata and callbacks. Pass `disabled={loading}`. Render a localized warning Alert when `preferenceError` is non-empty.
 
 Do not change existing table columns, wrapping rules, colors, or desktop grid classes.
 
-- [ ] **Step 4: Replace one-shot manager loading with guarded paged loading**
+- [x] **Step 4: Replace one-shot manager loading with guarded paged loading**
 
 Add two preference hooks:
 
@@ -681,7 +681,7 @@ Rules:
 - a request token prevents stale results replacing a newer target/page
 - closing clears target, history, error, and both page numbers
 
-- [ ] **Step 5: Upgrade manager tests to capture dialog props**
+- [x] **Step 5: Upgrade manager tests to capture dialog props**
 
 Replace the null dialog mock with one that records props. Assert:
 
@@ -690,7 +690,7 @@ Replace the null dialog mock with one that records props. Assert:
 3. `onReceiptPageSizeChange(15)` sends receipt page one and leaves the order page unchanged.
 4. Failed preference persistence is passed as a readable warning.
 
-- [ ] **Step 6: Run customer UI tests**
+- [x] **Step 6: Run customer UI tests**
 
 Run:
 
@@ -703,7 +703,7 @@ npx jest \
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit the integrated feature**
+- [x] **Step 7: Commit the integrated feature**
 
 ```bash
 git add src/components/workspace/modules/customers/components/customer-order-history-dialog.tsx src/components/workspace/modules/customers/components/customer-order-history-dialog.test.tsx src/components/workspace/modules/customers/customer-manager.tsx src/components/workspace/modules/customers/customer-manager.test.tsx
@@ -724,7 +724,7 @@ git commit -m "feat: paginate customer order history dialog"
 - Consumes: all completed feature tasks.
 - Produces: release version `1.0.191` and reproducible verification evidence.
 
-- [ ] **Step 1: Update the version from its single source**
+- [x] **Step 1: Update the version from its single source**
 
 Run:
 
@@ -734,7 +734,7 @@ npm version 1.0.191 --no-git-tag-version
 
 Expected: `package.json` and `package-lock.json` both contain `1.0.191`.
 
-- [ ] **Step 2: Keep README user-facing and concise**
+- [x] **Step 2: Keep README user-facing and concise**
 
 Update only the current version section:
 
@@ -745,7 +745,7 @@ Update only the current version section:
 
 Do not add implementation details to README.
 
-- [ ] **Step 3: Record engineering details**
+- [x] **Step 3: Record engineering details**
 
 Add an `ENGINEERING_LOG.md` entry containing:
 
@@ -756,7 +756,7 @@ Add an `ENGINEERING_LOG.md` entry containing:
 - test commands and outcomes
 - explicit statement that there is no schema migration, NAS/COS path change, or backup scope change
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run:
 
@@ -775,7 +775,7 @@ npx jest \
 
 Expected: all focused suites PASS.
 
-- [ ] **Step 5: Run project gates**
+- [x] **Step 5: Run project gates**
 
 Run each command separately and preserve complete failure output:
 
@@ -788,7 +788,7 @@ npm run build
 
 Expected: all commands exit `0`.
 
-- [ ] **Step 6: Inspect the final diff and data boundary**
+- [x] **Step 6: Inspect the final diff and data boundary**
 
 Run:
 
@@ -805,14 +805,14 @@ Expected:
 - no unexpected files
 - no Prisma schema, migration, Docker persistence, NAS/COS, or backup documentation changes
 
-- [ ] **Step 7: Commit the release metadata**
+- [x] **Step 7: Commit the release metadata**
 
 ```bash
 git add README.md ENGINEERING_LOG.md package.json package-lock.json
 git commit -m "docs: release customer history pagination"
 ```
 
-- [ ] **Step 8: Report before deployment**
+- [x] **Step 8: Report before deployment**
 
 Report:
 

@@ -1040,7 +1040,13 @@ describe('useSettingsActions', () => {
       imageCompressionQualityFloor: '0.45',
       ocrTargetMaxKb: '640',
       dashboardLayout: DEFAULT_DASHBOARD_LAYOUT,
-      listPageSizes: { detail: 20, swift: 50, receipt: 20 },
+      listPageSizes: {
+        detail: 20,
+        swift: 50,
+        receipt: 20,
+        customerHistoryOrders: 10,
+        customerHistoryReceipts: 10,
+      },
     });
   });
 

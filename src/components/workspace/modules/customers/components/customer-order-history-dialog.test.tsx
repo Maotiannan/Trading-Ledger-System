@@ -13,6 +13,7 @@ describe('CustomerOrderHistoryDialog', () => {
         title="MAB-1"
         tx={tx}
         history={{
+          orderPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
           orders: [{
             id: 'order-1',
             orderNo: 'BIG ALPHA-10A/BIG ALPHA-10B',
@@ -20,6 +21,7 @@ describe('CustomerOrderHistoryDialog', () => {
             amount: 1000,
             outstanding: 250,
           }],
+          receiptPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
           receipts: [{
             id: 'receipt-1',
             receiptNo: '0001001',
@@ -31,6 +33,15 @@ describe('CustomerOrderHistoryDialog', () => {
             createdAt: '2026-05-08T10:12:30.000Z',
           }],
         }}
+
+        orderPageSizeOptions={[5, 10, 15, 20]}
+        receiptPageSizeOptions={[5, 10, 15, 20]}
+        onOrderPreviousPage={() => undefined}
+        onOrderNextPage={() => undefined}
+        onOrderPageSizeChange={() => undefined}
+        onReceiptPreviousPage={() => undefined}
+        onReceiptNextPage={() => undefined}
+        onReceiptPageSizeChange={() => undefined}
         onOpenChange={() => undefined}
       />,
     );

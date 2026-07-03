@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiCall } from '@/components/workspace/shared';
 import {
   DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE,
-  LIST_PAGE_SIZE_OPTIONS,
+  getListPageSizeOptions,
   normalizeListPageSizePreference,
-  type ListPageSizeOption,
   type UserListPageSizePreference,
 } from '@/lib/list-page-size-preference';
 
@@ -14,7 +13,8 @@ type ListPageSizePreferenceKey = keyof UserListPageSizePreference;
 
 export function useListPageSizePreference(key: ListPageSizePreferenceKey) {
   const [listPageSizes, setListPageSizes] = useState<UserListPageSizePreference>(DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE);
-  const [pageSize, setPageSize] = useState<ListPageSizeOption>(DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE[key]);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE[key]);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +38,7 @@ export function useListPageSizePreference(key: ListPageSizePreferenceKey) {
   }, [key]);
 
   const savePageSize = useCallback((nextPageSize: number) => {
+    setSaveError('');
     const next = normalizeListPageSizePreference({
       ...listPageSizes,
       [key]: nextPageSize,
@@ -48,21 +49,25 @@ export function useListPageSizePreference(key: ListPageSizePreferenceKey) {
       method: 'POST',
       body: JSON.stringify({
         action: 'update-user-preferences',
-        preferences: { listPageSizes: next },
+        preferences: { listPageSizes: { [key]: next[key] } },
       }),
     }).then((result) => {
-      if (!result.success || !result.data || typeof result.data !== 'object') return;
+      if (!result.success || !result.data || typeof result.data !== 'object') {
+        setSaveError(String(result.message || result.error || 'Failed to save page size setting.'));
+        return;
+      }
       const saved = normalizeListPageSizePreference((result.data as { listPageSizes?: unknown }).listPageSizes);
       setListPageSizes(saved);
       setPageSize(saved[key]);
     }).catch(() => {
-      // Keep the local selection even if persistence fails; user can continue using the page.
+      setSaveError('Failed to save page size setting.');
     });
   }, [key, listPageSizes]);
 
   return {
     pageSize,
-    pageSizeOptions: LIST_PAGE_SIZE_OPTIONS,
+    pageSizeOptions: getListPageSizeOptions(key),
     savePageSize,
+    saveError,
   };
 }

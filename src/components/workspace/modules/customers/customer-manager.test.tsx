@@ -3,8 +3,23 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CustomerManager } from './customer-manager';
 import { apiCall } from '@/components/workspace/shared';
 
+const mockSaveOrderPageSize = jest.fn();
+const mockSaveReceiptPageSize = jest.fn();
+const mockRequestGuard = {
+  nextToken: jest.fn(() => Symbol('request')),
+  isLatest: jest.fn(() => true),
+};
+
 jest.mock('@/lib/store', () => ({
   useStore: () => ({ user: { id: 'admin-1', role: 'ADMIN' } }),
+}));
+
+jest.mock('@/components/workspace/modules/shared/use-list-page-size-preference', () => ({
+  useListPageSizePreference: (key: string) => ({
+    pageSize: 10,
+    pageSizeOptions: [5, 10, 15, 20],
+    savePageSize: key === 'customerHistoryOrders' ? mockSaveOrderPageSize : mockSaveReceiptPageSize,
+  }),
 }));
 
 jest.mock('@/components/workspace/shared', () => ({
@@ -12,7 +27,7 @@ jest.mock('@/components/workspace/shared', () => ({
   peekPrefetchedApiResult: jest.fn(() => null),
   rememberPrefetchedApiResult: jest.fn((_: string, result: unknown) => result),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)),
-  useLatestRequestGuard: () => ({ nextToken: () => Symbol('request'), isLatest: () => true }),
+  useLatestRequestGuard: () => mockRequestGuard,
   useUiText: () => (zh: string) => zh,
 }));
 
@@ -81,11 +96,45 @@ jest.mock('./components', () => ({
   CustomerFixQueue: () => null,
   CustomerFormDialog: () => null,
   CustomerLongTextPreviewDialog: () => null,
-  CustomerOrderHistoryDialog: () => null,
-  CustomerList: ({ onOpenConsignees }: { onOpenConsignees: (row: Record<string, unknown>) => void }) => (
-    <button type="button" onClick={() => onOpenConsignees({ id: 'customer-1', mark: 'MAB', name: 'Customer' })}>
-      open consignees
-    </button>
+  CustomerOrderHistoryDialog: ({
+    open,
+    history,
+    onOrderNextPage,
+    onReceiptNextPage,
+    onOrderPageSizeChange,
+    onReceiptPageSizeChange,
+  }: {
+    open: boolean;
+    history: { orderPagination?: { page: number }; receiptPagination?: { page: number } } | null;
+    onOrderNextPage: () => void;
+    onReceiptNextPage: () => void;
+    onOrderPageSizeChange: (pageSize: number) => void;
+    onReceiptPageSizeChange: (pageSize: number) => void;
+  }) => open ? (
+    <div>
+      <span data-testid="history-order-page">{history?.orderPagination?.page || 0}</span>
+      <span data-testid="history-receipt-page">{history?.receiptPagination?.page || 0}</span>
+      <button type="button" onClick={onOrderNextPage}>next order page</button>
+      <button type="button" onClick={onReceiptNextPage}>next receipt page</button>
+      <button type="button" onClick={() => onOrderPageSizeChange(15)}>15 order rows</button>
+      <button type="button" onClick={() => onReceiptPageSizeChange(5)}>5 receipt rows</button>
+    </div>
+  ) : null,
+  CustomerList: ({
+    onOpenConsignees,
+    onOpenOrderNameHistory,
+  }: {
+    onOpenConsignees: (row: Record<string, unknown>) => void;
+    onOpenOrderNameHistory: (row: Record<string, unknown>, orderName: string) => void;
+  }) => (
+    <>
+      <button type="button" onClick={() => onOpenConsignees({ id: 'customer-1', mark: 'MAB', name: 'Customer' })}>
+        open consignees
+      </button>
+      <button type="button" onClick={() => onOpenOrderNameHistory({ id: 'customer-1' }, 'MAB-1')}>
+        open order history
+      </button>
+    </>
   ),
   CustomerConsigneeDialog: ({ open, inputValue, submitting, error, onInputChange, onAdd, onSetPrimary }: {
     open: boolean;
@@ -151,5 +200,70 @@ describe('CustomerManager consignee dialog', () => {
         consigneeId: 'consignee-2',
       }),
     })));
+  });
+});
+
+describe('CustomerManager order history pagination', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('customer?action=order-history')) {
+        const url = new URL(`https://example.com/api/${endpoint}`);
+        const orderPage = Number(url.searchParams.get('orderPage') || 1);
+        const receiptPage = Number(url.searchParams.get('receiptPage') || 1);
+        return {
+          success: true,
+          data: {
+            orders: [],
+            receipts: [],
+            orderPagination: { page: orderPage, pageSize: Number(url.searchParams.get('orderPageSize') || 10), totalItems: 21, totalPages: 3 },
+            receiptPagination: { page: receiptPage, pageSize: Number(url.searchParams.get('receiptPageSize') || 10), totalItems: 12, totalPages: 2 },
+          },
+        };
+      }
+      return { success: true, data: [] };
+    });
+  });
+
+  it('loads and changes the two history pages independently', async () => {
+    render(<CustomerManager />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'open order history' }));
+    await waitFor(() => expect(screen.getByTestId('history-order-page')).toHaveTextContent('1'));
+
+    expect(mockApiCall).toHaveBeenCalledWith(expect.stringContaining(
+      'orderPage=1&orderPageSize=10&receiptPage=1&receiptPageSize=10',
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'next order page' }));
+    await waitFor(() => expect(screen.getByTestId('history-order-page')).toHaveTextContent('2'));
+    expect(screen.getByTestId('history-receipt-page')).toHaveTextContent('1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'next receipt page' }));
+    await waitFor(() => expect(screen.getByTestId('history-receipt-page')).toHaveTextContent('2'));
+    expect(screen.getByTestId('history-order-page')).toHaveTextContent('2');
+  });
+
+  it('persists each history page size and resets only that table to page one', async () => {
+    render(<CustomerManager />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'open order history' }));
+    await waitFor(() => expect(screen.getByTestId('history-order-page')).toHaveTextContent('1'));
+    fireEvent.click(screen.getByRole('button', { name: 'next order page' }));
+    await waitFor(() => expect(screen.getByTestId('history-order-page')).toHaveTextContent('2'));
+    fireEvent.click(screen.getByRole('button', { name: 'next receipt page' }));
+    await waitFor(() => expect(screen.getByTestId('history-receipt-page')).toHaveTextContent('2'));
+
+    fireEvent.click(screen.getByRole('button', { name: '15 order rows' }));
+    expect(mockSaveOrderPageSize).toHaveBeenCalledWith(15);
+    await waitFor(() => expect(mockApiCall).toHaveBeenCalledWith(expect.stringContaining(
+      'orderPage=1&orderPageSize=15&receiptPage=2&receiptPageSize=10',
+    )));
+
+    fireEvent.click(screen.getByRole('button', { name: '5 receipt rows' }));
+    expect(mockSaveReceiptPageSize).toHaveBeenCalledWith(5);
+    await waitFor(() => expect(mockApiCall).toHaveBeenCalledWith(expect.stringContaining(
+      'orderPage=1&orderPageSize=15&receiptPage=1&receiptPageSize=5',
+    )));
   });
 });

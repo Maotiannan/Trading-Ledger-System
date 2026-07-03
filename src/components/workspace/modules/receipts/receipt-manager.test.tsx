@@ -315,7 +315,7 @@ describe('ReceiptManager', () => {
       method: 'POST',
       body: JSON.stringify({
         action: 'update-user-preferences',
-        preferences: { listPageSizes: { detail: 10, swift: 10, receipt: 50 } },
+        preferences: { listPageSizes: { receipt: 50 } },
       }),
     }));
   });

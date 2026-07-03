@@ -284,7 +284,7 @@ describe('DetailManager', () => {
       method: 'POST',
       body: JSON.stringify({
         action: 'update-user-preferences',
-        preferences: { listPageSizes: { detail: 50, swift: 10, receipt: 20 } },
+        preferences: { listPageSizes: { detail: 50 } },
       }),
     }));
   });

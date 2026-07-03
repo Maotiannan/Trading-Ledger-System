@@ -21,6 +21,7 @@ jest.mock('@/lib/db', () => ({
       findMany: jest.fn(),
     },
     receipt: {
+      count: jest.fn(),
       findMany: jest.fn(),
     },
   },
@@ -59,7 +60,7 @@ const mockDb = db as unknown as {
   user: { findMany: jest.Mock };
   customer: { findMany: jest.Mock; findFirst: jest.Mock };
   order: { findMany: jest.Mock };
-  receipt: { findMany: jest.Mock };
+  receipt: { count: jest.Mock; findMany: jest.Mock };
 };
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockCanSalesEditExtendedCustomerFields = canSalesEditExtendedCustomerFields as jest.Mock;
@@ -68,6 +69,7 @@ describe('customer-read-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanSalesEditExtendedCustomerFields.mockResolvedValue(true);
+    mockDb.receipt.count.mockResolvedValue(0);
   });
 
   it('lists owner options and records audit', async () => {
@@ -452,7 +454,7 @@ describe('customer-read-service', () => {
         orderNo: 'MAB-1-10',
         amount: 1000,
         orderBalance: 250,
-        invoice: { invNo: 'L25MH090001' },
+        invoice: { invNo: 'L25MH090001', shipDate: new Date('2026-04-20T00:00:00Z'), releaseDate: new Date('2026-05-01T00:00:00Z') },
         createdAt: new Date('2026-05-07T00:00:00Z'),
       },
       {
@@ -464,6 +466,7 @@ describe('customer-read-service', () => {
         createdAt: new Date('2026-05-08T00:00:00Z'),
       },
     ]);
+    mockDb.receipt.count.mockResolvedValueOnce(1);
     mockDb.receipt.findMany.mockResolvedValueOnce([
       {
         id: 'receipt-1',
@@ -498,8 +501,49 @@ describe('customer-read-service', () => {
         status: 'RECEIVED',
       }),
     ]);
+    expect(result.data.orderPagination).toEqual({ page: 1, pageSize: 10, totalItems: 1, totalPages: 1 });
+    expect(result.data.receiptPagination).toEqual({ page: 1, pageSize: 10, totalItems: 1, totalPages: 1 });
     expect(mockDb.customer.findFirst).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ id: 'customer-1' }),
+    }));
+  });
+
+  it('uses the shared live balance formula when the stored order balance is stale', async () => {
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'SUPER DT2',
+      orderName: 'SUPER DT2',
+      orderNames: [{ orderName: 'SUPER DT2', normalizedOrderName: 'superdt2', isPrimary: true }],
+    });
+    mockDb.order.findMany.mockResolvedValueOnce([
+      {
+        id: 'order-1',
+        orderNo: 'SUPER DT2-07',
+        amount: 28674,
+        orderBalance: 38674,
+        receipts: [
+          { usd: 10000, status: 'RECEIVED' },
+          { usd: 15000, status: 'Bank_Transfer' },
+          { usd: 999, status: 'SIGNING_PENDING' },
+        ],
+        invoice: { invNo: 'L26MH070001', shipDate: null, releaseDate: null },
+        createdAt: new Date('2026-07-02T00:00:00Z'),
+      },
+    ]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    const result = await getCustomerOrderNameHistory(makeUser(), {
+      customerId: 'customer-1',
+      orderName: 'SUPER DT2',
+    });
+
+    expect(result.data.orders[0].outstanding).toBe(3674);
+    expect(mockDb.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        receipts: {
+          select: { usd: true, status: true },
+        },
+      }),
     }));
   });
 
@@ -528,6 +572,7 @@ describe('customer-read-service', () => {
         createdAt: new Date('2026-05-08T00:00:00Z'),
       },
     ]);
+    mockDb.receipt.count.mockResolvedValueOnce(2);
     mockDb.receipt.findMany.mockResolvedValueOnce([
       {
         id: 'receipt-1',
@@ -570,6 +615,50 @@ describe('customer-read-service', () => {
       expect.objectContaining({ id: 'receipt-2', date: null, usd: 100, createdAt: '2026-05-08T10:12:30.000Z' }),
     ]);
     expect(result.message).toContain('1 条订单');
+  });
+
+
+
+  it('sorts and paginates ORDER_NAME history independently from recent receipts', async () => {
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'MAB',
+      orderName: 'MAB-1',
+      orderNames: [{ orderName: 'MAB-1', normalizedOrderName: 'mab-1', isPrimary: true }],
+    });
+    mockDb.order.findMany.mockResolvedValueOnce([
+      { id: 'active-ship', orderNo: 'MAB-1-20', amount: 100, orderBalance: 50, invoice: { invNo: 'SHIP', shipDate: new Date('2026-06-20T00:00:00Z'), releaseDate: null }, createdAt: new Date('2026-06-01T00:00:00Z') },
+      { id: 'active-empty-large', orderNo: 'MAB-1-10', amount: 100, orderBalance: 90, invoice: { invNo: 'EMPTY', shipDate: null, releaseDate: null }, createdAt: new Date('2026-06-01T00:00:00Z') },
+      { id: 'active-empty-small', orderNo: 'MAB-1-11', amount: 100, orderBalance: 20, invoice: { invNo: 'EMPTY2', shipDate: null, releaseDate: null }, createdAt: new Date('2026-06-01T00:00:00Z') },
+      { id: 'active-release-new', orderNo: 'MAB-1-30', amount: 100, orderBalance: 40, invoice: { invNo: 'REL', shipDate: new Date('2026-01-01T00:00:00Z'), releaseDate: new Date('2026-06-25T00:00:00Z') }, createdAt: new Date('2026-06-01T00:00:00Z') },
+      { id: 'low-empty', orderNo: 'MAB-1-40', amount: 100, orderBalance: 8, invoice: { invNo: 'LOW', shipDate: null, releaseDate: null }, createdAt: new Date('2026-06-01T00:00:00Z') },
+      { id: 'low-release', orderNo: 'MAB-1-41', amount: 100, orderBalance: 5, invoice: { invNo: 'LOWREL', shipDate: null, releaseDate: new Date('2026-06-30T00:00:00Z') }, createdAt: new Date('2026-06-01T00:00:00Z') },
+    ]);
+    mockDb.receipt.count.mockResolvedValueOnce(2);
+    mockDb.receipt.findMany.mockResolvedValueOnce([
+      { id: 'receipt-new', receiptNo: '0001002', orderNo: 'MAB-1-10', invNo: 'EMPTY', usd: 10, status: 'RECEIVED', date: null, createdAt: new Date('2026-06-10T00:00:00Z') },
+      { id: 'receipt-old', receiptNo: '0001001', orderNo: 'MAB-1-20', invNo: 'SHIP', usd: 20, status: 'RECEIVED', date: null, createdAt: new Date('2026-06-01T00:00:00Z') },
+    ]);
+
+    const result = await getCustomerOrderNameHistory(makeUser(), {
+      customerId: 'customer-1',
+      orderName: 'MAB-1',
+      orderPage: 2,
+      orderPageSize: 5,
+      receiptPage: 1,
+      receiptPageSize: 5,
+      defaultOrderPageSize: 10,
+      defaultReceiptPageSize: 10,
+    });
+
+    expect(result.data.orders.map((row) => row.id)).toEqual(['low-release']);
+    expect(result.data.orderPagination).toEqual({ page: 2, pageSize: 5, totalItems: 6, totalPages: 2 });
+    expect(result.data.receiptPagination).toEqual({ page: 1, pageSize: 5, totalItems: 2, totalPages: 1 });
+    expect(mockDb.receipt.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: 0,
+      take: 5,
+    }));
   });
 
   it('rejects invalid customer order history requests', async () => {

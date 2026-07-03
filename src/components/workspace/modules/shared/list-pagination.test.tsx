@@ -37,4 +37,29 @@ describe('ListPagination', () => {
     expect(onNextPage).toHaveBeenCalledTimes(1);
     expect(onPreviousPage).not.toHaveBeenCalled();
   });
+
+  it('renders an embedded compact mode without a card and disables all controls while loading', () => {
+    render(
+      <ListPagination
+        idPrefix="history"
+        tx={tx}
+        currentPage={1}
+        totalPages={2}
+        totalCount={15}
+        pageSize={10}
+        pageSizeOptions={[5, 10, 15, 20]}
+        compact
+        disabled
+        onPreviousPage={jest.fn()}
+        onNextPage={jest.fn()}
+        onPageSizeChange={jest.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('list-pagination-content')).toHaveClass('flex-nowrap', 'py-2');
+    expect(screen.getByLabelText('每页条数')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '上一页' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
+    expect(screen.getByTestId('list-pagination-content').closest('[data-slot="card"]')).toBeNull();
+  });
 });

@@ -259,7 +259,7 @@ describe('SwiftManager', () => {
       method: 'POST',
       body: JSON.stringify({
         action: 'update-user-preferences',
-        preferences: { listPageSizes: { detail: 10, swift: 50, receipt: 20 } },
+        preferences: { listPageSizes: { swift: 50 } },
       }),
     }));
   });

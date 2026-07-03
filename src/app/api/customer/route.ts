@@ -33,6 +33,7 @@ import {
   recognizeAndAttachCustomerCompanyFile,
 } from '@/lib/customer-company-file-service';
 import { logger } from '@/lib/logger';
+import { getUserPreferences } from '@/lib/user-preference-service';
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -131,9 +132,16 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
   }
 
   if (action === 'order-history') {
+    const preferences = await getUserPreferences(currentUser);
     const result = await getCustomerOrderNameHistory(currentUser, {
       customerId: trimStr(searchParams.get('customerId')),
       orderName: trimStr(searchParams.get('orderName')),
+      orderPage: searchParams.get('orderPage'),
+      orderPageSize: searchParams.get('orderPageSize'),
+      receiptPage: searchParams.get('receiptPage'),
+      receiptPageSize: searchParams.get('receiptPageSize'),
+      defaultOrderPageSize: preferences.listPageSizes.customerHistoryOrders,
+      defaultReceiptPageSize: preferences.listPageSizes.customerHistoryReceipts,
     });
     return createApiSuccessResponse(result, request);
   }

@@ -8,6 +8,8 @@
 
 ## P0（本周必须完成）
 
+- [x] Customer ORDER_NAME History 排序与独立分页：历史订单 O/S 改为复用 `order-balance` 统一内核，按 `Order.amount - 非 SIGNING_PENDING 收据合计` 实时计算，避免客户历史弹窗再次展示失真的 `Order.orderBalance`；订单按“`O/S > 10` 在前、`O/S <= 10` 永远在后”，组内依次按无日期且 O/S 倒序、Release Date 由近及远、仅 Ship Date 由近及远排列。Historical Orders 与 Recent Receipts 使用独立服务端分页，默认 10 条，可选 `5 / 10 / 15 / 20`，每页条数按账号持久化且互不影响；分页偏好保存改为只提交当前键、后端与数据库现值合并，避免两个分页器或其他列表互相覆盖。Recent Receipts 按创建时间由近及远。复用共享紧凑分页组件，手机端保持单行。无数据库迁移、无新增 NAS/COS 路径，现有 MySQL 偏好 JSON 和备份范围可直接覆盖。测试：排序内核、客户读取服务、Customer API、偏好归一化/持久化、双表状态、弹窗与共享分页回归 ✅ 2026-07-03
+
 - [x] Dashboard 余额可信度防错：新增 `order-balance` 纯内核和 `order-balance-service` 持久化服务，统一规则为 `Order.amount - 非 SIGNING_PENDING 收据合计`；`Dashboard` 不再信任 `Order.orderBalance` 作为最终来源，而是在后端一次性读取可见订单及关联收据后计算 `unpaidTotal / Released Unpaid Invoices / Customer Outstanding Ranking / 弹窗 Balance`，同一订单只计算一次并复用。若缓存与计算值不一致，系统自动写回正确 `Order.orderBalance`，只记录结构化日志与 `ORDER_BALANCE_CACHE_REPAIR` 审计，不提供人工修复按钮、不在页面打扰用户。`invoice-read-service / deletion-service / order-alias-db` 已移除重复公式并复用统一内核/服务；主要写入路径回归仍通过统一 `updateOrderBalance` 入口。无新增数据库表、无新增 NAS/COS 路径、备份范围不变。测试：`order-balance / order-balance-service / dashboard-summary-service / invoice-read-service / deletion-service / order-alias-db / receipt-service / receipt-generator-service / receipt-edit-request-service / detail-service / invoice-service / invoice-write` 聚焦回归 ✅ 2026-07-03
 
 - [x] Receipt 全局分页收口：`Receipt Management` 删除独立的 `30 / 50 / 100 / 200` 分页状态和重复底部控件，改为复用共享 `ListPagination` 与 `useListPageSizePreference('receipt')`；账号偏好 JSON 新增 `receipt` 键，旧账号缺失时自动补默认 `20`，选项统一为 `5 / 10 / 20 / 50`，手机端条数选择、左右箭头和页码摘要保持单行。未新增数据库表或迁移，未修改 NAS/COS 路径及备份范围。测试按 RED/GREEN 覆盖偏好归一化、跨页面偏好保留、Receipt 组件布局及账号持久化 ✅ 2026-07-01

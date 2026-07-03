@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.191
+> 当前版本：v1.0.192
 > 最后更新：2026-07-03
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Customer ORDER_NAME History 分页体验修复：确认根因是弹窗只有一个 `loading` 状态，翻页或切换每页条数时即使已有 `history` 数据也会卸载两张表并显示整块 Loading；改为仅首次无数据加载时显示整块 Loading，已有数据刷新时保留 Historical Orders / Recent Receipts 表格和分页控件，体验与 Dashboard 列表分页一致。无数据库、NAS/COS 路径或备份范围变更。测试：先新增 `loading=true + history` 的失败用例，再通过弹窗与 CustomerManager 回归 ✅ 2026-07-03
 
 - [x] Customer ORDER_NAME History 排序与独立分页：历史订单 O/S 改为复用 `order-balance` 统一内核，按 `Order.amount - 非 SIGNING_PENDING 收据合计` 实时计算，避免客户历史弹窗再次展示失真的 `Order.orderBalance`；订单按“`O/S > 10` 在前、`O/S <= 10` 永远在后”，组内依次按无日期且 O/S 倒序、Release Date 由近及远、仅 Ship Date 由近及远排列。Historical Orders 与 Recent Receipts 使用独立服务端分页，默认 10 条，可选 `5 / 10 / 15 / 20`，每页条数按账号持久化且互不影响；分页偏好保存改为只提交当前键、后端与数据库现值合并，避免两个分页器或其他列表互相覆盖。Recent Receipts 按创建时间由近及远。复用共享紧凑分页组件，手机端保持单行。无数据库迁移、无新增 NAS/COS 路径，现有 MySQL 偏好 JSON 和备份范围可直接覆盖。测试：排序内核、客户读取服务、Customer API、偏好归一化/持久化、双表状态、弹窗与共享分页回归 ✅ 2026-07-03
 

@@ -96,6 +96,10 @@ export function CustomerOrderHistoryDialog({
   onReceiptPageSizeChange,
   onOpenChange,
 }: CustomerOrderHistoryDialogProps) {
+  const hasHistory = Boolean(history);
+  const showInitialLoading = loading && !hasHistory;
+  const showTables = hasHistory && !showInitialLoading;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-6xl flex-col p-4 sm:p-6 md:w-fit md:max-w-[calc(100vw-32px)]">
@@ -107,7 +111,7 @@ export function CustomerOrderHistoryDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          {loading && (
+          {showInitialLoading && (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               {tx('加载中...', 'Loading...')}
@@ -120,7 +124,7 @@ export function CustomerOrderHistoryDialog({
             </Alert>
           )}
 
-          {!loading && !error && (
+          {showTables && (
             <div data-testid="customer-order-history-scroll" className="md:min-w-0 md:max-w-full md:overflow-x-auto">
               <div data-testid="customer-order-history-grid" className="grid gap-4 md:w-max md:min-w-full md:grid-cols-[max-content_max-content] md:items-start">
                 <section className="space-y-3 md:w-max">

@@ -92,4 +92,50 @@ describe('CustomerOrderHistoryDialog', () => {
     expect(screen.getByText('0001001')).toBeInTheDocument();
     expect(screen.getByText('RECEIVED')).toBeInTheDocument();
   });
+
+  it('keeps the existing tables visible while a pagination refresh is loading', () => {
+    render(
+      <CustomerOrderHistoryDialog
+        open
+        loading
+        error=""
+        title="MAB-1"
+        tx={tx}
+        history={{
+          orderPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+          orders: [{
+            id: 'order-1',
+            orderNo: 'MAB-1-10',
+            invNo: 'L25MH090001',
+            amount: 1000,
+            outstanding: 250,
+          }],
+          receiptPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+          receipts: [{
+            id: 'receipt-1',
+            receiptNo: '0001001',
+            orderNo: 'MAB-1-10',
+            invNo: 'L25MH090001',
+            usd: 750,
+            status: 'RECEIVED',
+            date: '2026-05-07',
+            createdAt: '2026-05-08T10:12:30.000Z',
+          }],
+        }}
+        orderPageSizeOptions={[5, 10, 15, 20]}
+        receiptPageSizeOptions={[5, 10, 15, 20]}
+        onOrderPreviousPage={() => undefined}
+        onOrderNextPage={() => undefined}
+        onOrderPageSizeChange={() => undefined}
+        onReceiptPreviousPage={() => undefined}
+        onReceiptNextPage={() => undefined}
+        onReceiptPageSizeChange={() => undefined}
+        onOpenChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByTestId('customer-order-history-orders-table')).toBeInTheDocument();
+    expect(screen.getByTestId('customer-order-history-receipts-table')).toBeInTheDocument();
+    expect(screen.queryByText('加载中...')).not.toBeInTheDocument();
+  });
 });

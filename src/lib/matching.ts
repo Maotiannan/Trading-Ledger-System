@@ -5,8 +5,8 @@ import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
 import { findOrderIdByNoOrAlias, mapOrderIdsByOrderNos, syncOrderAliases } from '@/lib/order-alias-db';
 import { formatUsdAmount } from '@/lib/display-format';
 import type { DbTransactionClient } from '@/lib/transaction';
+import { calculateLiveOrderBalance, updateOrderBalance as persistOrderBalance } from '@/lib/order-balance-service';
 import { runInTransaction } from '@/lib/transaction';
-import { addMoney, moneyToNumber, subtractMoney } from '@/lib/money';
 
 type MatchingWriteClient = Pick<DbTransactionClient, 'invoice' | 'order' | 'receipt' | 'systemSetting'>;
 const ORDER_MATCH_CANDIDATE_LIMIT = 250;
@@ -255,36 +255,12 @@ export function findSubsetSum(
 // 计算ORDER BALANCE
 // ORDER BALANCE = AMOUNT - 该ORDER下所有已入业务流程收据金额之和
 export async function calculateOrderBalance(orderId: string, client: MatchingWriteClient = db): Promise<number> {
-  const order = await client.order.findUnique({
-    where: { id: orderId },
-    include: {
-      receipts: {
-        where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
-        select: { usd: true, status: true },
-      },
-    },
-  });
-
-  if (!order) return 0;
-
-  // 计算所有已入业务流程关联收据的金额总和
-  const numericReceiptSum = addMoney(
-    order.receipts
-      .filter((receipt) => receipt.status !== ReceiptStatus.SIGNING_PENDING)
-      .map((receipt) => receipt.usd)
-  );
-
-  // ORDER BALANCE = AMOUNT - 收据总额
-  return moneyToNumber(subtractMoney(order.amount, numericReceiptSum));
+  return calculateLiveOrderBalance(orderId, client);
 }
 
 // 更新ORDER BALANCE
 export async function updateOrderBalance(orderId: string, client: MatchingWriteClient = db): Promise<void> {
-  const newBalance = await calculateOrderBalance(orderId, client);
-  await client.order.update({
-    where: { id: orderId },
-    data: { orderBalance: newBalance }
-  });
+  await persistOrderBalance(orderId, client);
 }
 
 // 获取可用的RECEIPT列表（用于DETAIL匹配）

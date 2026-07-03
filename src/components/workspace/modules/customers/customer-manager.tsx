@@ -30,6 +30,7 @@ import {
 import type { CustomerOwnerOption } from './types';
 import type { CustomerCompanyFileOverwriteProposal, CustomerCompanyFileSummary } from './types';
 import { useCustomerActions, useCustomerForms, useCustomerImportColumns } from './hooks';
+import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
 
 function normalizePhoneToken(value: unknown): string {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -61,6 +62,7 @@ export function CustomerManager() {
   const [orderHistoryError, setOrderHistoryError] = useState('');
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
   const [orderHistory, setOrderHistory] = useState<CustomerOrderHistory | null>(null);
+  const [orderHistoryTarget, setOrderHistoryTarget] = useState<{ customerId: string; orderName: string } | null>(null);
   const [consigneeDialogCustomer, setConsigneeDialogCustomer] = useState<Record<string, unknown> | null>(null);
   const [consigneeRows, setConsigneeRows] = useState<CustomerConsigneeItem[]>([]);
   const [consigneeInput, setConsigneeInput] = useState('');
@@ -72,6 +74,17 @@ export function CustomerManager() {
   const [companyFileError, setCompanyFileError] = useState('');
   const [companyFileProposal, setCompanyFileProposal] = useState<CustomerCompanyFileOverwriteProposal | null>(null);
   const customerRequestGuard = useLatestRequestGuard();
+  const orderHistoryRequestGuard = useLatestRequestGuard();
+  const {
+    pageSize: orderHistoryOrderPageSize,
+    pageSizeOptions: orderHistoryOrderPageSizeOptions,
+    savePageSize: saveOrderHistoryOrderPageSize,
+  } = useListPageSizePreference('customerHistoryOrders');
+  const {
+    pageSize: orderHistoryReceiptPageSize,
+    pageSizeOptions: orderHistoryReceiptPageSizeOptions,
+    savePageSize: saveOrderHistoryReceiptPageSize,
+  } = useListPageSizePreference('customerHistoryReceipts');
   const {
     customerImportInputRef,
     showCreate,
@@ -360,24 +373,106 @@ export function CustomerManager() {
     setCompanyFileProposal(null);
   }, [companyFileProposal, setForm]);
 
-  const openOrderNameHistory = async (row: Record<string, unknown>, orderName: string) => {
+  const loadOrderNameHistory = useCallback(async (
+    target: { customerId: string; orderName: string },
+    pagination: {
+      orderPage: number;
+      orderPageSize: number;
+      receiptPage: number;
+      receiptPageSize: number;
+    },
+  ) => {
+    const requestToken = orderHistoryRequestGuard.nextToken();
+    const searchParams = new URLSearchParams({
+      action: 'order-history',
+      customerId: target.customerId,
+      orderName: target.orderName,
+      orderPage: String(pagination.orderPage),
+      orderPageSize: String(pagination.orderPageSize),
+      receiptPage: String(pagination.receiptPage),
+      receiptPageSize: String(pagination.receiptPageSize),
+    });
+
+    setOrderHistoryLoading(true);
+    setOrderHistoryError('');
+    try {
+      const result = await apiCall(`customer?${searchParams.toString()}`);
+      if (!orderHistoryRequestGuard.isLatest(requestToken)) return;
+      if (result.success && result.data) {
+        setOrderHistory(result.data as CustomerOrderHistory);
+      } else {
+        setOrderHistoryError(String(result.message || result.error || tx('加载失败', 'Load failed')));
+      }
+    } catch (error) {
+      if (orderHistoryRequestGuard.isLatest(requestToken)) {
+        setOrderHistoryError(getApiErrorMessage(error, tx('加载失败', 'Load failed')));
+      }
+    } finally {
+      if (orderHistoryRequestGuard.isLatest(requestToken)) {
+        setOrderHistoryLoading(false);
+      }
+    }
+  }, [orderHistoryRequestGuard, tx]);
+
+  const openOrderNameHistory = (row: Record<string, unknown>, orderName: string) => {
     const customerId = String(row.id || '').trim();
     const trimmedOrderName = orderName.trim();
     if (!customerId || !trimmedOrderName) return;
 
+    const target = { customerId, orderName: trimmedOrderName };
+    setOrderHistoryTarget(target);
     setOrderHistoryOpen(true);
-    setOrderHistoryLoading(true);
     setOrderHistoryError('');
     setOrderHistory(null);
     setOrderHistoryTitle(trimmedOrderName);
+    void loadOrderNameHistory(target, {
+      orderPage: 1,
+      orderPageSize: orderHistoryOrderPageSize,
+      receiptPage: 1,
+      receiptPageSize: orderHistoryReceiptPageSize,
+    });
+  };
 
-    const result = await apiCall(`customer?action=order-history&customerId=${encodeURIComponent(customerId)}&orderName=${encodeURIComponent(trimmedOrderName)}`);
-    if (result.success && result.data) {
-      setOrderHistory(result.data as CustomerOrderHistory);
-    } else {
-      setOrderHistoryError(String(result.message || result.error || tx('加载失败', 'Load failed')));
-    }
-    setOrderHistoryLoading(false);
+  const changeOrderHistoryPage = (orderPage: number) => {
+    if (!orderHistoryTarget) return;
+    void loadOrderNameHistory(orderHistoryTarget, {
+      orderPage,
+      orderPageSize: orderHistory?.orderPagination?.pageSize || orderHistoryOrderPageSize,
+      receiptPage: orderHistory?.receiptPagination?.page || 1,
+      receiptPageSize: orderHistory?.receiptPagination?.pageSize || orderHistoryReceiptPageSize,
+    });
+  };
+
+  const changeReceiptHistoryPage = (receiptPage: number) => {
+    if (!orderHistoryTarget) return;
+    void loadOrderNameHistory(orderHistoryTarget, {
+      orderPage: orderHistory?.orderPagination?.page || 1,
+      orderPageSize: orderHistory?.orderPagination?.pageSize || orderHistoryOrderPageSize,
+      receiptPage,
+      receiptPageSize: orderHistory?.receiptPagination?.pageSize || orderHistoryReceiptPageSize,
+    });
+  };
+
+  const changeOrderHistoryPageSize = (pageSize: number) => {
+    if (!orderHistoryTarget) return;
+    saveOrderHistoryOrderPageSize(pageSize);
+    void loadOrderNameHistory(orderHistoryTarget, {
+      orderPage: 1,
+      orderPageSize: pageSize,
+      receiptPage: orderHistory?.receiptPagination?.page || 1,
+      receiptPageSize: orderHistory?.receiptPagination?.pageSize || orderHistoryReceiptPageSize,
+    });
+  };
+
+  const changeReceiptHistoryPageSize = (pageSize: number) => {
+    if (!orderHistoryTarget) return;
+    saveOrderHistoryReceiptPageSize(pageSize);
+    void loadOrderNameHistory(orderHistoryTarget, {
+      orderPage: orderHistory?.orderPagination?.page || 1,
+      orderPageSize: orderHistory?.orderPagination?.pageSize || orderHistoryOrderPageSize,
+      receiptPage: 1,
+      receiptPageSize: pageSize,
+    });
   };
 
   const normalizeConsigneeRows = (rawRows: unknown): CustomerConsigneeItem[] => {
@@ -682,11 +777,21 @@ export function CustomerManager() {
         title={orderHistoryTitle}
         history={orderHistory}
         tx={tx}
+        orderPageSizeOptions={orderHistoryOrderPageSizeOptions}
+        receiptPageSizeOptions={orderHistoryReceiptPageSizeOptions}
+        onOrderPreviousPage={() => changeOrderHistoryPage(Math.max(1, (orderHistory?.orderPagination?.page || 1) - 1))}
+        onOrderNextPage={() => changeOrderHistoryPage((orderHistory?.orderPagination?.page || 1) + 1)}
+        onOrderPageSizeChange={changeOrderHistoryPageSize}
+        onReceiptPreviousPage={() => changeReceiptHistoryPage(Math.max(1, (orderHistory?.receiptPagination?.page || 1) - 1))}
+        onReceiptNextPage={() => changeReceiptHistoryPage((orderHistory?.receiptPagination?.page || 1) + 1)}
+        onReceiptPageSizeChange={changeReceiptHistoryPageSize}
         onOpenChange={(open) => {
           setOrderHistoryOpen(open);
           if (!open) {
+            orderHistoryRequestGuard.nextToken();
             setOrderHistory(null);
             setOrderHistoryError('');
+            setOrderHistoryTarget(null);
           }
         }}
       />

@@ -1,10 +1,11 @@
 import { db } from '@/lib/db';
-import { Prisma, ReceiptStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { buildOrderNoWithAliases, canonicalizeOrderNo, isCompositeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
-import { addMoney, moneyToNumber, subtractMoney } from '@/lib/money';
+import { addMoney, moneyToNumber } from '@/lib/money';
+import { updateOrderBalance } from '@/lib/order-balance-service';
 
 type DbExecutor = Prisma.TransactionClient | typeof db;
 
@@ -176,21 +177,7 @@ export async function syncOrderAliasesByAliasNos(tx: DbExecutor, orderId: string
 }
 
 async function refreshOrderBalance(tx: DbExecutor, orderId: string): Promise<void> {
-  const order = await tx.order.findUnique({
-    where: { id: orderId },
-    include: {
-      receipts: {
-        where: { status: { not: ReceiptStatus.SIGNING_PENDING } },
-        select: { usd: true },
-      },
-    },
-  });
-  if (!order) return;
-  const receiptSum = addMoney(order.receipts.map((row) => row.usd));
-  await tx.order.update({
-    where: { id: orderId },
-    data: { orderBalance: moneyToNumber(subtractMoney(order.amount, receiptSum)) },
-  });
+  await updateOrderBalance(orderId, tx);
 }
 
 export async function consolidateGroupedOrders(params?: {

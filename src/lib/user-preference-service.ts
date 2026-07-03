@@ -136,9 +136,18 @@ function validateDashboardLayout(value: unknown): DashboardLayoutPreference {
   }
 }
 
-function validateListPageSizes(value: unknown): UserListPageSizePreference {
+function validateListPageSizes(
+  value: unknown,
+  current: UserListPageSizePreference,
+): UserListPageSizePreference {
   try {
-    return validateListPageSizePreference(value);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return validateListPageSizePreference(value);
+    }
+    return validateListPageSizePreference({
+      ...current,
+      ...value,
+    });
   } catch (error) {
     throw createApiError({
       code: 'BAD_REQUEST',
@@ -187,7 +196,7 @@ export async function updateUserPreferences(
       ? validateDashboardLayout(input.dashboardLayout)
       : currentPreference.dashboardLayout,
     listPageSizes: Object.prototype.hasOwnProperty.call(input, 'listPageSizes')
-      ? validateListPageSizes(input.listPageSizes)
+      ? validateListPageSizes(input.listPageSizes, currentPreference.listPageSizes)
       : currentPreference.listPageSizes,
   };
 

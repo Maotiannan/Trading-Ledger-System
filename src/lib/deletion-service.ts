@@ -13,7 +13,7 @@ import { updateOrderBalance } from '@/lib/matching';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
-import { addMoney, moneyToNumber, subtractMoney } from '@/lib/money';
+import { addMoney, moneyToNumber } from '@/lib/money';
 
 const AUTO_DETAIL_RECEIPT_NOTES = new Set(['由付款明细自动创建', '由付款明细直接创建']);
 
@@ -285,24 +285,7 @@ async function approveDetailDeletion(
   }
 
   for (const orderId of affectedOrderIds) {
-    const order = await tx.order.findUnique({
-      where: { id: orderId },
-      select: { amount: true },
-    });
-    if (!order) continue;
-
-    const receiptAgg = await tx.receipt.aggregate({
-      where: {
-        orderId,
-        status: { not: ReceiptStatus.SIGNING_PENDING },
-      },
-      _sum: { usd: true },
-    });
-    const receiptSum = receiptAgg._sum.usd ?? 0;
-    await tx.order.update({
-      where: { id: orderId },
-      data: { orderBalance: moneyToNumber(subtractMoney(order.amount, receiptSum)) },
-    });
+    await updateOrderBalance(orderId, tx);
   }
 }
 

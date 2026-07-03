@@ -12,7 +12,8 @@ import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
 import { getCustomerPayerBase } from '@/lib/customer-display';
-import { addMoney, moneyToNumber, subtractMoney, type MoneyInput } from '@/lib/money';
+import { addMoney, moneyToNumber } from '@/lib/money';
+import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
 
 function rankInvoice(invNo: string) {
   if (invNo === 'DEPOSIT_POOL') return 0;
@@ -20,23 +21,19 @@ function rankInvoice(invNo: string) {
   return 2;
 }
 
-function computeLiveOrderBalance(row: {
+function computeReadOrderBalance(row: {
   amount?: unknown;
   orderBalance?: unknown;
   receipts?: Array<{ usd: unknown; status?: unknown }>;
 }): number {
-  const amount = moneyToNumber(row.amount as MoneyInput);
-  if (!Number.isFinite(amount) || !Array.isArray(row.receipts)) {
-    return moneyToNumber((row.orderBalance || 0) as MoneyInput);
+  if (!Array.isArray(row.receipts)) {
+    return moneyToNumber((row.orderBalance || 0) as never);
   }
 
-  const received = addMoney(
-    row.receipts
-      .filter((receipt) => receipt.status !== ReceiptStatus.SIGNING_PENDING)
-      .map((receipt) => receipt.usd || 0)
-  );
-
-  return moneyToNumber(subtractMoney(amount, received));
+  return computeOrderBalanceFromReceipts({
+    amount: (row.amount || 0) as never,
+    receipts: row.receipts,
+  });
 }
 
 export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId: string) {
@@ -320,7 +317,7 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
 
   const exactContextMatches = exactMatches.map((row) => ({
     ...row,
-    orderBalance: computeLiveOrderBalance(row),
+    orderBalance: computeReadOrderBalance(row),
     customerPhone: row.customerPhone || row.customer?.phone || null,
     customerPayer: getCustomerPayerBase(row.customer || {}),
   }));
@@ -400,22 +397,19 @@ export async function listInvoiceRecords(currentUser: CurrentUser, search: strin
   });
 
   const result = invoices.map((invoice) => {
-    const invAmount = moneyToNumber(addMoney(invoice.orders.map((order) => order.amount)));
-    const receivedAmount = addMoney(invoice.orders.flatMap((order) => order.receipts.map((receipt) => receipt.usd)));
-    const invBalance = moneyToNumber(subtractMoney(invAmount, receivedAmount));
+    const orders = invoice.orders.map((order) => ({
+      ...order,
+      orderBalance: computeOrderBalanceFromReceipts({ amount: order.amount, receipts: order.receipts }),
+      isSystemOrder: false,
+    }));
+    const invAmount = moneyToNumber(addMoney(orders.map((order) => order.amount)));
+    const invBalance = moneyToNumber(addMoney(orders.map((order) => order.orderBalance)));
 
     return {
       ...invoice,
       invAmount,
       invBalance,
-      orders: invoice.orders.map((order) => {
-        const orderReceived = addMoney(order.receipts.map((receipt) => receipt.usd));
-        return {
-          ...order,
-          orderBalance: moneyToNumber(subtractMoney(order.amount, orderReceived)),
-          isSystemOrder: false,
-        };
-      }),
+      orders,
     };
   });
 

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.190
-> 最后更新：2026-07-01
+> 当前版本：v1.0.191
+> 最后更新：2026-07-03
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 余额可信度防错：新增 `order-balance` 纯内核和 `order-balance-service` 持久化服务，统一规则为 `Order.amount - 非 SIGNING_PENDING 收据合计`；`Dashboard` 不再信任 `Order.orderBalance` 作为最终来源，而是在后端一次性读取可见订单及关联收据后计算 `unpaidTotal / Released Unpaid Invoices / Customer Outstanding Ranking / 弹窗 Balance`，同一订单只计算一次并复用。若缓存与计算值不一致，系统自动写回正确 `Order.orderBalance`，只记录结构化日志与 `ORDER_BALANCE_CACHE_REPAIR` 审计，不提供人工修复按钮、不在页面打扰用户。`invoice-read-service / deletion-service / order-alias-db` 已移除重复公式并复用统一内核/服务；主要写入路径回归仍通过统一 `updateOrderBalance` 入口。无新增数据库表、无新增 NAS/COS 路径、备份范围不变。测试：`order-balance / order-balance-service / dashboard-summary-service / invoice-read-service / deletion-service / order-alias-db / receipt-service / receipt-generator-service / receipt-edit-request-service / detail-service / invoice-service / invoice-write` 聚焦回归 ✅ 2026-07-03
 
 - [x] Receipt 全局分页收口：`Receipt Management` 删除独立的 `30 / 50 / 100 / 200` 分页状态和重复底部控件，改为复用共享 `ListPagination` 与 `useListPageSizePreference('receipt')`；账号偏好 JSON 新增 `receipt` 键，旧账号缺失时自动补默认 `20`，选项统一为 `5 / 10 / 20 / 50`，手机端条数选择、左右箭头和页码摘要保持单行。未新增数据库表或迁移，未修改 NAS/COS 路径及备份范围。测试按 RED/GREEN 覆盖偏好归一化、跨页面偏好保留、Receipt 组件布局及账号持久化 ✅ 2026-07-01
 

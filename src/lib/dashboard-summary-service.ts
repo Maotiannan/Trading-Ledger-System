@@ -2,6 +2,9 @@ import { DetailEditRequestStatus, DetailStatus, DeletionStatus, ReceiptEditReque
 import { db } from '@/lib/db';
 import { formatOrderNameDisplay } from '@/lib/display-format';
 import { addMoney, moneyToNumber } from '@/lib/money';
+import { compareStoredOrderBalance, computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { repairOrderBalanceCacheIfNeeded } from '@/lib/order-balance-service';
+import { logger } from '@/lib/logger';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildDetailVisibilityWhere,
@@ -106,6 +109,12 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
             customerMark: true,
             amount: true,
             orderBalance: true,
+            receipts: {
+              select: {
+                usd: true,
+                status: true,
+              },
+            },
           },
         },
       },
@@ -158,9 +167,43 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     db.swiftEditRequest.count({ where: { status: SwiftEditRequestStatus.PENDING } }),
   ]);
 
+  const computedOrderBalances = new Map<string, number>();
+  const balanceRepairTasks: Array<Promise<unknown>> = [];
+
+  for (const invoice of visibleInvoices) {
+    for (const order of invoice.orders) {
+      const computed = computeOrderBalanceFromReceipts({
+        amount: order.amount,
+        receipts: order.receipts,
+      });
+      computedOrderBalances.set(order.id, computed);
+
+      const comparison = compareStoredOrderBalance({ stored: order.orderBalance, computed });
+      if (!comparison.matches) {
+        balanceRepairTasks.push(
+          repairOrderBalanceCacheIfNeeded(order, db, {
+            actorId: currentUser.id,
+            source: 'dashboard-summary',
+          }).catch((error) => {
+            logger.error('Dashboard order balance cache repair failed', {
+              orderId: order.id,
+              orderNo: order.orderNo,
+              stored: comparison.stored,
+              computed: comparison.computed,
+              difference: comparison.difference,
+              error,
+            });
+          }),
+        );
+      }
+    }
+  }
+
+  const getComputedBalance = (orderId: string) => computedOrderBalances.get(orderId) ?? 0;
+
   const unpaidTotal = moneyToNumber(addMoney(
     visibleInvoices.flatMap((invoice) => invoice.orders.map((order) => {
-      const outstanding = moneyToNumber(order.orderBalance);
+      const outstanding = getComputedBalance(order.id);
       return outstanding > 0 ? outstanding : 0;
     }))
   ));
@@ -172,7 +215,7 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     let invoiceOutstanding = 0;
 
     for (const order of invoice.orders) {
-      const outstanding = Math.max(moneyToNumber(order.orderBalance), 0);
+      const outstanding = Math.max(getComputedBalance(order.id), 0);
       invoiceOutstanding += outstanding;
 
       if (outstanding <= 0) continue;
@@ -224,7 +267,7 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
             orderId: order.id,
             orderNo: formatOrderNameDisplay(order.orderNo),
             amount: Number(moneyToNumber(order.amount).toFixed(2)),
-            outstanding: Number(Math.max(moneyToNumber(order.orderBalance), 0).toFixed(2)),
+            outstanding: Number(Math.max(getComputedBalance(order.id), 0).toFixed(2)),
           }))
           .sort((a, b) => b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo)),
       });
@@ -253,6 +296,10 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
         }),
     }))
     .sort((a, b) => b.totalOutstanding - a.totalOutstanding || a.customerLabel.localeCompare(b.customerLabel));
+
+  if (balanceRepairTasks.length > 0) {
+    await Promise.allSettled(balanceRepairTasks);
+  }
 
   return {
     invoiceCount,

@@ -12,7 +12,7 @@ import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
 import { getCustomerPayerBase } from '@/lib/customer-display';
-import { addMoney, moneyToNumber } from '@/lib/money';
+import { addMoney, moneyToNumber, type MoneyInput } from '@/lib/money';
 import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
 
 function rankInvoice(invNo: string) {
@@ -24,7 +24,7 @@ function rankInvoice(invNo: string) {
 function computeReadOrderBalance(row: {
   amount?: unknown;
   orderBalance?: unknown;
-  receipts?: Array<{ usd: unknown; status?: unknown }>;
+  receipts?: Array<{ usd: MoneyInput; status?: string | null }>;
 }): number {
   if (!Array.isArray(row.receipts)) {
     return moneyToNumber((row.orderBalance || 0) as never);

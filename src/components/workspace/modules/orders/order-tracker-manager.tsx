@@ -27,6 +27,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiCall, lookupOrderContextByOrderNo, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
+import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { CheckSquare, Loader2, Pencil, Plus, Search } from 'lucide-react';
 import type { OrderTrackerCustomerOption, OrderTrackerRow } from './types';
@@ -372,6 +373,7 @@ export function OrderTrackerManager() {
                   <TableHead>{tx('备注', 'REMARK')}</TableHead>
                   <TableHead>{tx('系统备注', 'SYSTEM NOTED')}</TableHead>
                   <TableHead>{tx('定金', 'DEPOSIT')}</TableHead>
+                  <TableHead>{tx('确认日期', 'CONFIRMED DATE')}</TableHead>
                   <TableHead>{tx('客户', 'Customer')}</TableHead>
                   <TableHead>{tx('操作', 'Actions')}</TableHead>
                 </TableRow>
@@ -389,6 +391,7 @@ export function OrderTrackerManager() {
                     <TableCell className="min-w-[220px] whitespace-pre-wrap">{row.remark || '-'}</TableCell>
                     <TableCell className="min-w-[220px] whitespace-pre-wrap">{row.systemNote || '-'}</TableCell>
                     <TableCell className="font-medium">{row.depositAmount ? formatUsdAmount(row.depositAmount) : '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatAppDate(row.confirmedAt)}</TableCell>
                     <TableCell>
                       <div className="max-w-[180px] truncate text-sm font-medium" title={row.customerMark || '-'}>{row.customerMark || '-'}</div>
                       <div className="max-w-[180px] truncate text-xs text-muted-foreground" title={row.customerName || row.customerPhone || '-'}>{row.customerName || row.customerPhone || '-'}</div>
@@ -407,7 +410,7 @@ export function OrderTrackerManager() {
                 ))}
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       {loading ? tx('加载中...', 'Loading...') : tx('暂无订单记录', 'No Orders records')}
                     </TableCell>
                   </TableRow>

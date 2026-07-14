@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.193`
-- 最近更新：Dashboard 新增客户历史订单/付款搜索，可按客户资料或具体订单号查找客户，并查看该客户全部 ORDER_NAME 的历史订单和最近收据。
+- 版本：`1.0.194`
+- 最近更新：Orders 页面新增 `CONFIRMED DATE`，自动记录订单状态最近一次变为 `Confirmed` 的几内亚日期。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -32,7 +32,7 @@
 |---|---|
 | Dashboard | 查看业务概览、待处理事项、欠款排行；可按 MARK、ORDER_NAME、NAME 或具体 ORDER NO 查询客户历史订单和付款；支持按账号隐藏和排序卡片 |
 | Invoice Management | 创建发票、维护订单金额、查看 Outstanding |
-| Orders | 维护不参与财务余额的业务订单跟踪 |
+| Orders | 维护不参与财务余额的业务订单跟踪，并记录订单确认日期 |
 | Receipt Management | 上传收据、直接创建收据、生成签名收据 |
 | Payment Detail Management | 上传或创建付款明细，导出付款明细图片；默认聚焦未完成明细 |
 | SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路；默认聚焦未完成水单 |

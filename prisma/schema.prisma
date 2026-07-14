@@ -301,6 +301,7 @@ model OrderTracker {
   customerCity      String?
   needsCustomerFix  Boolean  @default(false)
   status            String   @default("In progress")
+  confirmedAt       DateTime?
   piStatus          Boolean  @default(false)
   remark            String?  @db.Text
   systemNote        String?  @db.Text

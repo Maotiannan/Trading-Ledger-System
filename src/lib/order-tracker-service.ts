@@ -6,6 +6,10 @@ import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import {
+  confirmedAtForNewOrder,
+  confirmedAtForStatusUpdate,
+} from '@/lib/order-tracker-confirmation';
 import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
@@ -33,6 +37,12 @@ function asNumber(value: unknown): number {
   if (value === null || value === undefined) return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toAuditTimestamp(value: unknown): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function badRequest(message: string, detail?: unknown): never {
@@ -130,6 +140,7 @@ function serializeTracker(row: Record<string, unknown>, depositAmount: number, c
     ...row,
     amount: asNumber(row.amount),
     orderBalance: asNumber(row.orderBalance),
+    confirmedAt: row.confirmedAt instanceof Date ? row.confirmedAt : null,
     financeOrderNo: typeof financeOrder?.orderNo === 'string' ? financeOrder.orderNo : null,
     financeInvNo: typeof financeInvoice?.invNo === 'string' ? financeInvoice.invNo : null,
     depositAmount,
@@ -448,6 +459,7 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
 
   const statusOptions = await getStatusOptions();
   const status = sanitizeStatus(payload.status, statusOptions);
+  const confirmedAt = confirmedAtForNewOrder(status);
   const remark = trimStr(payload.remark);
   assertRemark(remark);
 
@@ -467,6 +479,7 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
       customerCity: customer.city,
       needsCustomerFix: false,
       status,
+      confirmedAt,
       piStatus: false,
       remark: remark || null,
       systemNote: null,
@@ -478,7 +491,12 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
     actorId: currentUser.id,
     targetType: auditTargetTypes.ORDER_TRACKER,
     targetId: data.id,
-    metadata: { orderNo, customerId: customer.id, status },
+    metadata: {
+      orderNo,
+      customerId: customer.id,
+      status,
+      confirmedAt: toAuditTimestamp(confirmedAt),
+    },
   });
 
   return { data, message: 'Order已创建' };
@@ -502,11 +520,30 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
   const data: Prisma.OrderTrackerUncheckedUpdateInput = {
     updatedBy: currentUser.id,
   };
+  let statusTransitionMetadata: Record<string, unknown> | null = null;
 
   if (payload.status !== undefined || payload.remark !== undefined) {
     if (!baseEditable) forbidden();
     if (payload.status !== undefined) {
-      data.status = sanitizeStatus(payload.status, statusOptions, target.status);
+      const nextStatus = sanitizeStatus(payload.status, statusOptions, target.status);
+      data.status = nextStatus;
+      const confirmedAtUpdate = confirmedAtForStatusUpdate({
+        currentStatus: target.status,
+        nextStatus,
+      });
+      if (confirmedAtUpdate !== undefined) {
+        data.confirmedAt = confirmedAtUpdate;
+      }
+      if (nextStatus !== target.status) {
+        statusTransitionMetadata = {
+          statusBefore: target.status,
+          statusAfter: nextStatus,
+          confirmedAtBefore: toAuditTimestamp(target.confirmedAt),
+          confirmedAtAfter: confirmedAtUpdate === undefined
+            ? toAuditTimestamp(target.confirmedAt)
+            : toAuditTimestamp(confirmedAtUpdate),
+        };
+      }
     }
     if (payload.remark !== undefined) {
       const remark = trimStr(payload.remark);
@@ -540,7 +577,10 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
     actorId: currentUser.id,
     targetType: auditTargetTypes.ORDER_TRACKER,
     targetId: id,
-    metadata: { fields: dataKeys },
+    metadata: {
+      fields: dataKeys,
+      ...(statusTransitionMetadata || {}),
+    },
   });
 
   return { data: updated, message: 'Order已更新' };

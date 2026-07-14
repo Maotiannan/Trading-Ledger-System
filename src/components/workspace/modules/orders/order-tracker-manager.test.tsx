@@ -171,6 +171,67 @@ describe('OrderTrackerManager', () => {
     expect(longOption).toHaveAttribute('title', longLabel);
   });
 
+  it('renders CONFIRMED DATE after DEPOSIT using Guinea date formatting', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('orders?action=customer-options')) {
+        return { success: true, data: [] };
+      }
+      return {
+        success: true,
+        data: [
+          {
+            id: 'tracker-confirmed',
+            orderNo: 'PIKIN-30',
+            status: 'Confirmed',
+            confirmedAt: '2026-07-13T23:30:00.000Z',
+            piStatus: false,
+            remark: '',
+            systemNote: '',
+            customerId: 'customer-pikin',
+            customerMark: 'PIKIN',
+            customerName: 'PIKIN',
+            customerPhone: '622491286',
+            customerCity: 'Conakry',
+            depositAmount: 500,
+            canEdit: true,
+            canEditAdminFields: false,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+          {
+            id: 'tracker-progress',
+            orderNo: 'MAB-02',
+            status: 'In progress',
+            confirmedAt: null,
+            piStatus: false,
+            remark: '',
+            systemNote: '',
+            customerId: 'customer-mab',
+            customerMark: 'MAB',
+            customerName: 'MAB-1',
+            customerPhone: '620071176',
+            customerCity: 'Conakry',
+            depositAmount: 0,
+            canEdit: true,
+            canEditAdminFields: false,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+        meta: { statusOptions: ['In progress', 'Confirmed', 'Canceled'], defaultStatus: 'In progress' },
+      };
+    });
+
+    await renderManager();
+
+    const headers = screen.getAllByRole('columnheader').map((header) => header.textContent);
+    const depositIndex = headers.indexOf('定金');
+    expect(headers.slice(depositIndex, depositIndex + 3)).toEqual(['定金', '确认日期', '客户']);
+    expect(screen.getByText('13/07/2026')).toBeInTheDocument();
+
+    const progressRow = screen.getByText('MAB-02').closest('tr');
+    expect(progressRow).not.toBeNull();
+    expect(within(progressRow as HTMLTableRowElement).getAllByRole('cell')[depositIndex + 1]).toHaveTextContent('-');
+  });
+
   it('does not submit admin-only fields when a sales-editable order is saved', async () => {
     mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
       if (endpoint.startsWith('orders?action=customer-options')) {

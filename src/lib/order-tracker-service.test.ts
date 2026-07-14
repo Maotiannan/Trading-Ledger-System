@@ -164,6 +164,7 @@ describe('order-tracker-service', () => {
         orderNo: 'PIKIN-23',
         normalizedOrderNo: 'pikin-23',
         status: 'In progress',
+        confirmedAt: null,
         remark: 'prepare PI',
         customerId: 'customer-1',
         customerMark: 'PIKIN',
@@ -173,6 +174,39 @@ describe('order-tracker-service', () => {
       }),
     }));
     expect(result.data.id).toBe('tracker-1');
+  });
+
+  it('records a confirmation timestamp when a record is created as Confirmed', async () => {
+    mockDb.orderTracker.findFirst.mockResolvedValueOnce(null);
+    mockDb.customer.findFirst.mockResolvedValueOnce({
+      id: 'customer-1',
+      mark: 'PIKIN',
+      orderName: 'PIKIN',
+      name: 'Mamadou Dian Diallo',
+      phone: '622491286',
+      city: 'Conakry',
+      ownerId: 'sales-1',
+    });
+    mockDb.orderTracker.create.mockResolvedValueOnce({
+      id: 'tracker-confirmed',
+      orderNo: 'PIKIN-24',
+      status: 'Confirmed',
+    });
+
+    await createOrderTracker(makeUser(), {
+      orderNo: 'PIKIN-24',
+      customerId: 'customer-1',
+      status: 'Confirmed',
+    });
+
+    const createData = mockDb.orderTracker.create.mock.calls[0][0].data;
+    expect(createData.confirmedAt).toBeInstanceOf(Date);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        status: 'Confirmed',
+        confirmedAt: createData.confirmedAt.toISOString(),
+      }),
+    }));
   });
 
   it('infers the customer and links the visible finance order when customerId is not provided', async () => {
@@ -228,6 +262,7 @@ describe('order-tracker-service', () => {
         id: 'tracker-1',
         orderNo: 'PIKIN-23/PIKIN-19C',
         status: 'In progress',
+        confirmedAt: new Date('2026-05-15T10:00:00.000Z'),
         piStatus: false,
         remark: null,
         systemNote: null,
@@ -256,6 +291,7 @@ describe('order-tracker-service', () => {
 
     expect(result.data).toHaveLength(1);
     expect(result.data[0].depositAmount).toBe(1300);
+    expect(result.data[0].confirmedAt).toEqual(new Date('2026-05-15T10:00:00.000Z'));
   });
 
   it('requires an upper ADMIN account to update PI status and system note', async () => {
@@ -280,6 +316,7 @@ describe('order-tracker-service', () => {
     mockDb.orderTracker.findUnique.mockResolvedValueOnce({
       id: 'tracker-1',
       status: 'In progress',
+      confirmedAt: null,
       createdBy: 'admin-1',
       customer: { ownerId: 'sales-1' },
     });
@@ -302,5 +339,79 @@ describe('order-tracker-service', () => {
         updatedBy: 'sales-1',
       }),
     }));
+    const updateData = mockDb.orderTracker.update.mock.calls[0][0].data;
+    expect(updateData.confirmedAt).toBeInstanceOf(Date);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        fields: expect.arrayContaining(['status', 'confirmedAt', 'remark']),
+        statusBefore: 'In progress',
+        statusAfter: 'Confirmed',
+        confirmedAtBefore: null,
+        confirmedAtAfter: updateData.confirmedAt.toISOString(),
+      }),
+    }));
+  });
+
+  it('clears the timestamp when a Confirmed record leaves that status', async () => {
+    const previousConfirmedAt = new Date('2026-07-01T08:00:00.000Z');
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'Confirmed',
+      confirmedAt: previousConfirmedAt,
+      createdBy: 'sales-1',
+      customer: { ownerId: 'sales-1' },
+    });
+    mockDb.orderTracker.update.mockResolvedValueOnce({ id: 'tracker-1', status: 'Canceled', confirmedAt: null });
+
+    await updateOrderTracker(makeUser(), 'tracker-1', { status: 'Canceled' });
+
+    expect(mockDb.orderTracker.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'Canceled', confirmedAt: null }),
+    }));
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        statusBefore: 'Confirmed',
+        statusAfter: 'Canceled',
+        confirmedAtBefore: previousConfirmedAt.toISOString(),
+        confirmedAtAfter: null,
+      }),
+    }));
+  });
+
+  it('preserves the timestamp when Confirmed is saved without a status transition', async () => {
+    const previousConfirmedAt = new Date('2026-07-01T08:00:00.000Z');
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'Confirmed',
+      confirmedAt: previousConfirmedAt,
+      createdBy: 'sales-1',
+      customer: { ownerId: 'sales-1' },
+    });
+    mockDb.orderTracker.update.mockResolvedValueOnce({ id: 'tracker-1', status: 'Confirmed', confirmedAt: previousConfirmedAt });
+
+    await updateOrderTracker(makeUser(), 'tracker-1', {
+      status: 'Confirmed',
+      remark: 'No status change',
+    });
+
+    const updateData = mockDb.orderTracker.update.mock.calls[0][0].data;
+    expect(updateData).not.toHaveProperty('confirmedAt');
+    expect(mockRecordAuditEvent.mock.calls[0][0].metadata).not.toHaveProperty('statusBefore');
+  });
+
+  it('preserves the timestamp for a remark-only update', async () => {
+    const previousConfirmedAt = new Date('2026-07-01T08:00:00.000Z');
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'Confirmed',
+      confirmedAt: previousConfirmedAt,
+      createdBy: 'sales-1',
+      customer: { ownerId: 'sales-1' },
+    });
+    mockDb.orderTracker.update.mockResolvedValueOnce({ id: 'tracker-1', status: 'Confirmed', confirmedAt: previousConfirmedAt });
+
+    await updateOrderTracker(makeUser(), 'tracker-1', { remark: 'Only the remark changed' });
+
+    expect(mockDb.orderTracker.update.mock.calls[0][0].data).not.toHaveProperty('confirmedAt');
   });
 });

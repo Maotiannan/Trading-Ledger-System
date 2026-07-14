@@ -2,6 +2,7 @@ export type OrderTrackerRow = {
   id: string;
   orderNo: string;
   status: string;
+  confirmedAt: string | null;
   piStatus: boolean;
   remark: string | null;
   systemNote: string | null;

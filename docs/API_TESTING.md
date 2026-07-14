@@ -39,6 +39,24 @@ curl -b cookie.txt \
 
 `MARK / ORDER_NAME / ORDER NO` use exact normalized matching. `NAME` supports case-insensitive contains matching. The history action returns all visible ORDER_NAME groups for the selected customer while keeping Historical Orders and Recent Receipts independently paginated.
 
+## 2.2 Orders confirmed date
+
+`confirmedAt` is read-only API output. Clients submit only `status`; the server maintains the timestamp atomically:
+
+- non-`Confirmed` to `Confirmed`: set current server time;
+- `Confirmed` to another status: clear it;
+- no status transition or unrelated edit: preserve it.
+
+```bash
+curl -b cookie.txt -X POST http://127.0.0.1/api/orders \
+  -H "Content-Type: application/json" \
+  --data '{"action":"update","orderId":"ORDER_TRACKER_ID","status":"Confirmed"}'
+
+curl -b cookie.txt "http://127.0.0.1/api/orders?search=ORDER-001"
+```
+
+The list response returns `confirmedAt` as an ISO timestamp or `null`. The Orders page formats it as `DD/MM/YYYY` in `Africa/Conakry`.
+
 ## 3. Common test flow (curl)
 
 ```bash

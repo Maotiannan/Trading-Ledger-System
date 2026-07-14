@@ -65,6 +65,7 @@ export default async function run(t) {
   const trackerRow = findOrder(trackerList.data?.data, trackerOrderNo);
   t.assertOk(Boolean(trackerRow?.id), 'orders page list returns created record');
   t.assertEqual(Number(trackerRow?.depositAmount), 777, 'orders page deposit amount is auto-summed');
+  t.assertEqual(trackerRow?.confirmedAt, null, 'new In progress order has no confirmed date');
 
   await t.request('POST', '/api/orders', {
     json: {
@@ -86,6 +87,54 @@ export default async function run(t) {
   t.assertEqual(updatedRow?.status, 'Confirmed', 'orders page status persisted');
   t.assertEqual(updatedRow?.piStatus, true, 'orders page PI status persisted');
   t.assertEqual(updatedRow?.systemNote, 'Admin checked', 'orders page system note persisted');
+  t.assertOk(Number.isFinite(Date.parse(String(updatedRow?.confirmedAt || ''))), 'entering Confirmed records a timestamp');
+  const firstConfirmedAt = String(updatedRow.confirmedAt);
+
+  await t.request('POST', '/api/orders', {
+    json: {
+      action: 'update',
+      orderId: trackerRow.id,
+      remark: 'Remark changed after confirmation',
+    },
+    expectedStatus: 200,
+  });
+  const remarkOnlyList = await t.request('GET', `/api/orders?search=${encodeURIComponent(trackerOrderNo)}`, {
+    expectedStatus: 200,
+  });
+  t.assertEqual(
+    findOrder(remarkOnlyList.data?.data, trackerOrderNo)?.confirmedAt,
+    firstConfirmedAt,
+    'remark-only update preserves confirmed date',
+  );
+
+  await t.request('POST', '/api/orders', {
+    json: {
+      action: 'update',
+      orderId: trackerRow.id,
+      status: 'Canceled',
+    },
+    expectedStatus: 200,
+  });
+  const canceledList = await t.request('GET', `/api/orders?search=${encodeURIComponent(trackerOrderNo)}`, {
+    expectedStatus: 200,
+  });
+  t.assertEqual(findOrder(canceledList.data?.data, trackerOrderNo)?.confirmedAt, null, 'leaving Confirmed clears the date');
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await t.request('POST', '/api/orders', {
+    json: {
+      action: 'update',
+      orderId: trackerRow.id,
+      status: 'Confirmed',
+    },
+    expectedStatus: 200,
+  });
+  const reconfirmedList = await t.request('GET', `/api/orders?search=${encodeURIComponent(trackerOrderNo)}`, {
+    expectedStatus: 200,
+  });
+  const reconfirmedAt = String(findOrder(reconfirmedList.data?.data, trackerOrderNo)?.confirmedAt || '');
+  t.assertOk(Number.isFinite(Date.parse(reconfirmedAt)), 'returning to Confirmed records a timestamp');
+  t.assertOk(Date.parse(reconfirmedAt) > Date.parse(firstConfirmedAt), 'returning to Confirmed records a newer timestamp');
 
   await t.request('POST', '/api/invoice', {
     json: {

@@ -9,7 +9,9 @@ Back up these two business data areas:
 - MySQL database: `trading_ledger`
 - NAS upload directory: `/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload`
 
-The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout` and `UserPreference.listPageSizes`; no separate media backup path is required for Dashboard layout or list pagination settings.
+The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout` and `UserPreference.listPageSizes`, plus Orders workflow data such as `OrderTracker.confirmedAt`. No separate media backup path is required for Dashboard preferences or Orders confirmation dates.
+
+`OrderTracker.confirmedAt` was introduced with a one-time backfill from `updatedAt` for rows already in `Confirmed` status. Future values are maintained by status transitions and are restored with the rest of the `trading_ledger` dump.
 
 Do not treat Docker containers, `.next`, `node_modules`, or test output as business backup data.
 

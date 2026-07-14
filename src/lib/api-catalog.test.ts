@@ -57,6 +57,11 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/upload-image', 'upload')?.method).toBe('POST');
   });
 
+  it('should expose dashboard customer history search actions', () => {
+    expect(findAction('/api/dashboard/customer-history-search', 'search')?.method).toBe('GET');
+    expect(findAction('/api/dashboard/customer-history-search', 'history')?.method).toBe('GET');
+  });
+
   it('should expose Excel ML token and lookup routes', () => {
     expect(findAction('/api/excel/token', 'generate')?.method).toBe('POST');
     expect(findAction('/api/excel/token', 'revoke')?.method).toBe('POST');

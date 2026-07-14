@@ -1,4 +1,5 @@
 import {
+  buildCustomerVisibilityWhere,
   buildDetailVisibilityWhere,
   buildInvoiceVisibilityWhere,
   buildOrderVisibilityWhere,
@@ -9,6 +10,14 @@ import {
 describe('resource-visibility', () => {
   it('uses customer owner binding for order/invoice/receipt/detail/swift visibility', () => {
     const ownerIds = ['sales-1'];
+
+    expect(buildCustomerVisibilityWhere(ownerIds)).toEqual({
+      OR: [
+        { ownerId: { in: ownerIds } },
+        { orders: { some: { createdBy: { in: ownerIds } } } },
+        { receipts: { some: { createdBy: { in: ownerIds } } } },
+      ],
+    });
 
     expect(buildOrderVisibilityWhere(ownerIds)).toEqual({
       OR: [

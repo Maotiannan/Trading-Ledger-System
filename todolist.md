@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.183
-> 最后更新：2026-06-23
+> 当前版本：v1.0.193
+> 最后更新：2026-07-14
 
 ## 当前状态
 
@@ -47,10 +47,12 @@
 - `Generate Signed Receipt` 的 `Deposit` 类型恢复旧规则：客户可匹配但订单尚未登记时，也会创建待签名收据并自动进入定金订单池
 - `Generate Signed Receipt` 可选择 `Frais`（默认 `Payé`，可选 `Non payé`）和法语付款方式（默认 `Espèces`，可选 `Virement`），生成图片同步显示选择结果
 - `Generate Signed Receipt` 输入 `ORDER NO` 和金额后，会自动建议 `Deposit / Full / Initial / Standard / Final` 付款类型；用户仍可手动改选
+- Dashboard 的 `Order Receipt Search` 已升级为客户历史订单/付款搜索：点击查询后可按精确 `MARK / ORDER_NAME / ORDER NO` 或姓名包含内容找到当前账号可见客户；结果显示 `MARK / ORDER NAME / NAME`，点击任意蓝色字段可查看该客户全部 `ORDER_NAME` 的历史订单和最近收据
 
 ## 已完成的主要里程碑
 
 ### 0. 最新里程碑
+- Dashboard 客户历史订单/付款搜索已替换旧的单订单收据查询：搜索结果按客户分行，多个命中客户全部显示，同一客户的多个 ORDER_NAME 在一个历史弹窗中统一查看
 - Generate Signed Receipt 新增付款类型自动诊断：按订单历史正式收据、是否定金池、输入金额后的预计余额自动回填付款类型；签名前临时收据不参与历史判断，用户可继续手动修改
 - Generate Signed Receipt 新增 `Frais` 和法语 `Mode de paiement` 选择；旧的 `Cash / Transfer` 会自动兼容为 `Espèces / Virement`
 - 修复 `Deposit` 签名收据误报“未找到对应订单”的问题；未登记订单会自动创建到 `DEPOSIT_POOL`，`INV NO` 保持空白

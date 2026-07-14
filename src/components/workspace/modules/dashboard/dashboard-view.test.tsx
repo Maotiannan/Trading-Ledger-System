@@ -277,52 +277,46 @@ describe('Dashboard customer outstanding status dialog', () => {
     expect(mockApiCall).not.toHaveBeenCalledWith('settings', expect.anything());
   });
 
-  it('searches receipts by ORDER NO from the dashboard card and reuses the query on pagination', async () => {
+  it('searches visible customers only on submit and opens all ORDER_NAME history for one customer', async () => {
     mockApiCall.mockImplementation(async (endpoint: string) => {
       if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
       if (endpoint === 'settings?view=user-preferences') return { success: true, data: { dashboardLayout: DEFAULT_DASHBOARD_LAYOUT } };
-      if (endpoint === 'dashboard/receipt-search?orderNo=PIKIN-20&page=1') return {
+      if (endpoint === 'dashboard/customer-history-search?action=search&query=Mamadou') return {
         success: true,
         data: {
-          matched: true,
-          inputOrderNo: 'PIKIN-20',
-          matchedOrderNo: 'PIKIN-20',
-          items: [{
-            id: 'receipt-1',
-            orderNo: 'PIKIN-20',
-            invNo: 'L25MH090002',
-            boundInvNo: 'L25MH090002',
-            date: '2026-06-20T00:00:00.000Z',
-            amount: 2500,
-            status: 'SR_Received',
-            imageUrl: '/upload/images/receipts/ocr/pikin.jpg',
-            imageName: 'pikin.jpg',
-            creatorName: 'Sales User',
-            creatorEmail: 'sales@example.com',
-          }],
-          pagination: { page: 1, pageSize: 10, totalItems: 11, totalPages: 2 },
+          query: 'Mamadou',
+          items: [
+            {
+              customerId: 'customer-mab',
+              mark: 'MAB',
+              name: 'Mamadou Aliou Barry',
+              orderNames: ['MAB-1', 'MARY'],
+            },
+            {
+              customerId: 'customer-pikin',
+              mark: 'PIKIN',
+              name: 'Mamadou Dian Diallo',
+              orderNames: ['PIKIN'],
+            },
+          ],
         },
       };
-      if (endpoint === 'dashboard/receipt-search?orderNo=PIKIN-20&page=2') return {
+      if (endpoint === 'dashboard/customer-history-search?action=history&customerId=customer-mab&orderPage=1&orderPageSize=10&receiptPage=1&receiptPageSize=10') return {
         success: true,
         data: {
-          matched: true,
-          inputOrderNo: 'PIKIN-20',
-          matchedOrderNo: 'PIKIN-20',
-          items: [{
-            id: 'receipt-2',
-            orderNo: 'PIKIN-20',
-            invNo: null,
-            boundInvNo: null,
-            date: null,
-            amount: 3000,
-            status: 'RECEIVED',
-            imageUrl: null,
-            imageName: null,
-            creatorName: null,
-            creatorEmail: null,
+          customer: { id: 'customer-mab', mark: 'MAB', name: 'Mamadou Aliou Barry' },
+          orderNames: ['MAB-1', 'MARY'],
+          orders: [
+            { id: 'order-mab', orderNo: 'MAB-1-10', invNo: 'INV-1', amount: 1000, outstanding: 250 },
+            { id: 'order-mary', orderNo: 'MARY-01', invNo: 'INV-2', amount: 500, outstanding: 100 },
+          ],
+          orderPagination: { page: 1, pageSize: 10, totalItems: 2, totalPages: 1 },
+          receipts: [{
+            id: 'receipt-1', receiptNo: '0010001', orderNo: 'MARY-01', invNo: 'INV-2', boundInvNo: 'INV-2',
+            usd: 400, status: 'RECEIVED', date: '2026-07-01', createdAt: '2026-07-02T08:00:00.000Z',
+            imageUrl: '/upload/images/receipts/ocr/mary.jpg', imageName: 'mary.jpg', creatorName: 'User', creatorEmail: 'user@example.com',
           }],
-          pagination: { page: 2, pageSize: 10, totalItems: 11, totalPages: 2 },
+          receiptPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
         },
       };
       return { success: false };
@@ -332,40 +326,42 @@ describe('Dashboard customer outstanding status dialog', () => {
       render(<Dashboard />);
     });
 
-    const card = await screen.findByTestId('dashboard-order-receipt-search-card');
-    fireEvent.change(within(card).getByLabelText('ORDER NO'), { target: { value: 'PIKIN-20' } });
+    const card = await screen.findByTestId('dashboard-customer-history-search-card');
+    fireEvent.change(within(card).getByLabelText('Customer search'), { target: { value: 'Mamadou' } });
+    expect(mockApiCall).not.toHaveBeenCalledWith('dashboard/customer-history-search?action=search&query=Mamadou');
     fireEvent.click(within(card).getByRole('button', { name: 'Search' }));
 
-    expect(await within(card).findByText('Matched ORDER NO: PIKIN-20')).toBeInTheDocument();
-    expect(within(card).getByText('$2,500')).toBeInTheDocument();
-    fireEvent.click(within(card).getByRole('button', { name: 'PIKIN-20' }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText('Bound ORDER NO: PIKIN-20')).toBeInTheDocument();
-    expect(screen.getByText('Bound invoice: L25MH090002')).toBeInTheDocument();
-    expect(screen.getByText('Creator: Sales User')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Receipt image' })).toHaveAttribute('src', '/upload/images/receipts/ocr/pikin.jpg');
-    expect(screen.getAllByTestId('dashboard-card-pagination')).toHaveLength(3);
+    const results = await within(card).findByTestId('dashboard-customer-search-results');
+    expect(results).toHaveClass('overflow-y-auto');
+    expect(within(card).getByRole('button', { name: 'MAB' })).toHaveClass('text-blue-700');
+    expect(within(card).getByRole('button', { name: 'MAB-1' })).toHaveClass('text-blue-700');
+    expect(within(card).getByRole('button', { name: 'MARY' })).toHaveClass('text-blue-700');
+    expect(within(card).getByRole('button', { name: 'Mamadou Aliou Barry' })).toHaveClass('text-blue-700');
+    expect(within(card).getAllByRole('button', { name: 'PIKIN' })).toHaveLength(2);
+    expect(within(card).queryByTestId('dashboard-card-pagination')).not.toBeInTheDocument();
 
-    fireEvent.click(within(card).getByRole('button', { name: 'Next' }));
+    const mabRow = within(card).getByRole('button', { name: 'MAB' }).closest('tr');
+    expect(mabRow).not.toBeNull();
+    expect(within(mabRow as HTMLTableRowElement).getByRole('button', { name: 'MAB-1' })).toBeInTheDocument();
+    expect(within(mabRow as HTMLTableRowElement).getByRole('button', { name: 'MARY' })).toBeInTheDocument();
+    expect(within(mabRow as HTMLTableRowElement).getByRole('button', { name: 'Mamadou Aliou Barry' })).toBeInTheDocument();
 
-    expect(await within(card).findByText('$3,000')).toBeInTheDocument();
-    expect(within(card).queryByRole('button', { name: 'PIKIN-20' })).not.toBeInTheDocument();
-    expect(mockApiCall).toHaveBeenCalledWith('dashboard/receipt-search?orderNo=PIKIN-20&page=2');
+    fireEvent.click(within(card).getByRole('button', { name: 'MARY' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/MAB-1 \/ MARY/)).toBeInTheDocument();
+    expect(within(dialog).getByText('MAB-1-10')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('MARY-01')).toHaveLength(2);
+    expect(mockApiCall).toHaveBeenCalledWith('dashboard/customer-history-search?action=history&customerId=customer-mab&orderPage=1&orderPageSize=10&receiptPage=1&receiptPageSize=10');
   });
 
-  it('shows not found when ORDER NO matching fails and supports Enter search', async () => {
+  it('supports Enter search and shows an empty customer result without pagination', async () => {
     mockApiCall.mockImplementation(async (endpoint: string) => {
       if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
       if (endpoint === 'settings?view=user-preferences') return { success: true, data: { dashboardLayout: DEFAULT_DASHBOARD_LAYOUT } };
-      if (endpoint === 'dashboard/receipt-search?orderNo=UNKNOWN-01&page=1') return {
+      if (endpoint === 'dashboard/customer-history-search?action=search&query=UNKNOWN-01') return {
         success: true,
-        data: {
-          matched: false,
-          inputOrderNo: 'UNKNOWN-01',
-          matchedOrderNo: null,
-          items: [],
-          pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 },
-        },
+        data: { query: 'UNKNOWN-01', items: [] },
       };
       return { success: false };
     });
@@ -374,12 +370,13 @@ describe('Dashboard customer outstanding status dialog', () => {
       render(<Dashboard />);
     });
 
-    const card = await screen.findByTestId('dashboard-order-receipt-search-card');
-    const input = within(card).getByLabelText('ORDER NO');
+    const card = await screen.findByTestId('dashboard-customer-history-search-card');
+    const input = within(card).getByLabelText('Customer search');
     fireEvent.change(input, { target: { value: 'UNKNOWN-01' } });
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
-    expect(await within(card).findByText('ORDER NO not found')).toBeInTheDocument();
-    expect(mockApiCall).toHaveBeenCalledWith('dashboard/receipt-search?orderNo=UNKNOWN-01&page=1');
+    expect(await within(card).findByText('No matching customers')).toBeInTheDocument();
+    expect(within(card).queryByTestId('dashboard-card-pagination')).not.toBeInTheDocument();
+    expect(mockApiCall).toHaveBeenCalledWith('dashboard/customer-history-search?action=search&query=UNKNOWN-01');
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { CustomerOrderHistoryDialog } from './customer-order-history-dialog';
 
 describe('CustomerOrderHistoryDialog', () => {
@@ -137,5 +137,56 @@ describe('CustomerOrderHistoryDialog', () => {
     expect(screen.getByTestId('customer-order-history-orders-table')).toBeInTheDocument();
     expect(screen.getByTestId('customer-order-history-receipts-table')).toBeInTheDocument();
     expect(screen.queryByText('加载中...')).not.toBeInTheDocument();
+  });
+
+  it('describes combined ORDER_NAME history and opens an attached receipt image', () => {
+    const onOpenReceiptImage = jest.fn();
+    render(
+      <CustomerOrderHistoryDialog
+        open
+        loading={false}
+        error=""
+        title="MAB-1 / MARY"
+        allOrderNames
+        tx={tx}
+        history={{
+          orderPagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 },
+          orders: [],
+          receiptPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+          receipts: [{
+            id: 'receipt-1',
+            receiptNo: '0010001',
+            orderNo: 'MARY-01',
+            invNo: 'INV-2',
+            boundInvNo: 'INV-2',
+            usd: 400,
+            status: 'RECEIVED',
+            date: '2026-07-01',
+            createdAt: '2026-07-02T08:00:00.000Z',
+            imageUrl: '/upload/images/receipts/ocr/mary.jpg',
+            imageName: 'mary.jpg',
+            creatorName: 'User',
+            creatorEmail: 'user@example.com',
+          }],
+        }}
+        orderPageSizeOptions={[5, 10, 15, 20]}
+        receiptPageSizeOptions={[5, 10, 15, 20]}
+        onOrderPreviousPage={() => undefined}
+        onOrderNextPage={() => undefined}
+        onOrderPageSizeChange={() => undefined}
+        onReceiptPreviousPage={() => undefined}
+        onReceiptNextPage={() => undefined}
+        onReceiptPageSizeChange={() => undefined}
+        onOpenReceiptImage={onOpenReceiptImage}
+        onOpenChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText('查看该客户所有 ORDER_NAME 的历史订单，以及最近收据状态。')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '0010001' }));
+    expect(onOpenReceiptImage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'receipt-1',
+      imageUrl: '/upload/images/receipts/ocr/mary.jpg',
+    }));
   });
 });

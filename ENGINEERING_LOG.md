@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.192
-> 最后更新：2026-07-03
+> 当前版本：v1.0.193
+> 最后更新：2026-07-14
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 客户历史订单/付款搜索：保留旧 `order-receipt-search` 卡片 ID 以兼容账号布局偏好，替换旧单订单收据查询服务和 API；新增 `dashboard-customer-history-service` 与 `/api/dashboard/customer-history-search`，精确匹配标准化 `MARK / ORDER_NAME / ORDER NO`，`NAME` 使用不区分大小写的包含匹配，返回所有命中且当前账号可见的客户。抽出 `customer-history-service` 作为 Customer Management 与 Dashboard 共用历史内核，统一实时余额、排序、分页和收据图片字段；Dashboard 点击同一客户任意 `MARK / ORDER NAME / NAME` 都打开一份合并全部 ORDER_NAME 的历史弹窗。搜索结果区约三行高并滚动，不再分页；USER/SALES/ADMIN 均可使用且复用订单、收据可见范围。删除旧 `/api/dashboard/receipt-search` 与重复服务。无数据库、NAS/COS 路径或备份范围变更。测试：服务、route、API catalog、resource visibility、Customer Manager、Dashboard、共享历史弹窗及 isolated API 35 权限链路 ✅ 2026-07-14
 
 - [x] Customer ORDER_NAME History 分页体验修复：确认根因是弹窗只有一个 `loading` 状态，翻页或切换每页条数时即使已有 `history` 数据也会卸载两张表并显示整块 Loading；改为仅首次无数据加载时显示整块 Loading，已有数据刷新时保留 Historical Orders / Recent Receipts 表格和分页控件，体验与 Dashboard 列表分页一致。无数据库、NAS/COS 路径或备份范围变更。测试：先新增 `loading=true + history` 的失败用例，再通过弹窗与 CustomerManager 回归 ✅ 2026-07-03
 

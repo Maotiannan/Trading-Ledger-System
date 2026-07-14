@@ -27,6 +27,11 @@ export type CustomerOrderHistoryReceipt = {
   status: string;
   date: string | null;
   createdAt: string;
+  boundInvNo?: string | null;
+  imageUrl?: string | null;
+  imageName?: string | null;
+  creatorName?: string | null;
+  creatorEmail?: string | null;
 };
 
 export type CustomerOrderHistoryPagination = {
@@ -48,6 +53,7 @@ export type CustomerOrderHistoryDialogProps = {
   loading: boolean;
   error: string;
   title: string;
+  allOrderNames?: boolean;
   history: CustomerOrderHistory | null;
   tx: (zh: string, en: string) => string;
   orderPageSizeOptions: readonly number[];
@@ -58,6 +64,7 @@ export type CustomerOrderHistoryDialogProps = {
   onReceiptPreviousPage: () => void;
   onReceiptNextPage: () => void;
   onReceiptPageSizeChange: (pageSize: number) => void;
+  onOpenReceiptImage?: (receipt: CustomerOrderHistoryReceipt) => void;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -84,6 +91,7 @@ export function CustomerOrderHistoryDialog({
   loading,
   error,
   title,
+  allOrderNames = false,
   history,
   tx,
   orderPageSizeOptions,
@@ -94,6 +102,7 @@ export function CustomerOrderHistoryDialog({
   onReceiptPreviousPage,
   onReceiptNextPage,
   onReceiptPageSizeChange,
+  onOpenReceiptImage,
   onOpenChange,
 }: CustomerOrderHistoryDialogProps) {
   const hasHistory = Boolean(history);
@@ -106,7 +115,9 @@ export function CustomerOrderHistoryDialog({
         <DialogHeader>
           <DialogTitle>{tx('ORDER_NAME 历史', 'ORDER_NAME History')}: {title || '-'}</DialogTitle>
           <DialogDescription>
-            {tx('查看该客户在此 ORDER_NAME 下的历史订单，以及最近收据状态。', 'Review historical orders for this ORDER_NAME and recent receipt statuses.')}
+            {allOrderNames
+              ? tx('查看该客户所有 ORDER_NAME 的历史订单，以及最近收据状态。', 'Review historical orders for all customer ORDER_NAME values and recent receipt statuses.')
+              : tx('查看该客户在此 ORDER_NAME 下的历史订单，以及最近收据状态。', 'Review historical orders for this ORDER_NAME and recent receipt statuses.')}
           </DialogDescription>
         </DialogHeader>
 
@@ -196,7 +207,17 @@ export function CustomerOrderHistoryDialog({
                             <TableCell data-testid="customer-order-history-order-value" className="min-w-[13ch]"><OrderNoText value={receipt.orderNo} /></TableCell>
                             <TableCell className="whitespace-nowrap">{money(receipt.usd)}</TableCell>
                             <TableCell className="whitespace-nowrap"><Badge variant="outline">{receipt.status || '-'}</Badge></TableCell>
-                            <TableCell className="whitespace-nowrap font-medium">{receipt.receiptNo || '-'}</TableCell>
+                            <TableCell className="whitespace-nowrap font-medium">
+                              {receipt.imageUrl && onOpenReceiptImage ? (
+                                <button
+                                  type="button"
+                                  className="text-blue-700 underline-offset-2 hover:underline"
+                                  onClick={() => onOpenReceiptImage(receipt)}
+                                >
+                                  {receipt.receiptNo || '-'}
+                                </button>
+                              ) : receipt.receiptNo || '-'}
+                            </TableCell>
                           </TableRow>
                         ))}
                         {(!history?.receipts || history.receipts.length === 0) && (

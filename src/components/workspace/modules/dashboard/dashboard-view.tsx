@@ -24,6 +24,12 @@ import {
   type ReceiptImagePreviewInfo,
 } from '@/components/workspace/modules/receipts/components/receipt-image-preview-dialog';
 import {
+  CustomerOrderHistoryDialog,
+  type CustomerOrderHistory,
+  type CustomerOrderHistoryReceipt,
+} from '@/components/workspace/modules/customers/components/customer-order-history-dialog';
+import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
+import {
   CustomerCandidate,
   IMPORT_RESULT_PAGE_SIZE,
   apiCall,
@@ -91,26 +97,16 @@ type DashboardCustomerOutstanding = {
   }>;
 };
 
-type DashboardReceiptSearchItem = {
-  id: string;
-  orderNo: string;
-  invNo: string | null;
-  boundInvNo: string | null;
-  date: string | null;
-  amount: number;
-  status: string;
-  imageUrl: string | null;
-  imageName: string | null;
-  creatorName: string | null;
-  creatorEmail: string | null;
+type DashboardCustomerSearchItem = {
+  customerId: string;
+  mark: string;
+  name: string;
+  orderNames: string[];
 };
 
-type DashboardReceiptSearchResult = {
-  matched: boolean;
-  inputOrderNo: string;
-  matchedOrderNo: string | null;
-  items: DashboardReceiptSearchItem[];
-  pagination: { page: number; pageSize: number; totalItems: number; totalPages: number };
+type DashboardCustomerSearchResult = {
+  query: string;
+  items: DashboardCustomerSearchItem[];
 };
 
 const DASHBOARD_LIST_PAGE_SIZE = 10;
@@ -120,6 +116,18 @@ export function Dashboard() {
   const tx = useUiText();
   const { invoices, receipts, details, deletionRequests } = useStore();
   const dashboardRequestGuard = useLatestRequestGuard();
+  const customerSearchRequestGuard = useLatestRequestGuard();
+  const customerHistoryRequestGuard = useLatestRequestGuard();
+  const {
+    pageSize: customerHistoryOrderPageSize,
+    pageSizeOptions: customerHistoryOrderPageSizeOptions,
+    savePageSize: saveCustomerHistoryOrderPageSize,
+  } = useListPageSizePreference('customerHistoryOrders');
+  const {
+    pageSize: customerHistoryReceiptPageSize,
+    pageSizeOptions: customerHistoryReceiptPageSizeOptions,
+    savePageSize: saveCustomerHistoryReceiptPageSize,
+  } = useListPageSizePreference('customerHistoryReceipts');
   const [summary, setSummary] = useState<{
     invoiceCount: number;
     unpaidTotal: number;
@@ -149,12 +157,14 @@ export function Dashboard() {
   const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
   const [selectedReleasedInvoice, setSelectedReleasedInvoice] = useState<DashboardReleasedInvoice | null>(null);
   const [viewingReceiptImage, setViewingReceiptImage] = useState<ReceiptImagePreviewInfo | null>(null);
-  const [orderReceiptSearchInput, setOrderReceiptSearchInput] = useState('');
-  const [orderReceiptSearchQuery, setOrderReceiptSearchQuery] = useState('');
-  const [orderReceiptSearchPage, setOrderReceiptSearchPage] = useState(1);
-  const [orderReceiptSearchResult, setOrderReceiptSearchResult] = useState<DashboardReceiptSearchResult | null>(null);
-  const [orderReceiptSearchLoading, setOrderReceiptSearchLoading] = useState(false);
-  const [orderReceiptSearchError, setOrderReceiptSearchError] = useState<string | null>(null);
+  const [customerSearchInput, setCustomerSearchInput] = useState('');
+  const [customerSearchResult, setCustomerSearchResult] = useState<DashboardCustomerSearchResult | null>(null);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
+  const [historyCustomer, setHistoryCustomer] = useState<DashboardCustomerSearchItem | null>(null);
+  const [customerHistory, setCustomerHistory] = useState<CustomerOrderHistory | null>(null);
+  const [customerHistoryLoading, setCustomerHistoryLoading] = useState(false);
+  const [customerHistoryError, setCustomerHistoryError] = useState('');
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const loadSummary = useCallback(async () => {
     const requestToken = dashboardRequestGuard.nextToken();
@@ -300,36 +310,146 @@ export function Dashboard() {
     }
   };
 
-  const loadOrderReceiptSearch = useCallback(async (orderNo: string, page: number) => {
-    const trimmed = orderNo.trim();
+  const loadCustomerSearch = useCallback(async (query: string) => {
+    const trimmed = query.trim();
     if (!trimmed) {
-      setOrderReceiptSearchResult(null);
-      setOrderReceiptSearchError(tx('请输入 ORDER NO', 'Please enter ORDER NO'));
+      setCustomerSearchResult(null);
+      setCustomerSearchError(tx('请输入客户搜索内容', 'Please enter a customer search value'));
       return;
     }
 
-    setOrderReceiptSearchLoading(true);
-    setOrderReceiptSearchError(null);
+    const requestToken = customerSearchRequestGuard.nextToken();
+    setCustomerSearchLoading(true);
+    setCustomerSearchError(null);
+    setCustomerSearchResult(null);
     try {
-      const endpoint = `dashboard/receipt-search?orderNo=${encodeURIComponent(trimmed)}&page=${page}`;
+      const endpoint = `dashboard/customer-history-search?action=search&query=${encodeURIComponent(trimmed)}`;
       const result = await apiCall(endpoint);
+      if (!customerSearchRequestGuard.isLatest(requestToken)) return;
       if (result.success && result.data) {
-        setOrderReceiptSearchResult(result.data as DashboardReceiptSearchResult);
-        setOrderReceiptSearchQuery(trimmed);
-        setOrderReceiptSearchPage(page);
+        setCustomerSearchResult(result.data as DashboardCustomerSearchResult);
       } else {
-        setOrderReceiptSearchError(tx('查询失败，请稍后重试', 'Search failed, please retry'));
+        setCustomerSearchError(String(result.message || result.error || tx('查询失败，请稍后重试', 'Search failed, please retry')));
       }
-    } catch {
-      setOrderReceiptSearchError(tx('查询失败，请稍后重试', 'Search failed, please retry'));
+    } catch (error) {
+      if (customerSearchRequestGuard.isLatest(requestToken)) {
+        setCustomerSearchError(getErrorMessage(error, tx('查询失败，请稍后重试', 'Search failed, please retry')));
+      }
     } finally {
-      setOrderReceiptSearchLoading(false);
+      if (customerSearchRequestGuard.isLatest(requestToken)) {
+        setCustomerSearchLoading(false);
+      }
     }
-  }, [tx]);
+  }, [customerSearchRequestGuard, tx]);
 
-  const handleOrderReceiptSearch = useCallback(() => {
-    void loadOrderReceiptSearch(orderReceiptSearchInput, 1);
-  }, [loadOrderReceiptSearch, orderReceiptSearchInput]);
+  const handleCustomerSearch = useCallback(() => {
+    void loadCustomerSearch(customerSearchInput);
+  }, [customerSearchInput, loadCustomerSearch]);
+
+  const loadCustomerHistory = useCallback(async (
+    customer: DashboardCustomerSearchItem,
+    pagination: {
+      orderPage: number;
+      orderPageSize: number;
+      receiptPage: number;
+      receiptPageSize: number;
+    },
+  ) => {
+    const requestToken = customerHistoryRequestGuard.nextToken();
+    const searchParams = new URLSearchParams({
+      action: 'history',
+      customerId: customer.customerId,
+      orderPage: String(pagination.orderPage),
+      orderPageSize: String(pagination.orderPageSize),
+      receiptPage: String(pagination.receiptPage),
+      receiptPageSize: String(pagination.receiptPageSize),
+    });
+
+    setCustomerHistoryLoading(true);
+    setCustomerHistoryError('');
+    try {
+      const result = await apiCall(`dashboard/customer-history-search?${searchParams.toString()}`);
+      if (!customerHistoryRequestGuard.isLatest(requestToken)) return;
+      if (result.success && result.data) {
+        setCustomerHistory(result.data as CustomerOrderHistory);
+      } else {
+        setCustomerHistoryError(String(result.message || result.error || tx('加载失败', 'Load failed')));
+      }
+    } catch (error) {
+      if (customerHistoryRequestGuard.isLatest(requestToken)) {
+        setCustomerHistoryError(getErrorMessage(error, tx('加载失败', 'Load failed')));
+      }
+    } finally {
+      if (customerHistoryRequestGuard.isLatest(requestToken)) {
+        setCustomerHistoryLoading(false);
+      }
+    }
+  }, [customerHistoryRequestGuard, tx]);
+
+  const openCustomerHistory = useCallback((customer: DashboardCustomerSearchItem) => {
+    setHistoryCustomer(customer);
+    setCustomerHistory(null);
+    setCustomerHistoryError('');
+    void loadCustomerHistory(customer, {
+      orderPage: 1,
+      orderPageSize: customerHistoryOrderPageSize,
+      receiptPage: 1,
+      receiptPageSize: customerHistoryReceiptPageSize,
+    });
+  }, [customerHistoryOrderPageSize, customerHistoryReceiptPageSize, loadCustomerHistory]);
+
+  const changeCustomerOrderHistoryPage = (orderPage: number) => {
+    if (!historyCustomer) return;
+    void loadCustomerHistory(historyCustomer, {
+      orderPage,
+      orderPageSize: customerHistory?.orderPagination?.pageSize || customerHistoryOrderPageSize,
+      receiptPage: customerHistory?.receiptPagination?.page || 1,
+      receiptPageSize: customerHistory?.receiptPagination?.pageSize || customerHistoryReceiptPageSize,
+    });
+  };
+
+  const changeCustomerReceiptHistoryPage = (receiptPage: number) => {
+    if (!historyCustomer) return;
+    void loadCustomerHistory(historyCustomer, {
+      orderPage: customerHistory?.orderPagination?.page || 1,
+      orderPageSize: customerHistory?.orderPagination?.pageSize || customerHistoryOrderPageSize,
+      receiptPage,
+      receiptPageSize: customerHistory?.receiptPagination?.pageSize || customerHistoryReceiptPageSize,
+    });
+  };
+
+  const changeCustomerOrderHistoryPageSize = (pageSize: number) => {
+    if (!historyCustomer) return;
+    saveCustomerHistoryOrderPageSize(pageSize);
+    void loadCustomerHistory(historyCustomer, {
+      orderPage: 1,
+      orderPageSize: pageSize,
+      receiptPage: customerHistory?.receiptPagination?.page || 1,
+      receiptPageSize: customerHistory?.receiptPagination?.pageSize || customerHistoryReceiptPageSize,
+    });
+  };
+
+  const changeCustomerReceiptHistoryPageSize = (pageSize: number) => {
+    if (!historyCustomer) return;
+    saveCustomerHistoryReceiptPageSize(pageSize);
+    void loadCustomerHistory(historyCustomer, {
+      orderPage: customerHistory?.orderPagination?.page || 1,
+      orderPageSize: customerHistory?.orderPagination?.pageSize || customerHistoryOrderPageSize,
+      receiptPage: 1,
+      receiptPageSize: pageSize,
+    });
+  };
+
+  const openCustomerHistoryReceiptImage = (receipt: CustomerOrderHistoryReceipt) => {
+    if (!receipt.imageUrl) return;
+    setViewingReceiptImage({
+      url: getDisplayImageUrl(receipt.imageUrl),
+      alt: tx('收据图片', 'Receipt image'),
+      orderNo: receipt.orderNo || '-',
+      invNo: receipt.boundInvNo || receipt.invNo || '-',
+      creator: receipt.creatorName || receipt.creatorEmail || '-',
+    });
+  };
 
   const renderPaginationFooter = (params: {
     page: number;
@@ -542,101 +662,101 @@ export function Dashboard() {
     }
 
     if (cardId === 'order-receipt-search') {
-      const page = orderReceiptSearchResult?.pagination.page ?? orderReceiptSearchPage;
-      const totalPages = orderReceiptSearchResult?.pagination.totalPages ?? 1;
-      const totalItems = orderReceiptSearchResult?.pagination.totalItems ?? 0;
-      const receiptRows = orderReceiptSearchResult?.items ?? [];
+      const customerRows = customerSearchResult?.items ?? [];
       return (
-        <Card data-testid="dashboard-order-receipt-search-card" className="flex min-h-[520px] flex-col">
+        <Card data-testid="dashboard-customer-history-search-card" className="flex flex-col">
           <CardHeader>
-            <CardTitle>{tx('订单收据查询', 'Order Receipt Search')}</CardTitle>
-            <CardDescription>{tx('输入 ORDER NO 查询该订单对应收据', 'Search receipts by matched ORDER NO')}</CardDescription>
+            <CardTitle>{tx('客户历史订单/付款搜索', 'Customer Order & Payment History')}</CardTitle>
+            <CardDescription>{tx('按 MARK、ORDER NAME、NAME 或具体 ORDER NO 查找客户', 'Find customers by MARK, ORDER NAME, NAME, or exact ORDER NO')}</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-1 flex-col space-y-3">
+          <CardContent className="flex flex-col space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex-1 space-y-1">
-                <Label htmlFor="dashboard-order-receipt-search-input">ORDER NO</Label>
+                <Label htmlFor="dashboard-customer-history-search-input">{tx('客户搜索', 'Customer search')}</Label>
                 <Input
-                  id="dashboard-order-receipt-search-input"
-                  value={orderReceiptSearchInput}
-                  onChange={(event) => setOrderReceiptSearchInput(event.target.value)}
+                  id="dashboard-customer-history-search-input"
+                  value={customerSearchInput}
+                  onChange={(event) => setCustomerSearchInput(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter') handleOrderReceiptSearch();
+                    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      handleCustomerSearch();
+                    }
                   }}
-                  placeholder="PIKIN-20"
+                  placeholder={tx('例如：PIKIN、Mamadou、PIKIN-20', 'Example: PIKIN, Mamadou, PIKIN-20')}
                 />
               </div>
-              <Button onClick={handleOrderReceiptSearch} disabled={orderReceiptSearchLoading}>
-                {orderReceiptSearchLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              <Button onClick={handleCustomerSearch} disabled={customerSearchLoading}>
+                {customerSearchLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {tx('查询', 'Search')}
               </Button>
             </div>
 
-            {orderReceiptSearchError && (
-              <Alert variant="destructive"><AlertDescription>{orderReceiptSearchError}</AlertDescription></Alert>
-            )}
-            {orderReceiptSearchResult && !orderReceiptSearchResult.matched && (
-              <Alert variant="destructive"><AlertDescription>{tx('ORDER NO 未找到', 'ORDER NO not found')}</AlertDescription></Alert>
-            )}
-            {orderReceiptSearchResult?.matchedOrderNo && (
-              <p className="text-sm text-muted-foreground">
-                {tx(`匹配 ORDER NO：${formatOrderNameDisplay(orderReceiptSearchResult.matchedOrderNo)}`, `Matched ORDER NO: ${formatOrderNameDisplay(orderReceiptSearchResult.matchedOrderNo)}`)}
-              </p>
+            {customerSearchError && (
+              <Alert variant="destructive"><AlertDescription>{customerSearchError}</AlertDescription></Alert>
             )}
 
-            <div className="overflow-x-auto rounded-md border">
+            {customerSearchResult && (
+            <div
+              data-testid="dashboard-customer-search-results"
+              className="max-h-[176px] overflow-x-auto overflow-y-auto rounded-md border"
+            >
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 z-10 bg-background">
                   <TableRow>
-                    <TableHead>ORDER NO</TableHead>
-                    <TableHead>{tx('日期', 'Date')}</TableHead>
-                    <TableHead>{tx('金额', 'Amount')}</TableHead>
-                    <TableHead>{tx('状态', 'Status')}</TableHead>
+                    <TableHead>MARK</TableHead>
+                    <TableHead>ORDER NAME</TableHead>
+                    <TableHead>NAME</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {receiptRows.map((receipt) => (
-                    <TableRow key={receipt.id}>
-                      <TableCell className="font-medium">
-                        {receipt.imageUrl ? (
-                          <button
-                            type="button"
-                            className="text-left font-medium text-blue-700 underline-offset-2 hover:underline"
-                            onClick={() => setViewingReceiptImage({
-                              url: getDisplayImageUrl(receipt.imageUrl as string),
-                              alt: tx('收据图片', 'Receipt image'),
-                              orderNo: receipt.orderNo || '-',
-                              invNo: receipt.boundInvNo || receipt.invNo || '-',
-                              creator: receipt.creatorName || receipt.creatorEmail || '-',
-                            })}
-                          >
-                            {formatOrderNameDisplay(receipt.orderNo)}
-                          </button>
-                        ) : (
-                          formatOrderNameDisplay(receipt.orderNo)
-                        )}
+                  {customerRows.map((customer) => (
+                    <TableRow key={customer.customerId}>
+                      <TableCell className="whitespace-nowrap">
+                        <button
+                          type="button"
+                          className="font-medium text-blue-700 underline-offset-2 hover:underline"
+                          onClick={() => openCustomerHistory(customer)}
+                        >
+                          {customer.mark || '-'}
+                        </button>
                       </TableCell>
-                      <TableCell>{receipt.date ? new Date(receipt.date).toLocaleDateString() : '-'}</TableCell>
-                      <TableCell className="font-medium">{formatUsdAmount(receipt.amount)}</TableCell>
-                      <TableCell><Badge>{receipt.status}</Badge></TableCell>
+                      <TableCell>
+                        <div className="flex min-w-[9rem] flex-wrap gap-x-2 gap-y-1">
+                          {customer.orderNames.length > 0 ? customer.orderNames.map((orderName) => (
+                          <button
+                            key={orderName}
+                            type="button"
+                            className="font-medium text-blue-700 underline-offset-2 hover:underline"
+                            onClick={() => openCustomerHistory(customer)}
+                          >
+                            {formatOrderNameDisplay(orderName)}
+                          </button>
+                          )) : '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <button
+                          type="button"
+                          className="text-left font-medium text-blue-700 underline-offset-2 hover:underline"
+                          onClick={() => openCustomerHistory(customer)}
+                        >
+                          {customer.name || '-'}
+                        </button>
+                      </TableCell>
                     </TableRow>
                   ))}
-                  {Array.from({ length: Math.max(0, DASHBOARD_LIST_PAGE_SIZE - receiptRows.length) }).map((_, index) => (
-                    <TableRow key={`empty-${index}`} className="h-10">
-                      <TableCell colSpan={4}>&nbsp;</TableCell>
+                  {customerRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} className="py-6 text-center text-muted-foreground">
+                        {tx('未找到匹配客户', 'No matching customers')}
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </div>
-
-            {renderPaginationFooter({
-              page,
-              totalPages,
-              totalItems,
-              onPrevious: () => void loadOrderReceiptSearch(orderReceiptSearchQuery, Math.max(1, page - 1)),
-              onNext: () => void loadOrderReceiptSearch(orderReceiptSearchQuery, Math.min(totalPages, page + 1)),
-            })}
+            )}
           </CardContent>
         </Card>
       );
@@ -824,6 +944,32 @@ export function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CustomerOrderHistoryDialog
+        open={Boolean(historyCustomer)}
+        loading={customerHistoryLoading}
+        error={customerHistoryError}
+        title={historyCustomer?.orderNames.join(' / ') || historyCustomer?.mark || historyCustomer?.name || ''}
+        allOrderNames
+        history={customerHistory}
+        tx={tx}
+        orderPageSizeOptions={customerHistoryOrderPageSizeOptions}
+        receiptPageSizeOptions={customerHistoryReceiptPageSizeOptions}
+        onOrderPreviousPage={() => changeCustomerOrderHistoryPage(Math.max(1, (customerHistory?.orderPagination?.page || 1) - 1))}
+        onOrderNextPage={() => changeCustomerOrderHistoryPage((customerHistory?.orderPagination?.page || 1) + 1)}
+        onOrderPageSizeChange={changeCustomerOrderHistoryPageSize}
+        onReceiptPreviousPage={() => changeCustomerReceiptHistoryPage(Math.max(1, (customerHistory?.receiptPagination?.page || 1) - 1))}
+        onReceiptNextPage={() => changeCustomerReceiptHistoryPage((customerHistory?.receiptPagination?.page || 1) + 1)}
+        onReceiptPageSizeChange={changeCustomerReceiptHistoryPageSize}
+        onOpenReceiptImage={openCustomerHistoryReceiptImage}
+        onOpenChange={(open) => {
+          if (open) return;
+          customerHistoryRequestGuard.nextToken();
+          setHistoryCustomer(null);
+          setCustomerHistory(null);
+          setCustomerHistoryError('');
+        }}
+      />
 
       <ReceiptImagePreviewDialog
         image={viewingReceiptImage}

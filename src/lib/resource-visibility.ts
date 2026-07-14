@@ -16,6 +16,16 @@ export function buildOrderVisibilityWhere(ownerIds: string[]): Prisma.OrderWhere
   };
 }
 
+export function buildCustomerVisibilityWhere(ownerIds: string[]): Prisma.CustomerWhereInput {
+  return {
+    OR: [
+      { ownerId: { in: ownerIds } },
+      { orders: { some: { createdBy: { in: ownerIds } } } },
+      { receipts: { some: { createdBy: { in: ownerIds } } } },
+    ],
+  };
+}
+
 export function buildInvoiceVisibilityWhere(ownerIds: string[]): Prisma.InvoiceWhereInput {
   return {
     OR: [

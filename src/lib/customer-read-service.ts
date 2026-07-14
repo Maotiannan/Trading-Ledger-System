@@ -5,15 +5,10 @@ import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 import { customerAccessWhere, splitPhoneCandidates } from '@/lib/customer-scope';
-import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { filterRowsBySearch } from '@/lib/text-search';
-import {
-  normalizeCustomerHistoryPagination,
-  paginateCustomerHistoryRows,
-  sortCustomerHistoryOrders,
-} from '@/lib/customer-order-history-pagination';
-import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
 import { canSalesEditExtendedCustomerFields } from '@/lib/customer-service';
+import { readCustomerHistory } from '@/lib/customer-history-service';
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -172,20 +167,6 @@ export async function listCustomers(
   return { data, message: `客户列表已加载，共 ${data.length} 个客户` };
 }
 
-function toDateText(value: unknown): string | null {
-  if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  const text = String(value).trim();
-  return text ? text.slice(0, 10) : null;
-}
-
-function orderMatchesOrderName(orderNo: string | null | undefined, normalizedOrderName: string): boolean {
-  if (!normalizedOrderName) return false;
-  if (normalizeOrderIdentifier(orderNo) === normalizedOrderName) return true;
-  return buildCompositeOrderLookupCandidates(orderNo).orderNameCandidates
-    .some((candidate) => candidate.normalizedOrderName === normalizedOrderName);
-}
-
 export async function getCustomerOrderNameHistory(
   currentUser: CurrentUser,
   input: {
@@ -203,121 +184,18 @@ export async function getCustomerOrderNameHistory(
 
   const customerId = trimStr(input.customerId);
   const orderName = trimStr(input.orderName);
-  const normalizedOrderName = normalizeOrderIdentifier(orderName);
-  if (!customerId || !normalizedOrderName) {
+  if (!customerId || !normalizeOrderIdentifier(orderName)) {
     throw createApiError({ code: apiErrorCodes.BAD_REQUEST, status: 400, message: '缺少客户或ORDER_NAME' });
   }
 
-  const customer = await db.customer.findFirst({
-    where: {
-      ...customerAccessWhere(currentUser),
-      id: customerId,
-    },
-    include: {
-      orderNames: {
-        select: {
-          orderName: true,
-          normalizedOrderName: true,
-          isPrimary: true,
-        },
-      },
-    },
+  const result = await readCustomerHistory({
+    ...input,
+    customerId,
+    orderName,
+    customerWhere: customerAccessWhere(currentUser),
   });
-  if (!customer) {
-    throw createApiError({ code: apiErrorCodes.RESOURCE_NOT_FOUND, status: 404, message: '客户不存在或无权限' });
-  }
-
-  const isKnownOrderName = normalizeOrderIdentifier(customer.orderName) === normalizedOrderName
-    || customer.orderNames.some((row) => row.normalizedOrderName === normalizedOrderName);
-  if (!isKnownOrderName) {
-    throw createApiError({ code: apiErrorCodes.BAD_REQUEST, status: 400, message: 'ORDER_NAME不属于该客户' });
-  }
-
-  const orderPaginationRequest = normalizeCustomerHistoryPagination(
-    { page: input.orderPage, pageSize: input.orderPageSize },
-    { defaultPageSize: input.defaultOrderPageSize },
-  );
-  const receiptPaginationRequest = normalizeCustomerHistoryPagination(
-    { page: input.receiptPage, pageSize: input.receiptPageSize },
-    { defaultPageSize: input.defaultReceiptPageSize },
-  );
-
-  const rows = await db.order.findMany({
-    where: { customerId },
-    include: {
-      invoice: {
-        select: { invNo: true, shipDate: true, releaseDate: true },
-      },
-      receipts: {
-        select: { usd: true, status: true },
-      },
-    },
-    orderBy: [{ createdAt: 'desc' }],
-  });
-
-  const sortedOrders = sortCustomerHistoryOrders(rows
-    .filter((row) => orderMatchesOrderName(row.orderNo, normalizedOrderName))
-    .map((row) => ({
-      id: row.id,
-      orderNo: row.orderNo,
-      invNo: row.invoice?.invNo || null,
-      amount: Number(row.amount),
-      outstanding: Array.isArray(row.receipts)
-        ? computeOrderBalanceFromReceipts({ amount: row.amount, receipts: row.receipts })
-        : Number(row.orderBalance),
-      shipDate: row.invoice?.shipDate || null,
-      releaseDate: row.invoice?.releaseDate || null,
-      createdAt: row.createdAt,
-    })));
-  const { items: orders, pagination: orderPagination } = paginateCustomerHistoryRows(
-    sortedOrders,
-    orderPaginationRequest.page,
-    orderPaginationRequest.pageSize,
-  );
-
-  const receiptWhere = { customerId };
-  const totalReceipts = await db.receipt.count({ where: receiptWhere });
-  const receiptTotalPages = Math.max(1, Math.ceil(totalReceipts / receiptPaginationRequest.pageSize));
-  const receiptPage = Math.min(receiptPaginationRequest.page, receiptTotalPages);
-  const receipts = await db.receipt.findMany({
-    where: receiptWhere,
-    select: {
-      id: true,
-      receiptNo: true,
-      orderNo: true,
-      invNo: true,
-      usd: true,
-      status: true,
-      date: true,
-      createdAt: true,
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-    skip: (receiptPage - 1) * receiptPaginationRequest.pageSize,
-    take: receiptPaginationRequest.pageSize,
-  });
-  const receiptPagination = {
-    page: receiptPage,
-    pageSize: receiptPaginationRequest.pageSize,
-    totalItems: totalReceipts,
-    totalPages: receiptTotalPages,
-  };
-
   return {
-    data: {
-      orders: orders.map(({ shipDate: _shipDate, releaseDate: _releaseDate, createdAt: _createdAt, ...row }) => row),
-      orderPagination,
-      receipts: receipts.map((row) => ({
-        id: row.id,
-        receiptNo: row.receiptNo,
-        orderNo: row.orderNo,
-        invNo: row.invNo,
-        usd: Number(row.usd),
-        status: row.status,
-        date: toDateText(row.date),
-        createdAt: row.createdAt.toISOString(),
-      })),
-      receiptPagination,
-    },
-    message: `客户ORDER_NAME历史已加载，共 ${orderPagination.totalItems} 条订单`,
+    ...result,
+    message: `客户ORDER_NAME历史已加载，共 ${result.data.orderPagination.totalItems} 条订单`,
   };
 }

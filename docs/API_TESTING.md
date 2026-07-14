@@ -23,6 +23,22 @@ Copy `.env.example` and fill:
   - `OCR_API_KEY`
   - `OCR_MODEL`
 
+## 2.1 Dashboard customer history search
+
+All logged-in roles can call this endpoint. Results are restricted to the current account's existing customer, order, and receipt visibility scope.
+
+```bash
+# Search starts only when this request is sent.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-history-search?action=search&query=PIKIN"
+
+# Open the selected customer's combined ORDER_NAME history.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-history-search?action=history&customerId=CUSTOMER_ID&orderPage=1&receiptPage=1"
+```
+
+`MARK / ORDER_NAME / ORDER NO` use exact normalized matching. `NAME` supports case-insensitive contains matching. The history action returns all visible ORDER_NAME groups for the selected customer while keeping Historical Orders and Recent Receipts independently paginated.
+
 ## 3. Common test flow (curl)
 
 ```bash

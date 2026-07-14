@@ -116,6 +116,14 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/dashboard/customer-history-search',
+    description: 'Account-scoped Dashboard customer and payment history search',
+    actions: [
+      { action: 'search', method: 'GET', description: 'Find every visible customer by exact MARK/ORDER_NAME/ORDER NO or partial NAME', bodyExample: { query: 'action=search&query=PIKIN' } },
+      { action: 'history', method: 'GET', description: 'Load visible orders across all ORDER_NAME values and recent receipts for one matched customer', bodyExample: { query: 'action=history&customerId=customer-id&orderPage=1&receiptPage=1' } },
+    ],
+  },
+  {
     endpoint: '/api/receipt',
     description: 'Receipt OCR and lifecycle',
     actions: [

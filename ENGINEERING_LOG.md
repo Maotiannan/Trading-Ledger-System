@@ -14,7 +14,7 @@
 
 - [x] Next 16 worktree 构建兼容：确认 Turbopack 会拒绝隔离 worktree 中指向主仓库的 `node_modules` 软链接；API/E2E 隔离启动和正式 `npm run build` 显式固定为官方 Webpack 模式，避免 agent 在 worktree 内出现与业务代码无关的 panic。临时 MariaDB project/volume 均由清理钩子销毁，现有业务容器未重启，MySQL/NAS 未触碰；Webpack 生产构建和两类隔离测试已通过 ✅ 2026-07-15
 
-- [x] GitHub Actions 首次登录 E2E 稳定性：CI 首轮执行中登录 API 与 `/dashboard` 均成功，但开发服务器冷启动下页面导航耗时超过 Playwright 默认 5 秒，导致 `auth-navigation` 误报失败，其他 8 条用例正常。本地隔离复现首条导航耗时 10.1 秒后，将登录 URL 断言改为最多 15 秒的条件等待；到达目标即继续，不增加固定休眠、不修改产品登录逻辑。isolated Playwright 9/9 通过 ✅ 2026-07-15
+- [x] GitHub Actions E2E 路由等待稳定性：CI 首轮中登录 API 与 `/dashboard` 均成功，但开发模式页面切换超过 Playwright 默认 5 秒，导致登录 URL 误报；将登录等待放宽后，第二轮又在 Dashboard → Invoice 的同类 5 秒断言处失败，证明问题属于全局路由等待而非登录业务。Playwright 统一设置条件断言最多 15 秒、单条用例最多 60 秒，到达目标即继续，不增加固定休眠、不修改产品逻辑；本地隔离曾复现首条导航耗时 10.1 秒，isolated Playwright 9/9 通过 ✅ 2026-07-15
 
 - [x] Orders 确认日期持久化：`OrderTracker` 新增可空 `confirmedAt`，迁移对当前 `Confirmed` 历史记录使用 `updatedAt` 做一次性近似回填；后续由服务端统一执行“进入 Confirmed 记录当前时间、离开 Confirmed 清空、无状态变化或仅改备注时保持”的规则，并与状态在同一次 Prisma 写入中提交。Orders 表格在 `DEPOSIT` 右侧新增 `CONFIRMED DATE`，复用 `Africa/Conakry` 全局时区显示 `DD/MM/YYYY`。状态审计增加前后状态与确认时间。字段位于现有 MySQL `trading_ledger`，无新增 NAS/COS 路径；部署前创建数据库备份。测试：确认时间内核、OrderTracker service/UI、isolated API 25 状态生命周期 ✅ 2026-07-14
 

@@ -20,5 +20,5 @@ export async function loginAsAdmin(page: Page) {
   await page.getByLabel(/邮箱|Email/i).fill(adminEmail);
   await page.getByLabel(/密码|Password/i).fill(adminPassword);
   await page.getByRole('button', { name: /登录|log in|login/i }).click();
-  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/dashboard$/);
 }

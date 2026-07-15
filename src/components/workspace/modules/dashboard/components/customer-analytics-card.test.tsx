@@ -236,4 +236,35 @@ describe('CustomerAnalyticsCard', () => {
       year: 2026,
     });
   });
+
+  it('opens the active metric detail dialog and loads evidence lazily', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      const params = new URL(`https://example.com/${endpoint}`).searchParams;
+      if (params.get('action') === 'detail') {
+        return {
+          success: true,
+          data: {
+            metric: 'annual-amount',
+            asOf: '2026-07-15T12:00:00.000Z',
+            settings,
+            period: { start: '2026-01-01T00:00:00.000Z', endExclusive: '2027-01-01T00:00:00.000Z' },
+            availableYears: [2026],
+            quality: response('annual-amount', []).quality,
+            customer: { id: 'customer-1', companyName: 'Customer 1', name: 'Person 1', mark: 'MARK-1' },
+            value: 1000,
+            detail: { customerId: 'customer-1', total: 1000, orders: [] },
+          },
+        };
+      }
+      return { success: true, data: response('annual-amount', [row(1)]) };
+    });
+    render(<CustomerAnalyticsCard initialYear={2026} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Customer 1' }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(mockApiCall).toHaveBeenCalledWith(
+      'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-1&year=2026',
+    );
+  });
 });

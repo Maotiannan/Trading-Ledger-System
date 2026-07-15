@@ -15,6 +15,7 @@ import type {
   CustomerAnalyticsRankingRow,
 } from '@/lib/customer-analytics-types';
 import { CustomerAnalyticsHint, CustomerAnalyticsRiskIndicator } from './customer-analytics-risk-indicator';
+import { CustomerAnalyticsDetailDialog } from './customer-analytics-detail-dialog';
 import { DashboardCardPagination } from './dashboard-card-pagination';
 
 const PAGE_SIZE = 10;
@@ -74,6 +75,7 @@ export function CustomerAnalyticsCard({
   const [activeMetric, setActiveMetric] = useState<CustomerAnalyticsMetric>('annual-amount');
   const [selectedYear, setSelectedYear] = useState(initialYear);
   const [metricState, setMetricState] = useState<MetricState>(emptyMetricState);
+  const [selectedDetail, setSelectedDetail] = useState<CustomerAnalyticsOpenDetail | null>(null);
   const requestSequence = useRef<Record<CustomerAnalyticsMetric, number>>({
     'annual-amount': 0,
     'payment-capacity': 0,
@@ -223,7 +225,21 @@ export function CustomerAnalyticsCard({
     );
   };
 
+  const openDetail = (row: CustomerAnalyticsRankingRow) => {
+    const selection: CustomerAnalyticsOpenDetail = {
+      metric: activeMetric,
+      row,
+      ...(activeMetric === 'annual-amount' ? { year: selectedYear } : {}),
+    };
+    if (onOpenDetail) {
+      onOpenDetail(selection);
+      return;
+    }
+    setSelectedDetail(selection);
+  };
+
   return (
+    <>
     <Card data-testid="customer-analytics-card" className="flex h-full flex-col">
       <CardHeader className="space-y-2">
         <div className="flex items-start justify-between gap-3">
@@ -300,20 +316,12 @@ export function CustomerAnalyticsCard({
                       className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       onClick={(event) => {
                         if ((event.target as HTMLElement).closest('button')) return;
-                        onOpenDetail?.({
-                          metric: activeMetric,
-                          row,
-                          ...(activeMetric === 'annual-amount' ? { year: selectedYear } : {}),
-                        });
+                        openDetail(row);
                       }}
                       onKeyDown={(event) => {
                         if (event.key !== 'Enter' && event.key !== ' ') return;
                         event.preventDefault();
-                        onOpenDetail?.({
-                          metric: activeMetric,
-                          row,
-                          ...(activeMetric === 'annual-amount' ? { year: selectedYear } : {}),
-                        });
+                        openDetail(row);
                       }}
                     >
                       <TableCell>{row.rank}</TableCell>
@@ -322,11 +330,7 @@ export function CustomerAnalyticsCard({
                           type="button"
                           title={row.customerName || row.mark || '-'}
                           className="block max-w-[10rem] truncate text-left font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[14rem]"
-                          onClick={() => onOpenDetail?.({
-                            metric: activeMetric,
-                            row,
-                            ...(activeMetric === 'annual-amount' ? { year: selectedYear } : {}),
-                          })}
+                          onClick={() => openDetail(row)}
                         >
                           {row.customerName || row.mark || '-'}
                         </button>
@@ -357,5 +361,18 @@ export function CustomerAnalyticsCard({
         )}
       </CardContent>
     </Card>
+    <CustomerAnalyticsDetailDialog
+      open={Boolean(selectedDetail)}
+      metric={selectedDetail?.metric || 'annual-amount'}
+      customer={selectedDetail?.row || null}
+      rankingAsOf={selectedDetail
+        ? metricState[selectedDetail.metric].response?.asOf || null
+        : null}
+      year={selectedDetail?.year}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setSelectedDetail(null);
+      }}
+    />
+    </>
   );
 }

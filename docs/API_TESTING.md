@@ -57,6 +57,61 @@ curl -b cookie.txt "http://127.0.0.1/api/orders?search=ORDER-001"
 
 The list response returns `confirmedAt` as an ISO timestamp or `null`. The Orders page formats it as `DD/MM/YYYY` in `Africa/Conakry`.
 
+## 2.3 Dashboard customer analytics
+
+All logged-in roles can read customer analytics. Ranking and detail results use the same management-tree visibility rules as the underlying customers, finance orders, and receipts. A detail request for a customer outside the current account scope returns `404`.
+
+```bash
+# Released invoice amount in one natural year.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=annual-amount&year=2026"
+
+# Average receipts across the configured trailing completed months.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=payment-capacity"
+
+# Amount-weighted payment-cycle ranking.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=payment-cycle"
+
+# Evidence for one ranking row. Include year only for annual-amount.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=CUSTOMER_ID&year=2026"
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=payment-capacity&customerId=CUSTOMER_ID"
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=payment-cycle&customerId=CUSTOMER_ID"
+```
+
+The API calculates results at request time on the server. Annual amount uses invoice `releaseDate`, not ship date. Payment capacity uses the previous completed Conakry calendar months and includes zero-payment months. Receipt calculations include every formal status except `SIGNING_PENDING`, prefer the receipt business date, fall back to creation time when missing, and ignore future-dated receipts. Ranking rows and detail evidence come from the same backend calculation.
+
+Only ADMIN accounts can change the shared analytics settings. The server validates all risk thresholds together and rejects a reversed or partially invalid sequence without saving any field:
+
+```bash
+curl -b cookie.txt -X POST http://127.0.0.1/api/settings \
+  -H "Content-Type: application/json" \
+  --data '{
+    "action":"update-config",
+    "settings":{
+      "CUSTOMER_ANALYTICS_LOOKBACK_MONTHS":"12",
+      "CUSTOMER_ANALYTICS_NORMAL_DAYS":"30",
+      "CUSTOMER_ANALYTICS_MILD_DELAY_DAYS":"60",
+      "CUSTOMER_ANALYTICS_DELAY_DAYS":"90",
+      "CUSTOMER_ANALYTICS_WARNING_DAYS":"120",
+      "CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS":"150",
+      "CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS":"180"
+    }
+  }'
+```
+
+Automated isolated regression:
+
+```bash
+npm run test:api:isolated -- --case 36-dashboard-customer-analytics
+```
+
+This case verifies USER/ADMIN visibility, all three rankings and details, zero-payment customers, receipt de-duplication, settings authorization, and transactional threshold validation against a temporary MariaDB instance.
+
 ## 3. Common test flow (curl)
 
 ```bash

@@ -8,6 +8,7 @@ import { APP_VERSION } from '@/lib/app-version';
 import {
   BranchPurgeCard,
   CollapsibleSettingsSection,
+  CustomerAnalyticsSettingsCard,
   DashboardSettingsCard,
   ExcelTokenCard,
   PasswordSettingsCard,
@@ -286,6 +287,18 @@ export function SettingsManager() {
           onPurgeFormChange={setPurgeForm}
           onTogglePurgeModule={togglePurgeModule}
           onSubmit={handlePurgeBranch}
+        />
+      </CollapsibleSettingsSection>
+
+      <CollapsibleSettingsSection title={tx('客户分析设置', 'Customer Analytics Settings')}>
+        <CustomerAnalyticsSettingsCard
+          loading={loading}
+          saving={savingConfig}
+          canEdit={canEditConfig}
+          config={config}
+          tx={tx}
+          onFieldChange={updateConfigField}
+          onSave={handleSaveConfig}
         />
       </CollapsibleSettingsSection>
 

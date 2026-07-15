@@ -124,6 +124,14 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/dashboard/customer-analytics',
+    description: 'Account-scoped live customer analytics rankings and calculation evidence',
+    actions: [
+      { action: 'ranking', method: 'GET', description: 'Load annual amount, payment capacity, or payment-cycle customer ranking', bodyExample: { query: 'action=ranking&metric=annual-amount&year=2026' } },
+      { action: 'detail', method: 'GET', description: 'Load calculation evidence for one visible customer and metric', bodyExample: { query: 'action=detail&metric=payment-cycle&customerId=customer-id' } },
+    ],
+  },
+  {
     endpoint: '/api/receipt',
     description: 'Receipt OCR and lifecycle',
     actions: [

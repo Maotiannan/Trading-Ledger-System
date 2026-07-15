@@ -14,6 +14,8 @@
 
 - [x] Next 16 worktree 构建兼容：确认 Turbopack 会拒绝隔离 worktree 中指向主仓库的 `node_modules` 软链接；API/E2E 隔离启动和正式 `npm run build` 显式固定为官方 Webpack 模式，避免 agent 在 worktree 内出现与业务代码无关的 panic。临时 MariaDB project/volume 均由清理钩子销毁，现有业务容器未重启，MySQL/NAS 未触碰；Webpack 生产构建和两类隔离测试已通过 ✅ 2026-07-15
 
+- [x] GitHub Actions 首次登录 E2E 稳定性：CI 首轮执行中登录 API 与 `/dashboard` 均成功，但开发服务器冷启动下页面导航耗时超过 Playwright 默认 5 秒，导致 `auth-navigation` 误报失败，其他 8 条用例正常。本地隔离复现首条导航耗时 10.1 秒后，将登录 URL 断言改为最多 15 秒的条件等待；到达目标即继续，不增加固定休眠、不修改产品登录逻辑。isolated Playwright 9/9 通过 ✅ 2026-07-15
+
 - [x] Orders 确认日期持久化：`OrderTracker` 新增可空 `confirmedAt`，迁移对当前 `Confirmed` 历史记录使用 `updatedAt` 做一次性近似回填；后续由服务端统一执行“进入 Confirmed 记录当前时间、离开 Confirmed 清空、无状态变化或仅改备注时保持”的规则，并与状态在同一次 Prisma 写入中提交。Orders 表格在 `DEPOSIT` 右侧新增 `CONFIRMED DATE`，复用 `Africa/Conakry` 全局时区显示 `DD/MM/YYYY`。状态审计增加前后状态与确认时间。字段位于现有 MySQL `trading_ledger`，无新增 NAS/COS 路径；部署前创建数据库备份。测试：确认时间内核、OrderTracker service/UI、isolated API 25 状态生命周期 ✅ 2026-07-14
 
 - [x] Dashboard 客户历史订单/付款搜索：保留旧 `order-receipt-search` 卡片 ID 以兼容账号布局偏好，替换旧单订单收据查询服务和 API；新增 `dashboard-customer-history-service` 与 `/api/dashboard/customer-history-search`，精确匹配标准化 `MARK / ORDER_NAME / ORDER NO`，`NAME` 使用不区分大小写的包含匹配，返回所有命中且当前账号可见的客户。抽出 `customer-history-service` 作为 Customer Management 与 Dashboard 共用历史内核，统一实时余额、排序、分页和收据图片字段；Dashboard 点击同一客户任意 `MARK / ORDER NAME / NAME` 都打开一份合并全部 ORDER_NAME 的历史弹窗。搜索结果区约三行高并滚动，不再分页；USER/SALES/ADMIN 均可使用且复用订单、收据可见范围。删除旧 `/api/dashboard/receipt-search` 与重复服务。无数据库、NAS/COS 路径或备份范围变更。测试：服务、route、API catalog、resource visibility、Customer Manager、Dashboard、共享历史弹窗及 isolated API 35 权限链路 ✅ 2026-07-14

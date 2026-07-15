@@ -318,6 +318,7 @@ export default async function run(t) {
     json: {
       action: 'update-config',
       settings: {
+        ...validAnalyticsSettings,
         CUSTOMER_ANALYTICS_NORMAL_DAYS: '62',
         CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '32',
       },

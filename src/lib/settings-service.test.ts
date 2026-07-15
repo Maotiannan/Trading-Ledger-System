@@ -175,6 +175,16 @@ const mockVerifyPassword = verifyPassword as jest.Mock;
 const mockTestOcrConnectivity = testOcrConnectivity as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 
+const validAnalyticsSettings = {
+  CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '18',
+  CUSTOMER_ANALYTICS_NORMAL_DAYS: '35',
+  CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '65',
+  CUSTOMER_ANALYTICS_DELAY_DAYS: '95',
+  CUSTOMER_ANALYTICS_WARNING_DAYS: '125',
+  CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: '155',
+  CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: '185',
+};
+
 describe('settings-service', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -725,8 +735,19 @@ describe('settings-service', () => {
     });
   });
 
+  it('requires all customer analytics rules in one atomic submission', async () => {
+    await expect(updateSystemSettings(makeUser(), {
+      CUSTOMER_ANALYTICS_NORMAL_DAYS: '31',
+    })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      status: 400,
+    });
+
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+    expect(mockDb.systemSetting.upsert).not.toHaveBeenCalled();
+  });
+
   it.each([
-    ['partial update conflicting with stored thresholds', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '61' }],
     ['reversed thresholds', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '60', CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '30' }],
     ['equal thresholds', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '60', CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '60' }],
     ['decimal threshold', { CUSTOMER_ANALYTICS_DELAY_DAYS: '90.5' }],
@@ -736,7 +757,10 @@ describe('settings-service', () => {
     ['decimal lookback', { CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '12.5' }],
     ['excessive lookback', { CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '61' }],
   ])('rejects invalid customer analytics %s without side effects', async (_label, update) => {
-    await expect(updateSystemSettings(makeUser(), update)).rejects.toMatchObject({
+    await expect(updateSystemSettings(makeUser(), {
+      ...validAnalyticsSettings,
+      ...update,
+    })).rejects.toMatchObject({
       code: 'BAD_REQUEST',
       status: 400,
     });
@@ -766,15 +790,7 @@ describe('settings-service', () => {
   it('transactionally saves valid customer analytics settings and audits before and after values', async () => {
     mockDb.systemSetting.upsert.mockResolvedValue(undefined);
 
-    const result = await updateSystemSettings(makeUser(), {
-      CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '18',
-      CUSTOMER_ANALYTICS_NORMAL_DAYS: '35',
-      CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '65',
-      CUSTOMER_ANALYTICS_DELAY_DAYS: '95',
-      CUSTOMER_ANALYTICS_WARNING_DAYS: '125',
-      CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: '155',
-      CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: '185',
-    });
+    const result = await updateSystemSettings(makeUser(), validAnalyticsSettings);
 
     expect(result).toEqual({ message: '配置已更新' });
     expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
@@ -823,6 +839,30 @@ describe('settings-service', () => {
       metadata: expect.objectContaining({
         updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE'],
       }),
+    }));
+  });
+
+  it('allows unrelated settings updates when stored analytics rules are malformed', async () => {
+    mockGetSystemSettingsWithDefaults.mockResolvedValueOnce({
+      OCR_DISABLED: 'false',
+      OCR_API_KEY: 'old-secret',
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
+      SWIFT_WARNING_TOLERANCE: '5',
+      SWIFT_REJECT_TOLERANCE: '50',
+      SETTINGS_AUDIT_MAX_PAGE_SIZE: '100',
+      SETTINGS_AUDIT_EXPORT_MAX_ROWS: '5000',
+      ...validAnalyticsSettings,
+      CUSTOMER_ANALYTICS_NORMAL_DAYS: '100',
+      CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '50',
+    });
+    mockDb.systemSetting.upsert.mockResolvedValue(undefined);
+
+    const result = await updateSystemSettings(makeUser(), { OCR_DISABLED: 'true' });
+
+    expect(result).toEqual({ message: '配置已更新' });
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(1);
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { key: 'OCR_DISABLED' },
     }));
   });
 

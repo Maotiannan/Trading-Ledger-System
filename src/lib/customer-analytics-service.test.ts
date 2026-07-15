@@ -286,6 +286,10 @@ describe('customer analytics service', () => {
         durationMs: expect.any(Number),
       }),
     );
+    const rankingLog = mockInfo.mock.calls.find(
+      ([message]) => message === 'Customer analytics ranking calculated',
+    )?.[1];
+    expect(rankingLog?.quality).not.toHaveProperty('missingReleaseDateAmount');
   });
 
   it('passes only rows returned by visibility-scoped bulk queries to the calculator', async () => {
@@ -330,7 +334,7 @@ describe('customer analytics service', () => {
           }],
         },
       },
-      quality,
+      quality: { ...quality, missingReleaseDateAmount: 5000 },
     });
 
     const result = await getCustomerAnalyticsDetail(currentUser, {
@@ -372,6 +376,10 @@ describe('customer analytics service', () => {
         })],
       },
     }));
+    const detailLog = mockInfo.mock.calls.find(
+      ([message]) => message === 'Customer analytics detail calculated',
+    )?.[1];
+    expect(detailLog?.quality).not.toHaveProperty('missingReleaseDateAmount');
   });
 
   it('returns not found without querying orders for an out-of-scope customer', async () => {

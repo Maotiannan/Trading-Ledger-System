@@ -15,6 +15,7 @@ import type {
   CustomerAnalyticsMetric,
   CustomerAnalyticsOrderInput,
   CustomerAnalyticsPeriod,
+  CustomerAnalyticsQuality,
   CustomerAnalyticsRankingResponse,
   CustomerAnalyticsReceiptInput,
   CustomerAnalyticsSettings,
@@ -228,6 +229,17 @@ function combineScope<T extends Record<string, unknown>>(
   return { AND: [identity, scope] };
 }
 
+function qualityForLog(quality: CustomerAnalyticsQuality) {
+  return {
+    missingReleaseDateOrders: quality.missingReleaseDateOrders,
+    receiptDateFallbacks: quality.receiptDateFallbacks,
+    unboundReceipts: quality.unboundReceipts,
+    invalidOrderAmounts: quality.invalidOrderAmounts,
+    invalidReceiptAmounts: quality.invalidReceiptAmounts,
+    futureDatedReceipts: quality.futureDatedReceipts,
+  };
+}
+
 export async function getCustomerAnalyticsRanking(
   currentUser: CurrentUser,
   request: CustomerAnalyticsRequest,
@@ -278,7 +290,7 @@ export async function getCustomerAnalyticsRanking(
     visibleCustomers: customers.length,
     visibleOrders: orders.length,
     resultCustomers: calculated.items.length,
-    quality,
+    quality: qualityForLog(quality),
   });
   return response;
 }
@@ -353,7 +365,7 @@ export async function getCustomerAnalyticsDetail(
     durationMs: Date.now() - startedAt,
     visibleOrders: orders.length,
     hasResult: Boolean(row),
-    quality,
+    quality: qualityForLog(quality),
   });
   return response;
 }

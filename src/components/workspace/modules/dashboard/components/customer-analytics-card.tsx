@@ -55,9 +55,9 @@ export type CustomerAnalyticsCardProps = {
   onOpenDetail?: (input: CustomerAnalyticsOpenDetail) => void;
 };
 
-function metricEndpoint(metric: CustomerAnalyticsMetric, year: number): string {
+function metricEndpoint(metric: CustomerAnalyticsMetric, year?: number): string {
   const query = new URLSearchParams({ action: 'ranking', metric });
-  if (metric === 'annual-amount') query.set('year', String(year));
+  if (metric === 'annual-amount' && year !== undefined) query.set('year', String(year));
   return `dashboard/customer-analytics?${query.toString()}`;
 }
 
@@ -68,12 +68,12 @@ function readRankingResponse(value: unknown): CustomerAnalyticsRankingResponse |
 }
 
 export function CustomerAnalyticsCard({
-  initialYear = getAppYear(),
+  initialYear,
   onOpenDetail,
 }: CustomerAnalyticsCardProps) {
   const tx = useUiText();
   const [activeMetric, setActiveMetric] = useState<CustomerAnalyticsMetric>('annual-amount');
-  const [selectedYear, setSelectedYear] = useState(initialYear);
+  const [selectedYear, setSelectedYear] = useState<number | null>(initialYear ?? null);
   const [metricState, setMetricState] = useState<MetricState>(emptyMetricState);
   const [selectedDetail, setSelectedDetail] = useState<CustomerAnalyticsOpenDetail | null>(null);
   const requestSequence = useRef<Record<CustomerAnalyticsMetric, number>>({
@@ -84,7 +84,7 @@ export function CustomerAnalyticsCard({
 
   const loadMetric = useCallback(async (
     metric: CustomerAnalyticsMetric,
-    year: number,
+    year?: number,
   ) => {
     const requestId = requestSequence.current[metric] + 1;
     requestSequence.current[metric] = requestId;
@@ -99,6 +99,10 @@ export function CustomerAnalyticsCard({
         throw new Error(String(result.message || result.error || 'Invalid customer analytics response'));
       }
       if (requestSequence.current[metric] !== requestId) return;
+      const resolvedYear = metric === 'annual-amount'
+        ? (year ?? getAppYear(response.period.start))
+        : undefined;
+      if (resolvedYear !== undefined) setSelectedYear(resolvedYear);
       setMetricState((current) => ({
         ...current,
         [metric]: {
@@ -106,7 +110,7 @@ export function CustomerAnalyticsCard({
           error: '',
           response,
           page: 1,
-          ...(metric === 'annual-amount' ? { year } : {}),
+          ...(resolvedYear === undefined ? {} : { year: resolvedYear }),
         },
       }));
     } catch (error) {
@@ -133,9 +137,11 @@ export function CustomerAnalyticsCard({
     const metric = value as CustomerAnalyticsMetric;
     setActiveMetric(metric);
     const state = metricState[metric];
-    const responseIsCurrent = metric !== 'annual-amount' || state.year === selectedYear;
+    const responseIsCurrent = metric !== 'annual-amount'
+      || selectedYear === null
+      || state.year === selectedYear;
     if (!state.loading && (!state.response || !responseIsCurrent)) {
-      void loadMetric(metric, selectedYear);
+      void loadMetric(metric, selectedYear ?? undefined);
     }
   };
 
@@ -145,14 +151,16 @@ export function CustomerAnalyticsCard({
   };
 
   const activeState = metricState[activeMetric];
-  const response = activeMetric === 'annual-amount' && activeState.year !== selectedYear
+  const response = activeMetric === 'annual-amount'
+    && selectedYear !== null
+    && activeState.year !== selectedYear
     ? null
     : activeState.response;
   const totalPages = Math.max(1, Math.ceil((response?.items.length || 0) / PAGE_SIZE));
   const page = Math.min(activeState.page, totalPages);
   const rows = (response?.items || []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const yearOptions = useMemo(() => Array.from(new Set([
-    selectedYear,
+    ...(selectedYear === null ? [] : [selectedYear]),
     ...(metricState['annual-amount'].response?.availableYears || []),
   ])).sort((left, right) => right - left), [metricState, selectedYear]);
 
@@ -205,8 +213,8 @@ export function CustomerAnalyticsCard({
       {response ? (
         <p className="text-muted-foreground">
           {tx(
-            `计算区间：${formatAppDate(response.period.start)} 至 ${formatAppDate(new Date(new Date(response.period.endExclusive).getTime() - 86_400_000))}；${response.quality.missingReleaseDateOrders} 个订单缺少放单日期；${response.quality.receiptDateFallbacks} 张收据使用创建时间；${response.quality.unboundReceipts} 张收据未绑定订单/客户；${response.quality.invalidOrderAmounts + response.quality.invalidReceiptAmounts} 条金额数据无效；${response.quality.futureDatedReceipts} 张未来日期收据被排除。`,
-            `Period: ${formatAppDate(response.period.start)} to ${formatAppDate(new Date(new Date(response.period.endExclusive).getTime() - 86_400_000))}; ${response.quality.missingReleaseDateOrders} orders missing release dates; ${response.quality.receiptDateFallbacks} receipt${response.quality.receiptDateFallbacks === 1 ? '' : 's'} used its creation time; ${response.quality.unboundReceipts} unbound receipts; ${response.quality.invalidOrderAmounts + response.quality.invalidReceiptAmounts} invalid amount rows; ${response.quality.futureDatedReceipts} future-dated receipts excluded.`,
+            `计算区间：${formatAppDate(response.period.start)} 至 ${formatAppDate(new Date(new Date(response.period.endExclusive).getTime() - 86_400_000))}；${response.quality.missingReleaseDateOrders} 个订单缺少放单日期；缺少放单日期而排除的金额为 ${formatUsdAmount(response.quality.missingReleaseDateAmount, '$0')}；${response.quality.receiptDateFallbacks} 张收据使用创建时间；${response.quality.unboundReceipts} 张收据未绑定订单/客户；${response.quality.invalidOrderAmounts + response.quality.invalidReceiptAmounts} 条金额数据无效；${response.quality.futureDatedReceipts} 张未来日期收据被排除。`,
+            `Period: ${formatAppDate(response.period.start)} to ${formatAppDate(new Date(new Date(response.period.endExclusive).getTime() - 86_400_000))}; ${response.quality.missingReleaseDateOrders} orders missing release dates; ${formatUsdAmount(response.quality.missingReleaseDateAmount, '$0')} excluded with missing release dates; ${response.quality.receiptDateFallbacks} receipt${response.quality.receiptDateFallbacks === 1 ? '' : 's'} used its creation time; ${response.quality.unboundReceipts} unbound receipts; ${response.quality.invalidOrderAmounts + response.quality.invalidReceiptAmounts} invalid amount rows; ${response.quality.futureDatedReceipts} future-dated receipts excluded.`,
           )}
         </p>
       ) : null}
@@ -226,10 +234,13 @@ export function CustomerAnalyticsCard({
   };
 
   const openDetail = (row: CustomerAnalyticsRankingRow) => {
+    const detailYear = activeMetric === 'annual-amount'
+      ? (activeState.year ?? selectedYear ?? undefined)
+      : undefined;
     const selection: CustomerAnalyticsOpenDetail = {
       metric: activeMetric,
       row,
-      ...(activeMetric === 'annual-amount' ? { year: selectedYear } : {}),
+      ...(detailYear === undefined ? {} : { year: detailYear }),
     };
     if (onOpenDetail) {
       onOpenDetail(selection);
@@ -272,7 +283,7 @@ export function CustomerAnalyticsCard({
               <span>{tx('年份', 'Year')}</span>
               <select
                 aria-label={tx('分析年份', 'Analysis year')}
-                value={selectedYear}
+                value={selectedYear ?? ''}
                 onChange={(event) => handleYearChange(Number(event.target.value))}
                 className="rounded-md border bg-background px-2 py-1.5 text-sm text-foreground"
               >
@@ -290,7 +301,7 @@ export function CustomerAnalyticsCard({
         ) : activeState.error ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm text-destructive">{activeState.error}</p>
-            <Button variant="outline" size="sm" onClick={() => void loadMetric(activeMetric, selectedYear)}>
+            <Button variant="outline" size="sm" onClick={() => void loadMetric(activeMetric, selectedYear ?? undefined)}>
               <RefreshCw className="mr-2 h-4 w-4" />
               {tx('重试', 'Retry')}
             </Button>
@@ -367,6 +378,9 @@ export function CustomerAnalyticsCard({
       customer={selectedDetail?.row || null}
       rankingAsOf={selectedDetail
         ? metricState[selectedDetail.metric].response?.asOf || null
+        : null}
+      rankingSettings={selectedDetail
+        ? metricState[selectedDetail.metric].response?.settings || null
         : null}
       year={selectedDetail?.year}
       onOpenChange={(nextOpen) => {

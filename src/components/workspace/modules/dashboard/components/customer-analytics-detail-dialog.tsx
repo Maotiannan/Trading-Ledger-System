@@ -23,6 +23,7 @@ import type {
   CustomerAnalyticsDetailResponse,
   CustomerAnalyticsMetric,
   CustomerAnalyticsRankingRow,
+  CustomerAnalyticsSettings,
 } from '@/lib/customer-analytics-types';
 import { CustomerAnalyticsRiskIndicator } from './customer-analytics-risk-indicator';
 
@@ -37,6 +38,7 @@ export type CustomerAnalyticsDetailDialogProps = {
   metric: CustomerAnalyticsMetric;
   customer: CustomerAnalyticsRankingRow | null;
   rankingAsOf: string | null;
+  rankingSettings: CustomerAnalyticsSettings | null;
   year?: number;
   onOpenChange: (open: boolean) => void;
 };
@@ -45,6 +47,7 @@ function detailEndpoint(input: {
   metric: CustomerAnalyticsMetric;
   customerId: string;
   year?: number;
+  asOf?: string;
 }): string {
   const query = new URLSearchParams({
     action: 'detail',
@@ -54,7 +57,21 @@ function detailEndpoint(input: {
   if (input.metric === 'annual-amount' && input.year !== undefined) {
     query.set('year', String(input.year));
   }
+  if (input.asOf) query.set('asOf', input.asOf);
   return `dashboard/customer-analytics?${query.toString()}`;
+}
+
+function settingsMatch(
+  left: CustomerAnalyticsSettings,
+  right: CustomerAnalyticsSettings,
+): boolean {
+  return left.lookbackMonths === right.lookbackMonths
+    && left.normalDays === right.normalDays
+    && left.mildDelayDays === right.mildDelayDays
+    && left.delayDays === right.delayDays
+    && left.warningDays === right.warningDays
+    && left.doubleWarningDays === right.doubleWarningDays
+    && left.severeWarningDays === right.severeWarningDays;
 }
 
 function readDetailResponse(
@@ -224,6 +241,7 @@ export function CustomerAnalyticsDetailDialog({
   metric,
   customer,
   rankingAsOf,
+  rankingSettings,
   year,
   onOpenChange,
 }: CustomerAnalyticsDetailDialogProps) {
@@ -240,7 +258,12 @@ export function CustomerAnalyticsDetailDialog({
     setLoading(true);
     setError('');
     try {
-      const result = await apiCall(detailEndpoint({ metric, customerId: customer.customerId, year }));
+      const result = await apiCall(detailEndpoint({
+        metric,
+        customerId: customer.customerId,
+        year,
+        asOf: rankingAsOf || undefined,
+      }));
       const detail = result.success
         ? readDetailResponse(result.data, metric, customer.customerId)
         : null;
@@ -256,7 +279,7 @@ export function CustomerAnalyticsDetailDialog({
     } finally {
       if (requestSequence.current === requestId) setLoading(false);
     }
-  }, [customer, metric, tx, year]);
+  }, [customer, metric, rankingAsOf, tx, year]);
 
   useEffect(() => {
     if (!open || !customer) return undefined;
@@ -267,7 +290,10 @@ export function CustomerAnalyticsDetailDialog({
     };
   }, [customer, loadDetail, open]);
 
-  const refreshed = Boolean(response && rankingAsOf && response.asOf !== rankingAsOf);
+  const refreshed = Boolean(response && customer && (
+    response.value !== customer.value
+    || (rankingSettings && !settingsMatch(response.settings, rankingSettings))
+  ));
   const annualDetail = metric === 'annual-amount' ? response?.detail as CustomerAnalyticsAnnualDetailDto | null : null;
   const capacityDetail = metric === 'payment-capacity' ? response?.detail as CustomerAnalyticsCapacityDetailDto | null : null;
   const cycleDetail = metric === 'payment-cycle' ? response?.detail as CustomerAnalyticsCycleDetailDto | null : null;

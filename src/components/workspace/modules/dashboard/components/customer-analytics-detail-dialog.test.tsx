@@ -77,6 +77,7 @@ function renderDialog(overrides: Partial<React.ComponentProps<typeof CustomerAna
     metric: 'annual-amount',
     customer,
     rankingAsOf: '2026-07-15T12:00:00.000Z',
+    rankingSettings: settings,
     year: 2026,
     onOpenChange: jest.fn(),
     ...overrides,
@@ -111,7 +112,7 @@ describe('CustomerAnalyticsDetailDialog', () => {
 
     expect(await screen.findByText('ALPHA-01')).toBeInTheDocument();
     expect(mockApiCall).toHaveBeenCalledWith(
-      'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-a&year=2026',
+      'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-a&year=2026&asOf=2026-07-15T12%3A00%3A00.000Z',
     );
     const table = screen.getByRole('table');
     expect(within(table).getByText('ORDER NO')).toBeInTheDocument();
@@ -219,12 +220,40 @@ describe('CustomerAnalyticsDetailDialog', () => {
 
     mockApiCall.mockResolvedValueOnce({
       success: true,
-      data: detailResponse('payment-cycle', null, { asOf: '2026-07-15T12:00:00.000Z' }),
+      data: detailResponse('payment-cycle', null, {
+        asOf: '2026-07-15T11:00:00.000Z',
+        value: 11000,
+      }),
     });
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByText('Source data changed; this detail was refreshed.')).toBeInTheDocument();
     expect(screen.getByText('No calculation evidence for this customer.')).toBeInTheDocument();
+  });
+
+  it('does not claim source data changed from a timestamp difference alone', async () => {
+    mockApiCall.mockResolvedValue({
+      success: true,
+      data: detailResponse('annual-amount', null, { asOf: '2026-07-15T12:01:00.000Z' }),
+    });
+
+    renderDialog({ rankingAsOf: '2026-07-15T12:00:00.000Z' });
+
+    expect(await screen.findByText('No calculation evidence for this customer.')).toBeInTheDocument();
+    expect(screen.queryByText('Source data changed; this detail was refreshed.')).not.toBeInTheDocument();
+  });
+
+  it('reports refreshed evidence when the applied settings changed', async () => {
+    mockApiCall.mockResolvedValue({
+      success: true,
+      data: detailResponse('annual-amount', null, {
+        settings: { ...settings, normalDays: 31 },
+      }),
+    });
+
+    renderDialog();
+
+    expect(await screen.findByText('Source data changed; this detail was refreshed.')).toBeInTheDocument();
   });
 
   it('is viewport-bounded, scrolls internally, and closes with Escape', async () => {

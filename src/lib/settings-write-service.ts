@@ -131,6 +131,21 @@ async function validateSettingUpdates(
       value: String(settings[key] ?? ''),
     }));
 
+  const analyticsUpdates = updates.filter((item) => (
+    (customerAnalyticsSystemSettingKeys as readonly string[]).includes(item.key)
+  ));
+  if (analyticsUpdates.length > 0 && analyticsUpdates.length !== customerAnalyticsSystemSettingKeys.length) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '客户分析配置必须整组保存，请同时提交全部七项规则',
+      detail: {
+        requiredKeys: customerAnalyticsSystemSettingKeys,
+        submittedKeys: analyticsUpdates.map((item) => item.key),
+      },
+    });
+  }
+
   for (const item of updates) {
     if ((booleanSystemSettingKeys as readonly string[]).includes(item.key)) {
       validateBooleanSetting(item.key, item.value);
@@ -168,16 +183,19 @@ async function validateSettingUpdates(
     });
   }
 
-  const analyticsSettings = Object.fromEntries(
-    customerAnalyticsSystemSettingKeys.map((key) => [key, merged[key]]),
-  ) as Record<string, string>;
-  if (!parseCustomerAnalyticsSettings(analyticsSettings)) {
-    throw createApiError({
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: '客户分析天数必须按正常、轻微拖延、拖延、警告、加倍警告、严重警告严格递增',
-      detail: analyticsSettings,
-    });
+  if (analyticsUpdates.length > 0) {
+    const analyticsUpdateMap = new Map(analyticsUpdates.map((item) => [item.key, item.value]));
+    const analyticsSettings = Object.fromEntries(
+      customerAnalyticsSystemSettingKeys.map((key) => [key, analyticsUpdateMap.get(key) || '']),
+    ) as Record<string, string>;
+    if (!parseCustomerAnalyticsSettings(analyticsSettings)) {
+      throw createApiError({
+        code: 'BAD_REQUEST',
+        status: 400,
+        message: '客户分析天数必须按正常、轻微拖延、拖延、警告、加倍警告、严重警告严格递增',
+        detail: analyticsSettings,
+      });
+    }
   }
 
   return updates;

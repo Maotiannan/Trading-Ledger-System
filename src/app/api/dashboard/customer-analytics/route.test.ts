@@ -54,6 +54,10 @@ describe('dashboard customer analytics route', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('returns the selected natural-year order amount ranking', async () => {
     mockRanking.mockResolvedValue({ metric: 'annual-amount', items: [] });
 
@@ -65,6 +69,19 @@ describe('dashboard customer analytics route', () => {
       year: 2026,
     });
     expect(json).toEqual({ success: true, data: { metric: 'annual-amount', items: [] } });
+  });
+
+  it('defaults a missing annual year from the server Conakry clock', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-12-31T18:30:00.000Z'));
+    mockRanking.mockResolvedValue({ metric: 'annual-amount', items: [] });
+
+    const { response } = await call('action=ranking&metric=annual-amount');
+
+    expect(response.status).toBe(200);
+    expect(mockRanking).toHaveBeenCalledWith(currentUser, {
+      metric: 'annual-amount',
+      year: 2026,
+    });
   });
 
   it.each(['payment-capacity', 'payment-cycle'])(
@@ -92,6 +109,22 @@ describe('dashboard customer analytics route', () => {
     expect(json.success).toBe(true);
   });
 
+  it('reuses a valid ranking asOf for detail evidence', async () => {
+    mockDetail.mockResolvedValue({ metric: 'payment-cycle', customer: { id: 'customer-1' } });
+    const rankingAsOf = '2026-07-15T12:00:00.000Z';
+
+    const { response } = await call(
+      `action=detail&metric=payment-cycle&customerId=customer-1&asOf=${encodeURIComponent(rankingAsOf)}`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockDetail).toHaveBeenCalledWith(currentUser, {
+      metric: 'payment-cycle',
+      customerId: 'customer-1',
+      asOf: new Date(rankingAsOf),
+    });
+  });
+
   it('passes the selected year to annual customer detail', async () => {
     mockDetail.mockResolvedValue({ metric: 'annual-amount', customer: { id: 'customer-1' } });
 
@@ -108,9 +141,9 @@ describe('dashboard customer analytics route', () => {
   it.each([
     ['unknown action', 'action=unknown&metric=payment-cycle'],
     ['unknown metric', 'action=ranking&metric=credit-score'],
-    ['missing annual year', 'action=ranking&metric=annual-amount'],
     ['invalid annual year', 'action=ranking&metric=annual-amount&year=2026.5'],
     ['missing detail customer', 'action=detail&metric=payment-cycle'],
+    ['invalid detail asOf', 'action=detail&metric=payment-cycle&customerId=customer-1&asOf=not-a-date'],
   ])('returns a readable bad request for %s', async (_label, query) => {
     const { response, json } = await call(query);
 

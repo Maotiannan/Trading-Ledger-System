@@ -105,6 +105,15 @@ describe('CustomerAnalyticsCard', () => {
     expect(mockApiCall).toHaveBeenCalledTimes(2);
   });
 
+  it('lets the server choose the default annual year and adopts the response period', async () => {
+    render(<CustomerAnalyticsCard />);
+
+    await waitFor(() => expect(mockApiCall).toHaveBeenCalledWith(
+      'dashboard/customer-analytics?action=ranking&metric=annual-amount',
+    ));
+    expect(await screen.findByRole('combobox', { name: 'Analysis year' })).toHaveValue('2026');
+  });
+
   it('renders four row fields, keeps zero capacity rows, and reloads a selected year', async () => {
     mockApiCall.mockImplementation(async (endpoint: string) => {
       const metric = endpointMetric(endpoint);
@@ -184,6 +193,7 @@ describe('CustomerAnalyticsCard', () => {
     expect(help).toHaveTextContent('Deposits count as payments');
     expect(help).toHaveTextContent('30 / 60 / 90 / 120 / 150 / 180 days');
     expect(help).toHaveTextContent('2 orders missing release dates');
+    expect(help).toHaveTextContent('$5,000 excluded with missing release dates');
     expect(help).toHaveTextContent('1 receipt used its creation time');
   });
 
@@ -264,7 +274,7 @@ describe('CustomerAnalyticsCard', () => {
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(mockApiCall).toHaveBeenCalledWith(
-      'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-1&year=2026',
+      'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-1&year=2026&asOf=2026-07-15T12%3A00%3A00.000Z',
     );
   });
 });

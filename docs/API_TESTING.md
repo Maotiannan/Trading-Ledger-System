@@ -66,6 +66,10 @@ All logged-in roles can read customer analytics. Ranking and detail results use 
 curl -b cookie.txt \
   "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=annual-amount&year=2026"
 
+# Omitting year uses the current natural year from the server's Africa/Conakry clock.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=annual-amount"
+
 # Average receipts across the configured trailing completed months.
 curl -b cookie.txt \
   "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=payment-capacity"
@@ -74,18 +78,18 @@ curl -b cookie.txt \
 curl -b cookie.txt \
   "http://127.0.0.1/api/dashboard/customer-analytics?action=ranking&metric=payment-cycle"
 
-# Evidence for one ranking row. Include year only for annual-amount.
+# Evidence for one ranking row. Reuse the ranking response's asOf value so both calculations share one cutoff.
 curl -b cookie.txt \
-  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=CUSTOMER_ID&year=2026"
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=CUSTOMER_ID&year=2026&asOf=2026-07-15T12%3A00%3A00.000Z"
 curl -b cookie.txt \
-  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=payment-capacity&customerId=CUSTOMER_ID"
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=payment-capacity&customerId=CUSTOMER_ID&asOf=2026-07-15T12%3A00%3A00.000Z"
 curl -b cookie.txt \
-  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=payment-cycle&customerId=CUSTOMER_ID"
+  "http://127.0.0.1/api/dashboard/customer-analytics?action=detail&metric=payment-cycle&customerId=CUSTOMER_ID&asOf=2026-07-15T12%3A00%3A00.000Z"
 ```
 
-The API calculates results at request time on the server. Annual amount uses invoice `releaseDate`, not ship date. Payment capacity uses the previous completed Conakry calendar months and includes zero-payment months. Receipt calculations include every formal status except `SIGNING_PENDING`, prefer the receipt business date, fall back to creation time when missing, and ignore future-dated receipts. Ranking rows and detail evidence come from the same backend calculation.
+The API calculates results at request time on the server. Annual amount uses invoice `releaseDate`, not ship date. Payment capacity uses the previous completed Conakry calendar months and includes zero-payment months. Receipt calculations include every formal status except `SIGNING_PENDING`, prefer the receipt business date, fall back to creation time when missing, and ignore future-dated receipts. Ranking rows and detail evidence use the same backend calculator. Detail `asOf` is optional, must be a valid timestamp when supplied, and should be copied from the ranking response to keep the evidence on the same calculation cutoff.
 
-Only ADMIN accounts can change the shared analytics settings. The server validates all risk thresholds together and rejects a reversed or partially invalid sequence without saving any field:
+Only ADMIN accounts can change the shared analytics settings. If a request changes any analytics rule, it must submit all seven analytics keys together. The server validates and saves the complete set transactionally, rejecting missing, reversed, or invalid values without saving any field. Unrelated settings remain writable even if legacy analytics rows are malformed:
 
 ```bash
 curl -b cookie.txt -X POST http://127.0.0.1/api/settings \

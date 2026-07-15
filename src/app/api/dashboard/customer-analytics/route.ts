@@ -6,6 +6,7 @@ import {
   getCustomerAnalyticsRanking,
 } from '@/lib/customer-analytics-service';
 import type { CustomerAnalyticsMetric } from '@/lib/customer-analytics-types';
+import { getAppYear } from '@/lib/app-time';
 import { logger } from '@/lib/logger';
 import { withAuth } from '@/lib/route-auth';
 
@@ -30,8 +31,9 @@ function parseMetric(value: string | null): CustomerAnalyticsMetric {
 
 function parseAnnualYear(metric: CustomerAnalyticsMetric, value: string | null): number | undefined {
   if (metric !== 'annual-amount') return undefined;
+  if (!value?.trim()) return getAppYear();
   const year = Number(value);
-  if (!value || !Number.isInteger(year) || year < 1900 || year > 3000) {
+  if (!Number.isInteger(year) || year < 1900 || year > 3000) {
     throw createApiError({
       code: apiErrorCodes.BAD_REQUEST,
       status: 400,
@@ -40,6 +42,20 @@ function parseAnnualYear(metric: CustomerAnalyticsMetric, value: string | null):
     });
   }
   return year;
+}
+
+function parseDetailAsOf(value: string | null): Date | undefined {
+  if (!value?.trim()) return undefined;
+  const asOf = new Date(value);
+  if (!Number.isFinite(asOf.getTime())) {
+    throw createApiError({
+      code: apiErrorCodes.BAD_REQUEST,
+      status: 400,
+      message: '客户分析时间无效',
+      detail: { asOf: value },
+    });
+  }
+  return asOf;
 }
 
 export const GET = withAuth(async (request: NextRequest, currentUser) => {
@@ -73,10 +89,12 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         message: '缺少客户',
       });
     }
+    const asOf = parseDetailAsOf(searchParams.get('asOf'));
     const data = await getCustomerAnalyticsDetail(currentUser, {
       metric,
       customerId,
       ...(year === undefined ? {} : { year }),
+      ...(asOf === undefined ? {} : { asOf }),
     });
     return NextResponse.json({ success: true, data });
   } catch (error) {

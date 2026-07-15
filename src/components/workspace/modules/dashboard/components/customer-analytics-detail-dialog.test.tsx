@@ -1,6 +1,7 @@
 'use client';
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { apiCall, useUiText } from '@/components/workspace/shared';
 import { CustomerAnalyticsDetailDialog } from './customer-analytics-detail-dialog';
 import type {
@@ -273,5 +274,125 @@ describe('CustomerAnalyticsDetailDialog', () => {
 
     fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  });
+
+  it('does not render stale payment-capacity data as annual evidence while closing', async () => {
+    mockApiCall.mockResolvedValue({
+      success: true,
+      data: detailResponse('payment-capacity', {
+        customerId: 'customer-a',
+        total: 12000,
+        averageMonthly: 1000,
+        months: [],
+      }, { value: 1000 }),
+    });
+
+    function ClosingDialogHarness() {
+      const [open, setOpen] = useState(true);
+      return (
+        <CustomerAnalyticsDetailDialog
+          open={open}
+          metric={open ? 'payment-capacity' : 'annual-amount'}
+          customer={open ? customer : null}
+          rankingAsOf="2026-07-15T12:00:00.000Z"
+          rankingSettings={settings}
+          year={undefined}
+          onOpenChange={setOpen}
+        />
+      );
+    }
+
+    render(<ClosingDialogHarness />);
+
+    expect(await screen.findByText('Average per month')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('ignores a detail request that resolves after closing and reopening for another customer', async () => {
+    const customerB: CustomerAnalyticsRankingRow = {
+      ...customer,
+      customerId: 'customer-b',
+      customerName: 'Beta Company',
+      mark: 'BETA',
+      value: 5000,
+    };
+    let resolveStaleRequest!: (value: unknown) => void;
+    const staleRequest = new Promise((resolve) => { resolveStaleRequest = resolve; });
+    mockApiCall
+      .mockReturnValueOnce(staleRequest)
+      .mockResolvedValueOnce({
+        success: true,
+        data: detailResponse('annual-amount', {
+          customerId: 'customer-b',
+          total: 5000,
+          orders: [{
+            orderId: 'order-b',
+            orderNo: 'BETA-01',
+            invNo: 'INV-B',
+            releaseDate: '2026-03-01T00:00:00.000Z',
+            amount: 5000,
+          }],
+        }, {
+          customer: {
+            id: 'customer-b',
+            companyName: 'Beta Company',
+            name: 'Beta Person',
+            mark: 'BETA',
+          },
+          value: 5000,
+        }),
+      });
+
+    function ReopenDialogHarness() {
+      const [selection, setSelection] = useState<{
+        metric: CustomerAnalyticsMetric;
+        customer: CustomerAnalyticsRankingRow;
+      } | null>({ metric: 'payment-capacity', customer });
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => setSelection({ metric: 'annual-amount', customer: customerB })}
+          >
+            Open Beta
+          </button>
+          <CustomerAnalyticsDetailDialog
+            open={Boolean(selection)}
+            metric={selection?.metric || 'annual-amount'}
+            customer={selection?.customer || null}
+            rankingAsOf="2026-07-15T12:00:00.000Z"
+            rankingSettings={settings}
+            year={selection?.metric === 'annual-amount' ? 2026 : undefined}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setSelection(null);
+            }}
+          />
+        </>
+      );
+    }
+
+    render(<ReopenDialogHarness />);
+
+    expect(screen.getByText('Loading calculation evidence...')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open Beta' }));
+    expect(await screen.findByText('BETA-01')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveStaleRequest({
+        success: true,
+        data: detailResponse('payment-capacity', {
+          customerId: 'customer-a',
+          total: 12000,
+          averageMonthly: 1000,
+          months: [],
+        }, { value: 1000 }),
+      });
+    });
+
+    expect(screen.getByText('BETA-01')).toBeInTheDocument();
+    expect(screen.queryByText('Average per month')).not.toBeInTheDocument();
   });
 });

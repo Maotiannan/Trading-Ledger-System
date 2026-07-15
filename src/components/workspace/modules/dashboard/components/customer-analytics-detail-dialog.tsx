@@ -290,16 +290,32 @@ export function CustomerAnalyticsDetailDialog({
     };
   }, [customer, loadDetail, open]);
 
-  const refreshed = Boolean(response && customer && (
-    response.value !== customer.value
-    || (rankingSettings && !settingsMatch(response.settings, rankingSettings))
+  const currentResponse = response
+    && customer
+    && response.metric === metric
+    && response.customer?.id === customer.customerId
+    ? response
+    : null;
+  const refreshed = Boolean(currentResponse && customer && (
+    currentResponse.value !== customer.value
+    || (rankingSettings && !settingsMatch(currentResponse.settings, rankingSettings))
   ));
-  const annualDetail = metric === 'annual-amount' ? response?.detail as CustomerAnalyticsAnnualDetailDto | null : null;
-  const capacityDetail = metric === 'payment-capacity' ? response?.detail as CustomerAnalyticsCapacityDetailDto | null : null;
-  const cycleDetail = metric === 'payment-cycle' ? response?.detail as CustomerAnalyticsCycleDetailDto | null : null;
+  const annualDetail = metric === 'annual-amount' ? currentResponse?.detail as CustomerAnalyticsAnnualDetailDto | null : null;
+  const capacityDetail = metric === 'payment-capacity' ? currentResponse?.detail as CustomerAnalyticsCapacityDetailDto | null : null;
+  const cycleDetail = metric === 'payment-cycle' ? currentResponse?.detail as CustomerAnalyticsCycleDetailDto | null : null;
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      requestSequence.current += 1;
+      setResponse(null);
+      setError('');
+      setLoading(false);
+    }
+    onOpenChange(nextOpen);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:max-w-5xl">
         <DialogHeader className="shrink-0 border-b px-4 py-4 pr-12 sm:px-6 sm:pr-12">
           <DialogTitle>
@@ -307,8 +323,8 @@ export function CustomerAnalyticsDetailDialog({
           </DialogTitle>
           <DialogDescription>
             {tx(
-              `MARK：${customer?.mark || '-'}；计算时间：${formatAppDateTime(response?.asOf || rankingAsOf)}`,
-              `MARK: ${customer?.mark || '-'}; calculated at ${formatAppDateTime(response?.asOf || rankingAsOf)}`,
+              `MARK：${customer?.mark || '-'}；计算时间：${formatAppDateTime(currentResponse?.asOf || rankingAsOf)}`,
+              `MARK: ${customer?.mark || '-'}; calculated at ${formatAppDateTime(currentResponse?.asOf || rankingAsOf)}`,
             )}
           </DialogDescription>
         </DialogHeader>
@@ -325,7 +341,7 @@ export function CustomerAnalyticsDetailDialog({
             </Alert>
           ) : null}
 
-          {loading && !response ? (
+          {loading && !currentResponse ? (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               {tx('正在加载计算证据...', 'Loading calculation evidence...')}
@@ -338,13 +354,13 @@ export function CustomerAnalyticsDetailDialog({
                 {tx('重试', 'Retry')}
               </Button>
             </div>
-          ) : response?.detail ? (
+          ) : currentResponse?.detail ? (
             <>
               {annualDetail ? <AnnualEvidence detail={annualDetail} tx={tx} /> : null}
               {capacityDetail ? <CapacityEvidence detail={capacityDetail} tx={tx} /> : null}
               {cycleDetail ? <CycleEvidence detail={cycleDetail} tx={tx} /> : null}
             </>
-          ) : response ? (
+          ) : currentResponse ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
               {tx('该客户当前没有可展示的计算证据。', 'No calculation evidence for this customer.')}
             </p>

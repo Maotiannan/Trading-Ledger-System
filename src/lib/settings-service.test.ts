@@ -74,6 +74,22 @@ jest.mock('@/lib/system-settings', () => ({
     'SWIFT_REJECT_TOLERANCE',
     'SETTINGS_AUDIT_MAX_PAGE_SIZE',
     'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
+    'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
+    'CUSTOMER_ANALYTICS_NORMAL_DAYS',
+    'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS',
+    'CUSTOMER_ANALYTICS_DELAY_DAYS',
+    'CUSTOMER_ANALYTICS_WARNING_DAYS',
+    'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
+    'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+  ],
+  customerAnalyticsSystemSettingKeys: [
+    'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
+    'CUSTOMER_ANALYTICS_NORMAL_DAYS',
+    'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS',
+    'CUSTOMER_ANALYTICS_DELAY_DAYS',
+    'CUSTOMER_ANALYTICS_WARNING_DAYS',
+    'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
+    'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
   ],
   booleanSystemSettingKeys: ['OCR_DISABLED'],
   secretSystemSettingKeys: ['OCR_API_KEY'],
@@ -83,7 +99,32 @@ jest.mock('@/lib/system-settings', () => ({
     SWIFT_REJECT_TOLERANCE: 0,
     SETTINGS_AUDIT_MAX_PAGE_SIZE: 1,
     SETTINGS_AUDIT_EXPORT_MAX_ROWS: 1,
+    CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: 1,
+    CUSTOMER_ANALYTICS_NORMAL_DAYS: 1,
+    CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: 1,
+    CUSTOMER_ANALYTICS_DELAY_DAYS: 1,
+    CUSTOMER_ANALYTICS_WARNING_DAYS: 1,
+    CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 1,
+    CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 1,
   },
+  numericSystemSettingMaximums: {
+    CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: 60,
+    CUSTOMER_ANALYTICS_NORMAL_DAYS: 3650,
+    CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: 3650,
+    CUSTOMER_ANALYTICS_DELAY_DAYS: 3650,
+    CUSTOMER_ANALYTICS_WARNING_DAYS: 3650,
+    CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 3650,
+    CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 3650,
+  },
+  integerSystemSettingKeys: [
+    'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
+    'CUSTOMER_ANALYTICS_NORMAL_DAYS',
+    'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS',
+    'CUSTOMER_ANALYTICS_DELAY_DAYS',
+    'CUSTOMER_ANALYTICS_WARNING_DAYS',
+    'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
+    'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+  ],
   getSystemSettingsWithDefaults: jest.fn(),
   invalidateSystemSettingsCache: jest.fn(),
 }));
@@ -146,6 +187,13 @@ describe('settings-service', () => {
       SWIFT_REJECT_TOLERANCE: '50',
       SETTINGS_AUDIT_MAX_PAGE_SIZE: '100',
       SETTINGS_AUDIT_EXPORT_MAX_ROWS: '5000',
+      CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '12',
+      CUSTOMER_ANALYTICS_NORMAL_DAYS: '30',
+      CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '60',
+      CUSTOMER_ANALYTICS_DELAY_DAYS: '90',
+      CUSTOMER_ANALYTICS_WARNING_DAYS: '120',
+      CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: '150',
+      CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: '180',
     });
   });
 
@@ -173,7 +221,7 @@ describe('settings-service', () => {
       targetType: 'SYSTEM_SETTING',
       actorId: 'admin-1',
       metadata: expect.objectContaining({
-        editableKeyCount: 7,
+        editableKeyCount: 14,
         branchPurgeTargetCount: 1,
         canEdit: true,
         canViewAudit: true,
@@ -675,6 +723,87 @@ describe('settings-service', () => {
       code: 'BAD_REQUEST',
       message: 'SWIFT_REJECT_TOLERANCE 不能小于 SWIFT_WARNING_TOLERANCE',
     });
+  });
+
+  it.each([
+    ['partial update conflicting with stored thresholds', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '61' }],
+    ['reversed thresholds', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '60', CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '30' }],
+    ['equal thresholds', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '60', CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '60' }],
+    ['decimal threshold', { CUSTOMER_ANALYTICS_DELAY_DAYS: '90.5' }],
+    ['zero threshold', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '0' }],
+    ['negative threshold', { CUSTOMER_ANALYTICS_NORMAL_DAYS: '-1' }],
+    ['excessive threshold', { CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: '3651' }],
+    ['decimal lookback', { CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '12.5' }],
+    ['excessive lookback', { CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '61' }],
+  ])('rejects invalid customer analytics %s without side effects', async (_label, update) => {
+    await expect(updateSystemSettings(makeUser(), update)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      status: 400,
+    });
+
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+    expect(mockDb.systemSetting.upsert).not.toHaveBeenCalled();
+    expect(mockInvalidateSystemSettingsCache).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it.each([UserRole.SALES, UserRole.USER])(
+    'forbids %s accounts from updating customer analytics settings',
+    async (role) => {
+      await expect(updateSystemSettings(makeUser({ role }), {
+        CUSTOMER_ANALYTICS_NORMAL_DAYS: '31',
+      })).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+        status: 403,
+      });
+
+      expect(mockGetSystemSettingsWithDefaults).not.toHaveBeenCalled();
+      expect(mockDb.$transaction).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it('transactionally saves valid customer analytics settings and audits before and after values', async () => {
+    mockDb.systemSetting.upsert.mockResolvedValue(undefined);
+
+    const result = await updateSystemSettings(makeUser(), {
+      CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '18',
+      CUSTOMER_ANALYTICS_NORMAL_DAYS: '35',
+      CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '65',
+      CUSTOMER_ANALYTICS_DELAY_DAYS: '95',
+      CUSTOMER_ANALYTICS_WARNING_DAYS: '125',
+      CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: '155',
+      CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: '185',
+    });
+
+    expect(result).toEqual({ message: '配置已更新' });
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(7);
+    expect(mockInvalidateSystemSettingsCache).toHaveBeenCalledTimes(1);
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'SYSTEM_SETTINGS_UPDATE',
+      actorId: 'admin-1',
+      metadata: {
+        updatedKeys: [
+          'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
+          'CUSTOMER_ANALYTICS_NORMAL_DAYS',
+          'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS',
+          'CUSTOMER_ANALYTICS_DELAY_DAYS',
+          'CUSTOMER_ANALYTICS_WARNING_DAYS',
+          'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
+          'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+        ],
+        changes: [
+          { key: 'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS', before: '12', after: '18' },
+          { key: 'CUSTOMER_ANALYTICS_NORMAL_DAYS', before: '30', after: '35' },
+          { key: 'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS', before: '60', after: '65' },
+          { key: 'CUSTOMER_ANALYTICS_DELAY_DAYS', before: '90', after: '95' },
+          { key: 'CUSTOMER_ANALYTICS_WARNING_DAYS', before: '120', after: '125' },
+          { key: 'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS', before: '150', after: '155' },
+          { key: 'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS', before: '180', after: '185' },
+        ],
+      },
+    }));
   });
 
   it('upserts settings and invalidates cache on save', async () => {

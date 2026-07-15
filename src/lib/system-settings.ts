@@ -1,6 +1,16 @@
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
+export const customerAnalyticsSystemSettingKeys = [
+  'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
+  'CUSTOMER_ANALYTICS_NORMAL_DAYS',
+  'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS',
+  'CUSTOMER_ANALYTICS_DELAY_DAYS',
+  'CUSTOMER_ANALYTICS_WARNING_DAYS',
+  'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
+  'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+] as const;
+
 export const editableSystemSettingKeys = [
   'OCR_DISABLED',
   'OCR_API_BASE_URL',
@@ -28,6 +38,7 @@ export const editableSystemSettingKeys = [
   'SETTINGS_AUDIT_MAX_PAGE_SIZE',
   'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
   'ORDER_TRACKER_STATUS_OPTIONS',
+  ...customerAnalyticsSystemSettingKeys,
 ] as const;
 
 export type EditableSystemSettingKey = (typeof editableSystemSettingKeys)[number];
@@ -44,6 +55,12 @@ export const secretSystemSettingKeys = [
 ] as const satisfies readonly EditableSystemSettingKey[];
 
 export type SecretSystemSettingKey = (typeof secretSystemSettingKeys)[number];
+
+export const integerSystemSettingKeys = [
+  ...customerAnalyticsSystemSettingKeys,
+] as const satisfies readonly EditableSystemSettingKey[];
+
+export type IntegerSystemSettingKey = (typeof integerSystemSettingKeys)[number];
 
 export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   OCR_DISABLED: process.env.OCR_DISABLED ?? 'false',
@@ -72,6 +89,13 @@ export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   SETTINGS_AUDIT_MAX_PAGE_SIZE: process.env.SETTINGS_AUDIT_MAX_PAGE_SIZE ?? '100',
   SETTINGS_AUDIT_EXPORT_MAX_ROWS: process.env.SETTINGS_AUDIT_EXPORT_MAX_ROWS ?? '5000',
   ORDER_TRACKER_STATUS_OPTIONS: process.env.ORDER_TRACKER_STATUS_OPTIONS ?? 'In progress,Confirmed,Canceled',
+  CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: process.env.CUSTOMER_ANALYTICS_LOOKBACK_MONTHS ?? '12',
+  CUSTOMER_ANALYTICS_NORMAL_DAYS: process.env.CUSTOMER_ANALYTICS_NORMAL_DAYS ?? '30',
+  CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: process.env.CUSTOMER_ANALYTICS_MILD_DELAY_DAYS ?? '60',
+  CUSTOMER_ANALYTICS_DELAY_DAYS: process.env.CUSTOMER_ANALYTICS_DELAY_DAYS ?? '90',
+  CUSTOMER_ANALYTICS_WARNING_DAYS: process.env.CUSTOMER_ANALYTICS_WARNING_DAYS ?? '120',
+  CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: process.env.CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS ?? '150',
+  CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: process.env.CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS ?? '180',
 };
 
 export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingKey, number>> = {
@@ -95,6 +119,23 @@ export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingK
   SIGNING_PENDING_TTL_HOURS: 24,
   SETTINGS_AUDIT_MAX_PAGE_SIZE: 1,
   SETTINGS_AUDIT_EXPORT_MAX_ROWS: 1,
+  CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: 1,
+  CUSTOMER_ANALYTICS_NORMAL_DAYS: 1,
+  CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: 1,
+  CUSTOMER_ANALYTICS_DELAY_DAYS: 1,
+  CUSTOMER_ANALYTICS_WARNING_DAYS: 1,
+  CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 1,
+  CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 1,
+};
+
+export const numericSystemSettingMaximums: Partial<Record<EditableSystemSettingKey, number>> = {
+  CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: 60,
+  CUSTOMER_ANALYTICS_NORMAL_DAYS: 3650,
+  CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: 3650,
+  CUSTOMER_ANALYTICS_DELAY_DAYS: 3650,
+  CUSTOMER_ANALYTICS_WARNING_DAYS: 3650,
+  CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 3650,
+  CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 3650,
 };
 
 let cache: { expiresAt: number; values: Record<string, string> } | null = null;

@@ -3,7 +3,10 @@ import {
   editableSystemSettingKeys,
   getNumericSystemSetting,
   getSystemSettings,
+  integerSystemSettingKeys,
   invalidateSystemSettingsCache,
+  numericSystemSettingMaximums,
+  numericSystemSettingMinimums,
   systemSettingDefaults,
 } from '@/lib/system-settings';
 
@@ -67,5 +70,34 @@ describe('system-settings', () => {
     ]));
     expect(systemSettingDefaults.EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS).toBe('60000');
     expect(systemSettingDefaults.EXCEL_LOOKUP_RATE_LIMIT_MAX).toBe('240');
+  });
+
+  it('exposes customer analytics settings with approved defaults', () => {
+    const analyticsKeys = [
+      'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
+      'CUSTOMER_ANALYTICS_NORMAL_DAYS',
+      'CUSTOMER_ANALYTICS_MILD_DELAY_DAYS',
+      'CUSTOMER_ANALYTICS_DELAY_DAYS',
+      'CUSTOMER_ANALYTICS_WARNING_DAYS',
+      'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
+      'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+    ] as const;
+
+    expect(editableSystemSettingKeys).toEqual(expect.arrayContaining(analyticsKeys));
+    expect(integerSystemSettingKeys).toEqual(expect.arrayContaining(analyticsKeys));
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_LOOKBACK_MONTHS).toBe('12');
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_NORMAL_DAYS).toBe('30');
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_MILD_DELAY_DAYS).toBe('60');
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_DELAY_DAYS).toBe('90');
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_WARNING_DAYS).toBe('120');
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS).toBe('150');
+    expect(systemSettingDefaults.CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS).toBe('180');
+    expect(numericSystemSettingMinimums.CUSTOMER_ANALYTICS_LOOKBACK_MONTHS).toBe(1);
+    expect(numericSystemSettingMaximums.CUSTOMER_ANALYTICS_LOOKBACK_MONTHS).toBe(60);
+
+    for (const key of analyticsKeys.slice(1)) {
+      expect(numericSystemSettingMinimums[key]).toBe(1);
+      expect(numericSystemSettingMaximums[key]).toBe(3650);
+    }
   });
 });

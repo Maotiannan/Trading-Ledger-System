@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.195
+> 当前版本：v1.0.196
 > 最后更新：2026-07-15
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 客户分析明细关闭崩溃修复：真实浏览器复现 `Application error: a client-side exception has occurred`，定位为非年度明细关闭动画期间，父组件把空选择回退为 `annual-amount`，子组件仍短暂持有上一份 `payment-capacity/payment-cycle` 响应，导致把错误数据结构传给年度表格并在 `detail.orders.map` 处抛出未捕获异常。明细弹窗现在只渲染与当前 `metric + customerId` 完全一致的响应，关闭时同步失效在途请求并清空响应、错误和 loading 状态。新增受控关闭 Harness 回归，修复前稳定复现同一 TypeError，修复后通过。无数据库、NAS/COS 路径或备份范围变更 ✅ 2026-07-15
 
 - [x] Dashboard 客户分析：新增后端纯计算域 `customer-analytics`，统一负责几内亚自然年/完整月份窗口、金额聚合、付款分配、金额加权付款周期和风险分级；年度下单金额只使用 `Invoice.releaseDate`，付款能力按最近 N 个完整自然月（含零付款月）计算，付款周期同时解释已付和未付金额的等待时间，正式收据只排除 `SIGNING_PENDING`。`customer-analytics-service` 按现有管理树权限一次性批量读取客户、订单和收据，排行与三类明细共享同一计算结果，不在 React 重算、不新增排行表或持久化缓存。新增 `/api/dashboard/customer-analytics` 排行/明细动作、三标签 Dashboard 卡片、10 行固定分页、键盘/手机可用的规则和风险说明、按指标懒加载的响应式证据弹窗；卡片登记进账号级 Dashboard 显示/排序配置。七项全局规则复用 `SystemSetting`、ADMIN 权限、事务校验和配置审计，非法或逆序阈值不会部分写入。备份范围不变：规则随 MySQL `trading_ledger` dump 保存，无新增 NAS/COS 路径；恢复验收新增规则值和三类排行 API。门禁：定向 14 suites / 143 tests、全量 160 suites / 1006 tests、isolated API 36 的 52 条业务断言、isolated Playwright 9 tests、typecheck、ESLint、生产构建和 i18n audit 均通过 ✅ 2026-07-15
 

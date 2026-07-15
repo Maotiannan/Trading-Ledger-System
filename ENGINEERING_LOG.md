@@ -1,12 +1,20 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.194
-> 最后更新：2026-07-14
+> 当前版本：v1.0.195
+> 最后更新：2026-07-15
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 客户分析：新增后端纯计算域 `customer-analytics`，统一负责几内亚自然年/完整月份窗口、金额聚合、付款分配、金额加权付款周期和风险分级；年度下单金额只使用 `Invoice.releaseDate`，付款能力按最近 N 个完整自然月（含零付款月）计算，付款周期同时解释已付和未付金额的等待时间，正式收据只排除 `SIGNING_PENDING`。`customer-analytics-service` 按现有管理树权限一次性批量读取客户、订单和收据，排行与三类明细共享同一计算结果，不在 React 重算、不新增排行表或持久化缓存。新增 `/api/dashboard/customer-analytics` 排行/明细动作、三标签 Dashboard 卡片、10 行固定分页、键盘/手机可用的规则和风险说明、按指标懒加载的响应式证据弹窗；卡片登记进账号级 Dashboard 显示/排序配置。七项全局规则复用 `SystemSetting`、ADMIN 权限、事务校验和配置审计，非法或逆序阈值不会部分写入。备份范围不变：规则随 MySQL `trading_ledger` dump 保存，无新增 NAS/COS 路径；恢复验收新增规则值和三类排行 API。门禁：定向 14 suites / 143 tests、全量 160 suites / 1006 tests、isolated API 36 的 52 条业务断言、isolated Playwright 9 tests、typecheck、ESLint、生产构建和 i18n audit 均通过 ✅ 2026-07-15
+
+- [x] Dashboard 客户分析独立审查加固：年度默认年份改由服务端 `Africa/Conakry` 时钟决定，浏览器首次请求不再自行推断年份；明细请求只接受排行输出的标准 UTC `asOf`，并在点击排行时一次性冻结行、年份、时间点和生效规则，刷新提示只比较指标值与规则，避免请求时间不同或后台排行刷新导致误报。七项客户分析规则改为整组提交、仅在实际变化时整组校验、事务保存，服务端只写入真正变化的配置，历史异常规则不再阻塞 OCR 等无关设置；结构化统计日志移除金额字段，API 仍返回该金额并在帮助说明中明确展示排除影响。无数据库迁移、无新增持久化路径、备份范围不变。验证：定向 5 suites / 91 tests、全量 160 suites / 1016 tests、isolated API case 36（含标准时间点复用与非法时间拒绝）、isolated Playwright 9/9、typecheck、全仓 ESLint、Webpack 生产构建和 i18n audit 均通过；临时测试容器及卷已清理，生产应用和维护容器保持 `restart=0` ✅ 2026-07-15
+
+- [x] Next 16 worktree 构建兼容：确认 Turbopack 会拒绝隔离 worktree 中指向主仓库的 `node_modules` 软链接；API/E2E 隔离启动和正式 `npm run build` 显式固定为官方 Webpack 模式，避免 agent 在 worktree 内出现与业务代码无关的 panic。临时 MariaDB project/volume 均由清理钩子销毁，现有业务容器未重启，MySQL/NAS 未触碰；Webpack 生产构建和两类隔离测试已通过 ✅ 2026-07-15
+
+- [x] GitHub Actions E2E 路由等待稳定性：CI 首轮中登录 API 与 `/dashboard` 均成功，但开发模式页面切换超过 Playwright 默认 5 秒，导致登录 URL 误报；将登录等待放宽后，第二轮又在 Dashboard → Invoice 的同类 5 秒断言处失败，证明问题属于全局路由等待而非登录业务。Playwright 统一设置条件断言最多 15 秒、单条用例最多 60 秒，到达目标即继续，不增加固定休眠、不修改产品逻辑；本地隔离曾复现首条导航耗时 10.1 秒，isolated Playwright 9/9 通过 ✅ 2026-07-15
 
 - [x] Orders 确认日期持久化：`OrderTracker` 新增可空 `confirmedAt`，迁移对当前 `Confirmed` 历史记录使用 `updatedAt` 做一次性近似回填；后续由服务端统一执行“进入 Confirmed 记录当前时间、离开 Confirmed 清空、无状态变化或仅改备注时保持”的规则，并与状态在同一次 Prisma 写入中提交。Orders 表格在 `DEPOSIT` 右侧新增 `CONFIRMED DATE`，复用 `Africa/Conakry` 全局时区显示 `DD/MM/YYYY`。状态审计增加前后状态与确认时间。字段位于现有 MySQL `trading_ledger`，无新增 NAS/COS 路径；部署前创建数据库备份。测试：确认时间内核、OrderTracker service/UI、isolated API 25 状态生命周期 ✅ 2026-07-14
 

@@ -9,7 +9,7 @@ Back up these two business data areas:
 - MySQL database: `trading_ledger`
 - NAS upload directory: `/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload`
 
-The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout` and `UserPreference.listPageSizes`, plus Orders workflow data such as `OrderTracker.confirmedAt`. No separate media backup path is required for Dashboard preferences or Orders confirmation dates.
+The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout` and `UserPreference.listPageSizes`, Orders workflow data such as `OrderTracker.confirmedAt`, and Customer Analytics rules stored in `SystemSetting` under the seven `CUSTOMER_ANALYTICS_*` keys. Customer Analytics rankings are calculated on demand and are not persisted. No separate media backup path is required for Dashboard preferences, Orders confirmation dates, or Customer Analytics.
 
 `OrderTracker.confirmedAt` was introduced with a one-time backfill from `updatedAt` for rows already in `Confirmed` status. Future values are maintained by status transitions and are restored with the rest of the `trading_ledger` dump.
 
@@ -198,5 +198,6 @@ Correct restore drill:
 3. Point a test app instance to the temporary database.
 4. Sync media files to a temporary folder.
 5. Verify login, customers, invoices, receipts, details, SWIFT previews, and generated receipt images.
+6. Verify all seven `CUSTOMER_ANALYTICS_*` settings and call the annual amount, payment capacity, and payment-cycle ranking APIs; open one detail result and confirm it reconciles with its ranking row.
 
 Only after a successful drill should production restore be considered.

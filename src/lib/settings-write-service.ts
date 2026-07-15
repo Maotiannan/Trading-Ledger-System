@@ -9,12 +9,16 @@ import { runInTransaction } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   booleanSystemSettingKeys,
+  customerAnalyticsSystemSettingKeys,
   editableSystemSettingKeys,
   getSystemSettingsWithDefaults,
+  integerSystemSettingKeys,
   invalidateSystemSettingsCache,
+  numericSystemSettingMaximums,
   numericSystemSettingMinimums,
   secretSystemSettingKeys,
 } from '@/lib/system-settings';
+import { parseCustomerAnalyticsSettings } from '@/lib/customer-analytics-settings';
 import {
   updateUserImageCompressionPreference,
   type UserImageCompressionPreference,
@@ -88,14 +92,30 @@ function validateBooleanSetting(key: string, value: string): void {
   }
 }
 
-function validateNumericSetting(key: string, value: string, min: number): void {
+function validateNumericSetting(
+  key: string,
+  value: string,
+  min: number,
+  max?: number,
+  integerOnly = false,
+): void {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < min) {
+  if (!Number.isFinite(parsed) || parsed < min || (max !== undefined && parsed > max)) {
     throw createApiError({
       code: 'BAD_REQUEST',
       status: 400,
-      message: `${key} 必须为不小于 ${min} 的数字`,
-      detail: { key, value, min },
+      message: max === undefined
+        ? `${key} 必须为不小于 ${min} 的数字`
+        : `${key} 必须为 ${min} 至 ${max} 之间的数字`,
+      detail: { key, value, min, ...(max === undefined ? {} : { max }) },
+    });
+  }
+  if (integerOnly && !Number.isInteger(parsed)) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: `${key} 必须为整数`,
+      detail: { key, value },
     });
   }
 }
@@ -111,14 +131,40 @@ async function validateSettingUpdates(
       value: String(settings[key] ?? ''),
     }));
 
-  for (const item of updates) {
+  const analyticsUpdates = updates.filter((item) => (
+    (customerAnalyticsSystemSettingKeys as readonly string[]).includes(item.key)
+  ));
+  if (analyticsUpdates.length > 0 && analyticsUpdates.length !== customerAnalyticsSystemSettingKeys.length) {
+    throw createApiError({
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: '客户分析配置必须整组保存，请同时提交全部七项规则',
+      detail: {
+        requiredKeys: customerAnalyticsSystemSettingKeys,
+        submittedKeys: analyticsUpdates.map((item) => item.key),
+      },
+    });
+  }
+
+  const changedUpdates = updates.filter((item) => (
+    currentSettings[item.key] !== item.value
+  ));
+
+  for (const item of changedUpdates) {
     if ((booleanSystemSettingKeys as readonly string[]).includes(item.key)) {
       validateBooleanSetting(item.key, item.value);
       continue;
     }
     const min = numericSystemSettingMinimums[item.key as keyof typeof numericSystemSettingMinimums];
     if (typeof min === 'number') {
-      validateNumericSetting(item.key, item.value, min);
+      const max = numericSystemSettingMaximums[item.key as keyof typeof numericSystemSettingMaximums];
+      validateNumericSetting(
+        item.key,
+        item.value,
+        min,
+        max,
+        (integerSystemSettingKeys as readonly string[]).includes(item.key),
+      );
     }
   }
 
@@ -141,7 +187,25 @@ async function validateSettingUpdates(
     });
   }
 
-  return updates;
+  const analyticsValuesChanged = analyticsUpdates.some((item) => (
+    currentSettings[item.key] !== item.value
+  ));
+  if (analyticsValuesChanged) {
+    const analyticsUpdateMap = new Map(analyticsUpdates.map((item) => [item.key, item.value]));
+    const analyticsSettings = Object.fromEntries(
+      customerAnalyticsSystemSettingKeys.map((key) => [key, analyticsUpdateMap.get(key) || '']),
+    ) as Record<string, string>;
+    if (!parseCustomerAnalyticsSettings(analyticsSettings)) {
+      throw createApiError({
+        code: 'BAD_REQUEST',
+        status: 400,
+        message: '客户分析天数必须按正常、轻微拖延、拖延、警告、加倍警告、严重警告严格递增',
+        detail: analyticsSettings,
+      });
+    }
+  }
+
+  return changedUpdates;
 }
 
 function normalizeSettingAuditValue(key: string, value: string): string {

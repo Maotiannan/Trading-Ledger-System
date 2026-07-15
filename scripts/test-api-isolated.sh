@@ -82,7 +82,8 @@ export UPLOAD_BODY_MAX_BYTES="${UPLOAD_BODY_MAX_BYTES:-10485760}"
 
 npx prisma migrate deploy >/dev/null
 rm -rf "$ROOT_DIR/$DIST_DIR"
-npx next dev -p "$APP_PORT" >"$APP_LOG" 2>&1 &
+# Webpack supports isolated worktrees whose node_modules is shared by symlink.
+npx next dev --webpack -p "$APP_PORT" >"$APP_LOG" 2>&1 &
 APP_PID="$!"
 wait_for_http "$BASE_URL" || fail "app not ready"
 

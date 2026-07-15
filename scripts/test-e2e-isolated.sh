@@ -76,7 +76,8 @@ export NEXT_DIST_DIR="$DIST_DIR"
 
 npx prisma migrate deploy >/dev/null
 rm -rf "$ROOT_DIR/$DIST_DIR"
-npx next dev -p "$APP_PORT" >"$APP_LOG" 2>&1 &
+# Webpack supports isolated worktrees whose node_modules is shared by symlink.
+npx next dev --webpack -p "$APP_PORT" >"$APP_LOG" 2>&1 &
 APP_PID="$!"
 wait_for_http "$BASE_URL" || fail "app not ready"
 

@@ -29,6 +29,8 @@ import {
   type CustomerOrderHistoryReceipt,
 } from '@/components/workspace/modules/customers/components/customer-order-history-dialog';
 import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
+import { CustomerAnalyticsCard } from './components/customer-analytics-card';
+import { DashboardCardPagination } from './components/dashboard-card-pagination';
 import {
   CustomerCandidate,
   IMPORT_RESULT_PAGE_SIZE,
@@ -451,29 +453,6 @@ export function Dashboard() {
     });
   };
 
-  const renderPaginationFooter = (params: {
-    page: number;
-    totalPages: number;
-    totalItems: number;
-    onPrevious: () => void;
-    onNext: () => void;
-  }) => {
-    if (params.totalItems <= 0) {
-      return <div data-testid="dashboard-card-pagination-placeholder" className="h-9" />;
-    }
-    return (
-      <div data-testid="dashboard-card-pagination" className="mt-auto flex items-center justify-end gap-2 pt-3 text-sm">
-        <Button variant="outline" size="sm" disabled={params.page === 1} onClick={params.onPrevious}>
-          {tx('上一页', 'Previous')}
-        </Button>
-        <span>{tx(`第 ${params.page} / ${params.totalPages} 页`, `Page ${params.page} / ${params.totalPages}`)}</span>
-        <Button variant="outline" size="sm" disabled={params.page === params.totalPages} onClick={params.onNext}>
-          {tx('下一页', 'Next')}
-        </Button>
-      </div>
-    );
-  };
-
   const renderCustomerOrderStatusSection = (
     title: string,
     orders: DashboardCustomerOutstanding['orders'],
@@ -592,13 +571,14 @@ export function Dashboard() {
                 </TableBody>
               </Table>
             </div>
-            {renderPaginationFooter({
-              page: releasedInvoicePage,
-              totalPages: releasedInvoiceTotalPages,
-              totalItems: releasedInvoices.length,
-              onPrevious: () => setReleasedInvoicePage((page) => Math.max(1, page - 1)),
-              onNext: () => setReleasedInvoicePage((page) => Math.min(releasedInvoiceTotalPages, page + 1)),
-            })}
+            <DashboardCardPagination
+              page={releasedInvoicePage}
+              totalPages={releasedInvoiceTotalPages}
+              totalItems={releasedInvoices.length}
+              tx={tx}
+              onPrevious={() => setReleasedInvoicePage((current) => Math.max(1, current - 1))}
+              onNext={() => setReleasedInvoicePage((current) => Math.min(releasedInvoiceTotalPages, current + 1))}
+            />
           </CardContent>
         </Card>
       );
@@ -649,13 +629,14 @@ export function Dashboard() {
                 </TableBody>
               </Table>
             </div>
-            {renderPaginationFooter({
-              page: customerOutstandingPage,
-              totalPages: customerOutstandingTotalPages,
-              totalItems: customerOutstanding.length,
-              onPrevious: () => setCustomerOutstandingPage((page) => Math.max(1, page - 1)),
-              onNext: () => setCustomerOutstandingPage((page) => Math.min(customerOutstandingTotalPages, page + 1)),
-            })}
+            <DashboardCardPagination
+              page={customerOutstandingPage}
+              totalPages={customerOutstandingTotalPages}
+              totalItems={customerOutstanding.length}
+              tx={tx}
+              onPrevious={() => setCustomerOutstandingPage((current) => Math.max(1, current - 1))}
+              onNext={() => setCustomerOutstandingPage((current) => Math.min(customerOutstandingTotalPages, current + 1))}
+            />
           </CardContent>
         </Card>
       );
@@ -760,6 +741,10 @@ export function Dashboard() {
           </CardContent>
         </Card>
       );
+    }
+
+    if (cardId === 'customer-analytics') {
+      return <CustomerAnalyticsCard />;
     }
 
     if (cardId === 'recent-receipts') {

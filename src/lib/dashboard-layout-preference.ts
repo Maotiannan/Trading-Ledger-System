@@ -11,6 +11,7 @@ export const DASHBOARD_CARD_REGISTRY = [
   { id: 'pending-approvals', sectionId: 'summary', defaultOrder: 40, zh: '待审批', en: 'Pending Approvals' },
   { id: 'released-unpaid-invoices', sectionId: 'analysis', defaultOrder: 10, zh: '已放单未结清发票', en: 'Released Unpaid Invoices' },
   { id: 'customer-outstanding-ranking', sectionId: 'analysis', defaultOrder: 20, zh: '客户欠款排行', en: 'Customer Outstanding Ranking' },
+  { id: 'customer-analytics', sectionId: 'analysis', defaultOrder: 25, zh: '客户分析', en: 'Customer Analytics' },
   { id: 'order-receipt-search', sectionId: 'analysis', defaultOrder: 30, zh: '客户历史订单/付款搜索', en: 'Customer Order & Payment History' },
   { id: 'recent-receipts', sectionId: 'recent', defaultOrder: 10, zh: '最近收据', en: 'Recent Receipts' },
   { id: 'recent-payment-details', sectionId: 'recent', defaultOrder: 20, zh: '最近付款明细', en: 'Recent Payment Details' },

@@ -27,6 +27,7 @@ jest.mock('./components', () => {
   return {
     ...actual,
     BranchPurgeCard: () => <div>BranchPurgeBody</div>,
+    CustomerAnalyticsSettingsCard: () => <div>CustomerAnalyticsSettingsBody</div>,
     DashboardSettingsCard: () => <div>DashboardSettingsBody</div>,
     ExcelTokenCard: () => <div>ExcelTokenBody</div>,
     PasswordSettingsCard: () => <div>PasswordSettingsBody</div>,
@@ -159,5 +160,9 @@ describe('SettingsManager', () => {
     fireEvent.click(screen.getByRole('button', { name: /User Management/i }));
 
     expect(screen.getByText('UserManagerBody')).toBeInTheDocument();
+
+    expect(screen.queryByText('CustomerAnalyticsSettingsBody')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Customer Analytics Settings/i }));
+    expect(screen.getByText('CustomerAnalyticsSettingsBody')).toBeInTheDocument();
   });
 });

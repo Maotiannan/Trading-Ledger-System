@@ -10,7 +10,7 @@ import {
 } from '@/lib/dashboard-layout-preference';
 
 describe('dashboard-layout-preference', () => {
-  it('returns the current nine cards in the default section order', () => {
+  it('returns the current ten cards in the default section order', () => {
     const layout = normalizeDashboardLayoutPreference(null);
     expect(layout.sections.map((section) => section.id)).toEqual(['summary', 'analysis', 'recent']);
     expect(layout.sections.flatMap((section) => section.cards.map((card) => card.id))).toEqual([
@@ -20,6 +20,7 @@ describe('dashboard-layout-preference', () => {
       'pending-approvals',
       'released-unpaid-invoices',
       'customer-outstanding-ranking',
+      'customer-analytics',
       'order-receipt-search',
       'recent-receipts',
       'recent-payment-details',
@@ -41,6 +42,7 @@ describe('dashboard-layout-preference', () => {
     expect(layout.sections.find((section) => section.id === 'analysis')?.cards.map((card) => card.id)).toEqual([
       'released-unpaid-invoices',
       'customer-outstanding-ranking',
+      'customer-analytics',
       'order-receipt-search',
     ]);
   });

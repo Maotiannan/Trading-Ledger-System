@@ -50,6 +50,10 @@ jest.mock('@/components/workspace/modules/receipts/components/receipt-image-prev
   ),
 }));
 
+jest.mock('./components/customer-analytics-card', () => ({
+  CustomerAnalyticsCard: () => <div data-testid="customer-analytics-card">Customer Analytics</div>,
+}));
+
 jest.mock('next-intl', () => ({
   useLocale: jest.fn(() => 'en'),
   useTranslations: jest.fn(() => (key: string, values?: Record<string, unknown>) => {
@@ -275,6 +279,14 @@ describe('Dashboard customer outstanding status dialog', () => {
     expect(await screen.findByText(/Invoice Balance/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Hide / })).not.toBeInTheDocument();
     expect(mockApiCall).not.toHaveBeenCalledWith('settings', expect.anything());
+  });
+
+  it('renders the default-visible customer analytics card', async () => {
+    await act(async () => {
+      render(<Dashboard />);
+    });
+
+    expect(await screen.findByTestId('customer-analytics-card')).toBeInTheDocument();
   });
 
   it('searches visible customers only on submit and opens all ORDER_NAME history for one customer', async () => {

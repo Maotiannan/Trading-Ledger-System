@@ -47,3 +47,12 @@ export function formatAppDateInputValue(value: DateInput): string {
   const day = parts.find((part) => part.type === 'day')?.value;
   return year && month && day ? `${year}-${month}-${day}` : '';
 }
+
+export function getAppYear(value: DateInput = new Date()): number {
+  const date = parseDateInput(value) || new Date();
+  const year = new Intl.DateTimeFormat('en', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+  }).format(date);
+  return Number(year);
+}

@@ -165,3 +165,77 @@ export type CustomerAnalyticsCycleResult = {
   detailsByCustomer: Record<string, CustomerAnalyticsCycleDetail>;
   quality: CustomerAnalyticsQuality;
 };
+
+export type CustomerAnalyticsPeriodDto = {
+  start: string;
+  endExclusive: string;
+};
+
+export type CustomerAnalyticsRankingResponse = {
+  metric: CustomerAnalyticsMetric;
+  asOf: string;
+  settings: CustomerAnalyticsSettings;
+  period: CustomerAnalyticsPeriodDto;
+  availableYears: number[];
+  quality: CustomerAnalyticsQuality;
+  totalVisibleCustomers: number;
+  totalResultCustomers: number;
+  items: CustomerAnalyticsRankingRow[];
+};
+
+export type CustomerAnalyticsAnnualOrderDetailDto = Omit<
+  CustomerAnalyticsAnnualOrderDetail,
+  'releaseDate'
+> & {
+  releaseDate: string;
+};
+
+export type CustomerAnalyticsAnnualDetailDto = Omit<CustomerAnalyticsAnnualDetail, 'orders'> & {
+  orders: CustomerAnalyticsAnnualOrderDetailDto[];
+};
+
+export type CustomerAnalyticsCapacityReceiptDetailDto = Omit<
+  CustomerAnalyticsCapacityReceiptDetail,
+  'effectiveDate'
+> & {
+  effectiveDate: string;
+};
+
+export type CustomerAnalyticsCapacityMonthDetailDto = Omit<
+  CustomerAnalyticsCapacityMonthDetail,
+  'receipts'
+> & {
+  receipts: CustomerAnalyticsCapacityReceiptDetailDto[];
+};
+
+export type CustomerAnalyticsCapacityDetailDto = Omit<CustomerAnalyticsCapacityDetail, 'months'> & {
+  months: CustomerAnalyticsCapacityMonthDetailDto[];
+};
+
+export type CustomerAnalyticsCycleOrderDetailDto = Omit<
+  CustomerAnalyticsCycleOrderDetail,
+  'releaseDate'
+> & {
+  releaseDate: string;
+};
+
+export type CustomerAnalyticsCycleDetailDto = Omit<CustomerAnalyticsCycleDetail, 'orders'> & {
+  orders: CustomerAnalyticsCycleOrderDetailDto[];
+};
+
+export type CustomerAnalyticsDetailDto =
+  | CustomerAnalyticsAnnualDetailDto
+  | CustomerAnalyticsCapacityDetailDto
+  | CustomerAnalyticsCycleDetailDto;
+
+export type CustomerAnalyticsDetailResponse = {
+  metric: CustomerAnalyticsMetric;
+  asOf: string;
+  settings: CustomerAnalyticsSettings;
+  period: CustomerAnalyticsPeriodDto;
+  availableYears: number[];
+  quality: CustomerAnalyticsQuality;
+  customer: CustomerAnalyticsCustomerInput;
+  value: number;
+  detail: CustomerAnalyticsDetailDto | null;
+};

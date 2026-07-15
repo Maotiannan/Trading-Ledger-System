@@ -82,3 +82,54 @@ export type CustomerAnalyticsRankingRow = {
   overdueOutstanding?: number;
 };
 
+export type CustomerAnalyticsAnnualOrderDetail = {
+  orderId: string;
+  orderNo: string;
+  invNo: string;
+  releaseDate: Date;
+  amount: number;
+};
+
+export type CustomerAnalyticsAnnualDetail = {
+  customerId: string;
+  total: number;
+  orders: CustomerAnalyticsAnnualOrderDetail[];
+};
+
+export type CustomerAnalyticsAnnualResult = {
+  period: CustomerAnalyticsPeriod;
+  availableYears: number[];
+  items: CustomerAnalyticsRankingRow[];
+  detailsByCustomer: Record<string, CustomerAnalyticsAnnualDetail>;
+  quality: CustomerAnalyticsQuality;
+};
+
+export type CustomerAnalyticsCapacityReceiptDetail = {
+  receiptId: string;
+  orderId: string;
+  orderNo: string;
+  amount: number;
+  effectiveDate: Date;
+  usedDateFallback: boolean;
+  isDeposit: boolean;
+};
+
+export type CustomerAnalyticsCapacityMonthDetail = {
+  month: string;
+  total: number;
+  receipts: CustomerAnalyticsCapacityReceiptDetail[];
+};
+
+export type CustomerAnalyticsCapacityDetail = {
+  customerId: string;
+  total: number;
+  averageMonthly: number;
+  months: CustomerAnalyticsCapacityMonthDetail[];
+};
+
+export type CustomerAnalyticsCapacityResult = {
+  period: CustomerAnalyticsPeriod;
+  items: CustomerAnalyticsRankingRow[];
+  detailsByCustomer: Record<string, CustomerAnalyticsCapacityDetail>;
+  quality: CustomerAnalyticsQuality;
+};

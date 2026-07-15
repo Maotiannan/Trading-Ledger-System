@@ -277,4 +277,53 @@ describe('CustomerAnalyticsCard', () => {
       'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-1&year=2026&asOf=2026-07-15T12%3A00%3A00.000Z',
     );
   });
+
+  it('keeps the clicked ranking metadata stable while a newer ranking loads', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      const params = new URL(`https://example.com/${endpoint}`).searchParams;
+      if (params.get('action') === 'detail') {
+        return {
+          success: true,
+          data: {
+            metric: 'annual-amount',
+            asOf: params.get('asOf'),
+            settings,
+            period: { start: '2026-01-01T00:00:00.000Z', endExclusive: '2027-01-01T00:00:00.000Z' },
+            availableYears: [2026],
+            quality: response('annual-amount', []).quality,
+            customer: { id: 'customer-1', companyName: 'Customer 1', name: 'Person 1', mark: 'MARK-1' },
+            value: 1000,
+            detail: null,
+          },
+        };
+      }
+      if (params.get('year') === '2025') {
+        return {
+          success: true,
+          data: response('annual-amount', [row(1, { customerName: 'Refreshed 2025' })], {
+            asOf: '2026-07-15T13:00:00.000Z',
+            settings: { ...settings, normalDays: 31 },
+            period: { start: '2025-01-01T00:00:00.000Z', endExclusive: '2026-01-01T00:00:00.000Z' },
+          }),
+        };
+      }
+      return { success: true, data: response('annual-amount', [row(1)]) };
+    });
+    render(<CustomerAnalyticsCard initialYear={2026} />);
+
+    const yearSelect = await screen.findByRole('combobox', { name: 'Analysis year' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Customer 1' }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.change(yearSelect, { target: { value: '2025' } });
+    expect(await screen.findByText('Refreshed 2025')).toBeInTheDocument();
+    await act(async () => { await Promise.resolve(); });
+
+    const detailCalls = mockApiCall.mock.calls
+      .map(([endpoint]) => endpoint as string)
+      .filter((endpoint) => endpoint.includes('action=detail'));
+    expect(detailCalls).toEqual([
+      'dashboard/customer-analytics?action=detail&metric=annual-amount&customerId=customer-1&year=2026&asOf=2026-07-15T12%3A00%3A00.000Z',
+    ]);
+  });
 });

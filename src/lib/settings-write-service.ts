@@ -146,7 +146,11 @@ async function validateSettingUpdates(
     });
   }
 
-  for (const item of updates) {
+  const changedUpdates = updates.filter((item) => (
+    currentSettings[item.key] !== item.value
+  ));
+
+  for (const item of changedUpdates) {
     if ((booleanSystemSettingKeys as readonly string[]).includes(item.key)) {
       validateBooleanSetting(item.key, item.value);
       continue;
@@ -183,7 +187,10 @@ async function validateSettingUpdates(
     });
   }
 
-  if (analyticsUpdates.length > 0) {
+  const analyticsValuesChanged = analyticsUpdates.some((item) => (
+    currentSettings[item.key] !== item.value
+  ));
+  if (analyticsValuesChanged) {
     const analyticsUpdateMap = new Map(analyticsUpdates.map((item) => [item.key, item.value]));
     const analyticsSettings = Object.fromEntries(
       customerAnalyticsSystemSettingKeys.map((key) => [key, analyticsUpdateMap.get(key) || '']),
@@ -198,7 +205,7 @@ async function validateSettingUpdates(
     }
   }
 
-  return updates;
+  return changedUpdates;
 }
 
 function normalizeSettingAuditValue(key: string, value: string): string {

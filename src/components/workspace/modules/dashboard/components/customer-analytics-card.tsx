@@ -13,6 +13,7 @@ import type {
   CustomerAnalyticsMetric,
   CustomerAnalyticsRankingResponse,
   CustomerAnalyticsRankingRow,
+  CustomerAnalyticsSettings,
 } from '@/lib/customer-analytics-types';
 import { CustomerAnalyticsHint, CustomerAnalyticsRiskIndicator } from './customer-analytics-risk-indicator';
 import { CustomerAnalyticsDetailDialog } from './customer-analytics-detail-dialog';
@@ -50,6 +51,11 @@ export type CustomerAnalyticsOpenDetail = {
   year?: number;
 };
 
+type SelectedCustomerAnalyticsDetail = CustomerAnalyticsOpenDetail & {
+  rankingAsOf: string | null;
+  rankingSettings: CustomerAnalyticsSettings | null;
+};
+
 export type CustomerAnalyticsCardProps = {
   initialYear?: number;
   onOpenDetail?: (input: CustomerAnalyticsOpenDetail) => void;
@@ -75,7 +81,7 @@ export function CustomerAnalyticsCard({
   const [activeMetric, setActiveMetric] = useState<CustomerAnalyticsMetric>('annual-amount');
   const [selectedYear, setSelectedYear] = useState<number | null>(initialYear ?? null);
   const [metricState, setMetricState] = useState<MetricState>(emptyMetricState);
-  const [selectedDetail, setSelectedDetail] = useState<CustomerAnalyticsOpenDetail | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<SelectedCustomerAnalyticsDetail | null>(null);
   const requestSequence = useRef<Record<CustomerAnalyticsMetric, number>>({
     'annual-amount': 0,
     'payment-capacity': 0,
@@ -246,7 +252,11 @@ export function CustomerAnalyticsCard({
       onOpenDetail(selection);
       return;
     }
-    setSelectedDetail(selection);
+    setSelectedDetail({
+      ...selection,
+      rankingAsOf: response?.asOf || null,
+      rankingSettings: response?.settings || null,
+    });
   };
 
   return (
@@ -376,12 +386,8 @@ export function CustomerAnalyticsCard({
       open={Boolean(selectedDetail)}
       metric={selectedDetail?.metric || 'annual-amount'}
       customer={selectedDetail?.row || null}
-      rankingAsOf={selectedDetail
-        ? metricState[selectedDetail.metric].response?.asOf || null
-        : null}
-      rankingSettings={selectedDetail
-        ? metricState[selectedDetail.metric].response?.settings || null
-        : null}
+      rankingAsOf={selectedDetail?.rankingAsOf || null}
+      rankingSettings={selectedDetail?.rankingSettings || null}
       year={selectedDetail?.year}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) setSelectedDetail(null);

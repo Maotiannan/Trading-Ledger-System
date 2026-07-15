@@ -843,7 +843,7 @@ describe('settings-service', () => {
   });
 
   it('allows unrelated settings updates when stored analytics rules are malformed', async () => {
-    mockGetSystemSettingsWithDefaults.mockResolvedValueOnce({
+    const malformedStoredSettings = {
       OCR_DISABLED: 'false',
       OCR_API_KEY: 'old-secret',
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
@@ -852,12 +852,16 @@ describe('settings-service', () => {
       SETTINGS_AUDIT_MAX_PAGE_SIZE: '100',
       SETTINGS_AUDIT_EXPORT_MAX_ROWS: '5000',
       ...validAnalyticsSettings,
-      CUSTOMER_ANALYTICS_NORMAL_DAYS: '100',
+      CUSTOMER_ANALYTICS_NORMAL_DAYS: 'invalid-legacy-value',
       CUSTOMER_ANALYTICS_MILD_DELAY_DAYS: '50',
-    });
+    };
+    mockGetSystemSettingsWithDefaults.mockResolvedValueOnce(malformedStoredSettings);
     mockDb.systemSetting.upsert.mockResolvedValue(undefined);
 
-    const result = await updateSystemSettings(makeUser(), { OCR_DISABLED: 'true' });
+    const result = await updateSystemSettings(makeUser(), {
+      ...malformedStoredSettings,
+      OCR_DISABLED: 'true',
+    });
 
     expect(result).toEqual({ message: '配置已更新' });
     expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(1);

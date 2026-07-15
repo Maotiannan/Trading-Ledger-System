@@ -46,8 +46,13 @@ function parseAnnualYear(metric: CustomerAnalyticsMetric, value: string | null):
 
 function parseDetailAsOf(value: string | null): Date | undefined {
   if (!value?.trim()) return undefined;
+  const canonicalUtcPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
   const asOf = new Date(value);
-  if (!Number.isFinite(asOf.getTime())) {
+  if (
+    !canonicalUtcPattern.test(value)
+    || !Number.isFinite(asOf.getTime())
+    || asOf.toISOString() !== value
+  ) {
     throw createApiError({
       code: apiErrorCodes.BAD_REQUEST,
       status: 400,

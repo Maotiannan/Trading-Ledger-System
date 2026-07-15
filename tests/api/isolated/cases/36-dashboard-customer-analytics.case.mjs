@@ -35,9 +35,10 @@ function metricUrl(metric, year) {
   return `/api/dashboard/customer-analytics?${params.toString()}`;
 }
 
-function detailUrl(metric, customerId, year) {
+function detailUrl(metric, customerId, year, asOf) {
   const params = new URLSearchParams({ action: 'detail', metric, customerId });
   if (metric === 'annual-amount') params.set('year', String(year));
+  if (asOf) params.set('asOf', String(asOf));
   return `/api/dashboard/customer-analytics?${params.toString()}`;
 }
 
@@ -229,7 +230,7 @@ export default async function run(t) {
 
   const annualDetail = await t.request(
     'GET',
-    detailUrl('annual-amount', customerAId, nowParts.year),
+    detailUrl('annual-amount', customerAId, nowParts.year, annualUser.data?.data?.asOf),
     { expectedStatus: 200 },
   );
   t.assertEqual(annualDetail.data?.data?.value, annualUserRow?.value, 'annual detail value reconciles with its ranking row');
@@ -243,7 +244,7 @@ export default async function run(t) {
 
   const capacityDetail = await t.request(
     'GET',
-    detailUrl('payment-capacity', customerAId),
+    detailUrl('payment-capacity', customerAId, undefined, capacityUser.data?.data?.asOf),
     { expectedStatus: 200 },
   );
   t.assertEqual(capacityDetail.data?.data?.value, capacityUserRow?.value, 'capacity detail average reconciles with ranking');
@@ -256,13 +257,20 @@ export default async function run(t) {
 
   const cycleDetail = await t.request(
     'GET',
-    detailUrl('payment-cycle', customerAId),
+    detailUrl('payment-cycle', customerAId, undefined, cycleUser.data?.data?.asOf),
     { expectedStatus: 200 },
   );
   t.assertEqual(cycleDetail.data?.data?.value, cycleUserRow?.value, 'cycle detail value reconciles with ranking');
   t.assertEqual(cycleDetail.data?.data?.detail?.eligibleOrderCount, 1, 'cycle detail contains the eligible released order');
   t.assertEqual(cycleDetail.data?.data?.detail?.paidAmount, receiptAmount, 'cycle detail allocates the receipt once');
   t.assertEqual(cycleDetail.data?.data?.detail?.orders?.[0]?.outstanding, 88000, 'cycle detail exposes the remaining order balance');
+
+  await t.request(
+    'GET',
+    detailUrl('payment-cycle', customerAId, undefined, '2026-02-30T12:00:00.000Z'),
+    { expectedStatus: 400 },
+  );
+  t.step('detail rejects a non-canonical normalized asOf timestamp');
 
   await t.request('GET', detailUrl('annual-amount', customerBId, nowParts.year), { expectedStatus: 404 });
   t.step('USER A cannot open analytics detail for the sibling branch customer');

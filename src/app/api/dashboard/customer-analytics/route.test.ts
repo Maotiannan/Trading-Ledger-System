@@ -144,6 +144,9 @@ describe('dashboard customer analytics route', () => {
     ['invalid annual year', 'action=ranking&metric=annual-amount&year=2026.5'],
     ['missing detail customer', 'action=detail&metric=payment-cycle'],
     ['invalid detail asOf', 'action=detail&metric=payment-cycle&customerId=customer-1&asOf=not-a-date'],
+    ['numeric detail asOf', 'action=detail&metric=payment-cycle&customerId=customer-1&asOf=1'],
+    ['timezone-free detail asOf', 'action=detail&metric=payment-cycle&customerId=customer-1&asOf=2026-07-15T12%3A00%3A00.000'],
+    ['normalized invalid detail date', 'action=detail&metric=payment-cycle&customerId=customer-1&asOf=2026-02-30T12%3A00%3A00.000Z'],
   ])('returns a readable bad request for %s', async (_label, query) => {
     const { response, json } = await call(query);
 

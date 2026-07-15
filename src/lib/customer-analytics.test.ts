@@ -2,6 +2,7 @@ import {
   appCalendarDaysBetween,
   calculateAnnualAmountRanking,
   calculatePaymentCapacityRanking,
+  calculatePaymentCycleRanking,
   classifyCustomerRisk,
   getCompletedMonthWindow,
   getNaturalYearWindow,
@@ -220,5 +221,130 @@ describe('customer payment capacity', () => {
     ]);
     expect(detail.months.find((month) => month.month === '2025-07')?.total).toBe(0);
     expect(detail.months.find((month) => month.month === '2025-12')?.receipts).toHaveLength(1);
+  });
+});
+
+describe('customer amount-weighted payment cycle', () => {
+  it('calculates the approved partial-payment example as 52 days', () => {
+    const result = calculatePaymentCycleRanking({
+      customers: [customers[0]],
+      orders: [order('alpha-cycle', 'customer-a', 100_000, '2026-01-01', {
+        receipts: [
+          receipt('prepay', 30_000, '2025-12-20'),
+          receipt('payment-40', 40_000, '2026-02-10'),
+          receipt('payment-100', 20_000, '2026-04-11'),
+        ],
+      })],
+      asOf: new Date('2026-06-10T00:00:00.000Z'),
+      settings,
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        customerId: 'customer-a',
+        rawValue: 52,
+        roundedDays: 52,
+        value: 52,
+        overdueOutstanding: 10_000,
+        riskBand: expect.objectContaining({ id: 'mild-delay' }),
+      }),
+    ]);
+    expect(result.detailsByCustomer['customer-a']).toEqual(expect.objectContaining({
+      eligibleOrderCount: 1,
+      eligibleAmount: 100_000,
+      paidAmount: 90_000,
+      overdueOutstanding: 10_000,
+      withinTermsOutstanding: 0,
+    }));
+    expect(result.detailsByCustomer['customer-a'].orders[0]).toEqual(expect.objectContaining({
+      rawDays: 52,
+      roundedDays: 52,
+      paidAmount: 90_000,
+      outstanding: 10_000,
+    }));
+  });
+
+  it('keeps open day-30 money within terms and starts scoring it on day 31', () => {
+    const asOf = new Date('2026-07-15T00:00:00.000Z');
+    const result = calculatePaymentCycleRanking({
+      customers: [customers[0]],
+      orders: [
+        order('within-terms', 'customer-a', 500, '2026-06-15'),
+        order('entered-cycle', 'customer-a', 1_000, '2026-06-14'),
+      ],
+      asOf,
+      settings,
+    });
+
+    expect(result.items[0]).toEqual(expect.objectContaining({ roundedDays: 31, overdueOutstanding: 1_000 }));
+    expect(result.detailsByCustomer['customer-a']).toEqual(expect.objectContaining({
+      eligibleOrderCount: 1,
+      eligibleAmount: 1_000,
+      withinTermsOutstanding: 500,
+    }));
+  });
+
+  it('excludes old paid history but never hides old open debt', () => {
+    const result = calculatePaymentCycleRanking({
+      customers: [customers[0]],
+      orders: [
+        order('old-paid', 'customer-a', 1_000, '2025-01-01', {
+          receipts: [receipt('old-paid-receipt', 1_000, '2025-01-11')],
+        }),
+        order('old-open', 'customer-a', 500, '2025-01-01'),
+      ],
+      asOf: new Date('2026-07-15T00:00:00.000Z'),
+      settings,
+    });
+
+    expect(result.detailsByCustomer['customer-a'].orders.map((row) => row.orderNo)).toEqual(['OLD-OPEN']);
+    expect(result.items[0].overdueOutstanding).toBe(500);
+  });
+
+  it('counts full prepayment as zero days and caps cycle allocation at order amount', () => {
+    const result = calculatePaymentCycleRanking({
+      customers: [customers[0], customers[1]],
+      orders: [
+        order('prepaid', 'customer-a', 100, '2026-01-01', {
+          receipts: [receipt('prepaid-receipt', 100, '2025-12-20', { isDeposit: true })],
+        }),
+        order('overpaid', 'customer-b', 100, '2026-01-01', {
+          receipts: [receipt('overpaid-receipt', 200, '2026-04-11')],
+        }),
+      ],
+      asOf: new Date('2026-06-10T00:00:00.000Z'),
+      settings,
+    });
+
+    expect(result.items.find((row) => row.customerId === 'customer-a')).toEqual(expect.objectContaining({
+      roundedDays: 0,
+      riskBand: expect.objectContaining({ id: 'normal' }),
+    }));
+    expect(result.items.find((row) => row.customerId === 'customer-b')).toEqual(expect.objectContaining({
+      roundedDays: 100,
+    }));
+    expect(result.detailsByCustomer['customer-b'].paidAmount).toBe(100);
+  });
+
+  it('reports invalid and future payment data without changing the formula', () => {
+    const result = calculatePaymentCycleRanking({
+      customers: [customers[0]],
+      orders: [
+        order('invalid-order', 'customer-a', -1, '2026-01-01'),
+        order('quality-order', 'customer-a', 100, '2026-01-01', {
+          receipts: [
+            receipt('invalid-payment', -5, '2026-02-01'),
+            receipt('future-payment', 100, '2026-08-01'),
+          ],
+        }),
+      ],
+      asOf: new Date('2026-06-10T00:00:00.000Z'),
+      settings,
+    });
+
+    expect(result.quality.invalidOrderAmounts).toBe(1);
+    expect(result.quality.invalidReceiptAmounts).toBe(1);
+    expect(result.quality.futureDatedReceipts).toBe(1);
+    expect(result.items[0]).toEqual(expect.objectContaining({ roundedDays: 160, overdueOutstanding: 100 }));
   });
 });

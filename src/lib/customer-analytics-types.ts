@@ -133,3 +133,35 @@ export type CustomerAnalyticsCapacityResult = {
   detailsByCustomer: Record<string, CustomerAnalyticsCapacityDetail>;
   quality: CustomerAnalyticsQuality;
 };
+
+export type CustomerAnalyticsCycleOrderDetail = {
+  orderId: string;
+  orderNo: string;
+  invNo: string;
+  releaseDate: Date;
+  amount: number;
+  paidAmount: number;
+  outstanding: number;
+  rawDays: number;
+  roundedDays: number;
+  riskBand: CustomerAnalyticsRiskBand;
+};
+
+export type CustomerAnalyticsCycleDetail = {
+  customerId: string;
+  rawDays: number;
+  roundedDays: number;
+  eligibleOrderCount: number;
+  eligibleAmount: number;
+  paidAmount: number;
+  overdueOutstanding: number;
+  withinTermsOutstanding: number;
+  orders: CustomerAnalyticsCycleOrderDetail[];
+};
+
+export type CustomerAnalyticsCycleResult = {
+  period: CustomerAnalyticsPeriod;
+  items: CustomerAnalyticsRankingRow[];
+  detailsByCustomer: Record<string, CustomerAnalyticsCycleDetail>;
+  quality: CustomerAnalyticsQuality;
+};

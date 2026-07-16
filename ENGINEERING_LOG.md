@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.204
+> 当前版本：v1.0.205
 > 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 依赖安全修复第六批 B：Recharts 2.15.4 的现有 `lodash ^4.17.21` 范围允许安全版，因此不升级图表库、不增加强制 override，仅将锁文件中的 `lodash 4.17.23 → 4.18.1`。只变化 1 个包，`npm audit` 从 7 项降至 6 项、生产依赖从 3 项降至 2 项。完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 
 - [x] 依赖安全修复第六批 A：全仓检索确认 `@reactuses/core` 只存在于依赖清单和旧 Bun 锁文件，源码、页面、测试均无引用；移除该包及其 5 个专属子依赖，连带清除 `js-cookie / lodash-es` 两条生产漏洞链。`npm audit` 从 9 项降至 7 项、生产依赖从 5 项降至 3 项。完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 

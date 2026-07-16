@@ -29,9 +29,9 @@
 - Modify: `ENGINEERING_LOG.md`
 - Modify: `todolist.md`
 
-- [ ] Upgrade `next` and `eslint-config-next` together from `16.1.6` to `16.2.10`.
-- [ ] Confirm no source or configuration migration is required by typecheck, lint, full Jest, production build, isolated API, and isolated E2E.
-- [ ] Record before/after audit counts, release `1.0.198`, push, merge after CI, rebuild app-only, and verify health/version/logs.
+- [x] Upgrade `next` and `eslint-config-next` together from `16.1.6` to `16.2.10`.
+- [x] Confirm no source or configuration migration is required by typecheck, lint, full Jest, production build, isolated API, and isolated E2E.
+- [x] Record before/after audit counts, release `1.0.198`, push, merge after CI, rebuild app-only, and verify health/version/logs.
 
 ### Task 2: Internationalization Security Patch
 

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.196
-> 最后更新：2026-07-15
+> 当前版本：v1.0.197
+> 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 客户分析排行精简：移除重复的 `Customer` 表头与客户名称单元格，保留整行鼠标/键盘打开明细、排名、MARK、当前指标、标签切换、排序、分页和后端统计逻辑；空状态列数同步为三列。无数据库、NAS/COS 路径或备份范围变更。验证：Dashboard 定向 5 suites / 30 tests、全量 160 suites / 1018 tests、typecheck、ESLint、Webpack 生产构建和 i18n audit 均通过 ✅ 2026-07-16
 
 - [x] Dashboard 客户分析明细关闭崩溃修复：真实浏览器复现 `Application error: a client-side exception has occurred`，定位为非年度明细关闭动画期间，父组件把空选择回退为 `annual-amount`，子组件仍短暂持有上一份 `payment-capacity/payment-cycle` 响应，导致把错误数据结构传给年度表格并在 `detail.orders.map` 处抛出未捕获异常。明细弹窗现在只渲染与当前 `metric + customerId` 完全一致的响应，关闭时同步失效在途请求并清空响应、错误和 loading 状态。新增受控关闭 Harness 回归，修复前稳定复现同一 TypeError，修复后通过。无数据库、NAS/COS 路径或备份范围变更 ✅ 2026-07-15
 

@@ -90,7 +90,7 @@
 - [x] Re-run `npm audit` and map every remaining package to its direct parent with `npm explain`.
 - [x] Prefer a compatible parent update; use the narrowest tested npm override only where the parent has not released a safe dependency range.
 - [x] Verify `npm audit` reports zero vulnerabilities in both complete and production-only scans.
-- [ ] Run all standard gates, merge, rebuild app-only, verify public route and authenticated health behavior, and record the final audit evidence.
+- [x] Run all standard gates, merge, rebuild app-only, verify public route and authenticated maintenance behavior, and record the final audit evidence.
 
 ### Task 7: Final Operational Closure
 
@@ -99,7 +99,17 @@
 - Modify: `ENGINEERING_LOG.md`
 - Modify: `todolist.md`
 
-- [ ] Confirm `main` and `origin/main` match, the worktree is clean, and the running app version matches `package.json`.
-- [ ] Confirm app, maintenance, and Caddy containers are running with no new startup errors.
-- [ ] Confirm no Prisma migration, MySQL data write, Docker volume removal, NAS/COS path change, or backup-scope change occurred.
-- [ ] Record residual risk if an upstream package cannot safely reach zero audit findings.
+- [x] Confirm `main` and `origin/main` match, the worktree is clean, and the running app version matches `package.json`.
+- [x] Confirm app, maintenance, and Caddy containers are running with no new startup errors.
+- [x] Confirm no Prisma migration, MySQL data write, Docker volume removal, NAS/COS path change, or backup-scope change occurred.
+- [x] Record residual risk: both audit scopes are zero, so no known dependency advisory remains; future upstream advisories still require routine monitoring.
+
+## Final Evidence
+
+- Release: `1.0.207`; PR #17; merge commit `176407c`.
+- Local gates: 160 Jest suites / 1018 tests, 20 isolated API cases, 9/9 isolated Playwright tests, Webpack production build, i18n audit, Prisma validation and client generation.
+- Security: `npm audit` and `npm audit --omit=dev` both returned 0 vulnerabilities; the Docker image install also reported 0 vulnerabilities.
+- CI: PR run `29510041832` and main run `29510478683` passed.
+- Runtime: 25 migrations found with none pending; local root `200`, unauthenticated health `401`, authenticated maintenance probe passed, public root `200`; app, maintenance, and Caddy restart counts were 0.
+- Rebuild note: the first attempt stopped before replacing any container because Docker Hub returned `EOF` while resolving `node:22-alpine`; the existing service remained healthy, and a retry of the same safe script completed successfully.
+- Data safety: no business source, Prisma schema, migration, MySQL data, Docker volume, NAS/COS media path, cleanup rule, or backup scope changed.

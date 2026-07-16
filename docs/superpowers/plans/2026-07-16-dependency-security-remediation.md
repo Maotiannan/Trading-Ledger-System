@@ -65,7 +65,7 @@
 - Modify: release documentation
 
 - [x] Remove the unused `@mdxeditor/editor` dependency and its transitive packages instead of introducing an unnecessary major upgrade.
-- [ ] Upgrade `react-syntax-highlighter` to the first safe 16.x release in a separate release batch.
+- [x] Remove the unused `react-syntax-highlighter` dependency and its transitive packages instead of introducing an unnecessary major upgrade.
 - [ ] For each release, run focused UI tests plus all standard gates before merge and app-only rebuild.
 
 ### Task 5: Excel And UUID Security Updates

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.199
+> 当前版本：v1.0.200
 > 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 依赖安全修复第三批：`prisma / @prisma/client` 从 `6.19.2` 同步升至同大版本安全补丁 `6.19.3`，连带更新 `@prisma/config`、`effect`、`defu` 等官方子依赖；`npm audit` 从 20 项降至 16 项、生产依赖从 17 项降至 13 项。Prisma CLI 保持原有运行依赖位置，避免未来省略开发依赖安装时影响启动迁移检查；`prisma generate / validate` 通过，`prisma/schema.prisma` 与全部 25 个迁移目录无差异。验证：typecheck、ESLint、i18n audit、全量 160 suites / 1018 tests、Webpack 生产构建、isolated API 20 cases、isolated Playwright 9/9。无数据库结构、MySQL 数据、Docker volume 或 NAS/COS 变更。✅ 2026-07-16
 
 - [x] 依赖安全修复第二批：`next-intl / use-intl / icu-minify` 从 `4.8.3` 升至 `4.13.2`，同时更新其官方 FormatJS 解析子依赖，消除国际化开放重定向、翻译目录原型污染及 ICU 处理公告。`npm audit` 从 22 项降至 20 项、生产依赖从 19 项降至 17 项；不修改现有中英文文案、语言偏好、路由或业务逻辑。验证：国际化/登录/导航定向 6 suites / 26 tests、typecheck、ESLint、i18n audit、全量 160 suites / 1018 tests、Webpack 生产构建、isolated API 20 cases（含 locale update）、isolated Playwright 9/9。无 Prisma schema、迁移、MySQL、Docker volume 或 NAS/COS 变更。✅ 2026-07-16
 

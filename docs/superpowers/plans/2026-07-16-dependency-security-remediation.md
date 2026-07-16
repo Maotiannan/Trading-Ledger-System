@@ -41,8 +41,8 @@
 - Modify: localization integration only if the compatible update requires it
 - Modify: release documentation
 
-- [ ] Upgrade `next-intl` to a safe 4.x release and keep locale behavior unchanged.
-- [ ] Run localization, route, API, full-suite, build, isolated runtime, audit, CI, merge, and app-only rebuild gates.
+- [x] Upgrade `next-intl` to a safe 4.x release and keep locale behavior unchanged.
+- [x] Run localization, route, API, full-suite, build, isolated runtime, audit, CI, merge, and app-only rebuild gates.
 
 ### Task 3: Prisma 6 Security Patch
 

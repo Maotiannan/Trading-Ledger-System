@@ -52,9 +52,9 @@
 - Modify: generated Prisma client artifacts only at build time
 - Modify: release documentation
 
-- [ ] Upgrade `prisma` and `@prisma/client` together from `6.19.2` to `6.19.3`.
-- [ ] Run `prisma generate` and confirm `prisma/schema.prisma` plus migration history are unchanged.
-- [ ] Run service/API/full-suite/build/isolated runtime/audit/CI gates, merge, and rebuild app-only.
+- [x] Upgrade `prisma` and `@prisma/client` together from `6.19.2` to `6.19.3`.
+- [x] Run `prisma generate` and confirm `prisma/schema.prisma` plus migration history are unchanged.
+- [x] Run service/API/full-suite/build/isolated runtime/audit/CI gates, merge, and rebuild app-only.
 
 ### Task 4: Editor And Syntax Rendering Security Updates
 
@@ -64,7 +64,7 @@
 - Modify: editor or syntax-rendering imports only if required
 - Modify: release documentation
 
-- [ ] Upgrade `@mdxeditor/editor` to the first safe 4.x release in its own release batch.
+- [x] Remove the unused `@mdxeditor/editor` dependency and its transitive packages instead of introducing an unnecessary major upgrade.
 - [ ] Upgrade `react-syntax-highlighter` to the first safe 16.x release in a separate release batch.
 - [ ] For each release, run focused UI tests plus all standard gates before merge and app-only rebuild.
 

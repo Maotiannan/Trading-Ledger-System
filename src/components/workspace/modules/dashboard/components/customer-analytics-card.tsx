@@ -323,7 +323,6 @@ export function CustomerAnalyticsCard({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">#</TableHead>
-                    <TableHead>{tx('客户', 'Customer')}</TableHead>
                     <TableHead>MARK</TableHead>
                     <TableHead className="text-right">{tx(metricLabels[activeMetric].zh, metricLabels[activeMetric].en)}</TableHead>
                   </TableRow>
@@ -346,23 +345,13 @@ export function CustomerAnalyticsCard({
                       }}
                     >
                       <TableCell>{row.rank}</TableCell>
-                      <TableCell>
-                        <button
-                          type="button"
-                          title={row.customerName || row.mark || '-'}
-                          className="block max-w-[10rem] truncate text-left font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:max-w-[14rem]"
-                          onClick={() => openDetail(row)}
-                        >
-                          {row.customerName || row.mark || '-'}
-                        </button>
-                      </TableCell>
                       <TableCell>{row.mark || '-'}</TableCell>
                       <TableCell className="text-right font-semibold">{renderValue(row)}</TableCell>
                     </TableRow>
                   ))}
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                      <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
                         {tx('当前指标暂无可排行客户', 'No customers qualify for this metric')}
                       </TableCell>
                     </TableRow>

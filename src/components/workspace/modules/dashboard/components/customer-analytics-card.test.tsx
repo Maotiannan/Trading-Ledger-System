@@ -114,7 +114,7 @@ describe('CustomerAnalyticsCard', () => {
     expect(await screen.findByRole('combobox', { name: 'Analysis year' })).toHaveValue('2026');
   });
 
-  it('renders four row fields, keeps zero capacity rows, and reloads a selected year', async () => {
+  it('renders rank, MARK, and metric without a customer-name column', async () => {
     mockApiCall.mockImplementation(async (endpoint: string) => {
       const metric = endpointMetric(endpoint);
       return {
@@ -130,7 +130,9 @@ describe('CustomerAnalyticsCard', () => {
 
     const table = await screen.findByRole('table');
     expect(within(table).getByText('1')).toBeInTheDocument();
-    expect(within(table).getByRole('button', { name: 'Alpha Company' })).toBeInTheDocument();
+    expect(within(table).queryByRole('columnheader', { name: 'Customer' })).not.toBeInTheDocument();
+    expect(within(table).queryByText('Alpha Company')).not.toBeInTheDocument();
+    expect(within(table).getByRole('row', { name: 'Open analytics detail for Alpha Company' })).toBeInTheDocument();
     expect(within(table).getByText('ALPHA')).toBeInTheDocument();
     expect(within(table).getByText('$125,000')).toBeInTheDocument();
 
@@ -150,11 +152,11 @@ describe('CustomerAnalyticsCard', () => {
     });
     render(<CustomerAnalyticsCard initialYear={2026} />);
 
-    expect(await screen.findByRole('button', { name: 'Customer 10' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Customer 11' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: 'Open analytics detail for Customer 10' })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: 'Open analytics detail for Customer 11' })).not.toBeInTheDocument();
     expect(screen.getByTestId('dashboard-card-pagination')).toHaveClass('mt-auto');
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(await screen.findByRole('button', { name: 'Customer 11' })).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: 'Open analytics detail for Customer 11' })).toBeInTheDocument();
 
     selectTab('Payment Capacity');
     expect(await screen.findByText('1 / 2 (11)')).toBeInTheDocument();
@@ -208,7 +210,7 @@ describe('CustomerAnalyticsCard', () => {
       .mockReturnValueOnce(pending2026Refresh);
     render(<CustomerAnalyticsCard initialYear={2026} />);
 
-    expect(await screen.findByRole('button', { name: 'Initial 2026' })).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: 'Open analytics detail for Initial 2026' })).toBeInTheDocument();
     const yearSelect = screen.getByRole('combobox', { name: 'Analysis year' });
     fireEvent.change(yearSelect, { target: { value: '2025' } });
     fireEvent.change(yearSelect, { target: { value: '2026' } });
@@ -217,7 +219,7 @@ describe('CustomerAnalyticsCard', () => {
       success: true,
       data: response('annual-amount', [row(1, { customerName: 'Current 2026' })]),
     });
-    expect(await screen.findByRole('button', { name: 'Current 2026' })).toBeInTheDocument();
+    expect(await screen.findByRole('row', { name: 'Open analytics detail for Current 2026' })).toBeInTheDocument();
 
     await act(async () => {
       resolve2025({
@@ -226,8 +228,8 @@ describe('CustomerAnalyticsCard', () => {
       });
       await Promise.resolve();
     });
-    expect(screen.queryByRole('button', { name: 'Stale 2025' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Current 2026' })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: 'Open analytics detail for Stale 2025' })).not.toBeInTheDocument();
+    expect(screen.getByRole('row', { name: 'Open analytics detail for Current 2026' })).toBeInTheDocument();
   });
 
   it('retries an active metric error and opens only the active metric detail', async () => {
@@ -238,7 +240,7 @@ describe('CustomerAnalyticsCard', () => {
     expect(await screen.findByText('Customer analytics could not be loaded.')).toBeInTheDocument();
     mockApiCall.mockResolvedValueOnce({ success: true, data: response('annual-amount', [row(1)]) });
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Customer 1' }));
+    fireEvent.click(await screen.findByRole('row', { name: 'Open analytics detail for Customer 1' }));
 
     expect(onOpenDetail).toHaveBeenCalledWith({
       metric: 'annual-amount',
@@ -270,7 +272,7 @@ describe('CustomerAnalyticsCard', () => {
     });
     render(<CustomerAnalyticsCard initialYear={2026} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Customer 1' }));
+    fireEvent.click(await screen.findByRole('row', { name: 'Open analytics detail for Customer 1' }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(mockApiCall).toHaveBeenCalledWith(
@@ -312,11 +314,11 @@ describe('CustomerAnalyticsCard', () => {
     render(<CustomerAnalyticsCard initialYear={2026} />);
 
     const yearSelect = await screen.findByRole('combobox', { name: 'Analysis year' });
-    fireEvent.click(await screen.findByRole('button', { name: 'Customer 1' }));
+    fireEvent.click(await screen.findByRole('row', { name: 'Open analytics detail for Customer 1' }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
 
     fireEvent.change(yearSelect, { target: { value: '2025' } });
-    expect(await screen.findByText('Refreshed 2025')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Open analytics detail for Refreshed 2025')).toBeInTheDocument();
     await act(async () => { await Promise.resolve(); });
 
     const detailCalls = mockApiCall.mock.calls

@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.200
+> 当前版本：v1.0.201
 > 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 依赖安全修复第四批 A：全仓检索确认 `@mdxeditor/editor` 只存在于 `package.json / bun.lock` 依赖记录，源码、页面和测试均无引用；选择删除而不是承担无业务收益的 3.x → 4.x 大版本升级。npm 共移除 148 个未使用子依赖，`npm audit` 从 16 项降至 15 项、生产依赖从 13 项降至 11 项。验证：typecheck、ESLint、i18n audit、全量 160 suites / 1018 tests、Webpack 生产构建、isolated API 20 cases、isolated Playwright 9/9。未修改 UI、业务代码、数据库或持久化路径。✅ 2026-07-16
 
 - [x] 依赖安全修复第三批：`prisma / @prisma/client` 从 `6.19.2` 同步升至同大版本安全补丁 `6.19.3`，连带更新 `@prisma/config`、`effect`、`defu` 等官方子依赖；`npm audit` 从 20 项降至 16 项、生产依赖从 17 项降至 13 项。Prisma CLI 保持原有运行依赖位置，避免未来省略开发依赖安装时影响启动迁移检查；`prisma generate / validate` 通过，`prisma/schema.prisma` 与全部 25 个迁移目录无差异。验证：typecheck、ESLint、i18n audit、全量 160 suites / 1018 tests、Webpack 生产构建、isolated API 20 cases、isolated Playwright 9/9。无数据库结构、MySQL 数据、Docker volume 或 NAS/COS 变更。✅ 2026-07-16
 

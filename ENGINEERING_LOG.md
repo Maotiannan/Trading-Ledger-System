@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.197
+> 当前版本：v1.0.198
 > 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 依赖安全修复第一批：`next / eslint-config-next` 从 `16.1.6` 升至 `16.2.10`，清除 Next.js 请求走私、DoS、CSRF 绕过、缓存污染、XSS、SSRF 等已公开版本公告；Next 内置与 Tailwind 使用的 PostCSS 统一覆盖到同大版本安全补丁 `8.5.19`。升级后隔离 E2E 首轮准确拦截了 Next 16.2 开发资源来源收紧问题，根因是测试浏览器使用 `127.0.0.1` 而开发服务器默认只认可自身主机名；`allowedDevOrigins` 仅增加本机回环地址后 9/9 通过，生产来源策略不变。`npm audit` 从 24 项降至 22 项、生产依赖从 21 项降至 19 项。验证：typecheck、ESLint、i18n audit、全量 160 suites / 1018 tests、Webpack 生产构建、isolated API 20 cases、isolated Playwright 9/9。无业务代码、Prisma schema、迁移、MySQL 数据、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 
 - [x] Dashboard 客户分析排行精简：移除重复的 `Customer` 表头与客户名称单元格，保留整行鼠标/键盘打开明细、排名、MARK、当前指标、标签切换、排序、分页和后端统计逻辑；空状态列数同步为三列。无数据库、NAS/COS 路径或备份范围变更。验证：Dashboard 定向 5 suites / 30 tests、全量 160 suites / 1018 tests、typecheck、ESLint、Webpack 生产构建和 i18n audit 均通过 ✅ 2026-07-16
 

@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  allowedDevOrigins: ['127.0.0.1'],
   serverExternalPackages: ['@resvg/resvg-js'],
 };
 

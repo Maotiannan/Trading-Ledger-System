@@ -66,7 +66,7 @@
 
 - [x] Remove the unused `@mdxeditor/editor` dependency and its transitive packages instead of introducing an unnecessary major upgrade.
 - [x] Remove the unused `react-syntax-highlighter` dependency and its transitive packages instead of introducing an unnecessary major upgrade.
-- [ ] For each release, run focused UI tests plus all standard gates before merge and app-only rebuild.
+- [x] For each release, run focused UI tests plus all standard gates before merge and app-only rebuild.
 
 ### Task 5: Excel And UUID Security Updates
 
@@ -76,8 +76,8 @@
 - Modify: Excel import/export code only if compatibility tests require it
 - Modify: release documentation
 
-- [ ] Upgrade the direct `uuid` dependency to a safe compatible release.
-- [ ] Resolve ExcelJS nested `uuid` and `tmp` advisories with tested targeted overrides rather than downgrading ExcelJS.
+- [x] Remove the unused direct `uuid` declaration instead of retaining an unnecessary direct dependency.
+- [x] Resolve ExcelJS nested `uuid` and `tmp` advisories with tested targeted overrides rather than downgrading ExcelJS.
 - [ ] Run all Excel import/export unit and isolated API tests, then all standard gates, merge, and app-only rebuild.
 
 ### Task 6: Remaining Transitive Advisories

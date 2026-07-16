@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.203
+> 当前版本：v1.0.204
 > 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 依赖安全修复第六批 A：全仓检索确认 `@reactuses/core` 只存在于依赖清单和旧 Bun 锁文件，源码、页面、测试均无引用；移除该包及其 5 个专属子依赖，连带清除 `js-cookie / lodash-es` 两条生产漏洞链。`npm audit` 从 9 项降至 7 项、生产依赖从 5 项降至 3 项。完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 
 - [x] 依赖安全修复第五批：确认源码不直接使用顶层 `uuid` 后移除其声明；ExcelJS 4.4.0 仍为最新版且内部固定旧依赖，因此使用限定在 `exceljs` 子树的 npm override，把 `uuid 8.3.2 → 11.1.1`、`tmp 0.2.5 → 0.2.7`，不影响其他包。真实内存工作簿写入/读取往返通过；完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。`npm audit` 从 12 项降至 9 项，生产依赖从 8 项降至 5 项。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 

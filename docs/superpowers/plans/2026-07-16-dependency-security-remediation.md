@@ -78,7 +78,7 @@
 
 - [x] Remove the unused direct `uuid` declaration instead of retaining an unnecessary direct dependency.
 - [x] Resolve ExcelJS nested `uuid` and `tmp` advisories with tested targeted overrides rather than downgrading ExcelJS.
-- [ ] Run all Excel import/export unit and isolated API tests, then all standard gates, merge, and app-only rebuild.
+- [x] Run all Excel import/export unit and isolated API tests, then all standard gates, merge, and app-only rebuild.
 
 ### Task 6: Remaining Transitive Advisories
 
@@ -87,7 +87,7 @@
 - Modify: `package-lock.json`
 - Modify: release documentation
 
-- [ ] Re-run `npm audit` and map every remaining package to its direct parent with `npm explain`.
+- [x] Re-run `npm audit` and map every remaining package to its direct parent with `npm explain`.
 - [ ] Prefer a compatible parent update; use the narrowest tested npm override only where the parent has not released a safe dependency range.
 - [ ] Verify `npm audit` reports zero vulnerabilities in both complete and production-only scans.
 - [ ] Run all standard gates, merge, rebuild app-only, verify public route and authenticated health behavior, and record the final audit evidence.

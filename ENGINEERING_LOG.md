@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.202
+> 当前版本：v1.0.203
 > 最后更新：2026-07-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 依赖安全修复第五批：确认源码不直接使用顶层 `uuid` 后移除其声明；ExcelJS 4.4.0 仍为最新版且内部固定旧依赖，因此使用限定在 `exceljs` 子树的 npm override，把 `uuid 8.3.2 → 11.1.1`、`tmp 0.2.5 → 0.2.7`，不影响其他包。真实内存工作簿写入/读取往返通过；完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。`npm audit` 从 12 项降至 9 项，生产依赖从 8 项降至 5 项。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 
 - [x] 依赖安全修复第四批 B：全仓检索确认 `react-syntax-highlighter` 只存在于依赖清单和旧 Bun 锁文件，源码、页面和测试均无引用；删除该依赖及 25 个未使用子依赖，连带清除 `prismjs / refractor` 漏洞链。`npm audit` 从 15 项降至 12 项、生产依赖从 11 项降至 8 项。验证：完整 `test:ci`（typecheck、ESLint、全量 Jest coverage、isolated API 20 cases、isolated Playwright 9/9）、Webpack 生产构建和 i18n audit。未修改 UI、业务代码、数据库或持久化路径。✅ 2026-07-16
 

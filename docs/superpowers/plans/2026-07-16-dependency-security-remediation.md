@@ -88,8 +88,8 @@
 - Modify: release documentation
 
 - [x] Re-run `npm audit` and map every remaining package to its direct parent with `npm explain`.
-- [ ] Prefer a compatible parent update; use the narrowest tested npm override only where the parent has not released a safe dependency range.
-- [ ] Verify `npm audit` reports zero vulnerabilities in both complete and production-only scans.
+- [x] Prefer a compatible parent update; use the narrowest tested npm override only where the parent has not released a safe dependency range.
+- [x] Verify `npm audit` reports zero vulnerabilities in both complete and production-only scans.
 - [ ] Run all standard gates, merge, rebuild app-only, verify public route and authenticated health behavior, and record the final audit evidence.
 
 ### Task 7: Final Operational Closure

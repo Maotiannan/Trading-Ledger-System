@@ -13,6 +13,7 @@ import {
 import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
+import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 const DEFAULT_ORDER_TRACKER_STATUS = 'In progress';
@@ -567,9 +568,20 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
     badRequest('没有可更新的内容');
   }
 
-  const updated = await db.orderTracker.update({
-    where: { id },
-    data,
+  const humanEditedAt = new Date();
+  const updated = await runInTransaction(async (tx) => {
+    const row = await tx.orderTracker.update({
+      where: { id },
+      data,
+    });
+    await tx.externalOrderSourceLink.updateMany({
+      where: { orderTrackerId: id, active: true },
+      data: {
+        humanEditedAt,
+        humanEditedBy: currentUser.id,
+      },
+    });
+    return row;
   });
 
   await recordAuditEvent({

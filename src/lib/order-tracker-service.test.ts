@@ -11,7 +11,8 @@ import {
 } from '@/lib/order-tracker-service';
 
 jest.mock('@/lib/db', () => ({
-  db: {
+  db: (() => {
+    const mockedDb: Record<string, unknown> = {
     customer: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -29,7 +30,15 @@ jest.mock('@/lib/db', () => ({
     receipt: {
       findMany: jest.fn(),
     },
-  },
+    externalOrderSourceLink: {
+      updateMany: jest.fn(),
+    },
+    };
+    mockedDb.$transaction = jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => (
+      callback(mockedDb)
+    ));
+    return mockedDb;
+  })(),
 }));
 
 jest.mock('@/lib/audit', () => ({
@@ -69,6 +78,7 @@ function makeUser(overrides: Partial<{
 }
 
 const mockDb = db as unknown as {
+  $transaction: jest.Mock;
   customer: { findFirst: jest.Mock; findMany: jest.Mock };
   order: { findUnique: jest.Mock };
   orderTracker: {
@@ -79,6 +89,7 @@ const mockDb = db as unknown as {
     update: jest.Mock;
   };
   receipt: { findMany: jest.Mock };
+  externalOrderSourceLink: { updateMany: jest.Mock };
 };
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockFindOrderIdByNoOrAlias = findOrderIdByNoOrAlias as jest.Mock;
@@ -88,6 +99,9 @@ const mockGetSystemSettingsWithDefaults = getSystemSettingsWithDefaults as jest.
 describe('order-tracker-service', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) => (
+      callback(mockDb)
+    ));
     mockGetSystemSettingsWithDefaults.mockResolvedValue({
       ORDER_TRACKER_STATUS_OPTIONS: 'In progress,Confirmed,Canceled',
     });
@@ -350,6 +364,31 @@ describe('order-tracker-service', () => {
         confirmedAtAfter: updateData.confirmedAt.toISOString(),
       }),
     }));
+  });
+
+  it('marks an active source link as human-edited in the same transaction', async () => {
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'In progress',
+      confirmedAt: null,
+      createdBy: 'sales-1',
+      customer: { ownerId: 'sales-1' },
+    });
+    mockDb.orderTracker.update.mockResolvedValueOnce({
+      id: 'tracker-1',
+      status: 'Confirmed',
+    });
+
+    await updateOrderTracker(makeUser(), 'tracker-1', { status: 'Confirmed' });
+
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.externalOrderSourceLink.updateMany).toHaveBeenCalledWith({
+      where: { orderTrackerId: 'tracker-1', active: true },
+      data: {
+        humanEditedAt: expect.any(Date),
+        humanEditedBy: 'sales-1',
+      },
+    });
   });
 
   it('clears the timestamp when a Confirmed record leaves that status', async () => {

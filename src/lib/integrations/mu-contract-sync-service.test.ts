@@ -10,7 +10,12 @@ import {
   runMuContractSyncNow,
   runScheduledMuContractSync,
 } from '@/lib/integrations/mu-contract-sync-service';
-import type { MuContractEventPage, MuContractOrderEvent } from '@/lib/integrations/mu-contract-contract';
+import {
+  isMuContractInvalidEvent,
+  parseMuContractEventPage,
+  type MuContractEventPage,
+  type MuContractOrderEvent,
+} from '@/lib/integrations/mu-contract-contract';
 
 jest.mock('@/lib/integrations/mu-contract-order-applier', () => ({
   applyMuContractOrderState: jest.fn(),
@@ -24,10 +29,16 @@ const mockApply = applyMuContractOrderState as jest.Mock;
 const mockGetSettings = getMuContractSyncSettings as jest.Mock;
 
 function eventPage(): MuContractEventPage {
-  return JSON.parse(readFileSync(
+  return parseMuContractEventPage(JSON.parse(readFileSync(
     path.join(process.cwd(), 'tests/fixtures/mu-contract-order-sync/formal-generated.json'),
     'utf8',
-  ));
+  )));
+}
+
+function validEvent(page = eventPage()): MuContractOrderEvent {
+  const event = page.events[0];
+  if (isMuContractInvalidEvent(event)) throw new Error('expected valid test event');
+  return event;
 }
 
 function state(overrides: Record<string, unknown> = {}) {
@@ -63,6 +74,9 @@ function makeDb(initialState = state()) {
     integrationEventReceipt: {
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn(async ({ data }) => ({ id: 'receipt-1', ...data })),
+    },
+    integrationSyncConflict: {
+      upsert: jest.fn(async ({ create }) => ({ id: 'conflict-1', ...create })),
     },
     integrationSyncState: {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -154,12 +168,54 @@ describe('MU Contract incremental synchronization', () => {
     expect(tx.integrationSyncState.update).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ committedCursor: expect.anything() }),
     }));
-    expect(root.integrationSyncState.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(root.integrationSyncState.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { provider: 'MU_CONTRACT', leaseOwner: 'lease-1' },
       data: expect.objectContaining({
         lastErrorCode: expect.any(String),
         lastErrorMessage: expect.not.stringContaining('upstream details'),
       }),
     }));
+  });
+
+  it('does not let a failed expired worker overwrite replacement-worker status', async () => {
+    const { root } = makeDb();
+    root.integrationSyncState.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValue({ count: 0 });
+    const client = makeClient();
+    client.fetchEvents.mockRejectedValueOnce(new Error('source timeout'));
+
+    await expect(runMuContractSyncNow({
+      actorId: 'admin-1',
+      client,
+      dbClient: root,
+      now: () => fixedNow,
+      leaseOwner: 'expired-worker',
+    })).rejects.toThrow();
+
+    expect(root.integrationSyncState.update).not.toHaveBeenCalled();
+    expect(root.integrationSyncState.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { provider: 'MU_CONTRACT', leaseOwner: 'expired-worker' },
+      data: expect.objectContaining({ lastErrorCode: expect.any(String) }),
+    }));
+  });
+
+  it('rejects completion when the lease was taken over after the final event', async () => {
+    const { root } = makeDb();
+    root.integrationSyncState.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValue({ count: 0 });
+
+    await expect(runMuContractSyncNow({
+      actorId: 'admin-1',
+      client: makeClient(),
+      dbClient: root,
+      now: () => fixedNow,
+      leaseOwner: 'expired-worker',
+    })).rejects.toMatchObject({ code: 'MU_CONTRACT_LEASE_LOST' });
+
+    expect(root.integrationSyncState.update).not.toHaveBeenCalled();
   });
 
   it('returns running without contacting the source when another lease is active', async () => {
@@ -214,13 +270,14 @@ describe('MU Contract incremental synchronization', () => {
 
   it('records stale and business-conflict events while advancing the cursor', async () => {
     const page = eventPage();
+    const first = validEvent(page);
     const second = {
-      ...page.events[0],
+      ...first,
       cursor: '1043',
       eventId: '46c25864-bffd-4d15-9e92-f536ece57585',
-      source: { ...page.events[0].source, version: page.events[0].source.version + 1 },
+      source: { ...first.source, version: first.source.version + 1 },
     } as MuContractOrderEvent;
-    page.events = [page.events[0], second];
+    page.events = [first, second];
     page.nextCursor = '1043';
     const client = makeClient(page);
     const { root, tx } = makeDb();
@@ -257,6 +314,54 @@ describe('MU Contract incremental synchronization', () => {
     expect(tx.integrationEventReceipt.create).toHaveBeenNthCalledWith(2, {
       data: expect.objectContaining({ result: 'BUSINESS_CONFLICT', cursor: '1043' }),
     });
+  });
+
+  it('records an identifiable invalid event, advances its cursor, and continues later valid events', async () => {
+    const rawPage = JSON.parse(readFileSync(
+      path.join(process.cwd(), 'tests/fixtures/mu-contract-order-sync/formal-generated.json'),
+      'utf8',
+    ));
+    rawPage.events[0].officialAmount.value = 'secret-invalid-amount';
+    const later = {
+      ...rawPage.events[0],
+      cursor: '1043',
+      eventId: '46c25864-bffd-4d15-9e92-f536ece57585',
+      source: { ...rawPage.events[0].source, version: 4 },
+      officialAmount: null,
+      eventType: 'PI_ORDER_LINKED',
+      reason: 'ORDER_ASSIGNED',
+    };
+    rawPage.events.push(later);
+    rawPage.nextCursor = '1043';
+    const page = parseMuContractEventPage(rawPage);
+    const client = makeClient(page);
+    const { root, tx } = makeDb();
+
+    const result = await runMuContractSyncNow({
+      actorId: 'admin-1',
+      client,
+      dbClient: root,
+      now: () => fixedNow,
+      leaseOwner: 'lease-1',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ processed: 2, conflicts: 1, committedCursor: '1043' }));
+    expect(tx.integrationSyncConflict.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        type: 'INVALID_SOURCE_DATA',
+        sourcePiId: rawPage.events[0].source.piId,
+        sourceOrderNo: null,
+        evidence: { issuePath: 'officialAmount.value' },
+      }),
+    }));
+    expect(JSON.stringify(tx.integrationSyncConflict.upsert.mock.calls)).not.toContain('secret-invalid-amount');
+    expect(tx.integrationEventReceipt.create).toHaveBeenNthCalledWith(1, {
+      data: expect.objectContaining({ result: 'BUSINESS_CONFLICT', cursor: '1042', orderTrackerId: null }),
+    });
+    expect(mockApply).toHaveBeenCalledTimes(1);
+    expect(mockApply).toHaveBeenCalledWith(tx, expect.objectContaining({
+      state: expect.objectContaining({ cursor: '1043' }),
+    }));
   });
 
   it('reports safe status counts without returning environment credentials', async () => {

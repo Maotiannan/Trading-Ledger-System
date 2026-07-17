@@ -282,7 +282,9 @@ async function createOrAttachTarget(
   actorId: string,
 ): Promise<{ target: AppliedTarget; collisionIds: string[] }> {
   const normalizedOrderNo = normalizeOrderIdentifier(state.order.orderNo);
-  const row = await tx.orderTracker.findUnique({ where: { normalizedOrderNo } });
+  const row = await tx.orderTracker.findFirst({
+    where: { normalizedOrderNo, archivedAt: null },
+  });
 
   if (!row) {
     return { target: await resolveForNewTracker(tx, state, actorId), collisionIds: [] };
@@ -342,8 +344,22 @@ async function applyExistingLinkedOrder(
     };
   }
 
+  if (existing.linkMode === ExternalOrderLinkMode.MANUAL_ATTACHED) {
+    return {
+      target: {
+        orderTrackerId: current.id,
+        linkMode: existing.linkMode,
+        customerMatchStatus: customerStatusForTracker(current),
+      },
+      collisionType: null,
+      collisionIds: [],
+    };
+  }
+
   const normalizedOrderNo = normalizeOrderIdentifier(state.order.orderNo);
-  const targetRow = await tx.orderTracker.findUnique({ where: { normalizedOrderNo } });
+  const targetRow = await tx.orderTracker.findFirst({
+    where: { normalizedOrderNo, archivedAt: null },
+  });
   if (targetRow && targetRow.id !== current.id) {
     const foreignLink = await linkedElsewhere(tx, targetRow.id, state.source.piId);
     if (foreignLink) {
@@ -367,6 +383,7 @@ async function applyExistingLinkedOrder(
         data: {
           archivedAt: new Date(),
           archiveReason: `MU_CONTRACT rename transferred source ${state.source.piId} to manual row ${targetRow.id}`,
+          normalizedOrderNo: `__archived__:mu_contract:${current.id}`,
           updatedBy: actorId,
         },
       });

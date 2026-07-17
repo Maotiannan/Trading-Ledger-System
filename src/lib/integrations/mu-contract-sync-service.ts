@@ -8,7 +8,12 @@ import {
   MuContractClientError,
   type MuContractClient,
 } from '@/lib/integrations/mu-contract-client';
-import { MuContractContractError, type MuContractOrderEvent } from '@/lib/integrations/mu-contract-contract';
+import {
+  isMuContractInvalidEvent,
+  MuContractContractError,
+  type MuContractOrderEvent,
+  type MuContractParsedEvent,
+} from '@/lib/integrations/mu-contract-contract';
 import {
   MU_CONTRACT_LEASE_MS,
   MU_CONTRACT_PROVIDER,
@@ -188,12 +193,12 @@ export async function releaseMuContractLease(
 
 async function processEvent(
   database: typeof db,
-  event: MuContractOrderEvent,
+  event: MuContractParsedEvent,
   actorId: string,
   leaseOwner: string,
   now: Clock,
 ): Promise<MuContractApplyResult> {
-  const payloadHash = eventHash(event);
+  const payloadHash = isMuContractInvalidEvent(event) ? event.payloadHash : eventHash(event);
   return database.$transaction(async (tx) => {
     const transactionStartedAt = now();
     const lease = await tx.integrationSyncState.updateMany({
@@ -238,11 +243,42 @@ async function processEvent(
       } as MuContractApplyResult;
     }
 
-    const result = await applyMuContractOrderState(tx, {
-      state: event,
-      actorId,
-      cursor: event.cursor,
-    });
+    const result: MuContractApplyResult = isMuContractInvalidEvent(event)
+      ? {
+          result: 'BUSINESS_CONFLICT',
+          orderTrackerId: null,
+          linkMode: null,
+          conflictType: 'INVALID_SOURCE_DATA',
+        }
+      : await applyMuContractOrderState(tx, {
+          state: event,
+          actorId,
+          cursor: event.cursor,
+        });
+    if (isMuContractInvalidEvent(event)) {
+      const dedupeKey = `${MU_CONTRACT_PROVIDER}:${event.source.piId}:INVALID_SOURCE_DATA`;
+      const conflict = {
+        provider: MU_CONTRACT_PROVIDER,
+        sourcePiId: event.source.piId,
+        sourceVersion: event.source.version,
+        eventId: event.eventId,
+        cursor: event.cursor,
+        type: 'INVALID_SOURCE_DATA' as const,
+        sourceOrderNo: null,
+        targetOrderTrackerIds: [],
+        summary: 'MU Contract source data is invalid',
+        evidence: { issuePath: event.issuePath },
+        status: IntegrationConflictStatus.OPEN,
+        resolutionNote: null,
+        resolvedAt: null,
+        resolvedBy: null,
+      };
+      await tx.integrationSyncConflict.upsert({
+        where: { dedupeKey },
+        create: { dedupeKey, ...conflict },
+        update: conflict,
+      });
+    }
     const processedAt = now();
     await tx.integrationEventReceipt.create({
       data: {
@@ -328,8 +364,12 @@ async function runIncremental(
     }
 
     const completedAt = now();
-    await database.integrationSyncState.update({
-      where: { provider: MU_CONTRACT_PROVIDER },
+    const completed = await database.integrationSyncState.updateMany({
+      where: {
+        provider: MU_CONTRACT_PROVIDER,
+        leaseOwner,
+        leaseExpiresAt: { gt: completedAt },
+      },
       data: {
         lastSuccessAt: completedAt,
         lastErrorCode: null,
@@ -337,11 +377,12 @@ async function runIncremental(
         nextEligiblePollAt: new Date(completedAt.getTime() + settings.intervalSeconds * 1000),
       },
     });
+    if (completed.count !== 1) throw new MuContractSyncError('MU_CONTRACT_LEASE_LOST');
     return { status: 'completed', processed, conflicts, committedCursor: cursor };
   } catch (error) {
     const code = safeErrorCode(error);
-    await database.integrationSyncState.update({
-      where: { provider: MU_CONTRACT_PROVIDER },
+    await database.integrationSyncState.updateMany({
+      where: { provider: MU_CONTRACT_PROVIDER, leaseOwner },
       data: {
         lastErrorCode: code,
         lastErrorMessage: safeErrorMessage(code),

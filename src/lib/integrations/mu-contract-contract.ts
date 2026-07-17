@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { z } from 'zod';
 
 export const MU_CONTRACT_SCHEMA_VERSION = 1 as const;
@@ -16,7 +18,10 @@ export class MuContractContractError extends Error {
   }
 }
 
-const cursorSchema = z.string().regex(/^(0|[1-9]\d*)$/, 'cursor must be an unsigned decimal string');
+const MAX_CURSOR = BigInt('9223372036854775807');
+const cursorSchema = z.string()
+  .regex(/^(0|[1-9]\d{0,18})$/, 'cursor must be an unsigned decimal string with at most 19 digits')
+  .refine((value) => BigInt(value) <= MAX_CURSOR, 'cursor exceeds signed 64-bit storage');
 const utcTimestampSchema = z.string().refine((value) => {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) return false;
   return !Number.isNaN(Date.parse(value));
@@ -26,8 +31,19 @@ const trimmedString = (max: number) => z.string().trim().min(1).max(max);
 const sourceSchema = z.object({
   system: z.literal('MU_CONTRACT'),
   piId: trimmedString(64),
-  version: z.number().int().min(1),
+  version: z.number().int().min(1).max(2_147_483_647),
 }).strict();
+
+// Identity parsing strips all business fields so an invalid event can be stored safely.
+const eventEnvelopeSchema = z.object({
+  cursor: cursorSchema,
+  eventId: z.string().uuid(),
+  source: z.object({
+    system: z.literal('MU_CONTRACT'),
+    piId: trimmedString(64),
+    version: z.number().int().min(1).max(2_147_483_647),
+  }),
+});
 
 const orderSchema = z.object({
   orderNo: trimmedString(191),
@@ -46,7 +62,7 @@ const orderSchema = z.object({
 
 const officialAmountSchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be a three-letter uppercase code'),
-  value: z.string().regex(/^\d+\.\d{2}$/, 'amount must be a non-negative two-decimal string'),
+  value: z.string().regex(/^\d{1,16}\.\d{2}$/, 'amount must have at most 16 integer digits and exactly two decimals'),
   generatedAt: utcTimestampSchema,
   generationRunId: trimmedString(64),
 }).strict();
@@ -113,21 +129,12 @@ const snapshotItemSchema = z.object({
   officialAmount: officialAmountSchema.nullable(),
 }).strict();
 
-const eventPageSchema = z.object({
+const eventPageEnvelopeSchema = z.object({
   schemaVersion: z.literal(MU_CONTRACT_SCHEMA_VERSION),
-  events: z.array(eventSchema).max(500),
+  events: z.array(z.unknown()).max(500),
   nextCursor: cursorSchema.nullable(),
   hasMore: z.boolean(),
 }).strict().superRefine((page, context) => {
-  for (let index = 1; index < page.events.length; index += 1) {
-    if (BigInt(page.events[index].cursor) <= BigInt(page.events[index - 1].cursor)) {
-      context.addIssue({ code: 'custom', path: ['events', index, 'cursor'], message: 'event cursors must be strictly increasing' });
-    }
-  }
-  const lastCursor = page.events.at(-1)?.cursor ?? null;
-  if (lastCursor !== null && page.nextCursor !== lastCursor) {
-    context.addIssue({ code: 'custom', path: ['nextCursor'], message: 'nextCursor must equal the final event cursor' });
-  }
   if (page.hasMore && page.events.length === 0) {
     context.addIssue({ code: 'custom', path: ['hasMore'], message: 'hasMore requires at least one event' });
   }
@@ -159,9 +166,26 @@ export type MuContractOrderSource = z.infer<typeof sourceSchema>;
 export type MuContractOrderState = z.infer<typeof orderSchema>;
 export type MuContractOfficialAmount = z.infer<typeof officialAmountSchema>;
 export type MuContractOrderEvent = z.infer<typeof eventSchema>;
+export type MuContractInvalidEvent = z.infer<typeof eventEnvelopeSchema> & {
+  invalid: true;
+  issuePath: string;
+  payloadHash: string;
+};
+export type MuContractParsedEvent = MuContractOrderEvent | MuContractInvalidEvent;
 export type MuContractSnapshotItem = z.infer<typeof snapshotItemSchema>;
-export type MuContractEventPage = z.infer<typeof eventPageSchema>;
+export type MuContractEventPage = {
+  schemaVersion: typeof MU_CONTRACT_SCHEMA_VERSION;
+  events: MuContractParsedEvent[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
 export type MuContractSnapshotPage = z.infer<typeof snapshotPageSchema>;
+
+export function isMuContractInvalidEvent(
+  event: MuContractParsedEvent,
+): event is MuContractInvalidEvent {
+  return 'invalid' in event && event.invalid === true;
+}
 
 function parseVersion(value: unknown): void {
   if (!value || typeof value !== 'object') return;
@@ -188,8 +212,61 @@ function parsePayload<T>(schema: z.ZodType<T>, value: unknown): T {
   return result.data;
 }
 
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalize(nested)]),
+    );
+  }
+  return value;
+}
+
 export function parseMuContractEventPage(value: unknown): MuContractEventPage {
-  return parsePayload(eventPageSchema, value);
+  const outer = parsePayload(eventPageEnvelopeSchema, value);
+  const events = outer.events.map((rawEvent, index): MuContractParsedEvent => {
+    const envelope = eventEnvelopeSchema.safeParse(rawEvent);
+    if (!envelope.success) {
+      const issue = envelope.error.issues[0];
+      const suffix = issue?.path.length ? `.${issue.path.join('.')}` : '';
+      throw new MuContractContractError(
+        'MU_CONTRACT_PAYLOAD_INVALID',
+        `Invalid MU Contract payload at events.${index}${suffix}`,
+      );
+    }
+
+    const event = eventSchema.safeParse(rawEvent);
+    if (event.success) return event.data;
+    const issue = event.error.issues[0];
+    return {
+      invalid: true,
+      ...envelope.data,
+      issuePath: issue?.path.length ? issue.path.join('.') : 'event',
+      payloadHash: createHash('sha256')
+        .update(JSON.stringify(canonicalize(rawEvent)))
+        .digest('hex'),
+    };
+  });
+
+  for (let index = 1; index < events.length; index += 1) {
+    if (BigInt(events[index].cursor) <= BigInt(events[index - 1].cursor)) {
+      throw new MuContractContractError(
+        'MU_CONTRACT_PAYLOAD_INVALID',
+        `Invalid MU Contract payload at events.${index}.cursor`,
+      );
+    }
+  }
+  const lastCursor = events.at(-1)?.cursor ?? null;
+  if (lastCursor !== null && outer.nextCursor !== lastCursor) {
+    throw new MuContractContractError(
+      'MU_CONTRACT_PAYLOAD_INVALID',
+      'Invalid MU Contract payload at nextCursor',
+    );
+  }
+
+  return { ...outer, events };
 }
 
 export function parseMuContractSnapshotPage(value: unknown): MuContractSnapshotPage {

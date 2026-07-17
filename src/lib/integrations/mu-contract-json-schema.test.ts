@@ -35,4 +35,28 @@ describe('MU Contract shared JSON Schema', () => {
 
     expect(validate(fixture)).toBe(false);
   });
+
+  it.each([
+    ['cursor above signed bigint', (fixture: any) => { fixture.events[0].cursor = '9223372036854775808'; fixture.nextCursor = '9223372036854775808'; }],
+    ['source version above signed int', (fixture: any) => { fixture.events[0].source.version = 2147483648; }],
+    ['official amount above 16 integer digits', (fixture: any) => { fixture.events[0].officialAmount.value = '10000000000000000.00'; }],
+  ])('rejects %s', (_label, mutate) => {
+    const fixture = readJson(
+      'tests/fixtures/mu-contract-order-sync/formal-generated.json',
+    ) as Record<string, unknown>;
+    mutate(fixture);
+
+    expect(validate(fixture)).toBe(false);
+  });
+
+  it('accepts the exact persistence maxima', () => {
+    const fixture = readJson(
+      'tests/fixtures/mu-contract-order-sync/formal-generated.json',
+    ) as { events: Array<{ cursor: string; source: { version: number } }>; nextCursor: string };
+    fixture.events[0].cursor = '9223372036854775807';
+    fixture.events[0].source.version = 2147483647;
+    fixture.nextCursor = '9223372036854775807';
+
+    expect(validate(fixture)).toBe(true);
+  });
 });

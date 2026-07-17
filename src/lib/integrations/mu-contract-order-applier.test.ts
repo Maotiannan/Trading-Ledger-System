@@ -114,6 +114,7 @@ function makeTx() {
     },
     orderTracker: {
       findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn(async ({ data }) => ({ id: 'sync-created', ...data })),
       update: jest.fn(async ({ where, data }) => ({ id: where.id, ...data })),
     },
@@ -188,7 +189,7 @@ describe('MU Contract transactional order applier', () => {
     ['missing order', null, 'SYNC_CREATED'],
   ])('%s preserves manual priority', async (_name, existingRow, expectedLinkMode) => {
     const tx = makeTx();
-    tx.orderTracker.findUnique.mockResolvedValue(existingRow);
+    tx.orderTracker.findFirst.mockResolvedValue(existingRow);
 
     const result = await apply(tx);
 
@@ -264,6 +265,31 @@ describe('MU Contract transactional order applier', () => {
     });
   });
 
+  it('never rewrites unresolved customer or finance fields on a manually attached row', async () => {
+    const tx = makeTx();
+    tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink({
+      linkMode: 'MANUAL_ATTACHED',
+      orderTracker: manualRow({
+        customerId: null,
+        needsCustomerFix: true,
+        financeOrderId: 'manual-finance-order',
+        customerMark: 'MANUAL',
+        customerName: 'Manual snapshot',
+      }),
+      customerMatchStatus: 'UNMATCHED',
+    }));
+
+    await apply(tx, makeEvent({ version: 3 }));
+
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(tx.orderTracker.update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ customerId: expect.anything() }),
+    }));
+    expect(tx.externalOrderSourceLink.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ customerMatchStatus: 'UNMATCHED' }),
+    }));
+  });
+
   it('renames the same PI row while preserving all user-owned fields', async () => {
     const tx = makeTx();
     const existing = sourceLink({ customerMatchStatus: 'MATCHED' });
@@ -297,7 +323,7 @@ describe('MU Contract transactional order applier', () => {
   it('archives an untouched sync row and transfers its link to a colliding manual row', async () => {
     const tx = makeTx();
     tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink());
-    tx.orderTracker.findUnique.mockResolvedValue(manualRow({ id: 'manual-target' }));
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow({ id: 'manual-target' }));
 
     const result = await apply(tx, makeEvent({
       orderNo: 'AB-12',
@@ -316,6 +342,7 @@ describe('MU Contract transactional order applier', () => {
       data: expect.objectContaining({
         archivedAt: expect.any(Date),
         archiveReason: expect.stringContaining('MU_CONTRACT'),
+        normalizedOrderNo: expect.stringMatching(/^__archived__:mu_contract:/),
         updatedBy: 'service-admin',
       }),
     });
@@ -328,12 +355,32 @@ describe('MU Contract transactional order applier', () => {
     });
   });
 
+  it('does not attach a new PI to an archived hidden row with the old business key', async () => {
+    const tx = makeTx();
+    tx.orderTracker.findUnique.mockResolvedValue(manualRow({
+      id: 'archived-hidden',
+      archivedAt: new Date('2026-07-17T00:00:00.000Z'),
+    }));
+    tx.orderTracker.findFirst.mockResolvedValue(null);
+
+    const result = await apply(tx);
+
+    expect(result).toEqual(expect.objectContaining({
+      orderTrackerId: 'sync-created',
+      linkMode: 'SYNC_CREATED',
+    }));
+    expect(tx.orderTracker.create).toHaveBeenCalled();
+    expect(tx.externalOrderSourceLink.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ orderTrackerId: 'sync-created' }),
+    });
+  });
+
   it('records a conflict instead of replacing a human-edited sync row', async () => {
     const tx = makeTx();
     tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink({
       humanEditedAt: new Date('2026-07-17T00:00:00.000Z'),
     }));
-    tx.orderTracker.findUnique.mockResolvedValue(manualRow({ id: 'manual-target' }));
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow({ id: 'manual-target' }));
 
     const result = await apply(tx, makeEvent({
       orderNo: 'AB-12',
@@ -354,7 +401,7 @@ describe('MU Contract transactional order applier', () => {
 
   it('does not attach a second PI source to the same Orders row', async () => {
     const tx = makeTx();
-    tx.orderTracker.findUnique.mockResolvedValue(manualRow());
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow());
     tx.externalOrderSourceLink.findFirst.mockResolvedValue({
       id: 'other-link',
       externalId: 'pi-2',
@@ -414,7 +461,7 @@ describe('MU Contract transactional order applier', () => {
 
   it('retains non-USD metadata but returns an explicit business conflict', async () => {
     const tx = makeTx();
-    tx.orderTracker.findUnique.mockResolvedValue(manualRow());
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow());
 
     const result = await apply(tx, makeEvent({ currency: 'EUR', amount: '900.00' }));
 

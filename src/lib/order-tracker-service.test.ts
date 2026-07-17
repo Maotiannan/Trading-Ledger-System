@@ -33,6 +33,9 @@ jest.mock('@/lib/db', () => ({
     externalOrderSourceLink: {
       updateMany: jest.fn(),
     },
+    integrationSyncConflict: {
+      findMany: jest.fn(),
+    },
     };
     mockedDb.$transaction = jest.fn(async (callback: (tx: unknown) => Promise<unknown>) => (
       callback(mockedDb)
@@ -90,6 +93,7 @@ const mockDb = db as unknown as {
   };
   receipt: { findMany: jest.Mock };
   externalOrderSourceLink: { updateMany: jest.Mock };
+  integrationSyncConflict: { findMany: jest.Mock };
 };
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockFindOrderIdByNoOrAlias = findOrderIdByNoOrAlias as jest.Mock;
@@ -114,6 +118,7 @@ describe('order-tracker-service', () => {
     });
     mockRecordAuditEvent.mockResolvedValue(undefined);
     mockFindOrderIdByNoOrAlias.mockResolvedValue(null);
+    mockDb.integrationSyncConflict.findMany.mockResolvedValue([]);
   });
 
   it('allows creating an Orders-page record even when the order already exists in finance orders or aliases', async () => {
@@ -306,6 +311,99 @@ describe('order-tracker-service', () => {
     expect(result.data).toHaveLength(1);
     expect(result.data[0].depositAmount).toBe(1300);
     expect(result.data[0].confirmedAt).toEqual(new Date('2026-05-15T10:00:00.000Z'));
+    expect(result.data[0]).toEqual(expect.objectContaining({
+      piCreatedAt: null,
+      piOfficialAmount: null,
+      piCurrency: null,
+      sourceState: null,
+      sourceConflict: false,
+    }));
+  });
+
+  it('excludes archived rows and allows ADMIN to see unresolved synchronized rows', async () => {
+    mockDb.orderTracker.findMany.mockResolvedValueOnce([]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    await listOrderTrackers(makeUser({ id: 'admin-1', role: UserRole.ADMIN }), {});
+
+    expect(mockDb.orderTracker.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        AND: expect.arrayContaining([
+          { archivedAt: null },
+          expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                externalSourceLinks: {
+                  some: expect.objectContaining({
+                    provider: 'MU_CONTRACT',
+                    customerMatchStatus: { not: 'MATCHED' },
+                  }),
+                },
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    }));
+  });
+
+  it('does not add the global unresolved-source visibility path for SALES', async () => {
+    mockDb.orderTracker.findMany.mockResolvedValueOnce([]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+
+    await listOrderTrackers(makeUser(), {});
+
+    const where = mockDb.orderTracker.findMany.mock.calls[0][0].where;
+    expect(JSON.stringify(where)).not.toContain('externalSourceLinks');
+    expect(JSON.stringify(where)).toContain('archivedAt');
+  });
+
+  it('serializes synchronized PI metadata and an open source conflict without N+1 queries', async () => {
+    const piCreatedAt = new Date('2026-07-18T00:30:00.000Z');
+    mockDb.orderTracker.findMany.mockResolvedValueOnce([{
+      id: 'tracker-source',
+      orderNo: 'AB-12',
+      normalizedOrderNo: 'ab-12',
+      status: 'In progress',
+      confirmedAt: null,
+      piStatus: false,
+      remark: null,
+      systemNote: null,
+      customerId: 'customer-1',
+      customerMark: 'AB',
+      customerName: 'AB',
+      customerPhone: '+224 600 00 00 00',
+      customerCity: 'Conakry',
+      createdBy: 'sales-1',
+      updatedBy: null,
+      amount: 0,
+      orderBalance: 0,
+      createdAt: new Date('2026-07-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-07-18T00:00:00.000Z'),
+      customer: { id: 'customer-1', ownerId: 'sales-1', mark: 'AB', orderName: 'AB' },
+      externalSourceLinks: [{
+        externalId: 'pi-1',
+        piCreatedAt,
+        officialAmount: 30040,
+        currency: 'USD',
+        active: true,
+        customerMatchStatus: 'MATCHED',
+      }],
+    }]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    mockDb.integrationSyncConflict.findMany.mockResolvedValueOnce([{ sourcePiId: 'pi-1' }]);
+
+    const result = await listOrderTrackers(makeUser(), {});
+
+    expect(result.data[0]).toEqual(expect.objectContaining({
+      piCreatedAt,
+      piOfficialAmount: 30040,
+      piCurrency: 'USD',
+      sourceState: 'ACTIVE',
+      sourceMatchStatus: 'MATCHED',
+      sourceConflict: true,
+    }));
+    expect(mockDb.integrationSyncConflict.findMany).toHaveBeenCalledTimes(1);
   });
 
   it('requires an upper ADMIN account to update PI status and system note', async () => {

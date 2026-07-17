@@ -1,4 +1,10 @@
-import { Prisma, ReceiptStatus, UserRole } from '@prisma/client';
+import {
+  ExternalCustomerMatchStatus,
+  IntegrationConflictStatus,
+  Prisma,
+  ReceiptStatus,
+  UserRole,
+} from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -15,6 +21,7 @@ import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { MU_CONTRACT_PROVIDER } from '@/lib/integrations/mu-contract-constants';
 
 const DEFAULT_ORDER_TRACKER_STATUS = 'In progress';
 const DEFAULT_STATUS_OPTIONS = [DEFAULT_ORDER_TRACKER_STATUS, 'Confirmed', 'Canceled'];
@@ -76,13 +83,25 @@ function normalizeTrackerOrderNo(value: string): string {
   return normalizeOrderIdentifier(value);
 }
 
-function buildTrackerVisibilityWhere(ownerIds: string[]): Prisma.OrderTrackerWhereInput {
-  return {
-    OR: [
-      { createdBy: { in: ownerIds } },
-      { customer: { ownerId: { in: ownerIds } } },
-    ],
-  };
+function buildTrackerVisibilityWhere(
+  ownerIds: string[],
+  role: UserRole,
+): Prisma.OrderTrackerWhereInput {
+  const scopedRows: Prisma.OrderTrackerWhereInput[] = [
+    { createdBy: { in: ownerIds } },
+    { customer: { ownerId: { in: ownerIds } } },
+  ];
+  if (role === UserRole.ADMIN) {
+    scopedRows.push({
+      externalSourceLinks: {
+        some: {
+          provider: MU_CONTRACT_PROVIDER,
+          customerMatchStatus: { not: ExternalCustomerMatchStatus.MATCHED },
+        },
+      },
+    });
+  }
+  return { OR: scopedRows };
 }
 
 function buildCustomerVisibilityWhere(ownerIds: string[]): Prisma.CustomerWhereInput {
@@ -130,7 +149,19 @@ function canEditAdminFields(
   return false;
 }
 
-function serializeTracker(row: Record<string, unknown>, depositAmount: number, currentUser: CurrentUser, baseEditable: boolean, adminEditable: boolean) {
+function serializeTracker(
+  row: Record<string, unknown>,
+  depositAmount: number,
+  currentUser: CurrentUser,
+  baseEditable: boolean,
+  adminEditable: boolean,
+  conflictingSourcePiIds: ReadonlySet<string>,
+) {
+  const externalSourceLinks = Array.isArray(row.externalSourceLinks)
+    ? row.externalSourceLinks as Array<Record<string, unknown>>
+    : [];
+  const source = externalSourceLinks[0] || null;
+  const { externalSourceLinks: _hiddenSourceLinks, ...publicRow } = row;
   const financeOrder = row.financeOrder && typeof row.financeOrder === 'object'
     ? row.financeOrder as Record<string, unknown>
     : null;
@@ -138,13 +169,25 @@ function serializeTracker(row: Record<string, unknown>, depositAmount: number, c
     ? financeOrder.invoice as Record<string, unknown>
     : null;
   return {
-    ...row,
+    ...publicRow,
     amount: asNumber(row.amount),
     orderBalance: asNumber(row.orderBalance),
     confirmedAt: row.confirmedAt instanceof Date ? row.confirmedAt : null,
     financeOrderNo: typeof financeOrder?.orderNo === 'string' ? financeOrder.orderNo : null,
     financeInvNo: typeof financeInvoice?.invNo === 'string' ? financeInvoice.invNo : null,
     depositAmount,
+    piCreatedAt: source?.piCreatedAt instanceof Date ? source.piCreatedAt : null,
+    piOfficialAmount: source?.officialAmount === null || source?.officialAmount === undefined
+      ? null
+      : asNumber(source.officialAmount),
+    piCurrency: typeof source?.currency === 'string' ? source.currency : null,
+    sourceState: source ? (source.active ? 'ACTIVE' : 'INACTIVE') : null,
+    sourceMatchStatus: typeof source?.customerMatchStatus === 'string'
+      ? source.customerMatchStatus
+      : null,
+    sourceConflict: typeof source?.externalId === 'string'
+      ? conflictingSourcePiIds.has(source.externalId)
+      : false,
     canEdit: baseEditable,
     canEditAdminFields: adminEditable,
     isMine: row.createdBy === currentUser.id,
@@ -309,7 +352,8 @@ export async function listOrderTrackers(
   const status = trimStr(filters.status);
   const where: Prisma.OrderTrackerWhereInput = {
     AND: [
-      buildTrackerVisibilityWhere(ownerIds),
+      { archivedAt: null },
+      buildTrackerVisibilityWhere(ownerIds, currentUser.role),
       status ? { status } : {},
       search
         ? {
@@ -333,6 +377,18 @@ export async function listOrderTrackers(
       updater: { select: { id: true, email: true, name: true, role: true } },
       customer: { select: { id: true, ownerId: true, mark: true, orderName: true, name: true, phone: true, city: true } },
       financeOrder: { select: { id: true, orderNo: true, invoice: { select: { id: true, invNo: true } } } },
+      externalSourceLinks: {
+        where: { provider: MU_CONTRACT_PROVIDER },
+        select: {
+          externalId: true,
+          piCreatedAt: true,
+          officialAmount: true,
+          currency: true,
+          active: true,
+          customerMatchStatus: true,
+        },
+        take: 1,
+      },
     },
     orderBy: [{ createdAt: 'desc' }],
   });
@@ -342,10 +398,32 @@ export async function listOrderTrackers(
     ownerIds,
   );
 
+  const sourcePiIds = Array.from(new Set(rows.flatMap((row) => (
+    (row.externalSourceLinks || []).map((source) => source.externalId)
+  ))));
+  const sourceConflicts = sourcePiIds.length > 0
+    ? await db.integrationSyncConflict.findMany({
+        where: {
+          provider: MU_CONTRACT_PROVIDER,
+          sourcePiId: { in: sourcePiIds },
+          status: IntegrationConflictStatus.OPEN,
+        },
+        select: { sourcePiId: true },
+      })
+    : [];
+  const conflictingSourcePiIds = new Set(sourceConflicts.map((row) => row.sourcePiId));
+
   const data = rows.map((row) => {
     const baseEditable = canEditBaseFields(currentUser, scope, row);
     const adminEditable = canEditAdminFields(currentUser, scope, row);
-    return serializeTracker(row as unknown as Record<string, unknown>, depositAmounts.get(row.id) || 0, currentUser, baseEditable, adminEditable);
+    return serializeTracker(
+      row as unknown as Record<string, unknown>,
+      depositAmounts.get(row.id) || 0,
+      currentUser,
+      baseEditable,
+      adminEditable,
+      conflictingSourcePiIds,
+    );
   });
 
   await recordAuditEvent({

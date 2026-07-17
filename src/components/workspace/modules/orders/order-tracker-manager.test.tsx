@@ -232,6 +232,97 @@ describe('OrderTrackerManager', () => {
     expect(within(progressRow as HTMLTableRowElement).getAllByRole('cell')[depositIndex + 1]).toHaveTextContent('-');
   });
 
+  it('shows synchronized PI date and amount in the approved desktop column order', async () => {
+    mockUseUiText.mockReturnValue((_zh: string, en: string) => en);
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('orders?action=customer-options')) {
+        return { success: true, data: [] };
+      }
+      return {
+        success: true,
+        data: [
+          {
+            id: 'tracker-source',
+            orderNo: 'AB-12',
+            status: 'In progress',
+            confirmedAt: null,
+            piStatus: false,
+            remark: '',
+            systemNote: '',
+            customerId: null,
+            customerMark: null,
+            customerName: null,
+            customerPhone: null,
+            customerCity: null,
+            depositAmount: 0,
+            piCreatedAt: '2026-07-18T00:30:00.000Z',
+            piOfficialAmount: 30040,
+            piCurrency: 'USD',
+            sourceState: 'INACTIVE',
+            sourceMatchStatus: 'UNMATCHED',
+            sourceConflict: true,
+            canEdit: false,
+            canEditAdminFields: false,
+            createdAt: '2026-07-18T00:30:00.000Z',
+          },
+          {
+            id: 'tracker-manual',
+            orderNo: 'LOCAL-01',
+            status: 'Confirmed',
+            confirmedAt: null,
+            piStatus: false,
+            remark: '',
+            systemNote: '',
+            customerId: 'customer-1',
+            customerMark: 'LOCAL',
+            customerName: 'LOCAL',
+            customerPhone: null,
+            customerCity: null,
+            depositAmount: 0,
+            piCreatedAt: null,
+            piOfficialAmount: null,
+            piCurrency: null,
+            sourceState: null,
+            sourceMatchStatus: null,
+            sourceConflict: false,
+            canEdit: true,
+            canEditAdminFields: true,
+            createdAt: '2026-07-18T00:30:00.000Z',
+          },
+        ],
+        meta: { statusOptions: ['In progress', 'Confirmed', 'Canceled'], defaultStatus: 'In progress' },
+      };
+    });
+
+    await renderManager();
+
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'ORDER',
+      'PI CREATED DATE',
+      'AMOUNT',
+      'STATUS',
+      'PI STATUS',
+      'REMARK',
+      'SYSTEM NOTED',
+      'DEPOSIT',
+      'CONFIRMED DATE',
+      'CUSTOMER',
+      'ACTIONS',
+    ]);
+    const sourceRow = screen.getByText('AB-12').closest('tr');
+    const sourceCells = within(sourceRow as HTMLTableRowElement).getAllByRole('cell');
+    expect(sourceCells[1]).toHaveTextContent('18/07/2026');
+    expect(sourceCells[2]).toHaveTextContent('$30,040');
+    expect(within(sourceRow as HTMLTableRowElement).getByText('Source inactive')).toBeInTheDocument();
+    expect(within(sourceRow as HTMLTableRowElement).getByText('Customer match needed')).toBeInTheDocument();
+    expect(within(sourceRow as HTMLTableRowElement).getByText('Source conflict')).toBeInTheDocument();
+
+    const manualRow = screen.getByText('LOCAL-01').closest('tr');
+    const manualCells = within(manualRow as HTMLTableRowElement).getAllByRole('cell');
+    expect(manualCells[1]).toHaveTextContent('-');
+    expect(manualCells[2]).toHaveTextContent('-');
+  });
+
   it('does not submit admin-only fields when a sales-editable order is saved', async () => {
     mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
       if (endpoint.startsWith('orders?action=customer-options')) {

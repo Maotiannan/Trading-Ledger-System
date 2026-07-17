@@ -14,6 +14,12 @@ export type OrderTrackerRow = {
   financeOrderId?: string | null;
   financeOrderNo?: string | null;
   financeInvNo?: string | null;
+  piCreatedAt: string | null;
+  piOfficialAmount: number | null;
+  piCurrency: string | null;
+  sourceState: 'ACTIVE' | 'INACTIVE' | null;
+  sourceMatchStatus: 'MATCHED' | 'UNMATCHED' | 'CONFLICT' | null;
+  sourceConflict: boolean;
   depositAmount: number;
   canEdit: boolean;
   canEditAdminFields: boolean;

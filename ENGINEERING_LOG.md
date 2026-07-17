@@ -8,6 +8,8 @@
 
 ## P0（本周必须完成）
 
+- [x] COS 真实恢复演练与历史计划状态收口：关闭并删除已被主线替代的旧草稿 PR #1；新增历史计划状态索引，28 份计划标记为已完成归档、1 份整张收据编辑器计划标记为被最终 `No/Date/Tél` 方案替代。恢复演练从 COS 下载 2026-07-17 数据库、校验文件、manifest 和完整媒体，在无主机端口、无生产卷的独立 MariaDB 10.6 + 应用容器中恢复；SHA-256、gzip、29 张表 `mariadb-check`、25 条 migration、管理员登录、客户/发票/收据/Detail/SWIFT/Dashboard/客户分析 API、PNG/JPG/PDF 预览均通过。演练状态为 `PASS_WITH_FINDINGS`：265 个有效媒体引用中 264 个可恢复，缺失图片影响 `0001001 / PETROUM-02` 与 `0001004 / YD-01`，且源 NAS 与 COS 历史版本均无副本；另发现 7 个 `.smbdelete*` 临时文件和旧 `0001031` 签名会话孤儿元数据。生产数据库、NAS、运行容器和端口均未触碰。✅ 2026-07-17
+
 - [x] 依赖安全修复第六批 D：最后四项均由开发工具链引入，现有父依赖范围允许同大版本安全更新；`@babel/core 7.29.0 → 7.29.7` 并同步其 7.x 官方组件，`flatted 3.3.3 → 3.4.2`，`js-yaml 3.14.2 / 4.1.1 → 3.15.0 / 4.3.0`，`ws 8.19.0 → 8.21.1`。不升级 Jest、ESLint、JSDOM 主版本，不增加强制 override。完整 `npm audit` 从 4 项降至 0 项，`npm audit --omit=dev` 保持 0 项，两种审计均以退出码 0 通过；完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。PR #17 与合并后的 main CI 均通过，主线提交为 `176407c`；本地首次重建因 Docker Hub 获取 `node:22-alpine` 令牌时返回临时 `EOF`，旧服务和数据未受影响，第二次使用同一安全脚本成功完成。运行容器版本 `1.0.207`，25 个迁移无待执行，本地首页 `200`、未登录健康接口 `401`、公网首页 `200`，app / maintenance / Caddy 重启次数均为 0。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
 
 - [x] 依赖安全修复第六批 C：现有父依赖范围直接允许安全补丁，不增加 override，将 1.x / 2.x / 5.x 的 `brace-expansion` 分别更新到 `1.1.16 / 2.1.2 / 5.0.7`，将 2.x / 4.x 的 `picomatch` 更新到 `2.3.2 / 4.0.5`；不升级 ExcelJS、Next Intl、Parcel Watcher、Jest 或 ESLint。`npm audit` 从 6 项降至 4 项，`npm audit --omit=dev` 从 2 项降至 0 项，生产依赖审计首次清零。完整 `test:ci` 通过 typecheck、ESLint、全量 160 suites / 1018 tests、isolated API 20 cases、isolated Playwright 9/9，Webpack 生产构建和 i18n audit 通过。无业务代码、数据库、Docker volume 或 NAS/COS 路径变更。✅ 2026-07-16
@@ -419,7 +421,7 @@
 ### 运维与监控
 - [ ] 接入 Sentry（前后端异常聚合）
 - [ ] 接入 Prometheus + Grafana（接口成功率、耗时、错误率）
-- [ ] 制定备份与恢复演练（MariaDB 快照 + 上传目录备份）
+- [x] 完成腾讯云 COS 数据库 + NAS 媒体真实恢复演练，使用隔离 MariaDB/应用验证并记录媒体完整性发现项 ✅ 2026-07-17
 
 ### 文档与交付
 - [ ] 补全 API 文档（可选 OpenAPI）

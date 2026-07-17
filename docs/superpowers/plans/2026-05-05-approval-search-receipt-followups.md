@@ -1,5 +1,7 @@
 # Approval, Search, and Composite ORDER Follow-ups Plan
 
+> **Plan status:** `ARCHIVED_COMPLETED` as of 2026-07-17. The implementation is on `main`; unchecked boxes below are retained as the original execution checklist and are not active backlog. See [the status index](./README.md).
+
 1. Extend the order matching kernel to understand `/`-delimited composite ORDER numbers and add targeted tests.
 2. Wire composite-order support into invoice order-context lookup and any exact-order helper used by receipt direct/OCR flows.
 3. Rename the Deletion Approval surface to Approval and aggregate receipt/detail/swift edit request sections into it.

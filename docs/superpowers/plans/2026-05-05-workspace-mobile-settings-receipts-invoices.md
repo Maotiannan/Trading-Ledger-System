@@ -1,5 +1,7 @@
 # Workspace Mobile / Settings / Receipts / Invoices Implementation Plan
 
+> **Plan status:** `ARCHIVED_COMPLETED` as of 2026-07-17. The implementation is on `main`; unchecked boxes below are retained as the original execution checklist and are not active backlog. See [the status index](./README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Improve mobile usability across the eight workspace pages, collapse Settings sections, upgrade Receipt Management status filtering/pagination, and change Invoice Management default ordering.

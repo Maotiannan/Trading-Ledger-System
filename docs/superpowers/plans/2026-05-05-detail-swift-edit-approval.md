@@ -1,5 +1,7 @@
 # Detail And Swift Edit Approval Implementation Plan
 
+> **Plan status:** `ARCHIVED_COMPLETED` as of 2026-07-17. The implementation is on `main`; unchecked boxes below are retained as the original execution checklist and are not active backlog. See [the status index](./README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend the receipt-style edit approval flow to `Payment Detail` and `Swift`, so `SALES` submits pending edit requests while `ADMIN` applies visible edits immediately, without weakening status boundaries, visibility rules, or auditability.

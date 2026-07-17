@@ -1,5 +1,7 @@
 # Global Matching And Receipt/Detail Follow-Ups Implementation Plan
 
+> **Plan status:** `ARCHIVED_COMPLETED` as of 2026-07-17. The implementation is on `main`; unchecked boxes below are retained as the original execution checklist and are not active backlog. See [the status index](./README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Unify all `ORDER_NAME`-based matching behind one shared spacing-insensitive kernel, upgrade invoice/receipt flows to use it, support one customer master profile with multiple `ORDER_NAME` aliases, and then land the dependent receipt/detail/mobile/export enhancements.

@@ -198,6 +198,16 @@ Correct restore drill:
 3. Point a test app instance to the temporary database.
 4. Sync media files to a temporary folder.
 5. Verify login, customers, invoices, receipts, details, SWIFT previews, and generated receipt images.
-6. Verify all seven `CUSTOMER_ANALYTICS_*` settings and call the annual amount, payment capacity, and payment-cycle ranking APIs; open one detail result and confirm it reconciles with its ranking row.
+6. Verify the seven Customer Analytics settings returned by the API. If no `CUSTOMER_ANALYTICS_*` rows are persisted, confirm all seven code defaults are returned instead.
+7. Compare active database media references with restored files. A missing active reference is a drill finding even when the source NAS file was already missing before backup.
+8. Use an authenticated `SELECT 1` against the final MariaDB server as the readiness check; `mariadb-admin ping` alone can succeed during image initialization before the final root password is active.
 
 Only after a successful drill should production restore be considered.
+
+## 9. Restore Drill History
+
+| Date | Backup | Result | Evidence |
+| --- | --- | --- | --- |
+| 2026-07-17 | `database/mysql/2026/07/17/trading_ledger-20260717-023005.sql.gz` + `media/upload/` | `PASS_WITH_FINDINGS` | [Full report](restore-drills/2026-07-17-muledger-cos-restore-drill.md) |
+
+The 2026-07-17 drill proved database, application, authentication, Dashboard analytics, and protected media recovery. It also found one active image path missing from both NAS and COS, affecting receipts `0001001` and `0001004`, plus seven `.smbdelete*` backup artifacts. Do not describe media recovery as 100% complete until the missing receipt image is manually resolved.

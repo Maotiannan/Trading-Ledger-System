@@ -81,6 +81,8 @@ docker compose down -v
 
 腾讯云 COS 备份运行手册见：[muledger-cos-backup.md](docs/backup/muledger-cos-backup.md)。
 
+最近一次真实恢复演练见：[2026-07-17 MULEDGER COS 恢复演练](docs/backup/restore-drills/2026-07-17-muledger-cos-restore-drill.md)。
+
 ## 启动与更新
 
 本地日常更新和重建：
@@ -110,3 +112,4 @@ docker compose up -d --build
 - [CHANGE_CHECKLIST.md](CHANGE_CHECKLIST.md)：每类改动必须同步检查的事项。
 - [API_TESTING.md](docs/API_TESTING.md)：API 自动化测试说明。
 - [data-and-integrations.md](docs/data-and-integrations.md)：数据文件、外部接口、上传目录和清理规则。
+- [Implementation Plan Status Index](docs/superpowers/plans/README.md)：历史实施计划的唯一状态索引。

@@ -54,7 +54,7 @@ services:
       sh -c '
         while true; do
           curl -fsS -X POST "$$MAINTENANCE_BASE_URL/api/internal/integrations/mu-contract/pull" \
-            -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" || true;
+            -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" >/dev/null || true;
           sleep 5;
         done
       '

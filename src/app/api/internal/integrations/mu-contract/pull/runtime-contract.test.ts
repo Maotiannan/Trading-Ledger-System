@@ -31,6 +31,7 @@ describe('MU Contract synchronization runtime contract', () => {
     expect(trigger).toContain('MAINTENANCE_JOB_TOKEN');
     expect(trigger).toContain('/api/internal/integrations/mu-contract/pull');
     expect(trigger).toContain('x-maintenance-token');
+    expect(trigger).toContain('x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" >/dev/null');
     expect(trigger).not.toMatch(/\/api\/integrations\/mu-contract\/actions/);
   });
 });

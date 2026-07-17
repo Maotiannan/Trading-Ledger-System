@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020';
+import type { AnySchema } from 'ajv';
 import addFormats from 'ajv-formats';
 
 function readJson(relativePath: string): unknown {
@@ -13,7 +14,7 @@ describe('MU Contract shared JSON Schema', () => {
   addFormats(ajv);
 
   const validate = ajv.compile(
-    readJson('docs/integrations/mu-contract-order-sync-v1.schema.json'),
+    readJson('docs/integrations/mu-contract-order-sync-v1.schema.json') as AnySchema,
   );
 
   it.each([

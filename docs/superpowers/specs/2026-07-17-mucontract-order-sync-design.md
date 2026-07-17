@@ -145,7 +145,7 @@ GET /integrations/muledger/order-events?after=<cursor>&limit=<batch>
 Authorization: Bearer <dedicated integration token>
 ```
 
-`after` is the last successfully committed cursor and is exclusive. It is omitted only for the first event pull. `limit` is constrained to `1..500`. Cursor values are decimal strings in JSON to avoid JavaScript 64-bit precision loss.
+`after` is the last successfully committed cursor and is exclusive. It is omitted only for the first event pull. `limit` is constrained to `1..500`. Cursor values are decimal strings in JSON to avoid JavaScript 64-bit precision loss and are bounded to `0..9223372036854775807` (maximum 19 digits). Source versions are bounded to `1..2147483647`; official amounts allow at most 16 integer digits and exactly two decimal digits.
 
 ```json
 {
@@ -237,7 +237,7 @@ Conflicts record source PI ID/version, event ID/cursor, type, current ORDER NO, 
 
 ### `IntegrationReconcilePreview`
 
-One short-lived administrator confirmation record stores provider, source high-watermark, snapshot summary, summary hash, creator, creation time, 15-minute expiry, and consumed time. Apply accepts only an unexpired, unconsumed preview whose current source high-watermark still matches. If source state changed, the API returns a readable `409` and requires a new preview rather than applying materially different counts without review.
+One short-lived administrator confirmation record stores provider, source high-watermark, snapshot summary, a deterministic fingerprint over the complete canonical snapshot, high-watermark, summary and apply-relevant local target state, creator, creation time, 15-minute expiry, and consumed time. Apply accepts only an unexpired, unconsumed preview. It re-reads one complete snapshot, verifies one stable high-watermark and ordered unique PI pagination on every page, and recalculates source and local target evidence before any writes. Drift returns a readable `409`; a validated in-memory snapshot is then applied in bounded transaction chunks with durable source-PI checkpoints.
 
 ### Orders archival
 
@@ -255,7 +255,7 @@ One short-lived administrator confirmation record stores provider, source high-w
 8. Apply a valid event, record before/after audit evidence, insert the event receipt, and update the committed cursor atomically.
 9. Convert deterministic business problems into an open conflict plus `BUSINESS_CONFLICT` event receipt, then advance the cursor so one bad PI cannot stop unrelated PIs.
 10. On network, source `5xx`, timeout, database, or transaction failure, do not insert a receipt and do not advance the cursor. Release or expire the lease and retry on the next run.
-11. A supported version with identifiable but invalid business data becomes `INVALID_SOURCE_DATA` and advances safely. An unsupported contract version stops the batch without advancing the cursor. It is an integration compatibility failure, not a skippable business conflict.
+11. A supported version with a storage-safe cursor, event ID and source PI identity but invalid business data becomes `INVALID_SOURCE_DATA`, writes a payload hash and safe issue path without raw source values, advances safely, and does not block later valid events. Unsafe identity, cursor ordering, or unsupported contract version stops the page without advancing the cursor. Snapshot validation remains fully strict.
 12. Source outbox rows and MULEDGER event receipts are retained indefinitely in version 1. Their expected volume is low and they form the durable audit trail; no cleanup job is introduced without a separately designed cursor-safe retention policy.
 
 Only USD official amounts are displayed in the current Orders USD column. A non-USD formal PI is retained as a business conflict with its original amount metadata; MULEDGER does not silently convert or mislabel it.
@@ -276,7 +276,7 @@ Only USD official amounts are displayed in the current Orders USD column. A non-
 - A successful match fills customer and finance-order references using existing Orders service conventions.
 - An unsuccessful match leaves the customer blank, sets `needsCustomerFix`, and keeps the row administrator-only.
 - Matching retries on later source events and every Full Reconcile while the row remains unresolved.
-- Once a user chooses a customer, later synchronization does not overwrite it.
+- Once a user chooses a customer, later synchronization does not overwrite it. ADMIN may directly resolve only an unmatched/conflicted synchronized row; customer snapshot, fix flag, source match status, human-edit stamp, conflict closure and before/after audit commit together without touching financial tables.
 
 ### Rename for the same PI ID
 
@@ -312,7 +312,7 @@ The current preflight baseline is 53 MU Contract PI ORDER NOs, comprising 39 met
 
 ### Apply
 
-Apply requires a second explicit administrator confirmation tied to the preview identifier and source high-watermark. It processes bounded batches and persists the immutable-PI snapshot cursor after each batch. It does not change the normal event cursor while snapshot work is incomplete. After the final snapshot batch commits, it atomically sets the event cursor to at least the captured high-watermark, clears reconcile progress, and then consumes events after that high-watermark. A crash resumes from the persisted snapshot cursor. If source state has moved beyond the preview, per-PI versions and the subsequent event feed reconcile the difference.
+Apply requires a second explicit administrator confirmation tied to the preview identifier, complete fingerprint and source high-watermark. Before writing, it re-reads and validates the entire stable paged snapshot and current apply-relevant MULEDGER target state. It then processes that exact in-memory snapshot in bounded batches and persists the immutable PI ID after each batch. It does not change the normal event cursor while snapshot work is incomplete. After the final batch commits, it atomically sets the event cursor to at least the captured high-watermark and clears reconcile progress. A crash revalidates the full source snapshot and untouched suffix, then resumes after the persisted PI ID. Any unapproved source or local target drift requires a new preview.
 
 `Full Reconcile` never invokes financial rematch, merges financial orders, deletes business rows, or changes balances.
 
@@ -463,14 +463,16 @@ No existing production Docker service or production database is used for develop
 11. Human-edited collision creates a conflict with no overwrite or archive.
 12. Source deactivation never deletes an Orders row.
 13. Non-USD amount creates a conflict and is never presented as USD.
-14. Scheduled and manual calls respect a single database lease.
-15. User edits mark a linked row human-edited without changing source metadata.
+14. Scheduled and manual calls respect a single database lease; completion/failure writes remain conditional on the same owner during takeover.
+15. User edits mark active or inactive linked rows human-edited without changing source metadata.
+16. Same-high-watermark row/amount drift, page watermark drift, local target drift, unstable pagination and reconcile resume are covered.
+17. ADMIN direct customer resolution rejects manual, matched and non-ADMIN requests and audits before/after state transactionally.
 
 ### MULEDGER isolated API and UI tests
 
 1. Integration status and actions require ADMIN.
 2. Internal trigger requires the maintenance token and cannot bypass persisted enabled/interval rules except explicit admin `Sync Now`.
-3. Full Reconcile preview is read-only; apply requires a matching preview confirmation.
+3. Full Reconcile preview is read-only; apply requires a matching complete fingerprint, and lease contention returns `409` while the UI retains the preview.
 4. The baseline fixture produces 39 metadata-only links, 14 creates, and leaves 10 manual-only Orders unchanged.
 5. Feed interruption resumes from the last committed cursor without duplicate rows.
 6. Matched, manual, and unmatched visibility follows the confirmed hierarchy rules.
@@ -478,6 +480,8 @@ No existing production Docker service or production database is used for develop
 8. Desktop columns use the approved order; mobile adds no new page-level horizontal overflow.
 9. Guinea date and existing rounded USD formatting are reused.
 10. Settings values persist, are audited, and secrets never appear in API responses.
+11. Identifiable invalid events commit a safe conflict/receipt/cursor and allow the following valid event through the real API.
+12. Financial safety compares deterministic full-row checksums before and after reconcile, incremental sync and customer resolution rather than table counts alone.
 
 ### Cross-repository contract tests
 

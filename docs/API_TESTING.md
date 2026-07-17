@@ -155,7 +155,7 @@ Automated isolated regression:
 npm run test:api:isolated -- --case 95-mu-contract-order-sync
 ```
 
-The case starts a disposable MariaDB and fake MU Contract server. It verifies the initial-reconcile gate, preview/apply, manual-order priority, metadata-only linking, sync-created Orders, event replay idempotency, cursor resume, ADMIN-only status, visibility isolation, and unchanged financial table counts. The test stack is destroyed automatically.
+The case starts a disposable MariaDB and fake MU Contract server. It verifies the initial-reconcile gate, fingerprinted preview/apply, manual-order priority, metadata-only linking, sync-created Orders, invalid-event isolation followed by valid-event continuation, replay idempotency, cursor resume, ADMIN-only direct customer resolution, status/visibility isolation, and exact before/after SHA-256 checksums of every row in the five financial tables. The test stack is destroyed automatically.
 
 ## 3. Common test flow (curl)
 

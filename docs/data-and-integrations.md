@@ -84,6 +84,7 @@ Content-Type: application/json
 - 数据方向固定为 `MU Contract -> MULEDGER`，由 MULEDGER 主动拉取。
 - MU Contract 隐藏 PI ID 是跨系统稳定身份；`ORDER NO` 是可修改的业务键。
 - MULEDGER 已有人工作业单优先。命中时只挂接来源元数据，不覆盖创建人、权限范围、客户、状态、PI 状态、备注、系统备注或确认日期。
+- 已挂接到人工 Orders 的 PI 后续事件也只更新来源关联；即使该人工行仍标记为待修复客户，也不能由来源重新写入客户快照或财务订单引用。
 - 只有 MU Contract 正式 PI PDF 成功生成或重新生成后，金额才成为官方同步金额；草稿金额不会同步。
 - 来源删除或解除 `ORDER NO` 只会停用来源关联，不会删除 MULEDGER 的 Orders 记录。
 
@@ -97,7 +98,9 @@ GET /integrations/muledger/order-snapshot?after=<snapshot-cursor>&limit=<1..500>
 Authorization: Bearer <MULEDGER_ORDER_SYNC_TOKEN>
 ```
 
-事件接口按持久化十进制游标增量返回；快照接口用于首次或人工 Full Reconcile。共享结构契约位于 `docs/integrations/mu-contract-order-sync-v1.schema.json`。
+事件接口按持久化十进制游标增量返回；快照接口用于首次或人工 Full Reconcile。共享结构契约位于 `docs/integrations/mu-contract-order-sync-v1.schema.json`。游标限定为 `0..9223372036854775807` 的最多 19 位十进制字符串，来源版本限定为 `1..2147483647`，正式金额限定为最多 16 位整数加固定两位小数。
+
+事件页先验证页结构和可安全持久化的 `cursor / eventId / source.piId / source.version` 身份，再验证业务载荷。身份安全但业务字段无效的 v1 事件会在单个事务中写入不含原始载荷的 `INVALID_SOURCE_DATA` 冲突、事件收据和已提交游标，并继续处理后续事件；身份或游标本身不安全时整页拒绝。快照接口仍使用完整严格校验，不采用该跳过策略。
 
 ### MULEDGER 控制接口
 
@@ -115,7 +118,11 @@ POST /api/integrations/mu-contract/actions
 - `preview-reconcile`
 - `apply-reconcile`，并且必须携带仍有效的 `previewId`
 
-Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效，来源高水位变化时必须重新预览。首次 Full Reconcile 完成前，系统拒绝启用普通增量同步。
+Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效。预览持久化完整规范化快照、高水位、汇总和相关本地目标状态的确定性指纹。Apply 在写入前重新读取一次完整分页快照，要求每页高水位一致、PI ID 全局唯一且稳定递增、分页游标等于页末 PI ID，并重新核对来源内容、汇总和本地目标状态；任何漂移都返回 `409` 并要求重新预览。通过后只应用这份已验证的内存快照，按设置批量事务提交并以来源 PI ID 持久化断点。首次 Full Reconcile 完成前，系统拒绝启用普通增量同步。
+
+`Sync Now` 或 `apply-reconcile` 遇到有效租约竞争时返回可读的 `409`“未完成”结果，而不是成功响应；设置页保留现有 Full Reconcile 预览供稍后重试。所有成功、失败和对账状态写入都带当前 `leaseOwner` 条件，过期 worker 不能覆盖接管者。
+
+Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / CONFLICT` 的同步行。它在一个事务中更新 Orders 客户快照与 `needsCustomerFix`、来源匹配状态和人工编辑标记，关闭对应客户冲突，并写入 before/after 审计；普通人工行、已匹配同步行和非 ADMIN 均不能使用，财务表不会被修改。
 
 ### 配置与运行
 
@@ -139,9 +146,9 @@ ADMIN 可在设置页持久化启用状态、轮询间隔 `10..3600` 秒和批�
 | `IntegrationSyncState` | 已提交游标、租约、最近结果和首次 Full Reconcile 状态 |
 | `IntegrationEventReceipt` | 事件幂等收据和载荷哈希 |
 | `IntegrationSyncConflict` | 订单号、来源关联、客户匹配和币种冲突证据 |
-| `IntegrationReconcilePreview` | 有效期内的 Full Reconcile 预览摘要 |
+| `IntegrationReconcilePreview` | 有效期内的 Full Reconcile 摘要、完整快照/目标状态指纹 |
 
-单次事件处理、事件收据和游标提交在同一数据库事务内完成。120 秒可续租租约防止两个触发器并行应用同一批事件。冲突只记录并等待管理员处理，不自动覆盖人工数据。
+单次事件处理、事件收据和游标提交在同一数据库事务内完成。120 秒可续租租约防止两个触发器并行应用同一批事件。冲突只记录并等待管理员处理，不自动覆盖人工数据。重命名转移时，被归档的未人工编辑同步行保留原 `orderNo` 和审计历史，但其唯一标准化业务键会改为由行 ID 派生的确定性归档键，确保旧 ORDER NO 后续可以创建新的可见行。
 
 ### 部署与回滚顺序
 

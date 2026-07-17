@@ -2,7 +2,7 @@
 
 Date: 2026-07-17
 
-Status: Written design awaiting final user review
+Status: Approved; implementation is on isolated branches and is not deployed or enabled
 
 ## 1. Purpose
 

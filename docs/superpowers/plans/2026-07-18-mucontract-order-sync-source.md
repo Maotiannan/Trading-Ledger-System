@@ -1,5 +1,7 @@
 # MU Contract Order Feed Implementation Plan
 
+> **Status:** ACTIVE on the separate MU Contract feature branch; PR review, merge, migration, and deployment remain gated.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Publish a durable, authenticated, read-only PI order event and snapshot feed that MULEDGER can consume without reading drafts or coupling to MU Contract's database.

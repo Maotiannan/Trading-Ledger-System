@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.207
-> 最后更新：2026-07-17
+> 当前版本：v1.0.208
+> 最后更新：2026-07-18
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] MU Contract PI -> MULEDGER Orders 双系统同步分支实现：以隐藏 PI ID 为稳定身份、标准化 ORDER NO 为业务键，新增版本化 JSON Schema、15 秒/最多三次/2 MiB 上限的只读客户端、120 秒可续租、事务化事件应用/幂等收据/游标、15 分钟 Full Reconcile 预览、人工订单优先和冲突证据；只写 `OrderTracker` 与五张新增集成表，不写财务订单、发票、收据、Detail、SWIFT、余额或媒体。Orders 增加 PI 创建日期/正式金额，Settings 增加 ADMIN 同步控制，Docker 增加仅持内部维护令牌的轻量触发器。新增迁移为纯增量，完整 `trading_ledger` dump 已覆盖新表且无新增 NAS/COS 路径。门禁通过 Prisma validate、typecheck、全仓 ESLint、174 suites / 1102 tests、isolated API case 95、Webpack 生产构建、Compose 配置校验以及完整/生产依赖 0 漏洞审计；case 95 证明 39 条仅挂接、14 条新建、10 条人工保留、事件重放幂等、游标续传且财务表计数零变化。正式部署仍需双仓库 PR 审查、最新备份的隔离恢复试迁移和明确批准。✅ 2026-07-18
 
 - [x] 恢复演练缺失媒体收口：只读追溯确认 `/upload/images/details/ocr/1779001460754_u71fgf.jpg` 由 SALES 账号 Pikin 于 2026-05-17 上传，原文件名为 `IMG_20260517_061920.jpg`，同时被 `0001001 / PETROUM-02` 与 `0001004 / YD-01` 引用；NAS、COS 当前对象、COS 历史版本、Mac 与微信本地目录均无副本，上传人也无法从源设备找回。经用户明确确认，两张收据保留为无图片记录；执行前保存权限为 `0600` 的行级回滚快照，随后在单个数据库事务中仅清空两条当前 `Receipt.imageUrl / imageName`，并为两条记录分别写入包含 before/after 的 `RECEIPT_UPDATE` 审计。金额、状态、订单、发票号、Payment Detail、历史版本和 NAS 文件均未修改；事务后确认当前失效路径引用数为 0。随后创建并上传数据库恢复点 `trading_ledger-20260717-170009.sql.gz`，gzip 与 SHA-256 校验通过；该备份在无端口、无生产卷的临时 MariaDB 10.6 中恢复后，两张收据图片字段均为 `NULL`、金额和状态保持不变、失效路径引用数为 0、审计记录数为 2，临时容器已清理。✅ 2026-07-17
 

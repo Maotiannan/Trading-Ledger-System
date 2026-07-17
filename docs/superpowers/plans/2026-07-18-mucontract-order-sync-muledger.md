@@ -1,12 +1,14 @@
 # MU Contract Order Sync - MULEDGER Implementation Plan
 
+> **Status:** ACTIVE on `feat/mucontract-order-sync`; production migration, merge, deployment, and enablement remain gated.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Pull durable MU Contract PI order events into MULEDGER Orders with idempotent processing, historical reconcile, manual-order priority, shared customer matching, administrator controls, and no effect on financial balances.
 
 **Architecture:** The Next.js server owns an environment-only MU Contract client, persists cursor/link/conflict state in MySQL, and applies each source event transactionally. A lightweight Docker trigger calls an internal endpoint; administrator APIs expose status, Sync Now, and preview-confirmed Full Reconcile. Orders and Settings consume only MULEDGER APIs.
 
-**Tech Stack:** Next.js 15 App Router, TypeScript, Prisma/MySQL, Jest/Testing Library, isolated API tests, Docker Compose.
+**Tech Stack:** Next.js 16 App Router, TypeScript, Prisma/MySQL, Jest/Testing Library, isolated API tests, Docker Compose.
 
 ## Global Constraints
 

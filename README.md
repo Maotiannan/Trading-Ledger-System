@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.207`
-- 最近更新：依赖安全治理完成，完整依赖和生产依赖漏洞审计均已降至零；页面、业务逻辑和数据结构不变。
+- 版本：`1.0.208`
+- 最近更新：Orders 已准备接收 MU Contract 正式 PI 的创建日期和金额；人工创建订单优先，首次全量对账确认前不会自动同步，也不会影响任何财务余额。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -32,13 +32,13 @@
 |---|---|
 | Dashboard | 查看业务概览、待处理事项、欠款排行和客户分析；可按 MARK、ORDER_NAME、NAME 或具体 ORDER NO 查询客户历史订单和付款；支持按账号隐藏和排序卡片 |
 | Invoice Management | 创建发票、维护订单金额、查看 Outstanding |
-| Orders | 维护不参与财务余额的业务订单跟踪，并记录订单确认日期 |
+| Orders | 维护不参与财务余额的业务订单跟踪，记录确认日期，并显示 MU Contract 正式 PI 的创建日期与金额 |
 | Receipt Management | 上传收据、直接创建收据、生成签名收据 |
 | Payment Detail Management | 上传或创建付款明细，导出付款明细图片；默认聚焦未完成明细 |
 | SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路；默认聚焦未完成水单 |
 | Approval | 审批删除申请和修改申请 |
 | Customer Management | 维护客户、ORDER_NAME、CONSIGNEE、绑定关系和客户公司文件 |
-| Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、审计 |
+| Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、审计和 MU Contract Orders 同步 |
 
 ## 推荐使用流程
 
@@ -68,7 +68,7 @@
 
 系统业务数据主要分两类：
 
-- MySQL `trading_ledger`：客户、发票、订单、收据、付款明细、SWIFT、审批、配置、审计。
+- MySQL `trading_ledger`：客户、发票、订单、收据、付款明细、SWIFT、审批、配置、审计和外部订单同步状态。
 - NAS 上传目录：收据图片、付款明细图片、SWIFT 图片/PDF、签名收据图片、付款代理附件、客户公司文件。
 
 不要随意执行会删除数据的 Docker 命令，例如：
@@ -91,7 +91,7 @@ docker compose down -v
 scripts/rebuild-local-app.sh
 ```
 
-这个脚本只重建 app、刷新维护服务，并检查服务是否可访问；不会删除数据库、Docker volume 或上传目录。
+这个脚本只重建 app、刷新内部维护/同步触发服务，并检查服务是否可访问；不会删除数据库、Docker volume 或上传目录。
 
 首次启动或需要整体拉起服务时：
 

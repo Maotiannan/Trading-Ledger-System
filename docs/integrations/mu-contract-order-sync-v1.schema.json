@@ -70,24 +70,37 @@
       }
     },
     "event": {
-      "allOf": [
-        { "$ref": "#/$defs/snapshotItem" },
-        {
-          "type": "object",
-          "required": ["cursor", "eventId", "eventType", "reason", "occurredAt"],
-          "properties": {
-            "cursor": { "$ref": "#/$defs/cursor" },
-            "eventId": { "type": "string", "format": "uuid" },
-            "eventType": {
-              "enum": ["PI_ORDER_LINKED", "PI_ORDER_RENAMED", "PI_FORMAL_PDF_GENERATED", "PI_SOURCE_DEACTIVATED"]
-            },
-            "reason": {
-              "enum": ["ORDER_ASSIGNED", "ORDER_CHANGED", "FORMAL_PDF_GENERATED", "FORMAL_PDF_REGENERATED", "PI_DELETED", "ORDER_UNLINKED"]
-            },
-            "occurredAt": { "$ref": "#/$defs/utcTimestamp" }
-          }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cursor",
+        "eventId",
+        "eventType",
+        "reason",
+        "occurredAt",
+        "source",
+        "order",
+        "officialAmount"
+      ],
+      "properties": {
+        "cursor": { "$ref": "#/$defs/cursor" },
+        "eventId": { "type": "string", "format": "uuid" },
+        "eventType": {
+          "enum": ["PI_ORDER_LINKED", "PI_ORDER_RENAMED", "PI_FORMAL_PDF_GENERATED", "PI_SOURCE_DEACTIVATED"]
+        },
+        "reason": {
+          "enum": ["ORDER_ASSIGNED", "ORDER_CHANGED", "FORMAL_PDF_GENERATED", "FORMAL_PDF_REGENERATED", "PI_DELETED", "ORDER_UNLINKED"]
+        },
+        "occurredAt": { "$ref": "#/$defs/utcTimestamp" },
+        "source": { "$ref": "#/$defs/source" },
+        "order": { "$ref": "#/$defs/order" },
+        "officialAmount": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/officialAmount" }
+          ]
         }
-      ]
+      }
     },
     "eventPage": {
       "type": "object",

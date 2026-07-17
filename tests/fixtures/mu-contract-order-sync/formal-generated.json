@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "events": [
+    {
+      "cursor": "1042",
+      "eventId": "c5a5c257-b3ec-4ce2-b54d-83f8f1aab7e2",
+      "eventType": "PI_FORMAL_PDF_GENERATED",
+      "reason": "FORMAL_PDF_REGENERATED",
+      "occurredAt": "2026-07-17T14:30:00.000Z",
+      "source": {
+        "system": "MU_CONTRACT",
+        "piId": "stable-hidden-pi-id",
+        "version": 4
+      },
+      "order": {
+        "orderNo": "SUPER DT2-16",
+        "previousOrderNo": null,
+        "piCreatedAt": "2026-07-16T10:00:00.000Z",
+        "active": true,
+        "deletedAt": null
+      },
+      "officialAmount": {
+        "currency": "USD",
+        "value": "30040.00",
+        "generatedAt": "2026-07-17T14:30:00.000Z",
+        "generationRunId": "stable-hidden-pi-id"
+      }
+    }
+  ],
+  "nextCursor": "1042",
+  "hasMore": false
+}

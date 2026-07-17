@@ -1,5 +1,7 @@
 # Full Receipt Meta Editor Implementation Plan
 
+> **Plan status:** `ARCHIVED_SUPERSEDED` as of 2026-07-17. The user narrowed this scope to absolute positioning of `No/Date/Tél`; unchecked boxes below are retained only as historical context. See [the status index](./README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver a standalone full-receipt HTML editor where the current generated receipt is locked and only the `No`, `Date`, and `Tél` labels and values can be positioned.

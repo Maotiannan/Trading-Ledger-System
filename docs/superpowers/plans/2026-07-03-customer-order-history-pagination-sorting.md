@@ -1,5 +1,7 @@
 # Customer ORDER_NAME History Sorting And Pagination Implementation Plan
 
+> **Plan status:** `ARCHIVED_COMPLETED` as of 2026-07-17. The implementation is on `main`; unchecked boxes below are retained as the original execution checklist and are not active backlog. See [the status index](./README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Sort customer historical orders by the confirmed balance/release/ship rules, sort receipts by creation time, and add independent account-persisted pagination to both history tables.

@@ -126,9 +126,9 @@ The amount comes from the persisted formal generation snapshot or corresponding 
 
 ### Historical source projection
 
-MU Contract includes an idempotent `backfill_muledger_order_projection` management command. It inserts projection rows only for PI IDs that do not yet have one, reads the most recent successful formal generation snapshot for the official amount, and never reads a mutable draft total. Historical rows begin at source version `1`; the backfill does not manufacture historical outbox events. The initial MULEDGER Full Reconcile consumes these rows from the snapshot feed.
+MU Contract includes an idempotent `backfill_muledger_order_projection` management command. It inserts projection rows for PI IDs that do not yet have one, reads the most recent provable successful formal generation snapshot for the official amount, and never reads a mutable draft total. Historical rows begin at source version `1`; the backfill does not manufacture historical outbox events. If a live event already created a projection with no official amount, backfill may fill only those still-null official amount fields from the proven historical formal snapshot. It never changes that live projection's ORDER NO, active state, source version, or existing non-null official amount. The initial MULEDGER Full Reconcile consumes these rows from the snapshot feed.
 
-The source schema and event-writing code are deployed before this command runs. If a live PI transaction creates a projection first, the command skips it. If the command inserts first, the next live event atomically advances that projection to version `2`. This makes the backfill safe to rerun without pausing ordinary PI use.
+The source schema and event-writing code are deployed before this command runs. If a live PI transaction creates a projection first, the command preserves its live state and may only enrich missing proven formal amount metadata. If the command inserts first, the next live event atomically advances that projection to version `2`. This makes the backfill safe to rerun without pausing ordinary PI use.
 
 ## 7. Version 1 Integration Contract
 

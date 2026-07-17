@@ -115,6 +115,20 @@ describe('MU Contract administrator action route', () => {
     expect(json.data).toEqual(expect.objectContaining({ processed: 1 }));
   });
 
+  it('returns readable 409 not-completed semantics when Sync Now is lease-contended', async () => {
+    mockSyncNow.mockResolvedValueOnce({ status: 'running', processed: 0, conflicts: 0 });
+
+    const response = await POST(request({ action: 'sync-now' }, 'en') as never);
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json).toEqual(expect.objectContaining({
+      success: false,
+      code: 'CONFLICT',
+      error: expect.stringMatching(/already running|not completed|正在运行|未完成/i),
+    }));
+  });
+
   it('returns the persisted Full Reconcile preview before apply', async () => {
     const response = await POST(request({ action: 'preview-reconcile' }) as never);
     const json = await response.json();
@@ -141,6 +155,24 @@ describe('MU Contract administrator action route', () => {
 
     expect(response.status).toBe(200);
     expect(mockApply).toHaveBeenCalledWith('admin-1', 'preview-1');
+  });
+
+  it('returns readable 409 not-completed semantics when reconcile apply is lease-contended', async () => {
+    mockApply.mockResolvedValueOnce({
+      status: 'running',
+      processed: 0,
+      conflicts: 0,
+      highWatermark: '1042',
+    });
+
+    const response = await POST(request({
+      action: 'apply-reconcile',
+      previewId: 'preview-1',
+    }, 'en') as never);
+    const json = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(json.error).toEqual(expect.stringMatching(/already running|not completed|正在运行|未完成/i));
   });
 
   it('rejects unknown actions without invoking a service', async () => {

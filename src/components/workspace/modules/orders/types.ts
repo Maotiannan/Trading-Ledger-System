@@ -23,6 +23,7 @@ export type OrderTrackerRow = {
   depositAmount: number;
   canEdit: boolean;
   canEditAdminFields: boolean;
+  canResolveSourceCustomer: boolean;
   createdAt: string;
   creator?: { id: string; email: string; name: string | null; role: string } | null;
 };

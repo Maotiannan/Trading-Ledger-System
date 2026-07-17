@@ -6,6 +6,7 @@ import {
   createOrderTracker,
   listOrderTrackerCustomerOptions,
   listOrderTrackers,
+  resolveSynchronizedOrderCustomer,
   updateOrderTracker,
 } from '@/lib/order-tracker-service';
 import { withAuth } from '@/lib/route-auth';
@@ -60,6 +61,15 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         remark: body.remark,
         systemNote: body.systemNote,
       });
+      return createApiSuccessResponse(result, request);
+    }
+
+    if (action === 'resolve-source-customer') {
+      const result = await resolveSynchronizedOrderCustomer(
+        currentUser,
+        body.orderId,
+        body.customerId,
+      );
       return createApiSuccessResponse(result, request);
     }
 

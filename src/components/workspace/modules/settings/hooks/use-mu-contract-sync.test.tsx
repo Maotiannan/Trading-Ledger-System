@@ -120,4 +120,36 @@ describe('useMuContractSync', () => {
 
     expect(setError).toHaveBeenCalledWith('Synchronization failed');
   });
+
+  it('retains the Full Reconcile preview when apply is lease-contended', async () => {
+    const preview = {
+      previewId: 'preview-1',
+      expiresAt: '2026-07-18T09:20:00.000Z',
+      highWatermark: '1042',
+      summary: {
+        totalSourceRows: 1,
+        metadataOnly: 0,
+        creates: 1,
+        updates: 0,
+        inactive: 0,
+        unmatched: 1,
+        conflicts: 0,
+        manualOnlyUntouched: 0,
+      },
+    };
+    mockApiCall.mockResolvedValueOnce({ success: true, data: preview });
+    const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const { result, setError } = setup();
+    await act(async () => result.current.previewReconcile());
+
+    mockApiCall.mockRejectedValueOnce(new Error('409 not completed'));
+    mockGetApiErrorMessage.mockReturnValueOnce('Another synchronization task is already running; apply was not completed.');
+    await act(async () => result.current.applyReconcile());
+
+    expect(result.current.preview).toEqual(preview);
+    expect(setError).toHaveBeenCalledWith(
+      'Another synchronization task is already running; apply was not completed.',
+    );
+    confirm.mockRestore();
+  });
 });

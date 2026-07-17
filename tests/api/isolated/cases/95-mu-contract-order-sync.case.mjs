@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { PrismaClient } from '@prisma/client';
 
@@ -46,15 +46,33 @@ function linkedEvent(cursor, piId, orderNo) {
   };
 }
 
-async function financialCounts(prisma) {
-  const [invoices, orders, receipts, details, swifts] = await Promise.all([
-    prisma.invoice.count(),
-    prisma.order.count(),
-    prisma.receipt.count(),
-    prisma.detail.count(),
-    prisma.swift.count(),
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === 'object') {
+    if (value instanceof Date) return value.toISOString();
+    if (Buffer.isBuffer(value)) return value.toString('base64');
+    return Object.fromEntries(Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, canonicalize(nested)]));
+  }
+  return value;
+}
+
+async function financialChecksums(prisma) {
+  const tables = await Promise.all([
+    ['invoices', prisma.invoice.findMany({ orderBy: { id: 'asc' } })],
+    ['orders', prisma.order.findMany({ orderBy: { id: 'asc' } })],
+    ['receipts', prisma.receipt.findMany({ orderBy: { id: 'asc' } })],
+    ['details', prisma.detail.findMany({ orderBy: { id: 'asc' } })],
+    ['swifts', prisma.swift.findMany({ orderBy: { id: 'asc' } })],
   ]);
-  return { invoices, orders, receipts, details, swifts };
+  return Object.fromEntries(tables.map(([name, rows]) => {
+    const content = JSON.stringify(canonicalize(rows));
+    return [name, {
+      rows: rows.length,
+      sha256: createHash('sha256').update(content).digest('hex'),
+    }];
+  }));
 }
 
 export default async function run(t) {
@@ -123,7 +141,7 @@ export default async function run(t) {
       json: { items: snapshotItems, events: [], eventHighWatermark: '0' },
     });
 
-    const countsBefore = await financialCounts(prisma);
+    const financialBefore = await financialChecksums(prisma);
     const settingsResponse = await t.request('GET', '/api/settings', { expectedStatus: 200 });
     const settings = settingsResponse.data?.data?.settings || {};
     await t.request('POST', '/api/settings', {
@@ -215,6 +233,76 @@ export default async function run(t) {
       expectedStatus: 200,
     });
     t.assertEqual(status.data?.data?.committedCursor, '2', 'incremental synchronization resumes from cursor 1 and commits cursor 2');
+
+    const invalidEvent = {
+      ...linkedEvent(3, 'pi-056', `${orderName}-056`),
+      officialAmount: {
+        currency: 'USD',
+        value: 'sensitive-invalid-amount',
+        generatedAt: '2026-07-18T10:00:03.000Z',
+        generationRunId: 'invalid-run',
+      },
+    };
+    const laterValidEvent = linkedEvent(4, 'pi-057', `${orderName}-057`);
+    await sourceControl('/__control/configure', {
+      method: 'POST',
+      json: {
+        items: snapshotItems,
+        events: [firstEvent, secondEvent, invalidEvent, laterValidEvent],
+        eventHighWatermark: '4',
+      },
+    });
+    const invalidThenValid = await t.request('POST', '/api/integrations/mu-contract/actions', {
+      json: { action: 'sync-now' },
+      expectedStatus: 200,
+    });
+    t.assertEqual(invalidThenValid.data?.data?.processed, 2, 'invalid event does not block the later valid event');
+    t.assertEqual(invalidThenValid.data?.data?.conflicts, 1, 'identifiable invalid event is reported as one business conflict');
+    const invalidReceipt = await prisma.integrationEventReceipt.findUnique({
+      where: { provider_eventId: { provider: 'MU_CONTRACT', eventId: invalidEvent.eventId } },
+    });
+    t.assertEqual(invalidReceipt?.result, 'BUSINESS_CONFLICT', 'invalid event receipt is durable');
+    const invalidConflict = await prisma.integrationSyncConflict.findUnique({
+      where: { dedupeKey: 'MU_CONTRACT:pi-056:INVALID_SOURCE_DATA' },
+    });
+    t.assertEqual(invalidConflict?.type, 'INVALID_SOURCE_DATA', 'invalid source data conflict is opened');
+    t.assertOk(
+      !JSON.stringify(invalidConflict).includes('sensitive-invalid-amount'),
+      'invalid source conflict stores no raw business payload or secret',
+    );
+
+    const unresolvedEvent = linkedEvent(5, 'pi-058', `UNMATCHED${suffix}-001`);
+    await sourceControl('/__control/configure', {
+      method: 'POST',
+      json: {
+        items: snapshotItems,
+        events: [firstEvent, secondEvent, invalidEvent, laterValidEvent, unresolvedEvent],
+        eventHighWatermark: '5',
+      },
+    });
+    await t.request('POST', '/api/integrations/mu-contract/actions', {
+      json: { action: 'sync-now' },
+      expectedStatus: 200,
+    });
+    const unresolvedLink = await prisma.externalOrderSourceLink.findUnique({
+      where: { provider_externalId: { provider: 'MU_CONTRACT', externalId: 'pi-058' } },
+    });
+    t.assertEqual(unresolvedLink?.customerMatchStatus, 'UNMATCHED', 'unmatched synchronized Order is available for ADMIN resolution');
+    await t.request('POST', '/api/orders', {
+      json: {
+        action: 'resolve-source-customer',
+        orderId: unresolvedLink.orderTrackerId,
+        customerId,
+      },
+      expectedStatus: 200,
+    });
+    const resolvedTracker = await prisma.orderTracker.findUnique({ where: { id: unresolvedLink.orderTrackerId } });
+    const resolvedLink = await prisma.externalOrderSourceLink.findUnique({
+      where: { provider_externalId: { provider: 'MU_CONTRACT', externalId: 'pi-058' } },
+    });
+    t.assertEqual(resolvedTracker?.customerId, customerId, 'ADMIN resolution updates the Orders customer snapshot');
+    t.assertEqual(resolvedTracker?.needsCustomerFix, false, 'ADMIN resolution clears the customer-fix flag');
+    t.assertEqual(resolvedLink?.customerMatchStatus, 'MATCHED', 'ADMIN resolution closes the source customer status');
     const sourceRequests = await sourceControl('/__control/requests');
     const eventRequests = sourceRequests.requests.filter((row) => row.pathname.endsWith('/order-events'));
     t.assertOk(
@@ -227,11 +315,11 @@ export default async function run(t) {
       'every source feed request carries the dedicated bearer credential',
     );
 
-    const countsAfter = await financialCounts(prisma);
+    const financialAfter = await financialChecksums(prisma);
     t.assertEqual(
-      JSON.stringify(countsAfter),
-      JSON.stringify(countsBefore),
-      'reconcile and incremental sync do not write financial tables',
+      JSON.stringify(financialAfter),
+      JSON.stringify(financialBefore),
+      'reconcile, incremental sync, and customer resolution preserve every financial row checksum',
     );
 
     const salesEmail = `${suffix.toLowerCase()}-sales@example.com`;

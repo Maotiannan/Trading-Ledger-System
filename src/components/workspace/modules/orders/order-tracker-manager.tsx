@@ -258,6 +258,12 @@ export function OrderTrackerManager() {
     return () => clearTimeout(timer);
   }, [dialogMode, dialogOpen, form.orderNo, loadCustomers, tx]);
 
+  const hasCustomerResolutionChange = Boolean(
+    editingOrder?.canResolveSourceCustomer
+    && form.customerId
+    && form.customerId !== (editingOrder.customerId || ''),
+  );
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
@@ -278,21 +284,34 @@ export function OrderTrackerManager() {
         });
         setMessage(result.message || tx('订单已创建', 'Order created'));
       } else if (editingOrder) {
-        const updateBody: Record<string, unknown> = {
-          action: 'update',
-          orderId: editingOrder.id,
-          status: form.status,
-          remark: form.remark.trim(),
-        };
-        if (editingOrder.canEditAdminFields) {
-          updateBody.piStatus = form.piStatus;
-          updateBody.systemNote = form.systemNote.trim();
+        let result: { message?: string } | null = null;
+        if (hasCustomerResolutionChange) {
+          result = await apiCall('orders', {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'resolve-source-customer',
+              orderId: editingOrder.id,
+              customerId: form.customerId,
+            }),
+          });
         }
-        const result = await apiCall('orders', {
-          method: 'POST',
-          body: JSON.stringify(updateBody),
-        });
-        setMessage(result.message || tx('订单已更新', 'Order updated'));
+        if (editingOrder.canEdit || editingOrder.canEditAdminFields) {
+          const updateBody: Record<string, unknown> = {
+            action: 'update',
+            orderId: editingOrder.id,
+            status: form.status,
+            remark: form.remark.trim(),
+          };
+          if (editingOrder.canEditAdminFields) {
+            updateBody.piStatus = form.piStatus;
+            updateBody.systemNote = form.systemNote.trim();
+          }
+          result = await apiCall('orders', {
+            method: 'POST',
+            body: JSON.stringify(updateBody),
+          });
+        }
+        setMessage(result?.message || tx('订单已更新', 'Order updated'));
       }
       setDialogOpen(false);
       await loadOrders();
@@ -305,7 +324,10 @@ export function OrderTrackerManager() {
 
   const canSave = dialogMode === 'create'
     ? Boolean(form.orderNo.trim() && form.customerId && form.remark.length <= MAX_REMARK_LENGTH)
-    : Boolean(editingOrder && (editingOrder.canEdit || editingOrder.canEditAdminFields) && form.remark.length <= MAX_REMARK_LENGTH);
+    : Boolean(editingOrder
+      && (editingOrder.canEdit || editingOrder.canEditAdminFields
+        || hasCustomerResolutionChange)
+      && form.remark.length <= MAX_REMARK_LENGTH);
 
   return (
     <div className="space-y-6">
@@ -434,7 +456,7 @@ export function OrderTrackerManager() {
                       <div className="max-w-[180px] truncate text-xs text-muted-foreground" title={row.customerName || row.customerPhone || '-'}>{row.customerName || row.customerPhone || '-'}</div>
                     </TableCell>
                     <TableCell>
-                      {(row.canEdit || row.canEditAdminFields) ? (
+                      {(row.canEdit || row.canEditAdminFields || row.canResolveSourceCustomer) ? (
                         <Button size="sm" variant="outline" onClick={() => openEditDialog(row)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           {tx('修改', 'Edit')}
@@ -490,7 +512,7 @@ export function OrderTrackerManager() {
               <Select
                 value={form.customerId}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, customerId: value }))}
-                disabled={dialogMode === 'edit'}
+                disabled={dialogMode === 'edit' && !editingOrder?.canResolveSourceCustomer}
               >
                 <SelectTrigger data-testid="orders-customer-select-trigger" className="w-full min-w-0 overflow-hidden [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate">
                   <SelectValue placeholder={tx('选择客户', 'Select customer')} />

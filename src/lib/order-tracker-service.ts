@@ -188,6 +188,9 @@ function serializeTracker(
     sourceConflict: typeof source?.externalId === 'string'
       ? conflictingSourcePiIds.has(source.externalId)
       : false,
+    canResolveSourceCustomer: currentUser.role === UserRole.ADMIN
+      && (source?.customerMatchStatus === ExternalCustomerMatchStatus.UNMATCHED
+        || source?.customerMatchStatus === ExternalCustomerMatchStatus.CONFLICT),
     canEdit: baseEditable,
     canEditAdminFields: adminEditable,
     isMine: row.createdBy === currentUser.id,
@@ -581,6 +584,123 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
   return { data, message: 'Order已创建' };
 }
 
+export async function resolveSynchronizedOrderCustomer(
+  currentUser: CurrentUser,
+  idInput: unknown,
+  customerIdInput: unknown,
+) {
+  if (currentUser.role !== UserRole.ADMIN) {
+    forbidden('只有ADMIN可直接解决同步订单的客户匹配');
+  }
+  const id = trimStr(idInput);
+  const customerId = trimStr(customerIdInput);
+  if (!id || !customerId) badRequest('ORDER ID和CUSTOMER不能为空');
+
+  return runInTransaction(async (tx) => {
+    const target = await tx.orderTracker.findUnique({
+      where: { id },
+      include: {
+        externalSourceLinks: {
+          where: { provider: MU_CONTRACT_PROVIDER },
+          select: {
+            id: true,
+            externalId: true,
+            customerMatchStatus: true,
+            active: true,
+          },
+        },
+      },
+    });
+    if (!target) notFound('Order不存在');
+    const sourceLink = target.externalSourceLinks[0];
+    if (!sourceLink || sourceLink.customerMatchStatus === ExternalCustomerMatchStatus.MATCHED) {
+      conflict('只有待匹配或匹配冲突的同步Order可直接选择客户');
+    }
+
+    const customer = await tx.customer.findFirst({
+      where: { id: customerId },
+      select: {
+        id: true,
+        mark: true,
+        orderName: true,
+        phone: true,
+        city: true,
+      },
+    });
+    if (!customer) notFound('客户不存在');
+
+    const before = {
+      customerId: target.customerId,
+      customerMark: target.customerMark,
+      customerName: target.customerName,
+      customerPhone: target.customerPhone,
+      customerCity: target.customerCity,
+      needsCustomerFix: target.needsCustomerFix,
+      customerMatchStatus: sourceLink.customerMatchStatus,
+    };
+    const after = {
+      customerId: customer.id,
+      customerMark: customer.mark,
+      customerName: customer.orderName,
+      customerPhone: customer.phone,
+      customerCity: customer.city,
+      needsCustomerFix: false,
+      customerMatchStatus: ExternalCustomerMatchStatus.MATCHED,
+    };
+    const editedAt = new Date();
+    const updated = await tx.orderTracker.update({
+      where: { id },
+      data: {
+        customerId: customer.id,
+        customerMark: customer.mark,
+        customerName: customer.orderName,
+        customerPhone: customer.phone,
+        customerCity: customer.city,
+        needsCustomerFix: false,
+        updatedBy: currentUser.id,
+      },
+    });
+    await tx.externalOrderSourceLink.update({
+      where: { id: sourceLink.id },
+      data: {
+        customerMatchStatus: ExternalCustomerMatchStatus.MATCHED,
+        humanEditedAt: editedAt,
+        humanEditedBy: currentUser.id,
+      },
+    });
+    await tx.integrationSyncConflict.updateMany({
+      where: {
+        provider: MU_CONTRACT_PROVIDER,
+        sourcePiId: sourceLink.externalId,
+        type: 'CUSTOMER_MATCH_CONFLICT',
+        status: IntegrationConflictStatus.OPEN,
+      },
+      data: {
+        status: IntegrationConflictStatus.RESOLVED,
+        resolutionNote: 'Customer selected directly by administrator',
+        resolvedAt: editedAt,
+        resolvedBy: currentUser.id,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        action: auditActions.ORDER_TRACKER_SOURCE_CUSTOMER_RESOLVE,
+        actorId: currentUser.id,
+        targetType: auditTargetTypes.ORDER_TRACKER,
+        targetId: id,
+        metadata: {
+          sourcePiId: sourceLink.externalId,
+          before,
+          after,
+        },
+        createdAt: editedAt,
+      },
+    });
+
+    return { data: updated, message: '同步Order客户已解决' };
+  });
+}
+
 export async function updateOrderTracker(currentUser: CurrentUser, idInput: unknown, payload: OrderTrackerPayload) {
   const id = trimStr(idInput);
   if (!id) badRequest('ORDER ID不能为空');
@@ -653,7 +773,7 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
       data,
     });
     await tx.externalOrderSourceLink.updateMany({
-      where: { orderTrackerId: id, active: true },
+      where: { orderTrackerId: id },
       data: {
         humanEditedAt,
         humanEditedBy: currentUser.id,

@@ -7,14 +7,13 @@ import {
 } from '@prisma/client';
 
 import type { MuContractOrderEvent } from '@/lib/integrations/mu-contract-contract';
+import { MU_CONTRACT_PROVIDER } from '@/lib/integrations/mu-contract-constants';
 import {
   resolveMuContractOrderCustomer,
   type MuContractOrderCustomerResolution,
 } from '@/lib/integrations/mu-contract-customer-resolver';
 import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { serializeOrderTokens } from '@/lib/tokenizer';
-
-const PROVIDER = 'MU_CONTRACT';
 
 export type MuContractConflictType =
   | 'INVALID_SOURCE_DATA'
@@ -192,7 +191,7 @@ async function persistLink(
 
   await tx.externalOrderSourceLink.create({
     data: {
-      provider: PROVIDER,
+      provider: MU_CONTRACT_PROVIDER,
       externalId: state.source.piId,
       ...data,
     },
@@ -215,9 +214,9 @@ async function recordConflict(
   targetOrderTrackerIds: string[],
   evidence: Prisma.InputJsonValue,
 ): Promise<void> {
-  const dedupeKey = `${PROVIDER}:${input.state.source.piId}:${type}`;
+  const dedupeKey = `${MU_CONTRACT_PROVIDER}:${input.state.source.piId}:${type}`;
   const shared = {
-    provider: PROVIDER,
+    provider: MU_CONTRACT_PROVIDER,
     sourcePiId: input.state.source.piId,
     sourceVersion: input.state.source.version,
     eventId: input.state.eventId,
@@ -248,7 +247,7 @@ async function resolveOtherConflicts(
 ): Promise<void> {
   await tx.integrationSyncConflict.updateMany({
     where: {
-      provider: PROVIDER,
+      provider: MU_CONTRACT_PROVIDER,
       sourcePiId,
       status: IntegrationConflictStatus.OPEN,
       ...(openTypes.length > 0
@@ -270,7 +269,7 @@ async function linkedElsewhere(
   sourcePiId: string,
 ) {
   const link = await tx.externalOrderSourceLink.findFirst({
-    where: { provider: PROVIDER, orderTrackerId },
+    where: { provider: MU_CONTRACT_PROVIDER, orderTrackerId },
     select: { id: true, externalId: true, orderTrackerId: true },
   });
   return link && link.externalId !== sourcePiId ? link : null;
@@ -427,7 +426,7 @@ export async function applyMuContractOrderState(
   const existing = await tx.externalOrderSourceLink.findUnique({
     where: {
       provider_externalId: {
-        provider: PROVIDER,
+          provider: MU_CONTRACT_PROVIDER,
         externalId: state.source.piId,
       },
     },

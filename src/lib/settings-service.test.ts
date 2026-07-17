@@ -37,6 +37,9 @@ jest.mock('@/lib/db', () => ({
       findMany: jest.fn(),
       upsert: jest.fn(),
     },
+    integrationSyncState: {
+      findUnique: jest.fn(),
+    },
     detailItem: { deleteMany: jest.fn(), updateMany: jest.fn() },
     receiptHistory: { deleteMany: jest.fn() },
     detailHistory: { deleteMany: jest.fn() },
@@ -81,6 +84,9 @@ jest.mock('@/lib/system-settings', () => ({
     'CUSTOMER_ANALYTICS_WARNING_DAYS',
     'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
     'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+    'MU_CONTRACT_SYNC_ENABLED',
+    'MU_CONTRACT_SYNC_INTERVAL_SECONDS',
+    'MU_CONTRACT_SYNC_BATCH_SIZE',
   ],
   customerAnalyticsSystemSettingKeys: [
     'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
@@ -91,7 +97,7 @@ jest.mock('@/lib/system-settings', () => ({
     'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
     'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
   ],
-  booleanSystemSettingKeys: ['OCR_DISABLED'],
+  booleanSystemSettingKeys: ['OCR_DISABLED', 'MU_CONTRACT_SYNC_ENABLED'],
   secretSystemSettingKeys: ['OCR_API_KEY'],
   numericSystemSettingMinimums: {
     DETAIL_RECEIPT_MATCH_TOLERANCE: 0,
@@ -106,6 +112,8 @@ jest.mock('@/lib/system-settings', () => ({
     CUSTOMER_ANALYTICS_WARNING_DAYS: 1,
     CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 1,
     CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 1,
+    MU_CONTRACT_SYNC_INTERVAL_SECONDS: 10,
+    MU_CONTRACT_SYNC_BATCH_SIZE: 1,
   },
   numericSystemSettingMaximums: {
     CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: 60,
@@ -115,6 +123,8 @@ jest.mock('@/lib/system-settings', () => ({
     CUSTOMER_ANALYTICS_WARNING_DAYS: 3650,
     CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 3650,
     CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 3650,
+    MU_CONTRACT_SYNC_INTERVAL_SECONDS: 3600,
+    MU_CONTRACT_SYNC_BATCH_SIZE: 500,
   },
   integerSystemSettingKeys: [
     'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
@@ -124,6 +134,8 @@ jest.mock('@/lib/system-settings', () => ({
     'CUSTOMER_ANALYTICS_WARNING_DAYS',
     'CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS',
     'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
+    'MU_CONTRACT_SYNC_INTERVAL_SECONDS',
+    'MU_CONTRACT_SYNC_BATCH_SIZE',
   ],
   getSystemSettingsWithDefaults: jest.fn(),
   invalidateSystemSettingsCache: jest.fn(),
@@ -154,6 +166,7 @@ const mockDb = db as unknown as {
   user: { findMany: jest.Mock; findUnique: jest.Mock };
   userPreference: { findUnique: jest.Mock; upsert: jest.Mock };
   systemSetting: { findMany: jest.Mock; upsert: jest.Mock };
+  integrationSyncState: { findUnique: jest.Mock };
   detailItem: { deleteMany: jest.Mock; updateMany: jest.Mock };
   receiptHistory: { deleteMany: jest.Mock };
   detailHistory: { deleteMany: jest.Mock };
@@ -204,6 +217,9 @@ describe('settings-service', () => {
       CUSTOMER_ANALYTICS_WARNING_DAYS: '120',
       CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: '150',
       CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: '180',
+      MU_CONTRACT_SYNC_ENABLED: 'false',
+      MU_CONTRACT_SYNC_INTERVAL_SECONDS: '30',
+      MU_CONTRACT_SYNC_BATCH_SIZE: '100',
     });
   });
 
@@ -231,7 +247,7 @@ describe('settings-service', () => {
       targetType: 'SYSTEM_SETTING',
       actorId: 'admin-1',
       metadata: expect.objectContaining({
-        editableKeyCount: 14,
+        editableKeyCount: 17,
         branchPurgeTargetCount: 1,
         canEdit: true,
         canViewAudit: true,
@@ -839,6 +855,36 @@ describe('settings-service', () => {
       metadata: expect.objectContaining({
         updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE'],
       }),
+    }));
+  });
+
+  it('rejects enabling MU Contract sync until Full Reconcile has completed', async () => {
+    mockDb.integrationSyncState.findUnique.mockResolvedValueOnce(null);
+
+    await expect(updateSystemSettings(makeUser(), {
+      MU_CONTRACT_SYNC_ENABLED: 'true',
+    })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      status: 409,
+    });
+
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+    expect(mockDb.systemSetting.upsert).not.toHaveBeenCalled();
+  });
+
+  it('allows enabling MU Contract sync after Full Reconcile', async () => {
+    mockDb.integrationSyncState.findUnique.mockResolvedValueOnce({
+      initialReconcileCompletedAt: new Date('2026-07-18T09:00:00.000Z'),
+    });
+    mockDb.systemSetting.upsert.mockResolvedValue(undefined);
+
+    await expect(updateSystemSettings(makeUser(), {
+      MU_CONTRACT_SYNC_ENABLED: 'true',
+    })).resolves.toEqual({ message: '配置已更新' });
+
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { key: 'MU_CONTRACT_SYNC_ENABLED' },
+      create: expect.objectContaining({ value: 'true' }),
     }));
   });
 

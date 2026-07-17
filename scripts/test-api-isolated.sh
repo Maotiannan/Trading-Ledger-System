@@ -9,11 +9,13 @@ APP_PORT="${APP_PORT:-3100}"
 TMP_BASE="${TMPDIR:-/tmp}"
 COOKIE_FILE="$(mktemp "${TMP_BASE}/tls-api-cookie.XXXXXX")"
 APP_LOG="$(mktemp "${TMP_BASE}/tls-api-app.XXXXXX")"
+SOURCE_LOG="$(mktemp "${TMP_BASE}/tls-mu-contract-source.XXXXXX")"
 UPLOAD_DIR="$(mktemp -d "${TMP_BASE}/tls-upload.XXXXXX")"
 DIST_DIR=".next-api-isolated"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.test.yml"
 COMPOSE_PROJECT_NAME="trading-ledger-system-test"
 APP_PID=""
+SOURCE_PID=""
 
 compose() {
   docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
@@ -24,8 +26,12 @@ cleanup() {
     kill "$APP_PID" >/dev/null 2>&1 || true
     wait "$APP_PID" >/dev/null 2>&1 || true
   fi
+  if [ -n "$SOURCE_PID" ] && kill -0 "$SOURCE_PID" >/dev/null 2>&1; then
+    kill "$SOURCE_PID" >/dev/null 2>&1 || true
+    wait "$SOURCE_PID" >/dev/null 2>&1 || true
+  fi
   compose down -v >/dev/null 2>&1 || true
-  rm -f "$COOKIE_FILE" "$APP_LOG"
+  rm -f "$COOKIE_FILE" "$APP_LOG" "$SOURCE_LOG"
   rm -rf "$UPLOAD_DIR"
   rm -rf "$ROOT_DIR/$DIST_DIR"
 }
@@ -36,6 +42,10 @@ fail() {
   if [ -f "$APP_LOG" ]; then
     echo "--- app log ---"
     tail -n 120 "$APP_LOG" || true
+  fi
+  if [ -f "$SOURCE_LOG" ]; then
+    echo "--- MU Contract fake source log ---"
+    tail -n 120 "$SOURCE_LOG" || true
   fi
   exit 1
 }
@@ -79,6 +89,15 @@ export UPLOAD_DIR="$UPLOAD_DIR"
 export NEXT_DIST_DIR="$DIST_DIR"
 export JSON_BODY_MAX_BYTES="${JSON_BODY_MAX_BYTES:-262144}"
 export UPLOAD_BODY_MAX_BYTES="${UPLOAD_BODY_MAX_BYTES:-10485760}"
+export MU_CONTRACT_FAKE_PORT="${MU_CONTRACT_FAKE_PORT:-$((3200 + RANDOM % 500))}"
+export MU_CONTRACT_FAKE_TOKEN="test-mu-contract-order-sync-token-1234567890"
+export MU_CONTRACT_FAKE_CONTROL_TOKEN="test-mu-contract-control-token-1234567890"
+export MU_CONTRACT_SYNC_BASE_URL="http://127.0.0.1:${MU_CONTRACT_FAKE_PORT}"
+export MU_CONTRACT_SYNC_TOKEN="$MU_CONTRACT_FAKE_TOKEN"
+
+node tests/api/isolated/helpers/mu-contract-order-feed-server.mjs >"$SOURCE_LOG" 2>&1 &
+SOURCE_PID="$!"
+wait_for_http "$MU_CONTRACT_SYNC_BASE_URL/__control/ready" || fail "MU Contract fake source not ready"
 
 npx prisma migrate deploy >/dev/null
 rm -rf "$ROOT_DIR/$DIST_DIR"

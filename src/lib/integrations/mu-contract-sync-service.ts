@@ -10,13 +10,14 @@ import {
 } from '@/lib/integrations/mu-contract-client';
 import { MuContractContractError, type MuContractOrderEvent } from '@/lib/integrations/mu-contract-contract';
 import {
+  MU_CONTRACT_LEASE_MS,
+  MU_CONTRACT_PROVIDER,
+} from '@/lib/integrations/mu-contract-constants';
+import {
   applyMuContractOrderState,
   type MuContractApplyResult,
 } from '@/lib/integrations/mu-contract-order-applier';
 import { getMuContractSyncSettings } from '@/lib/integrations/mu-contract-sync-settings';
-
-export const MU_CONTRACT_PROVIDER = 'MU_CONTRACT';
-export const MU_CONTRACT_LEASE_MS = 120_000;
 
 export type MuContractSyncErrorCode =
   | 'MU_CONTRACT_INITIAL_RECONCILE_REQUIRED'

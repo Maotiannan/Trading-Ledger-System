@@ -95,6 +95,36 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
   '无权完成该签名收据': { zh: '无权完成该签名收据', en: 'You do not have permission to finalize this signed receipt' },
   '签名或收据图片缺失': { zh: '签名或收据图片缺失', en: 'Signature or receipt image is missing' },
   '签名收据会话已结束或收据状态无效': { zh: '签名收据会话已结束或收据状态无效', en: 'The signed receipt session is closed or the receipt status is invalid' },
+  '请先完成 Full Reconcile，再启用增量同步': {
+    zh: '请先完成 Full Reconcile，再启用增量同步',
+    en: 'Complete Full Reconcile before enabling incremental sync.',
+  },
+  'Full Reconcile 预览不存在': { zh: 'Full Reconcile 预览不存在', en: 'Full Reconcile preview not found.' },
+  'Full Reconcile 预览已过期，请重新预览': {
+    zh: 'Full Reconcile 预览已过期，请重新预览',
+    en: 'The Full Reconcile preview expired. Generate a new preview.',
+  },
+  'Full Reconcile 预览已执行，请重新预览': {
+    zh: 'Full Reconcile 预览已执行，请重新预览',
+    en: 'The Full Reconcile preview was already applied. Generate a new preview.',
+  },
+  'MU Contract 数据已变化，请重新预览后再执行': {
+    zh: 'MU Contract 数据已变化，请重新预览后再执行',
+    en: 'MU Contract data changed. Generate and review a new preview.',
+  },
+  '另一个同步任务正在运行，请稍后重试': {
+    zh: '另一个同步任务正在运行，请稍后重试',
+    en: 'Another synchronization is running. Try again later.',
+  },
+  'MU Contract 同步尚未正确配置': {
+    zh: 'MU Contract 同步尚未正确配置',
+    en: 'MU Contract synchronization is not configured correctly.',
+  },
+  'MU Contract 同步认证失败': { zh: 'MU Contract 同步认证失败', en: 'MU Contract synchronization authentication failed.' },
+  'MU Contract 同步失败，请稍后重试': {
+    zh: 'MU Contract 同步失败，请稍后重试',
+    en: 'MU Contract synchronization failed. Try again later.',
+  },
   '签名未完成的收据不能进入业务流程': { zh: '签名未完成的收据不能进入业务流程', en: 'A receipt with unfinished signatures cannot enter the business workflow' },
   '签名未完成的收据不能进入付款明细流程': { zh: '签名未完成的收据不能进入付款明细流程', en: 'A receipt with unfinished signatures cannot enter the payment-detail workflow' },
   '签名未完成的收据不能直接修改': { zh: '签名未完成的收据不能直接修改', en: 'A receipt with unfinished signatures cannot be edited directly' },

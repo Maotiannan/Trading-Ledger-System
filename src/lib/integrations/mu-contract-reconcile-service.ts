@@ -8,12 +8,14 @@ import type {
   MuContractOrderEvent,
   MuContractSnapshotItem,
 } from '@/lib/integrations/mu-contract-contract';
+import {
+  MU_CONTRACT_LEASE_MS,
+  MU_CONTRACT_PROVIDER,
+} from '@/lib/integrations/mu-contract-constants';
 import { resolveMuContractOrderCustomer } from '@/lib/integrations/mu-contract-customer-resolver';
 import { applyMuContractOrderState } from '@/lib/integrations/mu-contract-order-applier';
 import { getMuContractSyncSettings } from '@/lib/integrations/mu-contract-sync-settings';
 import {
-  MU_CONTRACT_PROVIDER,
-  MU_CONTRACT_LEASE_MS,
   MuContractSyncError,
   acquireMuContractLease,
   ensureMuContractSyncState,

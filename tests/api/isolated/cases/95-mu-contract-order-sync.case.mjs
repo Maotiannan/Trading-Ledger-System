@@ -108,6 +108,16 @@ export default async function run(t) {
     const customerId = String(customer?.id || '');
     t.assertOk(Boolean(customerId), 'integration fixture customer created');
 
+    const [activeTrackerCountBefore, manualOnlyCountBefore] = await Promise.all([
+      prisma.orderTracker.count({ where: { archivedAt: null } }),
+      prisma.orderTracker.count({
+        where: {
+          archivedAt: null,
+          externalSourceLinks: { none: { provider: 'MU_CONTRACT' } },
+        },
+      }),
+    ]);
+
     const trackerRows = [...sourceOrderNos.slice(0, 39), ...manualOnlyOrderNos].map((orderNo) => ({
       id: randomUUID(),
       orderNo,
@@ -166,7 +176,11 @@ export default async function run(t) {
     const previewData = preview.data?.data;
     t.assertEqual(previewData?.summary?.metadataOnly, 39, 'preview reports 39 metadata-only links');
     t.assertEqual(previewData?.summary?.creates, 14, 'preview reports 14 synchronized Orders creates');
-    t.assertEqual(previewData?.summary?.manualOnlyUntouched, 10, 'preview leaves 10 manual-only Orders untouched');
+    t.assertEqual(
+      previewData?.summary?.manualOnlyUntouched,
+      manualOnlyCountBefore + manualOnlyOrderNos.length,
+      'preview leaves all existing and 10 newly seeded manual-only Orders untouched',
+    );
 
     await t.request('POST', '/api/integrations/mu-contract/actions', {
       json: { action: 'apply-reconcile', previewId: previewData.previewId },
@@ -179,7 +193,7 @@ export default async function run(t) {
     );
     t.assertEqual(
       await prisma.orderTracker.count({ where: { archivedAt: null } }),
-      63,
+      activeTrackerCountBefore + trackerRows.length + 14,
       'Full Reconcile creates only the 14 missing Orders rows',
     );
 

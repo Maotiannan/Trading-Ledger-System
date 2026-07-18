@@ -1,0 +1,2 @@
+export const MU_CONTRACT_PROVIDER = 'MU_CONTRACT';
+export const MU_CONTRACT_LEASE_MS = 120_000;

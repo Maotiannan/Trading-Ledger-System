@@ -6,6 +6,7 @@ import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction } from '@/lib/transaction';
+import { MU_CONTRACT_PROVIDER } from '@/lib/integrations/mu-contract-constants';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   booleanSystemSettingKeys,
@@ -556,6 +557,23 @@ export async function updateSystemSettings(
   const updates = await validateSettingUpdates(settings as Record<string, unknown>, currentSettings);
   if (updates.length === 0) {
     return { message: '无变更' };
+  }
+
+  const enablesMuContractSync = updates.some((item) => (
+    item.key === 'MU_CONTRACT_SYNC_ENABLED' && item.value === 'true'
+  ));
+  if (enablesMuContractSync) {
+    const syncState = await db.integrationSyncState.findUnique({
+      where: { provider: MU_CONTRACT_PROVIDER },
+      select: { initialReconcileCompletedAt: true },
+    });
+    if (!syncState?.initialReconcileCompletedAt) {
+      throw createApiError({
+        code: 'CONFLICT',
+        status: 409,
+        message: '请先完成 Full Reconcile，再启用增量同步',
+      });
+    }
   }
 
   const changeSet = updates.map((item) => ({

@@ -146,3 +146,39 @@ export type SettingsAuditFilterState = {
   pageSize: number;
   exportLimit: number;
 };
+
+export type MuContractSyncStatus = {
+  enabled: boolean;
+  intervalSeconds: number;
+  batchSize: number;
+  initialReconcileCompletedAt: string | null;
+  committedCursor: string | null;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  nextEligiblePollAt: string | null;
+  running: boolean;
+  reconcileStatus: string;
+  unmatchedCount: number;
+  conflictCount: number;
+};
+
+export type MuContractReconcileSummary = {
+  totalSourceRows: number;
+  metadataOnly: number;
+  creates: number;
+  updates: number;
+  inactive: number;
+  unmatched: number;
+  conflicts: number;
+  manualOnlyUntouched: number;
+};
+
+export type MuContractReconcilePreview = {
+  previewId: string;
+  expiresAt: string;
+  highWatermark: string;
+  summary: MuContractReconcileSummary;
+};
+
+export type MuContractSyncAction = 'sync-now' | 'preview-reconcile' | 'apply-reconcile' | null;

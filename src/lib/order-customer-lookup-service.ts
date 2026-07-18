@@ -3,13 +3,16 @@ import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError, isApiError } from '@/lib/api-error';
-import { findCustomerOrderNameMatches } from '@/lib/customer-order-name-service';
+import {
+  findCustomerOrderNameMatchesWithExecutor,
+  type CustomerOrderNameReadExecutor,
+} from '@/lib/customer-order-name-service';
 import type { CurrentUser } from '@/lib/request-auth';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
-import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
+import { findOrderIdByNoOrAliasWithExecutor } from '@/lib/order-alias-db';
 
 export type OrderCustomerLookupMatchedBy = 'linked-order' | 'derived-order-name';
 
@@ -80,6 +83,11 @@ type LookupOrder = {
   createdAt: Date | string;
   customer: LookupCustomer | null;
   invoice?: { id: string; invNo: string; createdAt: Date | string } | null;
+};
+
+export type OrderCustomerLookupExecutor = CustomerOrderNameReadExecutor & {
+  order: Pick<typeof db.order, 'findMany'>;
+  orderAlias: Pick<typeof db.orderAlias, 'findFirst' | 'findMany'>;
 };
 
 function trimStr(value: unknown): string {
@@ -166,9 +174,13 @@ const customerSelect = {
   },
 } satisfies Prisma.CustomerSelect;
 
-async function findExactOrders(rawOrderNo: string, visibilityWhere: ReturnType<typeof buildOrderVisibilityWhere>): Promise<LookupOrder[]> {
+async function findExactOrders(
+  executor: OrderCustomerLookupExecutor,
+  rawOrderNo: string,
+  visibilityWhere: ReturnType<typeof buildOrderVisibilityWhere>,
+): Promise<LookupOrder[]> {
   const candidates = buildCompositeOrderLookupCandidates(rawOrderNo);
-  let exactOrders = await db.order.findMany({
+  let exactOrders = await executor.order.findMany({
     where: {
       AND: [
         visibilityWhere,
@@ -207,9 +219,13 @@ async function findExactOrders(rawOrderNo: string, visibilityWhere: ReturnType<t
   }) as unknown as LookupOrder[];
 
   if (exactOrders.length === 0) {
-    const matchedOrderId = await findOrderIdByNoOrAlias(rawOrderNo, visibilityWhere);
+    const matchedOrderId = await findOrderIdByNoOrAliasWithExecutor(
+      executor as unknown as Parameters<typeof findOrderIdByNoOrAliasWithExecutor>[0],
+      rawOrderNo,
+      visibilityWhere,
+    );
     if (matchedOrderId) {
-      exactOrders = await db.order.findMany({
+      exactOrders = await executor.order.findMany({
         where: {
           AND: [visibilityWhere, { id: matchedOrderId }],
         },
@@ -229,15 +245,23 @@ async function findExactOrders(rawOrderNo: string, visibilityWhere: ReturnType<t
 }
 
 export async function resolveOrderCustomer(currentUser: CurrentUser, orderNo: string): Promise<OrderCustomerLookupSuccess> {
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
+  return resolveOrderCustomerForOwnerIds(db, ownerIds, orderNo);
+}
+
+export async function resolveOrderCustomerForOwnerIds(
+  executor: OrderCustomerLookupExecutor,
+  ownerIds: string[],
+  orderNo: string,
+): Promise<OrderCustomerLookupSuccess> {
   const rawOrderNo = trimStr(orderNo);
   if (!rawOrderNo) assertOrderMatched(orderNo, { reason: 'empty-order-no' });
 
-  const scope = await getHierarchyScope(currentUser);
-  const ownerIds = Array.from(scope.ownerVisibleIds);
   const visibilityWhere = buildOrderVisibilityWhere(ownerIds);
   const candidates = buildCompositeOrderLookupCandidates(rawOrderNo);
   const derivedOrderName = extractOrderNameFromOrderNo(rawOrderNo) || candidates.derivedOrderNames[0] || null;
-  const exactOrders = await findExactOrders(rawOrderNo, visibilityWhere);
+  const exactOrders = await findExactOrders(executor, rawOrderNo, visibilityWhere);
 
   const linkedCustomersById = new Map<string, { customer: LookupCustomer; order: LookupOrder }>();
   for (const order of sortExactOrders(exactOrders)) {
@@ -271,7 +295,7 @@ export async function resolveOrderCustomer(currentUser: CurrentUser, orderNo: st
     assertOrderMatched(rawOrderNo, { reason: 'order-name-not-derived' });
   }
 
-  const matchedCustomers = await findCustomerOrderNameMatches(ownerIds, rawOrderNo);
+  const matchedCustomers = await findCustomerOrderNameMatchesWithExecutor(executor, ownerIds, rawOrderNo);
   if (matchedCustomers.length === 0) {
     assertOrderMatched(rawOrderNo, { derivedOrderName });
   }

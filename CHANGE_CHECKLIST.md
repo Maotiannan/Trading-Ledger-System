@@ -185,6 +185,27 @@ Usually not required:
 - full test suite
 - version bump
 
+## 9.1 If An External Synchronization Changes
+
+Examples:
+- source event or snapshot feed
+- cursor, lease, outbox, or idempotency behavior
+- scheduled pull trigger
+- external stable identity or rename handling
+
+Must do:
+- publish and validate one versioned contract shared by producer and consumer
+- keep source credentials environment-only and out of API responses, database settings, audit metadata, logs, and fixtures
+- make source writes and outbox writes atomic; make consumer event application, event receipt, and cursor commit atomic
+- use stable external identity plus explicit business-key collision rules
+- bound request timeout, retry count, response size, page size, and concurrent workers
+- require a preview-confirmed, resumable initial reconcile before enabling incremental sync
+- preserve manual data priority and record conflicts instead of silently overwriting
+- add isolated producer and consumer API tests using disposable databases and fake peers
+- document deployment order, disable/rollback procedure, backup scope, and restore validation
+- verify that the scheduler holds only the internal trigger credential, never the external source credential
+- do not use a business rematch/merge operation to repair integration state
+
 If the documentation changes an operational rule that developers must follow, also update:
 - `README.md`
 - this checklist

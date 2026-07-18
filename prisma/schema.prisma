@@ -77,6 +77,44 @@ enum DetailSourceMode {
   DIRECT
 }
 
+enum ExternalOrderLinkMode {
+  MANUAL_ATTACHED
+  SYNC_CREATED
+}
+
+enum ExternalCustomerMatchStatus {
+  MATCHED
+  UNMATCHED
+  CONFLICT
+}
+
+enum IntegrationEventResult {
+  APPLIED
+  IGNORED_STALE
+  BUSINESS_CONFLICT
+}
+
+enum IntegrationConflictType {
+  INVALID_SOURCE_DATA
+  ORDER_NO_COLLISION
+  SOURCE_LINK_COLLISION
+  HUMAN_EDITED_RENAME_COLLISION
+  CUSTOMER_MATCH_CONFLICT
+  UNSUPPORTED_CURRENCY
+}
+
+enum IntegrationConflictStatus {
+  OPEN
+  RESOLVED
+}
+
+enum IntegrationReconcileStatus {
+  IDLE
+  RUNNING
+  FAILED
+  COMPLETED
+}
+
 // 删除申请状态枚举
 enum DeletionStatus {
   PENDING   // 待审批
@@ -154,6 +192,10 @@ model User {
   paymentAgentFiles            PaymentAgentFile[]   @relation("PaymentAgentFileUploadedBy")
   orderTrackers                OrderTracker[]       @relation("OrderTrackerCreatedBy")
   updatedOrderTrackers         OrderTracker[]       @relation("OrderTrackerUpdatedBy")
+  externalOrderSourceEdits     ExternalOrderSourceLink[]     @relation("ExternalOrderSourceHumanEditor")
+  integrationSyncStates        IntegrationSyncState[]        @relation("IntegrationSyncServiceActor")
+  resolvedIntegrationConflicts IntegrationSyncConflict[]     @relation("IntegrationConflictResolver")
+  integrationReconcilePreviews IntegrationReconcilePreview[] @relation("IntegrationReconcilePreviewCreator")
 
   @@index([parentId])
   @@index([createdById])
@@ -305,6 +347,8 @@ model OrderTracker {
   piStatus          Boolean  @default(false)
   remark            String?  @db.Text
   systemNote        String?  @db.Text
+  archivedAt        DateTime?
+  archiveReason     String?  @db.Text
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -312,6 +356,8 @@ model OrderTracker {
   updater  User?     @relation("OrderTrackerUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   financeOrder Order? @relation("OrderTrackerFinanceOrder", fields: [financeOrderId], references: [id], onDelete: SetNull)
+  externalSourceLinks       ExternalOrderSourceLink[]
+  integrationEventReceipts IntegrationEventReceipt[]
 
   @@index([financeOrderId])
   @@index([createdBy])
@@ -320,6 +366,133 @@ model OrderTracker {
   @@index([status])
   @@index([orderNo])
   @@index([normalizedOrderNo])
+  @@index([archivedAt])
+}
+
+model ExternalOrderSourceLink {
+  id                      String                      @id @default(cuid())
+  provider                String
+  externalId              String
+  orderTrackerId          String?
+  sourceVersion           Int
+  sourceOrderNo           String
+  normalizedSourceOrderNo String
+  piCreatedAt             DateTime
+  officialAmount          Decimal?                    @db.Decimal(18, 2)
+  currency                String?
+  officialGeneratedAt     DateTime?
+  officialGenerationRunId String?
+  active                  Boolean                     @default(true)
+  sourceDeletedAt         DateTime?
+  linkMode                ExternalOrderLinkMode
+  humanEditedAt           DateTime?
+  humanEditedBy           String?
+  customerMatchStatus     ExternalCustomerMatchStatus
+  lastEventCursor         String?
+  firstSeenAt             DateTime                    @default(now())
+  lastSourceUpdatedAt     DateTime
+  createdAt               DateTime                    @default(now())
+  updatedAt               DateTime                    @updatedAt
+
+  orderTracker OrderTracker? @relation(fields: [orderTrackerId], references: [id], onDelete: SetNull)
+  humanEditor  User?         @relation("ExternalOrderSourceHumanEditor", fields: [humanEditedBy], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalId])
+  @@unique([provider, orderTrackerId])
+  @@index([provider, active])
+  @@index([customerMatchStatus])
+  @@index([normalizedSourceOrderNo])
+  @@index([humanEditedBy])
+}
+
+model IntegrationSyncState {
+  provider                    String                     @id
+  committedCursor             String?
+  lastAttemptAt               DateTime?
+  lastSuccessAt               DateTime?
+  lastErrorCode               String?
+  lastErrorMessage            String?                    @db.Text
+  nextEligiblePollAt          DateTime?
+  leaseOwner                  String?
+  leaseExpiresAt              DateTime?
+  reconcileStatus             IntegrationReconcileStatus @default(IDLE)
+  reconcileCursor             String?
+  reconcileHighWatermark      String?
+  initialReconcileCompletedAt DateTime?
+  serviceActorId              String
+  createdAt                   DateTime                   @default(now())
+  updatedAt                   DateTime                   @updatedAt
+
+  serviceActor User @relation("IntegrationSyncServiceActor", fields: [serviceActorId], references: [id], onDelete: Restrict)
+
+  @@index([leaseExpiresAt])
+  @@index([lastSuccessAt])
+  @@index([serviceActorId])
+}
+
+model IntegrationEventReceipt {
+  id             String                 @id @default(cuid())
+  provider       String
+  eventId        String
+  cursor         String
+  sourcePiId     String
+  sourceVersion  Int
+  payloadHash    String
+  result         IntegrationEventResult
+  orderTrackerId String?
+  processedAt    DateTime
+  createdAt      DateTime               @default(now())
+
+  orderTracker OrderTracker? @relation(fields: [orderTrackerId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([provider, cursor])
+  @@index([provider, sourcePiId, sourceVersion])
+  @@index([orderTrackerId])
+}
+
+model IntegrationSyncConflict {
+  id                    String                    @id @default(cuid())
+  dedupeKey             String                    @unique
+  provider              String
+  sourcePiId            String
+  sourceVersion         Int
+  eventId               String?
+  cursor                String?
+  type                  IntegrationConflictType
+  sourceOrderNo         String?
+  targetOrderTrackerIds Json
+  summary               String                    @db.Text
+  evidence              Json
+  status                IntegrationConflictStatus @default(OPEN)
+  resolutionNote        String?                   @db.Text
+  resolvedAt            DateTime?
+  resolvedBy            String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  resolver User? @relation("IntegrationConflictResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+
+  @@index([provider, status])
+  @@index([provider, sourcePiId])
+  @@index([resolvedBy])
+}
+
+model IntegrationReconcilePreview {
+  id                  String    @id @default(cuid())
+  provider            String
+  sourceHighWatermark String
+  snapshotSummary     Json
+  summaryHash         String
+  createdBy           String
+  createdAt           DateTime  @default(now())
+  expiresAt           DateTime
+  consumedAt          DateTime?
+
+  creator User @relation("IntegrationReconcilePreviewCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([provider, expiresAt])
+  @@index([createdBy])
 }
 
 // ==================== 收据表 (Receipt) ====================

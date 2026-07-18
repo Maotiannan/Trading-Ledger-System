@@ -40,12 +40,24 @@ export async function syncCustomerOrderNames(
 }
 
 export async function findCustomerOrderNameMatches(ownerIds: string[] | null | undefined, orderInput: string | null | undefined) {
+  return findCustomerOrderNameMatchesWithExecutor(db, ownerIds, orderInput);
+}
+
+export type CustomerOrderNameReadExecutor = {
+  customerOrderName: Pick<typeof db.customerOrderName, 'findMany'>;
+};
+
+export async function findCustomerOrderNameMatchesWithExecutor(
+  executor: CustomerOrderNameReadExecutor,
+  ownerIds: string[] | null | undefined,
+  orderInput: string | null | undefined,
+) {
   const normalizedCandidates = buildCompositeOrderLookupCandidates(orderInput).orderNameCandidates
     .map((row) => row.normalizedOrderName)
     .filter(Boolean);
   if (normalizedCandidates.length === 0) return [];
 
-  const rows = await db.customerOrderName.findMany({
+  const rows = await executor.customerOrderName.findMany({
     where: {
       normalizedOrderName: normalizedCandidates.length === 1
         ? normalizedCandidates[0]

@@ -258,6 +258,12 @@ export function OrderTrackerManager() {
     return () => clearTimeout(timer);
   }, [dialogMode, dialogOpen, form.orderNo, loadCustomers, tx]);
 
+  const hasCustomerResolutionChange = Boolean(
+    editingOrder?.canResolveSourceCustomer
+    && form.customerId
+    && form.customerId !== (editingOrder.customerId || ''),
+  );
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
@@ -278,21 +284,34 @@ export function OrderTrackerManager() {
         });
         setMessage(result.message || tx('订单已创建', 'Order created'));
       } else if (editingOrder) {
-        const updateBody: Record<string, unknown> = {
-          action: 'update',
-          orderId: editingOrder.id,
-          status: form.status,
-          remark: form.remark.trim(),
-        };
-        if (editingOrder.canEditAdminFields) {
-          updateBody.piStatus = form.piStatus;
-          updateBody.systemNote = form.systemNote.trim();
+        let result: { message?: string } | null = null;
+        if (hasCustomerResolutionChange) {
+          result = await apiCall('orders', {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'resolve-source-customer',
+              orderId: editingOrder.id,
+              customerId: form.customerId,
+            }),
+          });
         }
-        const result = await apiCall('orders', {
-          method: 'POST',
-          body: JSON.stringify(updateBody),
-        });
-        setMessage(result.message || tx('订单已更新', 'Order updated'));
+        if (editingOrder.canEdit || editingOrder.canEditAdminFields) {
+          const updateBody: Record<string, unknown> = {
+            action: 'update',
+            orderId: editingOrder.id,
+            status: form.status,
+            remark: form.remark.trim(),
+          };
+          if (editingOrder.canEditAdminFields) {
+            updateBody.piStatus = form.piStatus;
+            updateBody.systemNote = form.systemNote.trim();
+          }
+          result = await apiCall('orders', {
+            method: 'POST',
+            body: JSON.stringify(updateBody),
+          });
+        }
+        setMessage(result?.message || tx('订单已更新', 'Order updated'));
       }
       setDialogOpen(false);
       await loadOrders();
@@ -305,7 +324,10 @@ export function OrderTrackerManager() {
 
   const canSave = dialogMode === 'create'
     ? Boolean(form.orderNo.trim() && form.customerId && form.remark.length <= MAX_REMARK_LENGTH)
-    : Boolean(editingOrder && (editingOrder.canEdit || editingOrder.canEditAdminFields) && form.remark.length <= MAX_REMARK_LENGTH);
+    : Boolean(editingOrder
+      && (editingOrder.canEdit || editingOrder.canEditAdminFields
+        || hasCustomerResolutionChange)
+      && form.remark.length <= MAX_REMARK_LENGTH);
 
   return (
     <div className="space-y-6">
@@ -364,24 +386,61 @@ export function OrderTrackerManager() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <Table>
+            <Table className="min-w-[1180px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>{tx('订单号', 'ORDER')}</TableHead>
+                  <TableHead>{tx('PI创建日期', 'PI CREATED DATE')}</TableHead>
+                  <TableHead>{tx('金额', 'AMOUNT')}</TableHead>
                   <TableHead>{tx('状态', 'STATUS')}</TableHead>
                   <TableHead>{tx('PI状态', 'PI STATUS')}</TableHead>
                   <TableHead>{tx('备注', 'REMARK')}</TableHead>
                   <TableHead>{tx('系统备注', 'SYSTEM NOTED')}</TableHead>
                   <TableHead>{tx('定金', 'DEPOSIT')}</TableHead>
                   <TableHead>{tx('确认日期', 'CONFIRMED DATE')}</TableHead>
-                  <TableHead>{tx('客户', 'Customer')}</TableHead>
-                  <TableHead>{tx('操作', 'Actions')}</TableHead>
+                  <TableHead>{tx('客户', 'CUSTOMER')}</TableHead>
+                  <TableHead>{tx('操作', 'ACTIONS')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {orders.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell className="font-semibold">{formatOrderNameDisplay(row.orderNo)}</TableCell>
+                    <TableCell className="font-semibold">
+                      <div>{formatOrderNameDisplay(row.orderNo)}</div>
+                      {(row.sourceState === 'INACTIVE'
+                        || row.sourceMatchStatus === 'UNMATCHED'
+                        || row.sourceMatchStatus === 'CONFLICT'
+                        || row.sourceConflict) && (
+                        <div className="mt-1 flex max-w-[220px] flex-wrap gap-1">
+                          {row.sourceState === 'INACTIVE' && (
+                            <Badge variant="outline" className="text-[10px] font-medium">
+                              {tx('来源已停用', 'Source inactive')}
+                            </Badge>
+                          )}
+                          {row.sourceMatchStatus === 'UNMATCHED' && (
+                            <Badge variant="secondary" className="text-[10px] font-medium">
+                              {tx('待匹配客户', 'Customer match needed')}
+                            </Badge>
+                          )}
+                          {row.sourceMatchStatus === 'CONFLICT' && (
+                            <Badge variant="destructive" className="text-[10px] font-medium">
+                              {tx('客户匹配冲突', 'Customer match conflict')}
+                            </Badge>
+                          )}
+                          {row.sourceConflict && (
+                            <Badge variant="destructive" className="text-[10px] font-medium">
+                              {tx('来源冲突', 'Source conflict')}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatAppDate(row.piCreatedAt)}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium">
+                      {row.piCurrency === 'USD' && row.piOfficialAmount !== null
+                        ? formatUsdAmount(row.piOfficialAmount)
+                        : '-'}
+                    </TableCell>
                     <TableCell><Badge variant={statusBadgeVariant(row.status)}>{statusLabel(row.status)}</Badge></TableCell>
                     <TableCell>
                       {row.piStatus ? (
@@ -397,7 +456,7 @@ export function OrderTrackerManager() {
                       <div className="max-w-[180px] truncate text-xs text-muted-foreground" title={row.customerName || row.customerPhone || '-'}>{row.customerName || row.customerPhone || '-'}</div>
                     </TableCell>
                     <TableCell>
-                      {(row.canEdit || row.canEditAdminFields) ? (
+                      {(row.canEdit || row.canEditAdminFields || row.canResolveSourceCustomer) ? (
                         <Button size="sm" variant="outline" onClick={() => openEditDialog(row)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           {tx('修改', 'Edit')}
@@ -410,7 +469,7 @@ export function OrderTrackerManager() {
                 ))}
                 {orders.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
                       {loading ? tx('加载中...', 'Loading...') : tx('暂无订单记录', 'No Orders records')}
                     </TableCell>
                   </TableRow>
@@ -453,7 +512,7 @@ export function OrderTrackerManager() {
               <Select
                 value={form.customerId}
                 onValueChange={(value) => setForm((prev) => ({ ...prev, customerId: value }))}
-                disabled={dialogMode === 'edit'}
+                disabled={dialogMode === 'edit' && !editingOrder?.canResolveSourceCustomer}
               >
                 <SelectTrigger data-testid="orders-customer-select-trigger" className="w-full min-w-0 overflow-hidden [&_[data-slot=select-value]]:min-w-0 [&_[data-slot=select-value]]:truncate">
                   <SelectValue placeholder={tx('选择客户', 'Select customer')} />

@@ -232,6 +232,97 @@ describe('OrderTrackerManager', () => {
     expect(within(progressRow as HTMLTableRowElement).getAllByRole('cell')[depositIndex + 1]).toHaveTextContent('-');
   });
 
+  it('shows synchronized PI date and amount in the approved desktop column order', async () => {
+    mockUseUiText.mockReturnValue((_zh: string, en: string) => en);
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('orders?action=customer-options')) {
+        return { success: true, data: [] };
+      }
+      return {
+        success: true,
+        data: [
+          {
+            id: 'tracker-source',
+            orderNo: 'AB-12',
+            status: 'In progress',
+            confirmedAt: null,
+            piStatus: false,
+            remark: '',
+            systemNote: '',
+            customerId: null,
+            customerMark: null,
+            customerName: null,
+            customerPhone: null,
+            customerCity: null,
+            depositAmount: 0,
+            piCreatedAt: '2026-07-18T00:30:00.000Z',
+            piOfficialAmount: 30040,
+            piCurrency: 'USD',
+            sourceState: 'INACTIVE',
+            sourceMatchStatus: 'UNMATCHED',
+            sourceConflict: true,
+            canEdit: false,
+            canEditAdminFields: false,
+            createdAt: '2026-07-18T00:30:00.000Z',
+          },
+          {
+            id: 'tracker-manual',
+            orderNo: 'LOCAL-01',
+            status: 'Confirmed',
+            confirmedAt: null,
+            piStatus: false,
+            remark: '',
+            systemNote: '',
+            customerId: 'customer-1',
+            customerMark: 'LOCAL',
+            customerName: 'LOCAL',
+            customerPhone: null,
+            customerCity: null,
+            depositAmount: 0,
+            piCreatedAt: null,
+            piOfficialAmount: null,
+            piCurrency: null,
+            sourceState: null,
+            sourceMatchStatus: null,
+            sourceConflict: false,
+            canEdit: true,
+            canEditAdminFields: true,
+            createdAt: '2026-07-18T00:30:00.000Z',
+          },
+        ],
+        meta: { statusOptions: ['In progress', 'Confirmed', 'Canceled'], defaultStatus: 'In progress' },
+      };
+    });
+
+    await renderManager();
+
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'ORDER',
+      'PI CREATED DATE',
+      'AMOUNT',
+      'STATUS',
+      'PI STATUS',
+      'REMARK',
+      'SYSTEM NOTED',
+      'DEPOSIT',
+      'CONFIRMED DATE',
+      'CUSTOMER',
+      'ACTIONS',
+    ]);
+    const sourceRow = screen.getByText('AB-12').closest('tr');
+    const sourceCells = within(sourceRow as HTMLTableRowElement).getAllByRole('cell');
+    expect(sourceCells[1]).toHaveTextContent('18/07/2026');
+    expect(sourceCells[2]).toHaveTextContent('$30,040');
+    expect(within(sourceRow as HTMLTableRowElement).getByText('Source inactive')).toBeInTheDocument();
+    expect(within(sourceRow as HTMLTableRowElement).getByText('Customer match needed')).toBeInTheDocument();
+    expect(within(sourceRow as HTMLTableRowElement).getByText('Source conflict')).toBeInTheDocument();
+
+    const manualRow = screen.getByText('LOCAL-01').closest('tr');
+    const manualCells = within(manualRow as HTMLTableRowElement).getAllByRole('cell');
+    expect(manualCells[1]).toHaveTextContent('-');
+    expect(manualCells[2]).toHaveTextContent('-');
+  });
+
   it('does not submit admin-only fields when a sales-editable order is saved', async () => {
     mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
       if (endpoint.startsWith('orders?action=customer-options')) {
@@ -288,5 +379,86 @@ describe('OrderTrackerManager', () => {
     }));
     expect(body).not.toHaveProperty('piStatus');
     expect(body).not.toHaveProperty('systemNote');
+  });
+
+  it('enables customer selection only for an ADMIN-resolvable synchronized Order', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint.startsWith('orders?action=customer-options')) {
+        return {
+          success: true,
+          data: [{
+            id: 'customer-2',
+            mark: 'AB',
+            orderName: 'AB-2',
+            name: 'Alpha Buyer',
+            companyName: null,
+            phone: '+224 600 00 00 02',
+            city: 'Conakry',
+            ownerId: 'admin-1',
+            label: 'AB / AB-2 / Alpha Buyer',
+          }],
+        };
+      }
+      if (endpoint === 'orders' && options?.method === 'POST') {
+        return { success: true, message: '同步Order客户已解决', data: { id: 'tracker-source' } };
+      }
+      return {
+        success: true,
+        data: [{
+          id: 'tracker-source',
+          orderNo: 'AB-12',
+          status: 'In progress',
+          confirmedAt: null,
+          piStatus: false,
+          remark: '',
+          systemNote: '',
+          customerId: null,
+          customerMark: null,
+          customerName: null,
+          customerPhone: null,
+          customerCity: null,
+          depositAmount: 0,
+          sourceState: 'ACTIVE',
+          sourceMatchStatus: 'UNMATCHED',
+          sourceConflict: false,
+          canEdit: false,
+          canEditAdminFields: false,
+          canResolveSourceCustomer: true,
+          createdAt: '2026-07-18T00:00:00.000Z',
+        }],
+        meta: { statusOptions: ['In progress', 'Confirmed', 'Canceled'], defaultStatus: 'In progress' },
+      };
+    });
+
+    await renderManager();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /修改/ }));
+      await Promise.resolve();
+    });
+    const dialog = screen.getByRole('dialog');
+    const trigger = within(dialog).getByTestId('orders-customer-select-trigger');
+    expect(trigger).not.toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(trigger);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('orders-customer-option-customer-2'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: /保存/ }));
+      await Promise.resolve();
+    });
+
+    const post = mockApiCall.mock.calls.find(([endpoint, options]) => (
+      endpoint === 'orders' && options?.method === 'POST'
+    ));
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+      action: 'resolve-source-customer',
+      orderId: 'tracker-source',
+      customerId: 'customer-2',
+    });
   });
 });

@@ -100,4 +100,21 @@ describe('system-settings', () => {
       expect(numericSystemSettingMaximums[key]).toBe(3650);
     }
   });
+
+  it('exposes bounded MU Contract synchronization settings', () => {
+    const keys = [
+      'MU_CONTRACT_SYNC_ENABLED',
+      'MU_CONTRACT_SYNC_INTERVAL_SECONDS',
+      'MU_CONTRACT_SYNC_BATCH_SIZE',
+    ] as const;
+
+    expect(editableSystemSettingKeys).toEqual(expect.arrayContaining(keys));
+    expect(systemSettingDefaults.MU_CONTRACT_SYNC_ENABLED).toBe('false');
+    expect(systemSettingDefaults.MU_CONTRACT_SYNC_INTERVAL_SECONDS).toBe('30');
+    expect(systemSettingDefaults.MU_CONTRACT_SYNC_BATCH_SIZE).toBe('100');
+    expect(numericSystemSettingMinimums.MU_CONTRACT_SYNC_INTERVAL_SECONDS).toBe(10);
+    expect(numericSystemSettingMaximums.MU_CONTRACT_SYNC_INTERVAL_SECONDS).toBe(3600);
+    expect(numericSystemSettingMinimums.MU_CONTRACT_SYNC_BATCH_SIZE).toBe(1);
+    expect(numericSystemSettingMaximums.MU_CONTRACT_SYNC_BATCH_SIZE).toBe(500);
+  });
 });

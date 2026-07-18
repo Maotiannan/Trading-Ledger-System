@@ -11,6 +11,12 @@ export const customerAnalyticsSystemSettingKeys = [
   'CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS',
 ] as const;
 
+export const muContractSyncSettingKeys = [
+  'MU_CONTRACT_SYNC_ENABLED',
+  'MU_CONTRACT_SYNC_INTERVAL_SECONDS',
+  'MU_CONTRACT_SYNC_BATCH_SIZE',
+] as const;
+
 export const editableSystemSettingKeys = [
   'OCR_DISABLED',
   'OCR_API_BASE_URL',
@@ -39,6 +45,7 @@ export const editableSystemSettingKeys = [
   'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
   'ORDER_TRACKER_STATUS_OPTIONS',
   ...customerAnalyticsSystemSettingKeys,
+  ...muContractSyncSettingKeys,
 ] as const;
 
 export type EditableSystemSettingKey = (typeof editableSystemSettingKeys)[number];
@@ -46,6 +53,7 @@ export type EditableSystemSettingKey = (typeof editableSystemSettingKeys)[number
 export const booleanSystemSettingKeys = [
   'OCR_DISABLED',
   'SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS',
+  'MU_CONTRACT_SYNC_ENABLED',
 ] as const satisfies readonly EditableSystemSettingKey[];
 
 export type BooleanSystemSettingKey = (typeof booleanSystemSettingKeys)[number];
@@ -58,6 +66,8 @@ export type SecretSystemSettingKey = (typeof secretSystemSettingKeys)[number];
 
 export const integerSystemSettingKeys = [
   ...customerAnalyticsSystemSettingKeys,
+  'MU_CONTRACT_SYNC_INTERVAL_SECONDS',
+  'MU_CONTRACT_SYNC_BATCH_SIZE',
 ] as const satisfies readonly EditableSystemSettingKey[];
 
 export type IntegerSystemSettingKey = (typeof integerSystemSettingKeys)[number];
@@ -96,6 +106,9 @@ export const systemSettingDefaults: Record<EditableSystemSettingKey, string> = {
   CUSTOMER_ANALYTICS_WARNING_DAYS: process.env.CUSTOMER_ANALYTICS_WARNING_DAYS ?? '120',
   CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: process.env.CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS ?? '150',
   CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: process.env.CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS ?? '180',
+  MU_CONTRACT_SYNC_ENABLED: 'false',
+  MU_CONTRACT_SYNC_INTERVAL_SECONDS: '30',
+  MU_CONTRACT_SYNC_BATCH_SIZE: '100',
 };
 
 export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingKey, number>> = {
@@ -126,6 +139,8 @@ export const numericSystemSettingMinimums: Partial<Record<EditableSystemSettingK
   CUSTOMER_ANALYTICS_WARNING_DAYS: 1,
   CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 1,
   CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 1,
+  MU_CONTRACT_SYNC_INTERVAL_SECONDS: 10,
+  MU_CONTRACT_SYNC_BATCH_SIZE: 1,
 };
 
 export const numericSystemSettingMaximums: Partial<Record<EditableSystemSettingKey, number>> = {
@@ -136,6 +151,8 @@ export const numericSystemSettingMaximums: Partial<Record<EditableSystemSettingK
   CUSTOMER_ANALYTICS_WARNING_DAYS: 3650,
   CUSTOMER_ANALYTICS_DOUBLE_WARNING_DAYS: 3650,
   CUSTOMER_ANALYTICS_SEVERE_WARNING_DAYS: 3650,
+  MU_CONTRACT_SYNC_INTERVAL_SECONDS: 3600,
+  MU_CONTRACT_SYNC_BATCH_SIZE: 500,
 };
 
 let cache: { expiresAt: number; values: Record<string, string> } | null = null;

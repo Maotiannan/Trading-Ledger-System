@@ -116,6 +116,47 @@ npm run test:api:isolated -- --case 36-dashboard-customer-analytics
 
 This case verifies USER/ADMIN visibility, all three rankings and details, zero-payment customers, receipt de-duplication, settings authorization, and transactional threshold validation against a temporary MariaDB instance.
 
+## 2.4 MU Contract Orders synchronization
+
+The source URL and token are environment-only. Do not paste real credentials into curl history or test fixtures. Administrator status and manual actions use the logged-in session; the scheduler uses the existing maintenance token.
+
+```bash
+# ADMIN status. Secrets are never returned.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/integrations/mu-contract/status"
+
+# Create a Full Reconcile preview first.
+curl -b cookie.txt -X POST \
+  "http://127.0.0.1/api/integrations/mu-contract/actions" \
+  -H "Content-Type: application/json" \
+  --data '{"action":"preview-reconcile"}'
+
+# Apply only the returned, unexpired preview ID after reviewing counts.
+curl -b cookie.txt -X POST \
+  "http://127.0.0.1/api/integrations/mu-contract/actions" \
+  -H "Content-Type: application/json" \
+  --data '{"action":"apply-reconcile","previewId":"PREVIEW_ID"}'
+
+# Incremental run after initial reconcile.
+curl -b cookie.txt -X POST \
+  "http://127.0.0.1/api/integrations/mu-contract/actions" \
+  -H "Content-Type: application/json" \
+  --data '{"action":"sync-now"}'
+
+# Internal scheduler path. Use only a local/test maintenance token.
+curl -X POST \
+  "http://127.0.0.1/api/internal/integrations/mu-contract/pull" \
+  -H "x-maintenance-token: TEST_MAINTENANCE_TOKEN"
+```
+
+Automated isolated regression:
+
+```bash
+npm run test:api:isolated -- --case 95-mu-contract-order-sync
+```
+
+The case starts a disposable MariaDB and fake MU Contract server. It verifies the initial-reconcile gate, fingerprinted preview/apply, manual-order priority, metadata-only linking, sync-created Orders, invalid-event isolation followed by valid-event continuation, replay idempotency, cursor resume, ADMIN-only direct customer resolution, status/visibility isolation, and exact before/after SHA-256 checksums of every row in the five financial tables. The test stack is destroyed automatically.
+
 ## 3. Common test flow (curl)
 
 ```bash

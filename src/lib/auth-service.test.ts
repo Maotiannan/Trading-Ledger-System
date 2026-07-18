@@ -29,6 +29,8 @@ jest.mock('@/lib/db', () => ({
     customer: { updateMany: jest.fn() },
     deletionRequest: { updateMany: jest.fn() },
     auditLog: { updateMany: jest.fn() },
+    orderTracker: { updateMany: jest.fn() },
+    integrationSyncState: { updateMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -82,6 +84,8 @@ const mockDb = db as unknown as {
   customer: { updateMany: jest.Mock };
   deletionRequest: { updateMany: jest.Mock };
   auditLog: { updateMany: jest.Mock };
+  orderTracker: { updateMany: jest.Mock };
+  integrationSyncState: { updateMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -179,6 +183,9 @@ describe('auth-service', () => {
     await deleteManagedUser(makeUser(), 'user-child');
 
     expect(mockDb.invoice.updateMany).toHaveBeenCalledWith({ where: { createdBy: 'user-child' }, data: { createdBy: 'admin-1' } });
+    expect(mockDb.orderTracker.updateMany).toHaveBeenCalledWith({ where: { createdBy: 'user-child' }, data: { createdBy: 'admin-1' } });
+    expect(mockDb.orderTracker.updateMany).toHaveBeenCalledWith({ where: { updatedBy: 'user-child' }, data: { updatedBy: 'admin-1' } });
+    expect(mockDb.integrationSyncState.updateMany).toHaveBeenCalledWith({ where: { serviceActorId: 'user-child' }, data: { serviceActorId: 'admin-1' } });
     expect(mockDb.user.delete).toHaveBeenCalledWith({ where: { id: 'user-child' } });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'USER_DELETE',

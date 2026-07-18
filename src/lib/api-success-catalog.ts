@@ -56,6 +56,10 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   'Excel API令牌已撤销': { zh: 'Excel API令牌已撤销', en: 'Excel API token revoked' },
   'Excel ML查询完成': { zh: 'Excel ML查询完成', en: 'Excel ML lookup completed' },
   'Excel ML批量查询完成': { zh: 'Excel ML批量查询完成', en: 'Excel ML batch lookup completed' },
+  'MU Contract 同步状态已加载': { zh: 'MU Contract 同步状态已加载', en: 'MU Contract sync status loaded' },
+  'MU Contract 增量同步已完成': { zh: 'MU Contract 增量同步已完成', en: 'MU Contract incremental sync completed' },
+  'Full Reconcile 预览已生成': { zh: 'Full Reconcile 预览已生成', en: 'Full Reconcile preview generated' },
+  'Full Reconcile 已完成': { zh: 'Full Reconcile 已完成', en: 'Full Reconcile completed' },
 };
 
 const containsSuccessMessages: Array<[string, Record<SupportedLocale, string>]> = [

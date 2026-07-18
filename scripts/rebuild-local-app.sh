@@ -98,6 +98,9 @@ docker compose up -d --no-deps --build app
 log 'refreshing maintenance service so its token/config matches app'
 docker compose up -d --no-deps --force-recreate maintenance
 
+log 'refreshing MU Contract trigger so its token/config matches app'
+docker compose up -d --no-deps --force-recreate mucontract-sync-trigger
+
 log 'waiting for app health endpoint'
 if ! wait_for_app; then
   log 'app health check failed; recent app logs follow'
@@ -107,6 +110,9 @@ fi
 
 log 'checking maintenance endpoint with container token'
 docker compose exec -T maintenance sh -c 'curl -fsS -X POST "$MAINTENANCE_BASE_URL/api/internal/maintenance/uploaded-assets" -H "x-maintenance-token: $MAINTENANCE_JOB_TOKEN" >/dev/null'
+
+log 'checking MU Contract pull endpoint with container token'
+docker compose exec -T mucontract-sync-trigger sh -c 'curl -fsS -X POST "$MAINTENANCE_BASE_URL/api/internal/integrations/mu-contract/pull" -H "x-maintenance-token: $MAINTENANCE_JOB_TOKEN" >/dev/null'
 
 log 'final containers'
 docker compose ps

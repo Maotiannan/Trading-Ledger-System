@@ -11,12 +11,13 @@ import {
   CustomerAnalyticsSettingsCard,
   DashboardSettingsCard,
   ExcelTokenCard,
+  MuContractSyncSettingsCard,
   PasswordSettingsCard,
   SettingsAuditCard,
   SystemConfigCard,
   UserImageCompressionCard,
 } from './components';
-import { useExcelTokenSettings, useSettingsActions, useSettingsForms } from './hooks';
+import { useExcelTokenSettings, useMuContractSync, useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
 import { buildSettingsPageViewModel } from './page-view-model';
 
@@ -94,6 +95,14 @@ export function SettingsManager() {
     togglePurgeModule,
   } = useSettingsForms();
 
+  const canManageMuContractSync = user?.role === 'ADMIN';
+  const muContractSync = useMuContractSync({
+    enabled: canManageMuContractSync,
+    tx,
+    setMessage,
+    setError,
+  });
+
   const {
     loadSettings,
     loadSettingsAudit,
@@ -166,6 +175,10 @@ export function SettingsManager() {
   useEffect(() => {
     void excelTokenSettings.loadExcelTokens();
   }, [excelTokenSettings.loadExcelTokens]);
+
+  useEffect(() => {
+    void muContractSync.loadStatus();
+  }, [muContractSync.loadStatus]);
 
   useEffect(() => {
     if (!canViewAudit) {
@@ -301,6 +314,32 @@ export function SettingsManager() {
           onSave={handleSaveConfig}
         />
       </CollapsibleSettingsSection>
+
+      {canManageMuContractSync && (
+        <CollapsibleSettingsSection title={tx('MU Contract 订单同步', 'MU Contract Order Sync')}>
+          <MuContractSyncSettingsCard
+            loading={loading || muContractSync.loading}
+            saving={savingConfig}
+            canEdit={canEditConfig}
+            action={muContractSync.action}
+            config={config}
+            status={muContractSync.status}
+            preview={muContractSync.preview}
+            tx={tx}
+            onFieldChange={updateConfigField}
+            onSave={() => {
+              void (async () => {
+                await handleSaveConfig();
+                await muContractSync.loadStatus();
+              })();
+            }}
+            onRefresh={() => { void muContractSync.loadStatus(); }}
+            onSyncNow={() => { void muContractSync.syncNow(); }}
+            onPreviewReconcile={() => { void muContractSync.previewReconcile(); }}
+            onApplyReconcile={() => { void muContractSync.applyReconcile(); }}
+          />
+        </CollapsibleSettingsSection>
+      )}
 
       <CollapsibleSettingsSection title={tx('系统配置', 'System Configuration')}>
         <SystemConfigCard

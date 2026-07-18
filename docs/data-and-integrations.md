@@ -75,6 +75,91 @@ Content-Type: application/json
 
 同一 `ORDER NO` 同一 `CONSIGNEE` 重复写入必须幂等成功。兼容路径：`/customers/order-consignee/write`。
 
+## MU Contract PI -> Orders 同步
+
+该集成只把 MU Contract 中已经绑定 `ORDER NO` 的 PI 元数据同步到 MULEDGER 的独立 `Orders` 页面。它不会写入财务订单、发票、收据、付款明细、SWIFT、余额或媒体文件。
+
+### 数据方向与身份
+
+- 数据方向固定为 `MU Contract -> MULEDGER`，由 MULEDGER 主动拉取。
+- MU Contract 隐藏 PI ID 是跨系统稳定身份；`ORDER NO` 是可修改的业务键。
+- MULEDGER 已有人工作业单优先。命中时只挂接来源元数据，不覆盖创建人、权限范围、客户、状态、PI 状态、备注、系统备注或确认日期。
+- 已挂接到人工 Orders 的 PI 后续事件不会覆盖客户快照、财务订单引用、状态、PI 状态、备注、系统备注或确认日期；同一隐藏 PI ID 的 `ORDER NO` 改名会同步更新该行的订单号和搜索索引。新订单号已被其他行占用时停止改名并记录冲突，不覆盖任何人工数据。
+- 只有 MU Contract 正式 PI PDF 成功生成或重新生成后，金额才成为官方同步金额；草稿金额不会同步。
+- 来源删除或解除 `ORDER NO` 只会停用来源关联，不会删除 MULEDGER 的 Orders 记录。
+
+### MU Contract 只读源接口
+
+两个接口都使用独立 Bearer token、`Cache-Control: no-store` 和 JSON Schema v1：
+
+```http
+GET /integrations/muledger/order-events?after=<cursor>&limit=<1..500>
+GET /integrations/muledger/order-snapshot?after=<snapshot-cursor>&limit=<1..500>
+Authorization: Bearer <MULEDGER_ORDER_SYNC_TOKEN>
+```
+
+事件接口按持久化十进制游标增量返回；快照接口用于首次或人工 Full Reconcile。共享结构契约位于 `docs/integrations/mu-contract-order-sync-v1.schema.json`，并与 MU Contract 仓库中的源文件保持逐字节一致。事件游标限定为 `0..9223372036854775807` 的最多 19 位十进制字符串；快照分页使用来源签发、最长 256 字符的不透明游标，MULEDGER 只原样回传，不解析或改写。来源版本限定为 `1..2147483647`，正式金额限定为最多 16 位整数加固定两位小数。
+
+事件页先验证页结构和可安全持久化的 `cursor / eventId / source.piId / source.version` 身份，再验证业务载荷。身份安全但业务字段无效的 v1 事件会在单个事务中写入不含原始载荷的 `INVALID_SOURCE_DATA` 冲突、事件收据和已提交游标，并继续处理后续事件；身份或游标本身不安全时整页拒绝。快照接口仍使用完整严格校验，不采用该跳过策略。
+
+### MULEDGER 控制接口
+
+```http
+POST /api/internal/integrations/mu-contract/pull
+x-maintenance-token: <MAINTENANCE_JOB_TOKEN>
+
+GET /api/integrations/mu-contract/status
+POST /api/integrations/mu-contract/actions
+```
+
+后两个接口仅限 ADMIN。`actions` 只接受：
+
+- `sync-now`
+- `preview-reconcile`
+- `apply-reconcile`，并且必须携带仍有效的 `previewId`
+
+Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效。Apply 在写入前重新读取完整分页快照，要求所有页面高水位一致、PI ID 全局唯一且稳定递增，并重新核对来源汇总和本地目标状态；快照分页游标始终使用来源返回值。任何变化都返回 `409` 并要求重新预览。通过后按设置批量事务提交，并以来源 PI ID 保存处理断点。首次 Full Reconcile 完成前，系统拒绝启用普通增量同步。
+
+`Sync Now` 或 `apply-reconcile` 遇到有效租约竞争时返回可读的 `409`“未完成”结果，而不是成功响应；设置页保留现有 Full Reconcile 预览供稍后重试。所有成功、失败和对账状态写入都带当前 `leaseOwner` 条件，过期 worker 不能覆盖接管者。
+
+Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / CONFLICT` 的同步行，所选客户必须位于该管理员现有层级可见范围内。它在一个事务中更新 Orders 客户快照与 `needsCustomerFix`、来源匹配状态和人工编辑标记，关闭对应客户冲突，并写入 before/after 审计；普通人工行、已匹配同步行和非 ADMIN 均不能使用，财务表不会被修改。
+
+### 配置与运行
+
+源地址和源令牌只允许放在运行环境，不写入数据库、设置审计、接口响应或日志：
+
+| 环境变量 | 用途 |
+|---|---|
+| `MU_CONTRACT_SYNC_BASE_URL` | MU Contract 内部源服务地址 |
+| `MU_CONTRACT_SYNC_TOKEN` | 调用源接口的独立 Bearer token |
+| `MAINTENANCE_JOB_TOKEN` | Docker 触发器调用 MULEDGER 内部 pull 接口 |
+
+ADMIN 可在设置页持久化启用状态、轮询间隔 `10..3600` 秒和批量大小 `1..500`。Docker `mucontract-sync-trigger` 每 5 秒唤醒一次内部接口；后端根据持久化的下一次可运行时间决定是否真正拉取，避免把业务调度逻辑放进容器脚本。
+
+### 持久化与冲突
+
+以下五张表都位于 MySQL `trading_ledger`，由现有完整数据库 dump 自动覆盖：
+
+| 表 | 用途 |
+|---|---|
+| `ExternalOrderSourceLink` | PI 稳定身份、当前 ORDER NO、正式金额及 Orders 挂接关系 |
+| `IntegrationSyncState` | 已提交游标、租约、最近结果和首次 Full Reconcile 状态 |
+| `IntegrationEventReceipt` | 事件幂等收据和载荷哈希 |
+| `IntegrationSyncConflict` | 订单号、来源关联、客户匹配和币种冲突证据 |
+| `IntegrationReconcilePreview` | 有效期内的 Full Reconcile 摘要、完整快照/目标状态指纹 |
+
+单次事件处理、事件收据和游标提交在同一数据库事务内完成。120 秒可续租租约防止两个触发器并行应用同一批事件。冲突只记录并等待管理员处理，不自动覆盖人工数据。重命名转移时，被归档的未人工编辑同步行保留原 `orderNo` 和审计历史，但其唯一标准化业务键会改为由行 ID 派生的确定性归档键，确保旧 ORDER NO 后续可以创建新的可见行。
+
+### 部署与回滚顺序
+
+1. 先备份并部署 MU Contract 的增量迁移、只读 feed 和历史来源初始化，验证两个源接口。
+2. 从最新 MULEDGER COS 数据库备份恢复到隔离 MariaDB，针对副本执行新迁移和恢复检查；不得直接拿生产库试迁移。
+3. 备份正式 MULEDGER 后部署迁移和应用，配置源地址/令牌；同步保持关闭。
+4. ADMIN 执行 Full Reconcile 预览并确认数量，再执行 apply；检查未匹配和冲突。
+5. 完成首次 Full Reconcile 后才启用增量同步。
+
+需要回滚应用时，先在设置中关闭同步并停止 `mucontract-sync-trigger`。不要删除五张集成表或已创建的 Orders 历史；旧应用版本回滚前必须确认其 Prisma schema 能忽略新增表和新增可空字段。该集成没有 NAS 文件和外部对象存储写入。
+
 ## 业务数据范围
 
 系统数据分为两类：
@@ -100,6 +185,7 @@ Content-Type: application/json
 - 上传资产台账 `UploadedAsset`
 - 签名收据会话与收据编号计数器
 - Payment Agent 资料与文件索引
+- MU Contract Orders 来源关联、同步游标、事件幂等收据、冲突与对账预览
 
 注意：MySQL 数据文件不在项目 Git 仓库，也不在 app 容器里。备份数据库时应备份 `trading_ledger` 业务库，而不是只备份项目代码。
 
@@ -206,6 +292,8 @@ docker volume rm ...
 |---|---|
 | `SESSION_SECRET` | 签发登录会话 Cookie |
 | `MAINTENANCE_JOB_TOKEN` | Docker `maintenance` 服务调用内部清理接口 |
+| `MU_CONTRACT_SYNC_BASE_URL` | MU Contract 只读 Orders feed 地址，仅传入 app |
+| `MU_CONTRACT_SYNC_TOKEN` | MU Contract Orders feed 独立令牌，仅传入 app |
 | `TRUST_PROXY_HEADERS` | 是否信任 Caddy 重写后的代理 IP 头，Docker/Caddy 部署建议为 `true` |
 
 如果缺少 `SESSION_SECRET` 或 `MAINTENANCE_JOB_TOKEN`，`docker compose` 会拒绝启动，避免系统用公开默认值悄悄运行。

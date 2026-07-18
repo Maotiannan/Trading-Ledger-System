@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { SettingsManager } from './settings-manager';
 import { useStore } from '@/lib/store';
 import { useUiText } from '@/components/workspace/shared';
-import { useExcelTokenSettings, useSettingsActions, useSettingsForms } from './hooks';
+import { useExcelTokenSettings, useMuContractSync, useSettingsActions, useSettingsForms } from './hooks';
 
 jest.mock('@/lib/store', () => ({
   useStore: jest.fn(),
@@ -14,6 +14,7 @@ jest.mock('@/components/workspace/shared', () => ({
 
 jest.mock('./hooks', () => ({
   useExcelTokenSettings: jest.fn(),
+  useMuContractSync: jest.fn(),
   useSettingsActions: jest.fn(),
   useSettingsForms: jest.fn(),
 }));
@@ -30,6 +31,7 @@ jest.mock('./components', () => {
     CustomerAnalyticsSettingsCard: () => <div>CustomerAnalyticsSettingsBody</div>,
     DashboardSettingsCard: () => <div>DashboardSettingsBody</div>,
     ExcelTokenCard: () => <div>ExcelTokenBody</div>,
+    MuContractSyncSettingsCard: () => <div>MuContractSyncSettingsBody</div>,
     PasswordSettingsCard: () => <div>PasswordSettingsBody</div>,
     SettingsAuditCard: () => <div>SettingsAuditBody</div>,
     SystemConfigCard: () => <div>SystemConfigBody</div>,
@@ -44,6 +46,7 @@ jest.mock('@/lib/app-version', () => ({
 const mockUseStore = useStore as unknown as jest.Mock;
 const mockUseUiText = useUiText as jest.Mock;
 const mockUseExcelTokenSettings = useExcelTokenSettings as jest.Mock;
+const mockUseMuContractSync = useMuContractSync as jest.Mock;
 const mockUseSettingsActions = useSettingsActions as jest.Mock;
 const mockUseSettingsForms = useSettingsForms as jest.Mock;
 
@@ -62,6 +65,16 @@ describe('SettingsManager', () => {
       generateExcelToken: jest.fn(),
       revokeExcelToken: jest.fn(),
     });
+    mockUseMuContractSync.mockReturnValue({
+      loading: false,
+      action: null,
+      status: null,
+      preview: null,
+      loadStatus: jest.fn(),
+      syncNow: jest.fn(),
+      previewReconcile: jest.fn(),
+      applyReconcile: jest.fn(),
+    });
     mockUseSettingsForms.mockReturnValue({
       loading: false,
       setLoading: jest.fn(),
@@ -79,7 +92,11 @@ describe('SettingsManager', () => {
       setMessage: jest.fn(),
       error: null,
       setError: jest.fn(),
-      config: {},
+      config: {
+        MU_CONTRACT_SYNC_ENABLED: 'false',
+        MU_CONTRACT_SYNC_INTERVAL_SECONDS: '30',
+        MU_CONTRACT_SYNC_BATCH_SIZE: '100',
+      },
       setConfig: jest.fn(),
       userPreferences: {
         imageCompressionEnabled: true,
@@ -164,5 +181,18 @@ describe('SettingsManager', () => {
     expect(screen.queryByText('CustomerAnalyticsSettingsBody')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Customer Analytics Settings/i }));
     expect(screen.getByText('CustomerAnalyticsSettingsBody')).toBeInTheDocument();
+
+    expect(screen.queryByText('MuContractSyncSettingsBody')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /MU Contract Order Sync/i }));
+    expect(screen.getByText('MuContractSyncSettingsBody')).toBeInTheDocument();
+  });
+
+  it('omits MU Contract controls for non-admin accounts', () => {
+    mockUseStore.mockReturnValue({ user: { email: 'sales@example.com', role: 'SALES' } });
+
+    render(<SettingsManager />);
+
+    expect(screen.queryByRole('button', { name: /MU Contract Order Sync/i })).not.toBeInTheDocument();
+    expect(mockUseMuContractSync).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
   });
 });

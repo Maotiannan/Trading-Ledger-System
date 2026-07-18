@@ -1,4 +1,10 @@
-import { Prisma, ReceiptStatus, UserRole } from '@prisma/client';
+import {
+  ExternalCustomerMatchStatus,
+  IntegrationConflictStatus,
+  Prisma,
+  ReceiptStatus,
+  UserRole,
+} from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -13,7 +19,9 @@ import {
 import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
+import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { MU_CONTRACT_PROVIDER } from '@/lib/integrations/mu-contract-constants';
 
 const DEFAULT_ORDER_TRACKER_STATUS = 'In progress';
 const DEFAULT_STATUS_OPTIONS = [DEFAULT_ORDER_TRACKER_STATUS, 'Confirmed', 'Canceled'];
@@ -75,13 +83,25 @@ function normalizeTrackerOrderNo(value: string): string {
   return normalizeOrderIdentifier(value);
 }
 
-function buildTrackerVisibilityWhere(ownerIds: string[]): Prisma.OrderTrackerWhereInput {
-  return {
-    OR: [
-      { createdBy: { in: ownerIds } },
-      { customer: { ownerId: { in: ownerIds } } },
-    ],
-  };
+function buildTrackerVisibilityWhere(
+  ownerIds: string[],
+  role: UserRole,
+): Prisma.OrderTrackerWhereInput {
+  const scopedRows: Prisma.OrderTrackerWhereInput[] = [
+    { createdBy: { in: ownerIds } },
+    { customer: { ownerId: { in: ownerIds } } },
+  ];
+  if (role === UserRole.ADMIN) {
+    scopedRows.push({
+      externalSourceLinks: {
+        some: {
+          provider: MU_CONTRACT_PROVIDER,
+          customerMatchStatus: { not: ExternalCustomerMatchStatus.MATCHED },
+        },
+      },
+    });
+  }
+  return { OR: scopedRows };
 }
 
 function buildCustomerVisibilityWhere(ownerIds: string[]): Prisma.CustomerWhereInput {
@@ -129,7 +149,19 @@ function canEditAdminFields(
   return false;
 }
 
-function serializeTracker(row: Record<string, unknown>, depositAmount: number, currentUser: CurrentUser, baseEditable: boolean, adminEditable: boolean) {
+function serializeTracker(
+  row: Record<string, unknown>,
+  depositAmount: number,
+  currentUser: CurrentUser,
+  baseEditable: boolean,
+  adminEditable: boolean,
+  conflictingSourcePiIds: ReadonlySet<string>,
+) {
+  const externalSourceLinks = Array.isArray(row.externalSourceLinks)
+    ? row.externalSourceLinks as Array<Record<string, unknown>>
+    : [];
+  const source = externalSourceLinks[0] || null;
+  const { externalSourceLinks: _hiddenSourceLinks, ...publicRow } = row;
   const financeOrder = row.financeOrder && typeof row.financeOrder === 'object'
     ? row.financeOrder as Record<string, unknown>
     : null;
@@ -137,13 +169,28 @@ function serializeTracker(row: Record<string, unknown>, depositAmount: number, c
     ? financeOrder.invoice as Record<string, unknown>
     : null;
   return {
-    ...row,
+    ...publicRow,
     amount: asNumber(row.amount),
     orderBalance: asNumber(row.orderBalance),
     confirmedAt: row.confirmedAt instanceof Date ? row.confirmedAt : null,
     financeOrderNo: typeof financeOrder?.orderNo === 'string' ? financeOrder.orderNo : null,
     financeInvNo: typeof financeInvoice?.invNo === 'string' ? financeInvoice.invNo : null,
     depositAmount,
+    piCreatedAt: source?.piCreatedAt instanceof Date ? source.piCreatedAt : null,
+    piOfficialAmount: source?.officialAmount === null || source?.officialAmount === undefined
+      ? null
+      : asNumber(source.officialAmount),
+    piCurrency: typeof source?.currency === 'string' ? source.currency : null,
+    sourceState: source ? (source.active ? 'ACTIVE' : 'INACTIVE') : null,
+    sourceMatchStatus: typeof source?.customerMatchStatus === 'string'
+      ? source.customerMatchStatus
+      : null,
+    sourceConflict: typeof source?.externalId === 'string'
+      ? conflictingSourcePiIds.has(source.externalId)
+      : false,
+    canResolveSourceCustomer: currentUser.role === UserRole.ADMIN
+      && (source?.customerMatchStatus === ExternalCustomerMatchStatus.UNMATCHED
+        || source?.customerMatchStatus === ExternalCustomerMatchStatus.CONFLICT),
     canEdit: baseEditable,
     canEditAdminFields: adminEditable,
     isMine: row.createdBy === currentUser.id,
@@ -308,7 +355,8 @@ export async function listOrderTrackers(
   const status = trimStr(filters.status);
   const where: Prisma.OrderTrackerWhereInput = {
     AND: [
-      buildTrackerVisibilityWhere(ownerIds),
+      { archivedAt: null },
+      buildTrackerVisibilityWhere(ownerIds, currentUser.role),
       status ? { status } : {},
       search
         ? {
@@ -332,6 +380,18 @@ export async function listOrderTrackers(
       updater: { select: { id: true, email: true, name: true, role: true } },
       customer: { select: { id: true, ownerId: true, mark: true, orderName: true, name: true, phone: true, city: true } },
       financeOrder: { select: { id: true, orderNo: true, invoice: { select: { id: true, invNo: true } } } },
+      externalSourceLinks: {
+        where: { provider: MU_CONTRACT_PROVIDER },
+        select: {
+          externalId: true,
+          piCreatedAt: true,
+          officialAmount: true,
+          currency: true,
+          active: true,
+          customerMatchStatus: true,
+        },
+        take: 1,
+      },
     },
     orderBy: [{ createdAt: 'desc' }],
   });
@@ -341,10 +401,32 @@ export async function listOrderTrackers(
     ownerIds,
   );
 
+  const sourcePiIds = Array.from(new Set(rows.flatMap((row) => (
+    (row.externalSourceLinks || []).map((source) => source.externalId)
+  ))));
+  const sourceConflicts = sourcePiIds.length > 0
+    ? await db.integrationSyncConflict.findMany({
+        where: {
+          provider: MU_CONTRACT_PROVIDER,
+          sourcePiId: { in: sourcePiIds },
+          status: IntegrationConflictStatus.OPEN,
+        },
+        select: { sourcePiId: true },
+      })
+    : [];
+  const conflictingSourcePiIds = new Set(sourceConflicts.map((row) => row.sourcePiId));
+
   const data = rows.map((row) => {
     const baseEditable = canEditBaseFields(currentUser, scope, row);
     const adminEditable = canEditAdminFields(currentUser, scope, row);
-    return serializeTracker(row as unknown as Record<string, unknown>, depositAmounts.get(row.id) || 0, currentUser, baseEditable, adminEditable);
+    return serializeTracker(
+      row as unknown as Record<string, unknown>,
+      depositAmounts.get(row.id) || 0,
+      currentUser,
+      baseEditable,
+      adminEditable,
+      conflictingSourcePiIds,
+    );
   });
 
   await recordAuditEvent({
@@ -502,6 +584,133 @@ export async function createOrderTracker(currentUser: CurrentUser, payload: Orde
   return { data, message: 'Order已创建' };
 }
 
+export async function resolveSynchronizedOrderCustomer(
+  currentUser: CurrentUser,
+  idInput: unknown,
+  customerIdInput: unknown,
+) {
+  if (currentUser.role !== UserRole.ADMIN) {
+    forbidden('只有ADMIN可直接解决同步订单的客户匹配');
+  }
+  const id = trimStr(idInput);
+  const customerId = trimStr(customerIdInput);
+  if (!id || !customerId) badRequest('ORDER ID和CUSTOMER不能为空');
+  const scope = await loadHierarchy(currentUser);
+  const customerOwnerIds = Array.from(new Set([
+    ...scope.ownerVisibleIds,
+    ...scope.ancestorIds,
+  ]));
+
+  return runInTransaction(async (tx) => {
+    const target = await tx.orderTracker.findUnique({
+      where: { id },
+      include: {
+        externalSourceLinks: {
+          where: { provider: MU_CONTRACT_PROVIDER },
+          select: {
+            id: true,
+            externalId: true,
+            customerMatchStatus: true,
+            active: true,
+          },
+        },
+      },
+    });
+    if (!target) notFound('Order不存在');
+    const sourceLink = target.externalSourceLinks[0];
+    if (!sourceLink || sourceLink.customerMatchStatus === ExternalCustomerMatchStatus.MATCHED) {
+      conflict('只有待匹配或匹配冲突的同步Order可直接选择客户');
+    }
+
+    const customer = await tx.customer.findFirst({
+      where: {
+        AND: [
+          { id: customerId },
+          buildCustomerVisibilityWhere(customerOwnerIds),
+        ],
+      },
+      select: {
+        id: true,
+        mark: true,
+        orderName: true,
+        phone: true,
+        city: true,
+      },
+    });
+    if (!customer) notFound('客户不存在');
+
+    const before = {
+      customerId: target.customerId,
+      customerMark: target.customerMark,
+      customerName: target.customerName,
+      customerPhone: target.customerPhone,
+      customerCity: target.customerCity,
+      needsCustomerFix: target.needsCustomerFix,
+      customerMatchStatus: sourceLink.customerMatchStatus,
+    };
+    const after = {
+      customerId: customer.id,
+      customerMark: customer.mark,
+      customerName: customer.orderName,
+      customerPhone: customer.phone,
+      customerCity: customer.city,
+      needsCustomerFix: false,
+      customerMatchStatus: ExternalCustomerMatchStatus.MATCHED,
+    };
+    const editedAt = new Date();
+    const updated = await tx.orderTracker.update({
+      where: { id },
+      data: {
+        customerId: customer.id,
+        customerMark: customer.mark,
+        customerName: customer.orderName,
+        customerPhone: customer.phone,
+        customerCity: customer.city,
+        needsCustomerFix: false,
+        updatedBy: currentUser.id,
+      },
+    });
+    await tx.externalOrderSourceLink.update({
+      where: { id: sourceLink.id },
+      data: {
+        customerMatchStatus: ExternalCustomerMatchStatus.MATCHED,
+        humanEditedAt: editedAt,
+        humanEditedBy: currentUser.id,
+      },
+    });
+    await tx.integrationSyncConflict.updateMany({
+      where: {
+        provider: MU_CONTRACT_PROVIDER,
+        sourcePiId: sourceLink.externalId,
+        type: 'CUSTOMER_MATCH_CONFLICT',
+        status: IntegrationConflictStatus.OPEN,
+      },
+      data: {
+        status: IntegrationConflictStatus.RESOLVED,
+        resolutionNote: 'Customer selected directly by administrator',
+        resolvedAt: editedAt,
+        resolvedBy: currentUser.id,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        action: auditActions.ORDER_TRACKER_SOURCE_CUSTOMER_RESOLVE,
+        actorId: currentUser.id,
+        targetType: auditTargetTypes.ORDER_TRACKER,
+        targetId: id,
+        metadata: {
+          sourcePiId: sourceLink.externalId,
+          before,
+          after,
+        },
+        createdAt: editedAt,
+      },
+    });
+
+    return { data: updated, message: '同步Order客户已解决' };
+  });
+}
+
 export async function updateOrderTracker(currentUser: CurrentUser, idInput: unknown, payload: OrderTrackerPayload) {
   const id = trimStr(idInput);
   if (!id) badRequest('ORDER ID不能为空');
@@ -567,9 +776,20 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
     badRequest('没有可更新的内容');
   }
 
-  const updated = await db.orderTracker.update({
-    where: { id },
-    data,
+  const humanEditedAt = new Date();
+  const updated = await runInTransaction(async (tx) => {
+    const row = await tx.orderTracker.update({
+      where: { id },
+      data,
+    });
+    await tx.externalOrderSourceLink.updateMany({
+      where: { orderTrackerId: id },
+      data: {
+        humanEditedAt,
+        humanEditedBy: currentUser.id,
+      },
+    });
+    return row;
   });
 
   await recordAuditEvent({

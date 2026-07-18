@@ -11,6 +11,8 @@ Back up these two business data areas:
 
 The MySQL dump includes account-level preferences such as `UserPreference.dashboardLayout` and `UserPreference.listPageSizes`, Orders workflow data such as `OrderTracker.confirmedAt`, and Customer Analytics rules stored in `SystemSetting` under the seven `CUSTOMER_ANALYTICS_*` keys. Customer Analytics rankings are calculated on demand and are not persisted. No separate media backup path is required for Dashboard preferences, Orders confirmation dates, or Customer Analytics.
 
+MU Contract Orders synchronization adds five durable MySQL tables: `ExternalOrderSourceLink`, `IntegrationSyncState`, `IntegrationEventReceipt`, `IntegrationSyncConflict`, and `IntegrationReconcilePreview`. It also adds nullable archive fields to `OrderTracker`. The existing full `mariadb-dump` of `trading_ledger` includes all of these automatically. The integration creates no file, object-storage, or NAS path, so `media/upload/` coverage does not change.
+
 `OrderTracker.confirmedAt` was introduced with a one-time backfill from `updatedAt` for rows already in `Confirmed` status. Future values are maintained by status transitions and are restored with the rest of the `trading_ledger` dump.
 
 Do not treat Docker containers, `.next`, `node_modules`, or test output as business backup data.
@@ -51,6 +53,20 @@ Required checks before closing that work item:
 - If the data lives outside MySQL/NAS, add a new section with backup command, restore command, retention policy, and failure alert plan.
 - Run `scripts/backup/muledger-cos-backup.sh --dry-run` after changing backup scripts or storage environment variables.
 - Run a restore drill when adding a new database engine, changing dump tooling, changing restore assumptions, or adding a critical new table family.
+
+### MU Contract Order Sync Deployment Gate
+
+The MU Contract integration is a critical new table family. Before applying migration `20260718090000_mu_contract_order_sync` to the active database:
+
+1. Create and verify a current COS database backup.
+2. Restore that exact dump into a separate MariaDB 10.6 container with no production volume or port reuse.
+3. Record pre-migration row counts and checksums for `OrderTracker`, `Order`, `Invoice`, `Receipt`, `Detail`, and `Swift`.
+4. Run `npx prisma migrate deploy` only against the restored copy.
+5. Confirm all five integration tables exist, `OrderTracker` financial links are unchanged, and the six protected table counts/checksums still match.
+6. Run `npm run test:api:isolated -- --case 95-mu-contract-order-sync`; this uses a disposable database and fake source feed, not production data.
+7. Save the evidence under `docs/backup/restore-drills/` before approving the production migration.
+
+Do not use Full Reconcile or the existing business Rematch feature as a database migration test. Full Reconcile is enabled only after the schema and application deployment gates pass.
 
 ## 2. Tencent Cloud COS Bucket
 
@@ -201,6 +217,7 @@ Correct restore drill:
 6. Verify the seven Customer Analytics settings returned by the API. If no `CUSTOMER_ANALYTICS_*` rows are persisted, confirm all seven code defaults are returned instead.
 7. Compare active database media references with restored files. A missing active reference is a drill finding even when the source NAS file was already missing before backup.
 8. Use an authenticated `SELECT 1` against the final MariaDB server as the readiness check; `mariadb-admin ping` alone can succeed during image initialization before the final root password is active.
+9. For a database containing MU Contract synchronization state, verify all five integration tables, the committed cursor, external PI links, open conflict count, and `OrderTracker.archivedAt/archiveReason` values.
 
 Only after a successful drill should production restore be considered.
 
@@ -208,6 +225,7 @@ Only after a successful drill should production restore be considered.
 
 | Date | Backup | Result | Evidence |
 | --- | --- | --- | --- |
+| 2026-07-18 | `database/mysql/2026/07/18/trading_ledger-20260718-023005.sql.gz` + `media/upload/` | `PASS` for MU Contract migration | [Migration drill](restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md) |
 | 2026-07-17 | `database/mysql/2026/07/17/trading_ledger-20260717-023005.sql.gz` + `media/upload/` | `PASS_WITH_FINDINGS` | [Full report](restore-drills/2026-07-17-muledger-cos-restore-drill.md) |
 
 The 2026-07-17 drill proved database, application, authentication, Dashboard analytics, and protected media recovery. It also found one active image path missing from both NAS and COS, affecting receipts `0001001` and `0001004`, plus seven `.smbdelete*` backup artifacts. The source image could not be recovered; with explicit user approval, the two current receipt image associations were transactionally cleared on 2026-07-17 while preserving receipt history and before/after audit records. The 02:30 drill backup still contains the old references, so current media coverage must be verified against a database backup created after that cleanup before it is described as complete.

@@ -225,6 +225,7 @@ Only after a successful drill should production restore be considered.
 
 | Date | Backup | Result | Evidence |
 | --- | --- | --- | --- |
+| 2026-07-18 | `database/mysql/2026/07/18/trading_ledger-20260718-023005.sql.gz` + `media/upload/` | `PASS` for MU Contract migration | [Migration drill](restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md) |
 | 2026-07-17 | `database/mysql/2026/07/17/trading_ledger-20260717-023005.sql.gz` + `media/upload/` | `PASS_WITH_FINDINGS` | [Full report](restore-drills/2026-07-17-muledger-cos-restore-drill.md) |
 
 The 2026-07-17 drill proved database, application, authentication, Dashboard analytics, and protected media recovery. It also found one active image path missing from both NAS and COS, affecting receipts `0001001` and `0001004`, plus seven `.smbdelete*` backup artifacts. The source image could not be recovered; with explicit user approval, the two current receipt image associations were transactionally cleared on 2026-07-17 while preserving receipt history and before/after audit records. The 02:30 drill backup still contains the old references, so current media coverage must be verified against a database backup created after that cleanup before it is described as complete.

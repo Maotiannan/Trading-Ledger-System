@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.208`
-- 最近更新：MU Contract Orders 同步已补齐全量快照防漂移、坏事件隔离、租约接管保护和 ADMIN 客户修复；人工订单仍永久优先，财务表不参与同步。
+- 版本：`1.0.209`
+- 最近更新：MU Contract 正式 PI 可同步到 Orders，包含 PI 创建日期和正式金额；人工订单优先，财务表和余额不受影响。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -81,7 +81,9 @@ docker compose down -v
 
 腾讯云 COS 备份运行手册见：[muledger-cos-backup.md](docs/backup/muledger-cos-backup.md)。
 
-最近一次真实恢复演练见：[2026-07-17 MULEDGER COS 恢复演练](docs/backup/restore-drills/2026-07-17-muledger-cos-restore-drill.md)。
+最近一次完整业务恢复演练见：[2026-07-17 MULEDGER COS 恢复演练](docs/backup/restore-drills/2026-07-17-muledger-cos-restore-drill.md)。
+
+MU Contract 同步迁移演练见：[2026-07-18 MU Contract Orders 迁移演练](docs/backup/restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md)。
 
 ## 启动与更新
 

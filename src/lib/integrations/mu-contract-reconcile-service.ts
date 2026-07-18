@@ -131,10 +131,8 @@ async function readSnapshot(
 
     hasMore = page.hasMore;
     if (hasMore) {
-      const expectedCursor = page.items.at(-1)?.source.piId ?? null;
       if (
         !page.nextAfter
-        || page.nextAfter !== expectedCursor
         || page.nextAfter === after
         || seenPageCursors.has(page.nextAfter)
       ) {

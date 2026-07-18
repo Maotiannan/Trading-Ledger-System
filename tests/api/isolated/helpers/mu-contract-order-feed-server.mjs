@@ -62,19 +62,32 @@ function eventPage(url) {
   };
 }
 
+function encodeSnapshotCursor(lastPiId) {
+  const payload = Buffer.from(JSON.stringify({ lastPiId }), 'utf8').toString('base64url');
+  return `${payload}.fake-signature`;
+}
+
+function decodeSnapshotCursor(value) {
+  const [payload] = value.split('.', 1);
+  const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  if (!parsed || typeof parsed.lastPiId !== 'string') throw new Error('invalid snapshot cursor');
+  return parsed.lastPiId;
+}
+
 function snapshotPage(url) {
   const after = url.searchParams.get('after');
+  const lastPiId = after === null ? null : decodeSnapshotCursor(after);
   const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') || 100)));
   const eligible = [...state.items]
     .sort((left, right) => left.source.piId.localeCompare(right.source.piId))
-    .filter((item) => after === null || item.source.piId > after);
+    .filter((item) => lastPiId === null || item.source.piId > lastPiId);
   const items = eligible.slice(0, limit);
   const hasMore = eligible.length > items.length;
   return {
     schemaVersion: 1,
     items,
     eventHighWatermark: state.eventHighWatermark,
-    nextAfter: hasMore ? items.at(-1)?.source.piId ?? null : null,
+    nextAfter: hasMore ? encodeSnapshotCursor(items.at(-1).source.piId) : null,
     hasMore,
   };
 }

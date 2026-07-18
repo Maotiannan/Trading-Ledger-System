@@ -22,15 +22,58 @@ const MAX_CURSOR = BigInt('9223372036854775807');
 const cursorSchema = z.string()
   .regex(/^(0|[1-9]\d{0,18})$/, 'cursor must be an unsigned decimal string with at most 19 digits')
   .refine((value) => BigInt(value) <= MAX_CURSOR, 'cursor exceeds signed 64-bit storage');
-const utcTimestampSchema = z.string().refine((value) => {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) return false;
-  return !Number.isNaN(Date.parse(value));
-}, 'timestamp must be an ISO UTC value ending in Z');
-const trimmedString = (max: number) => z.string().trim().min(1).max(max);
+const snapshotCursorSchema = z.string()
+  .min(1)
+  .max(256)
+  .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/, 'snapshot cursor must be a signed opaque token');
+
+function isValidUtcTimestamp(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):([0-5]\d)(?:\.(\d{1,3}))?Z$/.exec(value);
+  if (!match) return false;
+  const [, year, month, day, hour, minute, second, fraction = '0'] = match;
+  const expected = {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+    second: Number(second),
+    millisecond: Number(fraction.padEnd(3, '0')),
+  };
+  const parsed = new Date(0);
+  parsed.setUTCFullYear(expected.year, expected.month - 1, expected.day);
+  parsed.setUTCHours(
+    expected.hour,
+    expected.minute,
+    expected.second,
+    expected.millisecond,
+  );
+  return parsed.getUTCFullYear() === expected.year
+    && parsed.getUTCMonth() === expected.month - 1
+    && parsed.getUTCDate() === expected.day
+    && parsed.getUTCHours() === expected.hour
+    && parsed.getUTCMinutes() === expected.minute
+    && parsed.getUTCSeconds() === expected.second
+    && parsed.getUTCMilliseconds() === expected.millisecond;
+}
+
+const utcTimestampSchema = z.string().refine(
+  isValidUtcTimestamp,
+  'timestamp must be a valid ISO UTC value ending in Z',
+);
+const trimmedString = (max: number) => z.string()
+  .min(1)
+  .max(max)
+  .refine((value) => /\S/.test(value), 'value must contain a non-whitespace character')
+  .transform((value) => value.trim());
+const stableIdentityString = (max: number) => z.string()
+  .min(1)
+  .max(max)
+  .refine((value) => value === value.trim(), 'stable identity must not contain surrounding whitespace');
 
 const sourceSchema = z.object({
   system: z.literal('MU_CONTRACT'),
-  piId: trimmedString(64),
+  piId: stableIdentityString(64),
   version: z.number().int().min(1).max(2_147_483_647),
 }).strict();
 
@@ -40,14 +83,14 @@ const eventEnvelopeSchema = z.object({
   eventId: z.string().uuid(),
   source: z.object({
     system: z.literal('MU_CONTRACT'),
-    piId: trimmedString(64),
+    piId: stableIdentityString(64),
     version: z.number().int().min(1).max(2_147_483_647),
   }),
 });
 
 const orderSchema = z.object({
   orderNo: trimmedString(191),
-  previousOrderNo: z.string().trim().min(1).max(191).nullable(),
+  previousOrderNo: trimmedString(191).nullable(),
   piCreatedAt: utcTimestampSchema,
   active: z.boolean(),
   deletedAt: utcTimestampSchema.nullable(),
@@ -62,7 +105,7 @@ const orderSchema = z.object({
 
 const officialAmountSchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be a three-letter uppercase code'),
-  value: z.string().regex(/^\d{1,16}\.\d{2}$/, 'amount must have at most 16 integer digits and exactly two decimals'),
+  value: z.string().regex(/^(0|[1-9]\d{0,15})\.\d{2}$/, 'amount must have at most 16 integer digits and exactly two decimals'),
   generatedAt: utcTimestampSchema,
   generationRunId: trimmedString(64),
 }).strict();
@@ -144,7 +187,7 @@ const snapshotPageSchema = z.object({
   schemaVersion: z.literal(MU_CONTRACT_SCHEMA_VERSION),
   items: z.array(snapshotItemSchema).max(500),
   eventHighWatermark: cursorSchema,
-  nextAfter: z.string().trim().min(1).max(64).nullable(),
+  nextAfter: snapshotCursorSchema.nullable(),
   hasMore: z.boolean(),
 }).strict().superRefine((page, context) => {
   const seen = new Set<string>();

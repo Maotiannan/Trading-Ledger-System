@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -16,6 +17,15 @@ describe('MU Contract shared JSON Schema', () => {
   const validate = ajv.compile(
     readJson('docs/integrations/mu-contract-order-sync-v1.schema.json') as AnySchema,
   );
+
+  it('matches the schema published by MU Contract byte for byte', () => {
+    const schema = readFileSync(
+      path.join(process.cwd(), 'docs/integrations/mu-contract-order-sync-v1.schema.json'),
+    );
+
+    expect(createHash('sha256').update(schema).digest('hex'))
+      .toBe('45bfaaa9e6ae4f13c1c45a7aaab034cfbad6e1305204e4130178dcb3e482941b');
+  });
 
   it.each([
     'tests/fixtures/mu-contract-order-sync/formal-generated.json',

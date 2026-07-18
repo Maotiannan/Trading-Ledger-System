@@ -39,6 +39,17 @@ describe('MU Contract order sync version 1 contract', () => {
     expect(page.eventHighWatermark).toBe('1042');
   });
 
+  it('accepts the signed opaque snapshot cursor published by MU Contract', () => {
+    const payload = fixture('deactivated.json') as {
+      nextAfter: string | null;
+      hasMore: boolean;
+    };
+    payload.nextAfter = `${'a'.repeat(120)}.${'b'.repeat(43)}`;
+    payload.hasMore = true;
+
+    expect(parseMuContractSnapshotPage(payload).nextAfter).toBe(payload.nextAfter);
+  });
+
   it('rejects unsupported schema versions with a stable error code', () => {
     const payload = fixture('formal-generated.json') as Record<string, unknown>;
 
@@ -102,6 +113,36 @@ describe('MU Contract order sync version 1 contract', () => {
 
     expect(() => parseMuContractEventPage(payload))
       .toThrow(expect.objectContaining({ code: 'MU_CONTRACT_PAYLOAD_INVALID' }));
+  });
+
+  it('does not silently rewrite the stable PI identity', () => {
+    const payload = fixture('formal-generated.json') as {
+      events: Array<{ source: { piId: string } }>;
+    };
+    payload.events[0].source.piId = ' stable-hidden-pi-id ';
+
+    expect(() => parseMuContractEventPage(payload))
+      .toThrow(expect.objectContaining({ code: 'MU_CONTRACT_PAYLOAD_INVALID' }));
+  });
+
+  it('rejects invalid UTC calendar dates instead of rolling them forward', () => {
+    const payload = fixture('formal-generated.json') as {
+      events: Array<{ occurredAt: string }>;
+    };
+    payload.events[0].occurredAt = '2026-02-30T14:30:00.000Z';
+
+    expect(parseMuContractEventPage(payload).events[0])
+      .toEqual(expect.objectContaining({ invalid: true, issuePath: 'occurredAt' }));
+  });
+
+  it('rejects non-canonical official amount strings', () => {
+    const payload = fixture('formal-generated.json') as {
+      events: Array<{ officialAmount: { value: string } }>;
+    };
+    payload.events[0].officialAmount.value = '0001.00';
+
+    expect(parseMuContractEventPage(payload).events[0])
+      .toEqual(expect.objectContaining({ invalid: true, issuePath: 'officialAmount.value' }));
   });
 
   it.each([

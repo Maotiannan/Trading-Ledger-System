@@ -98,7 +98,7 @@ GET /integrations/muledger/order-snapshot?after=<snapshot-cursor>&limit=<1..500>
 Authorization: Bearer <MULEDGER_ORDER_SYNC_TOKEN>
 ```
 
-事件接口按持久化十进制游标增量返回；快照接口用于首次或人工 Full Reconcile。共享结构契约位于 `docs/integrations/mu-contract-order-sync-v1.schema.json`。游标限定为 `0..9223372036854775807` 的最多 19 位十进制字符串，来源版本限定为 `1..2147483647`，正式金额限定为最多 16 位整数加固定两位小数。
+事件接口按持久化十进制游标增量返回；快照接口用于首次或人工 Full Reconcile。共享结构契约位于 `docs/integrations/mu-contract-order-sync-v1.schema.json`，并与 MU Contract 仓库中的源文件保持逐字节一致。事件游标限定为 `0..9223372036854775807` 的最多 19 位十进制字符串；快照分页使用来源签发、最长 256 字符的不透明游标，MULEDGER 只原样回传，不解析或改写。来源版本限定为 `1..2147483647`，正式金额限定为最多 16 位整数加固定两位小数。
 
 事件页先验证页结构和可安全持久化的 `cursor / eventId / source.piId / source.version` 身份，再验证业务载荷。身份安全但业务字段无效的 v1 事件会在单个事务中写入不含原始载荷的 `INVALID_SOURCE_DATA` 冲突、事件收据和已提交游标，并继续处理后续事件；身份或游标本身不安全时整页拒绝。快照接口仍使用完整严格校验，不采用该跳过策略。
 
@@ -118,7 +118,7 @@ POST /api/integrations/mu-contract/actions
 - `preview-reconcile`
 - `apply-reconcile`，并且必须携带仍有效的 `previewId`
 
-Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效。预览持久化完整规范化快照、高水位、汇总和相关本地目标状态的确定性指纹。Apply 在写入前重新读取一次完整分页快照，要求每页高水位一致、PI ID 全局唯一且稳定递增、分页游标等于页末 PI ID，并重新核对来源内容、汇总和本地目标状态；任何漂移都返回 `409` 并要求重新预览。通过后只应用这份已验证的内存快照，按设置批量事务提交并以来源 PI ID 持久化断点。首次 Full Reconcile 完成前，系统拒绝启用普通增量同步。
+Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效。Apply 在写入前重新读取完整分页快照，要求所有页面高水位一致、PI ID 全局唯一且稳定递增，并重新核对来源汇总和本地目标状态；快照分页游标始终使用来源返回值。任何变化都返回 `409` 并要求重新预览。通过后按设置批量事务提交，并以来源 PI ID 保存处理断点。首次 Full Reconcile 完成前，系统拒绝启用普通增量同步。
 
 `Sync Now` 或 `apply-reconcile` 遇到有效租约竞争时返回可读的 `409`“未完成”结果，而不是成功响应；设置页保留现有 Full Reconcile 预览供稍后重试。所有成功、失败和对账状态写入都带当前 `leaseOwner` 条件，过期 worker 不能覆盖接管者。
 

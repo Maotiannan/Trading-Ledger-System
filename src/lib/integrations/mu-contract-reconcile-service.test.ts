@@ -274,6 +274,37 @@ describe('MU Contract Full Reconcile', () => {
     expect(root.integrationReconcilePreview.create).not.toHaveBeenCalled();
   });
 
+  it('continues snapshot pagination with the source-issued opaque cursor', async () => {
+    const opaqueCursor = `${'a'.repeat(120)}.${'b'.repeat(43)}`;
+    const firstPage: MuContractSnapshotPage = {
+      schemaVersion: 1,
+      items: [activeItem('pi-a', 'AB-11')],
+      eventHighWatermark: '1042',
+      nextAfter: opaqueCursor,
+      hasMore: true,
+    };
+    const finalPage: MuContractSnapshotPage = {
+      schemaVersion: 1,
+      items: [activeItem('pi-b', 'AB-12')],
+      eventHighWatermark: '1042',
+      nextAfter: null,
+      hasMore: false,
+    };
+    const client = makeClient(firstPage);
+    client.fetchSnapshot.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(finalPage);
+    const { root } = makeDb();
+
+    const result = await previewMuContractReconcile('admin-1', {
+      client,
+      dbClient: root,
+      now: () => fixedNow,
+    });
+
+    expect(result.summary.totalSourceRows).toBe(2);
+    expect(client.fetchSnapshot).toHaveBeenNthCalledWith(1, null, 100);
+    expect(client.fetchSnapshot).toHaveBeenNthCalledWith(2, opaqueCursor, 100);
+  });
+
   it('rejects same-high-watermark snapshot row drift before any writes', async () => {
     const changed = snapshotFixture();
     changed.items[0] = {

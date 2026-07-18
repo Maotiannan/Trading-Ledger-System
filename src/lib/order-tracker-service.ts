@@ -595,6 +595,11 @@ export async function resolveSynchronizedOrderCustomer(
   const id = trimStr(idInput);
   const customerId = trimStr(customerIdInput);
   if (!id || !customerId) badRequest('ORDER ID和CUSTOMER不能为空');
+  const scope = await loadHierarchy(currentUser);
+  const customerOwnerIds = Array.from(new Set([
+    ...scope.ownerVisibleIds,
+    ...scope.ancestorIds,
+  ]));
 
   return runInTransaction(async (tx) => {
     const target = await tx.orderTracker.findUnique({
@@ -618,7 +623,12 @@ export async function resolveSynchronizedOrderCustomer(
     }
 
     const customer = await tx.customer.findFirst({
-      where: { id: customerId },
+      where: {
+        AND: [
+          { id: customerId },
+          buildCustomerVisibilityWhere(customerOwnerIds),
+        ],
+      },
       select: {
         id: true,
         mark: true,

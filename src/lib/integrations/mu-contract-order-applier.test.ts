@@ -290,6 +290,82 @@ describe('MU Contract transactional order applier', () => {
     }));
   });
 
+  it('renames a manually attached row for the same PI without changing user-owned fields', async () => {
+    const tx = makeTx();
+    tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink({
+      linkMode: 'MANUAL_ATTACHED',
+      orderTracker: manualRow({
+        orderNo: 'AB-11',
+        normalizedOrderNo: 'ab-11',
+      }),
+      customerMatchStatus: 'MATCHED',
+    }));
+
+    const result = await apply(tx, makeEvent({
+      orderNo: 'AB-12',
+      previousOrderNo: 'AB-11',
+      eventType: 'PI_ORDER_RENAMED',
+      reason: 'ORDER_CHANGED',
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      result: 'APPLIED',
+      orderTrackerId: 'manual-1',
+      linkMode: 'MANUAL_ATTACHED',
+    }));
+    expect(tx.orderTracker.update).toHaveBeenCalledWith({
+      where: { id: 'manual-1' },
+      data: {
+        orderNo: 'AB-12',
+        normalizedOrderNo: 'ab-12',
+        tokens: expect.any(String),
+        updatedBy: 'service-admin',
+      },
+    });
+    expect(tx.orderTracker.update.mock.calls[0][0].data).not.toEqual(expect.objectContaining({
+      customerId: expect.anything(),
+      status: expect.anything(),
+      remark: expect.anything(),
+      systemNote: expect.anything(),
+      piStatus: expect.anything(),
+      confirmedAt: expect.anything(),
+    }));
+  });
+
+  it('records a conflict instead of renaming a manually attached row over another row', async () => {
+    const tx = makeTx();
+    tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink({
+      linkMode: 'MANUAL_ATTACHED',
+      orderTracker: manualRow({
+        orderNo: 'AB-11',
+        normalizedOrderNo: 'ab-11',
+      }),
+      customerMatchStatus: 'MATCHED',
+    }));
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow({ id: 'manual-target' }));
+
+    const result = await apply(tx, makeEvent({
+      orderNo: 'AB-12',
+      previousOrderNo: 'AB-11',
+      eventType: 'PI_ORDER_RENAMED',
+      reason: 'ORDER_CHANGED',
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      result: 'BUSINESS_CONFLICT',
+      orderTrackerId: 'manual-1',
+      linkMode: 'MANUAL_ATTACHED',
+      conflictType: 'ORDER_NO_COLLISION',
+    }));
+    expect(tx.orderTracker.update).not.toHaveBeenCalled();
+    expect(tx.integrationSyncConflict.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        type: 'ORDER_NO_COLLISION',
+        targetOrderTrackerIds: ['manual-1', 'manual-target'],
+      }),
+    }));
+  });
+
   it('renames the same PI row while preserving all user-owned fields', async () => {
     const tx = makeTx();
     const existing = sourceLink({ customerMatchStatus: 'MATCHED' });

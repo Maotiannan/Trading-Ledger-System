@@ -344,18 +344,6 @@ async function applyExistingLinkedOrder(
     };
   }
 
-  if (existing.linkMode === ExternalOrderLinkMode.MANUAL_ATTACHED) {
-    return {
-      target: {
-        orderTrackerId: current.id,
-        linkMode: existing.linkMode,
-        customerMatchStatus: customerStatusForTracker(current),
-      },
-      collisionType: null,
-      collisionIds: [],
-    };
-  }
-
   const normalizedOrderNo = normalizeOrderIdentifier(state.order.orderNo);
   const targetRow = await tx.orderTracker.findFirst({
     where: { normalizedOrderNo, archivedAt: null },
@@ -404,7 +392,8 @@ async function applyExistingLinkedOrder(
         linkMode: existing.linkMode,
         customerMatchStatus: ExternalCustomerMatchStatus.CONFLICT,
       },
-      collisionType: existing.humanEditedAt
+      collisionType: existing.linkMode === ExternalOrderLinkMode.SYNC_CREATED
+        && existing.humanEditedAt
         ? 'HUMAN_EDITED_RENAME_COLLISION'
         : 'ORDER_NO_COLLISION',
       collisionIds: [current.id, targetRow.id],
@@ -421,6 +410,18 @@ async function applyExistingLinkedOrder(
         updatedBy: actorId,
       },
     });
+  }
+
+  if (existing.linkMode === ExternalOrderLinkMode.MANUAL_ATTACHED) {
+    return {
+      target: {
+        orderTrackerId: current.id,
+        linkMode: existing.linkMode,
+        customerMatchStatus: customerStatusForTracker(current),
+      },
+      collisionType: null,
+      collisionIds: [],
+    };
   }
 
   const customer = await retryUnresolvedCustomer(tx, current, state, actorId);

@@ -46,6 +46,22 @@ function linkedEvent(cursor, piId, orderNo) {
   };
 }
 
+function renamedEvent(cursor, piId, version, previousOrderNo, orderNo) {
+  return {
+    cursor: String(cursor),
+    eventId: randomUUID(),
+    eventType: 'PI_ORDER_RENAMED',
+    reason: 'ORDER_CHANGED',
+    occurredAt: `2026-07-18T10:00:${String(cursor).padStart(2, '0')}.000Z`,
+    ...snapshotItem(piId, orderNo),
+    source: { system: 'MU_CONTRACT', piId, version },
+    order: {
+      ...snapshotItem(piId, orderNo).order,
+      previousOrderNo,
+    },
+  };
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value && typeof value === 'object') {
@@ -317,6 +333,43 @@ export default async function run(t) {
     t.assertEqual(resolvedTracker?.customerId, customerId, 'ADMIN resolution updates the Orders customer snapshot');
     t.assertEqual(resolvedTracker?.needsCustomerFix, false, 'ADMIN resolution clears the customer-fix flag');
     t.assertEqual(resolvedLink?.customerMatchStatus, 'MATCHED', 'ADMIN resolution closes the source customer status');
+
+    const renamedOrderNo = `${orderName}-RENAMED`;
+    const renamedSourceItem = {
+      ...snapshotItems[0],
+      source: { ...snapshotItems[0].source, version: 2 },
+      order: { ...snapshotItems[0].order, orderNo: renamedOrderNo },
+    };
+    const manualLinkBeforeRename = await prisma.externalOrderSourceLink.findUnique({
+      where: { provider_externalId: { provider: 'MU_CONTRACT', externalId: 'pi-001' } },
+      include: { orderTracker: true },
+    });
+    const manualTrackerBeforeRename = manualLinkBeforeRename?.orderTracker;
+    t.assertEqual(manualLinkBeforeRename?.linkMode, 'MANUAL_ATTACHED', 'rename fixture starts from a manually created Orders row');
+    const rename = renamedEvent(6, 'pi-001', 2, sourceOrderNos[0], renamedOrderNo);
+    await sourceControl('/__control/configure', {
+      method: 'POST',
+      json: {
+        items: [renamedSourceItem, ...snapshotItems.slice(1)],
+        events: [firstEvent, secondEvent, invalidEvent, laterValidEvent, unresolvedEvent, rename],
+        eventHighWatermark: '6',
+      },
+    });
+    const renameSync = await t.request('POST', '/api/integrations/mu-contract/actions', {
+      json: { action: 'sync-now' },
+      expectedStatus: 200,
+    });
+    t.assertEqual(renameSync.data?.data?.processed, 1, 'same PI rename is consumed through the synchronization API');
+    const manualLinkAfterRename = await prisma.externalOrderSourceLink.findUnique({
+      where: { provider_externalId: { provider: 'MU_CONTRACT', externalId: 'pi-001' } },
+      include: { orderTracker: true },
+    });
+    t.assertEqual(manualLinkAfterRename?.orderTrackerId, manualLinkBeforeRename?.orderTrackerId, 'same PI rename preserves the linked Orders row identity');
+    t.assertEqual(manualLinkAfterRename?.orderTracker?.orderNo, renamedOrderNo, 'same PI rename updates the manually linked ORDER NO');
+    t.assertEqual(manualLinkAfterRename?.orderTracker?.customerId, manualTrackerBeforeRename?.customerId, 'same PI rename preserves the manually linked customer');
+    t.assertEqual(manualLinkAfterRename?.orderTracker?.status, manualTrackerBeforeRename?.status, 'same PI rename preserves the manually maintained status');
+    t.assertEqual(manualLinkAfterRename?.orderTracker?.remark, manualTrackerBeforeRename?.remark, 'same PI rename preserves the manually maintained remark');
+
     const sourceRequests = await sourceControl('/__control/requests');
     const eventRequests = sourceRequests.requests.filter((row) => row.pathname.endsWith('/order-events'));
     t.assertOk(

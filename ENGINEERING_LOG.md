@@ -8,6 +8,8 @@
 
 ## P0（本周必须完成）
 
+- [x] MULEDGER PR #21 审查修复：补齐同一隐藏 PI ID 对人工挂接 Orders 的改名路径，来源 ORDER NO 变更时仅更新订单号、标准化键与搜索 token，保留客户和全部人工字段；目标订单号冲突时不覆盖并记录 `ORDER_NO_COLLISION`。同时给 ADMIN 的同步订单客户解决接口补上服务端层级可见范围校验，防止绕过前端选择其他分支客户。新增 3 个单元回归场景并扩展 isolated API case 95；相关 20 suites / 197 tests、全量 174 suites / 1142 tests、隔离 API、typecheck、全仓 ESLint、Prisma validate、i18n audit 和 `git diff --check` 均通过。隔离测试只使用一次性 MariaDB 与假来源服务并已清理；未连接生产数据库、未运行生产迁移、未重建现有服务、未访问 NAS/COS。✅ 2026-07-18
+
 - [x] MU Contract -> MULEDGER 实用版收口：放弃未提交的额外并发/审计扩张，从已提交同步基线重新核对双仓库真实接口。MULEDGER 共享 JSON Schema 与 MU Contract 源文件恢复逐字节一致（SHA-256 `45bfaaa9e6ae4f13c1c45a7aaab034cfbad6e1305204e4130178dcb3e482941b`），快照分页改为原样续传来源签发的最长 256 字符不透明游标，稳定 PI ID 不再被静默裁剪，并统一严格 UTC 日期及正式金额格式。验证通过同步聚焦 16 suites / 133 tests、全量 174 suites / 1139 tests、isolated API case 95、typecheck、ESLint、Prisma validate、Webpack build、i18n audit 和两类 0 漏洞审计。COS `2026-07-18 02:30:05` 备份在无挂载隔离 MariaDB 10.6 中完成迁移演练：23 张保护表逐行总哈希迁移前后相同、414 个媒体文件一致、5 张同步表正常创建、第二次迁移无待执行项、34 张表检查全部通过。未重建或连接现有应用/数据库/NAS/COS，版本更新为 `1.0.209`。✅ 2026-07-18
 
 - [x] MU Contract Orders review-fix wave：Full Reconcile 预览改为完整规范化快照、高水位、汇总和本地目标状态的确定性指纹，apply 在任何写入前重读一次完整稳定分页并核对同一高水位、PI 顺序/唯一性、来源内容和本地目标，之后只分块应用已验证的内存快照并保留 PI 游标续传；可识别坏事件改为安全 `INVALID_SOURCE_DATA` 冲突 + 收据 + 游标同事务提交，原始业务值不落库且后续有效事件继续；人工挂接行不再重试覆盖客户，归档转移释放标准化业务键，人工编辑标记覆盖停用来源。新增仅 ADMIN 可用的未匹配/冲突同步 Orders 客户解决事务和 before/after 审计；增量/对账失败与完成状态均绑定同一租约 owner，接管后旧 worker 无法覆盖，管理动作竞争返回可读 409 且保留预览。v1 契约补齐 bigint 游标、int 版本和 decimal(18,2) 业务上限；isolated case 95 改为五张财务表完整行 SHA-256，并增加坏事件续传与客户解决 API 证据。最终门禁通过 174 suites / 1133 tests、typecheck、全仓 ESLint、Prisma validate、isolated API case 95、Webpack 生产构建、验证专用密钥 Compose config、i18n audit、完整及生产依赖 0 漏洞审计和 `git diff --check`。无新表、迁移、Docker volume、NAS/COS 路径或备份范围变化，版本保持 `1.0.208`。✅ 2026-07-18

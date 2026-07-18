@@ -605,6 +605,45 @@ describe('order-tracker-service', () => {
     });
   });
 
+  it('limits synchronized Order customer resolution to the ADMIN hierarchy scope', async () => {
+    const sourceLink = {
+      id: 'source-link-1',
+      externalId: 'pi-1',
+      customerMatchStatus: 'UNMATCHED',
+      active: true,
+    };
+    mockGetHierarchyScope.mockResolvedValueOnce({
+      selfId: 'admin-1',
+      ancestorIds: new Set(['root-admin']),
+      descendantIds: new Set(['sales-1']),
+      visibleIds: new Set(['root-admin', 'admin-1', 'sales-1']),
+      ownerVisibleIds: new Set(['admin-1', 'sales-1']),
+    });
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({
+      id: 'tracker-1',
+      needsCustomerFix: true,
+      externalSourceLinks: [sourceLink],
+    });
+    mockDb.customer.findFirst.mockResolvedValueOnce(null);
+
+    await expect(resolveSynchronizedOrderCustomer(
+      makeUser({ id: 'admin-1', role: UserRole.ADMIN }),
+      'tracker-1',
+      'other-branch-customer',
+    )).rejects.toMatchObject({ status: 404 });
+
+    expect(mockDb.customer.findFirst).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          { id: 'other-branch-customer' },
+          { ownerId: { in: ['admin-1', 'sales-1', 'root-admin'] } },
+        ],
+      },
+      select: expect.any(Object),
+    });
+    expect(mockDb.orderTracker.update).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['manual Order', makeUser({ id: 'admin-1', role: UserRole.ADMIN }), []],
     ['matched synchronized Order', makeUser({ id: 'admin-1', role: UserRole.ADMIN }), [{ id: 'link-1', customerMatchStatus: 'MATCHED' }]],

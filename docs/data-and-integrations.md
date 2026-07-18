@@ -84,7 +84,7 @@ Content-Type: application/json
 - 数据方向固定为 `MU Contract -> MULEDGER`，由 MULEDGER 主动拉取。
 - MU Contract 隐藏 PI ID 是跨系统稳定身份；`ORDER NO` 是可修改的业务键。
 - MULEDGER 已有人工作业单优先。命中时只挂接来源元数据，不覆盖创建人、权限范围、客户、状态、PI 状态、备注、系统备注或确认日期。
-- 已挂接到人工 Orders 的 PI 后续事件也只更新来源关联；即使该人工行仍标记为待修复客户，也不能由来源重新写入客户快照或财务订单引用。
+- 已挂接到人工 Orders 的 PI 后续事件不会覆盖客户快照、财务订单引用、状态、PI 状态、备注、系统备注或确认日期；同一隐藏 PI ID 的 `ORDER NO` 改名会同步更新该行的订单号和搜索索引。新订单号已被其他行占用时停止改名并记录冲突，不覆盖任何人工数据。
 - 只有 MU Contract 正式 PI PDF 成功生成或重新生成后，金额才成为官方同步金额；草稿金额不会同步。
 - 来源删除或解除 `ORDER NO` 只会停用来源关联，不会删除 MULEDGER 的 Orders 记录。
 
@@ -122,7 +122,7 @@ Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效。Appl
 
 `Sync Now` 或 `apply-reconcile` 遇到有效租约竞争时返回可读的 `409`“未完成”结果，而不是成功响应；设置页保留现有 Full Reconcile 预览供稍后重试。所有成功、失败和对账状态写入都带当前 `leaseOwner` 条件，过期 worker 不能覆盖接管者。
 
-Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / CONFLICT` 的同步行。它在一个事务中更新 Orders 客户快照与 `needsCustomerFix`、来源匹配状态和人工编辑标记，关闭对应客户冲突，并写入 before/after 审计；普通人工行、已匹配同步行和非 ADMIN 均不能使用，财务表不会被修改。
+Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / CONFLICT` 的同步行，所选客户必须位于该管理员现有层级可见范围内。它在一个事务中更新 Orders 客户快照与 `needsCustomerFix`、来源匹配状态和人工编辑标记，关闭对应客户冲突，并写入 before/after 审计；普通人工行、已匹配同步行和非 ADMIN 均不能使用，财务表不会被修改。
 
 ### 配置与运行
 

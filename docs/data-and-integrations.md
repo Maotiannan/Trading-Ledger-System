@@ -136,6 +136,8 @@ Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / C
 
 ADMIN 可在设置页持久化启用状态、轮询间隔 `10..3600` 秒和批量大小 `1..500`。Docker `mucontract-sync-trigger` 每 5 秒唤醒一次内部接口；后端根据持久化的下一次可运行时间决定是否真正拉取，避免把业务调度逻辑放进容器脚本。
 
+生产环境已于 2026-07-19 完成首次 Full Reconcile 并启用 30 秒增量同步。上线时 53 条来源 PI 全部匹配，0 未匹配、0 冲突，提交游标为 106；完整备份、隔离恢复、迁移、对账和业务表不变证据见 `docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md`。
+
 ### 持久化与冲突
 
 以下五张表都位于 MySQL `trading_ledger`，由现有完整数据库 dump 自动覆盖：

@@ -5,7 +5,7 @@
 ## 当前版本
 
 - 版本：`1.0.210`
-- 最近更新：业务数据库和上传文件改为在 NAS 上生成可校验的每日完整快照；MU Contract Orders 同步仍保持关闭，等待上线前对账确认。
+- 最近更新：NAS 每日完整快照已启用并通过隔离恢复；MU Contract Orders 已完成首次对账并开启增量同步。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -81,7 +81,7 @@ docker compose down -v
 
 NAS 本地备份与恢复手册见：[muledger-local-backup.md](docs/backup/muledger-local-backup.md)。
 
-最近一次完整业务恢复演练见：[2026-07-17 MULEDGER COS 恢复演练](docs/backup/restore-drills/2026-07-17-muledger-cos-restore-drill.md)。
+最近一次完整业务恢复演练与上线记录见：[2026-07-19 MULEDGER NAS 备份与同步上线](docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md)。
 
 MU Contract 同步迁移演练见：[2026-07-18 MU Contract Orders 迁移演练](docs/backup/restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md)。
 

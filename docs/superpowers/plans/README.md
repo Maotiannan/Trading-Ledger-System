@@ -8,13 +8,13 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-There are currently two `ACTIVE` plans in this directory. MULEDGER synchronization and the NAS-only backup rollout are not yet deployed or enabled.
+There are currently no `ACTIVE` plans in this directory. The NAS-only backup rollout and MU Contract Orders synchronization were deployed and verified on 2026-07-19.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
-| `2026-07-19-muledger-nas-local-backup.md` | `ACTIVE` | NAS-only snapshot implementation is complete; CI, real snapshot verification, isolated restore, and controlled MULEDGER deployment remain. |
-| `2026-07-18-mucontract-order-sync-muledger.md` | `ACTIVE` | MULEDGER consumer implementation is merged; production backup/restore gate, migration, deployment, and reconcile preview remain. |
-| `2026-07-18-mucontract-order-sync-source.md` | `ARCHIVED_COMPLETED` | MU Contract producer PR, migration, and service deployment completed independently; its feed remains unconfigured until MULEDGER rollout. |
+| `2026-07-19-muledger-nas-local-backup.md` | `ARCHIVED_COMPLETED` | NAS-only daily snapshots, isolated restore, controlled deployment, final verification, and post-enable recovery point completed. |
+| `2026-07-18-mucontract-order-sync-muledger.md` | `ARCHIVED_COMPLETED` | Production migration, Full Reconcile, 53 source links, zero-conflict enablement, and idempotent incremental verification completed. |
+| `2026-07-18-mucontract-order-sync-source.md` | `ARCHIVED_COMPLETED` | MU Contract producer, migration, historical projection initialization, authenticated feed, and MULEDGER consumption are live. |
 | `2026-03-30-invoice-branch-assignment.md` | `ARCHIVED_COMPLETED` | Invoice branch reassignment and customer-owner visibility shipped. |
 | `2026-04-27-invoice-rematch-single-customer-reparse.md` | `ARCHIVED_COMPLETED` | Unresolved invoice orders can be reparsed during rematch. |
 | `2026-04-27-signed-receipt-generator.md` | `ARCHIVED_COMPLETED` | Signed receipt generation, signing isolation, NAS image persistence, and finalization shipped. |

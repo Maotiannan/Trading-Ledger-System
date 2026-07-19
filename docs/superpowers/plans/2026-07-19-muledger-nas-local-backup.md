@@ -1,6 +1,6 @@
 # MULEDGER NAS Local Backup Implementation Plan
 
-> **Status:** ACTIVE on `ops/muledger-nas-local-backup`; implementation is complete, while CI, real NAS snapshot verification, isolated restore, and controlled MULEDGER deployment remain gated.
+> **Status:** ARCHIVED_COMPLETED; PR #22 and post-merge CI passed, NAS snapshots and isolated restore were verified, MULEDGER was deployed, and MU Contract synchronization was reconciled and enabled on 2026-07-19. See `docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -1,6 +1,6 @@
 # MU Contract Order Feed Implementation Plan
 
-> **Status:** ARCHIVED_COMPLETED; the MU Contract source feed, migration, and service deployment landed independently. MULEDGER consumption remains disabled until its own rollout gates pass.
+> **Status:** ARCHIVED_COMPLETED; the source feed, migration, historical projection initialization, and service deployment are live, and MULEDGER consumption was enabled on 2026-07-19.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

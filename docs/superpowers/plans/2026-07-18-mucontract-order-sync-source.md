@@ -1,6 +1,6 @@
 # MU Contract Order Feed Implementation Plan
 
-> **Status:** ACTIVE on the separate MU Contract feature branch; PR review, merge, migration, and deployment remain gated.
+> **Status:** ARCHIVED_COMPLETED; the MU Contract source feed, migration, and service deployment landed independently. MULEDGER consumption remains disabled until its own rollout gates pass.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

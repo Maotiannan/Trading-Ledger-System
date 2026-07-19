@@ -60,7 +60,11 @@ function fixture() {
   };
 }
 
-function runBackup(f: Fixture, args: string[] = [], overrides: NodeJS.ProcessEnv = {}) {
+function runBackup(
+  f: Fixture,
+  args: string[] = [],
+  overrides: Partial<NodeJS.ProcessEnv> = {},
+) {
   return spawnSync('bash', [script, ...args], {
     cwd: process.cwd(),
     env: { ...f.env, ...overrides },

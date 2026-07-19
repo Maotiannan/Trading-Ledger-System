@@ -153,7 +153,7 @@ ADMIN 可在设置页持久化启用状态、轮询间隔 `10..3600` 秒和批�
 ### 部署与回滚顺序
 
 1. 先备份并部署 MU Contract 的增量迁移、只读 feed 和历史来源初始化，验证两个源接口。
-2. 从最新 MULEDGER COS 数据库备份恢复到隔离 MariaDB，针对副本执行新迁移和恢复检查；不得直接拿生产库试迁移。
+2. 从最新且校验通过的 MULEDGER NAS 快照恢复到隔离 MariaDB，针对副本执行新迁移和恢复检查；不得直接拿生产库试迁移。
 3. 备份正式 MULEDGER 后部署迁移和应用，配置源地址/令牌；同步保持关闭。
 4. ADMIN 执行 Full Reconcile 预览并确认数量，再执行 apply；检查未匹配和冲突。
 5. 完成首次 Full Reconcile 后才启用增量同步。
@@ -169,7 +169,7 @@ ADMIN 可在设置页持久化启用状态、轮询间隔 `10..3600` 秒和批�
 | 业务结构化数据 | MySQL `trading_ledger` | 必须备份完整业务库 |
 | 上传或生成文件 | NAS 挂载目录 `${UPLOAD_HOST_DIR}` | 必须备份完整上传目录 |
 
-腾讯云 COS 自动备份脚本和权限配置见 `docs/backup/muledger-cos-backup.md`。
+NAS 完整快照、校验、保留和隔离恢复流程见 `docs/backup/muledger-local-backup.md`。当前快照根目录为 `/Volumes/团队文件-DAINTY_SHIPMENT/docker/backups/muledger`，数据库与上传文件每次都创建完整快照并保留 30 天。
 
 ## MySQL 业务数据库
 

@@ -1,5 +1,7 @@
 # MULEDGER NAS Local Backup Implementation Plan
 
+> **Status:** ACTIVE on `ops/muledger-nas-local-backup`; implementation is complete, while CI, real NAS snapshot verification, isolated restore, and controlled MULEDGER deployment remain gated.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace MULEDGER's Tencent COS backup integration with verified daily database and media snapshots stored on the NAS, then use a fresh snapshot to finish the already approved MU Contract Orders synchronization deployment.
@@ -29,7 +31,7 @@
 - Create: `scripts/backup/muledger-local-backup.test.ts`
 - Expected missing implementation: `scripts/backup/muledger-local-backup.sh`
 
-- [ ] **Step 1: Add a test harness that creates isolated source, backup, and fake dump directories**
+- [x] **Step 1: Add a test harness that creates isolated source, backup, and fake dump directories**
 
 Use real `tar`, `gzip`, and `shasum`, but provide a fake `mariadb-dump` that writes deterministic SQL. The harness must never read `.env` or the active NAS:
 
@@ -66,7 +68,7 @@ function fixture() {
 }
 ```
 
-- [ ] **Step 2: Add failing tests for dry run, successful publication, and tamper detection**
+- [x] **Step 2: Add failing tests for dry run, successful publication, and tamper detection**
 
 ```ts
 it('prints a local plan without creating a snapshot during dry run', () => {
@@ -108,7 +110,7 @@ it('rejects a snapshot after its database dump is modified', () => {
 
 Implement `findOnlySnapshot` and `findFile` in the test as deterministic recursive directory helpers; they must throw when zero or multiple matches exist.
 
-- [ ] **Step 3: Add failing safety tests for overlap, lock contention, failure preservation, and retention boundaries**
+- [x] **Step 3: Add failing safety tests for overlap, lock contention, failure preservation, and retention boundaries**
 
 The tests must assert:
 
@@ -122,7 +124,7 @@ expect(unexpectedSiblingDirectoryStillExists()).toBe(true);
 
 Use `touch -t` through `execFileSync` to age only the explicit expired fixture. A fake dump executable that exits `42` must prove a failed run leaves prior snapshots untouched and performs no retention.
 
-- [ ] **Step 4: Run the tests and verify RED**
+- [x] **Step 4: Run the tests and verify RED**
 
 Run:
 
@@ -138,7 +140,7 @@ Expected: FAIL because `scripts/backup/muledger-local-backup.sh` does not exist 
 - Create: `scripts/backup/muledger-local-backup.sh`
 - Test: `scripts/backup/muledger-local-backup.test.ts`
 
-- [ ] **Step 1: Add Bash 3.2-compatible argument parsing and configuration**
+- [x] **Step 1: Add Bash 3.2-compatible argument parsing and configuration**
 
 Support only these interfaces:
 
@@ -161,7 +163,7 @@ MYSQLDUMP_DOCKER_IMAGE="${MYSQLDUMP_DOCKER_IMAGE:-mariadb:10.6}"
 
 Use `umask 077`, `set -euo pipefail`, an explicit safe `PATH`, and stderr-only timestamped logs. Reject unknown arguments, an empty `DATABASE_URL`, non-numeric retention/free-space settings, and missing source directories.
 
-- [ ] **Step 2: Implement path and source-tree validation**
+- [x] **Step 2: Implement path and source-tree validation**
 
 Resolve only existing directories using `cd "$path" && pwd -P`. Reject:
 
@@ -173,7 +175,7 @@ Resolve only existing directories using `cd "$path" && pwd -P`. Reject:
 
 Emit human-readable errors containing `overlap`, `symbolic link`, `unsafe file type`, or `insufficient free space` so tests assert the actual failure reason.
 
-- [ ] **Step 3: Implement exclusive locking and staging cleanup**
+- [x] **Step 3: Implement exclusive locking and staging cleanup**
 
 Acquire the lock only with atomic directory creation:
 
@@ -189,7 +191,7 @@ printf '{"pid":%s,"startedAt":"%s"}\n' "$$" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >
 
 The EXIT trap may remove only the current run's staging directory and the lock it acquired. It must not remove a published snapshot or another process's lock.
 
-- [ ] **Step 4: Reuse the proven transaction-consistent database dump behavior**
+- [x] **Step 4: Reuse the proven transaction-consistent database dump behavior**
 
 Parse `DATABASE_URL` with Node into a mode-600 staging file, source it, then delete it before publication. Dump with:
 
@@ -203,7 +205,7 @@ Parse `DATABASE_URL` with Node into a mode-600 staging file, source it, then del
 
 Prefer the configured client, then local `mysqldump`, then local `mariadb-dump`, and finally the configured MariaDB Docker image as a client-only container. Pipe directly through `gzip -9` and run `gzip -t` before proceeding.
 
-- [ ] **Step 5: Archive media and build checksums/manifest**
+- [x] **Step 5: Archive media and build checksums/manifest**
 
 Create `media/upload-${timestamp}.tar.gz` with:
 
@@ -213,7 +215,7 @@ tar -C "$UPLOAD_HOST_DIR" -czf "$media_archive" .
 
 Count regular files before archiving. Create SHA-256 files using `shasum -a 256` with a `sha256sum` fallback. Generate `manifest.json` with Node and fields defined in the approved design; serialize no URL, username, password, token, or parsed database environment.
 
-- [ ] **Step 6: Implement read-only snapshot verification**
+- [x] **Step 6: Implement read-only snapshot verification**
 
 Verification must:
 
@@ -225,7 +227,7 @@ Verification must:
 
 Print `Snapshot verification passed: $snapshot_path` only after every check succeeds.
 
-- [ ] **Step 7: Atomically publish and perform constrained retention**
+- [x] **Step 7: Atomically publish and perform constrained retention**
 
 Verify staging first, then create the date parent and use `mv` within the same NAS filesystem. Retention may inspect only depth-four directories matching:
 
@@ -235,7 +237,7 @@ snapshots/[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/muledger-[0-9][0-9][0-9][0-
 
 For each expired candidate, resolve and recheck the prefix and name before `find "$candidate" -depth -delete`. Do not run retention during dry-run, verification-only, or any failed backup.
 
-- [ ] **Step 8: Run targeted tests and verify GREEN**
+- [x] **Step 8: Run targeted tests and verify GREEN**
 
 Run:
 
@@ -246,7 +248,7 @@ bash -n scripts/backup/muledger-local-backup.sh
 
 Expected: all local backup tests PASS and Bash syntax returns exit code 0.
 
-- [ ] **Step 9: Commit the backup engine**
+- [x] **Step 9: Commit the backup engine**
 
 ```bash
 git add scripts/backup/muledger-local-backup.sh scripts/backup/muledger-local-backup.test.ts
@@ -262,7 +264,7 @@ git commit -m "feat(backup): add atomic NAS snapshots"
 - Delete: `scripts/backup/install-coscli-macos.sh`
 - Test: `scripts/backup/muledger-local-backup.test.ts`
 
-- [ ] **Step 1: Add a static local-only test and verify RED**
+- [x] **Step 1: Add a static local-only test and verify RED**
 
 ```ts
 it('keeps the active backup command, env example, and launch agent local-only', () => {
@@ -285,7 +287,7 @@ npm test -- scripts/backup/muledger-local-backup.test.ts --runInBand
 
 Expected: FAIL because the installer and environment example still contain COS names.
 
-- [ ] **Step 2: Replace the environment example**
+- [x] **Step 2: Replace the environment example**
 
 The example must contain exactly the active settings and explanatory comments:
 
@@ -301,7 +303,7 @@ MYSQLDUMP_DOCKER_IMAGE=mariadb:10.6
 
 It must instruct operators to keep the file mode `600` and must contain no Tencent or COS fields.
 
-- [ ] **Step 3: Update the LaunchAgent installer**
+- [x] **Step 3: Update the LaunchAgent installer**
 
 Use label `com.muledger.local-backup`, point to `muledger-local-backup.sh`, retain the `02:30` default, and print a local manual command. Before loading the new plist, unload and remove only:
 
@@ -311,7 +313,7 @@ Use label `com.muledger.local-backup`, point to `muledger-local-backup.sh`, reta
 
 Do not delete old logs, backup snapshots, the machine-wide `coscli` binary, or any remote object.
 
-- [ ] **Step 4: Delete project-owned COS scripts and verify GREEN**
+- [x] **Step 4: Delete project-owned COS scripts and verify GREEN**
 
 Delete the two COS scripts, then run:
 
@@ -323,7 +325,7 @@ rg -n 'COS_SECRET|coscli|cos://' scripts/backup
 
 Expected: tests PASS, Bash syntax returns 0, and the final `rg` returns no active script/config references. Historical restore-drill files are intentionally excluded.
 
-- [ ] **Step 5: Commit scheduler and configuration migration**
+- [x] **Step 5: Commit scheduler and configuration migration**
 
 ```bash
 git add scripts/backup
@@ -343,7 +345,7 @@ git commit -m "refactor(backup): remove MULEDGER COS integration"
 - Modify: `package.json`
 - Modify: `package-lock.json`
 
-- [ ] **Step 1: Rename and rewrite the active runbook**
+- [x] **Step 1: Rename and rewrite the active runbook**
 
 Keep the authoritative MySQL/NAS data-scope tables and MU Contract migration gate. Replace cloud setup with:
 
@@ -356,7 +358,7 @@ Keep the authoritative MySQL/NAS data-scope tables and MU Contract migration gat
 
 Preserve links to the 2026-07-17 and 2026-07-18 historical restore evidence without rewriting those records as local backups.
 
-- [ ] **Step 2: Replace active references across engineering documentation**
+- [x] **Step 2: Replace active references across engineering documentation**
 
 Change active commands from:
 
@@ -373,11 +375,11 @@ scripts/backup/muledger-local-backup.sh --verify /Volumes/团队文件-DAINTY_SH
 
 Update `CHANGE_CHECKLIST.md` database, upload, and deployment gates to reference `docs/backup/muledger-local-backup.md`. Update `README.md` with one concise NAS backup link rather than operational details.
 
-- [ ] **Step 3: Update plan status and engineering records**
+- [x] **Step 3: Update plan status and engineering records**
 
 Mark this plan `ACTIVE` until real deployment finishes. Record that the design was user-approved, COS writes were removed by request, the same-NAS limitation was accepted, and production migration still waits for a verified snapshot. Do not mark the sync rollout complete before the final controlled reconcile gate.
 
-- [ ] **Step 4: Bump the version single source**
+- [x] **Step 4: Bump the version single source**
 
 Run:
 
@@ -387,7 +389,7 @@ npm version 1.0.210 --no-git-tag-version
 
 Expected: only `package.json` and the two version locations in `package-lock.json` change from `1.0.209` to `1.0.210`; `src/lib/app-version.ts` continues reading `package.json`.
 
-- [ ] **Step 5: Run documentation and focused verification**
+- [x] **Step 5: Run documentation and focused verification**
 
 ```bash
 git diff --check

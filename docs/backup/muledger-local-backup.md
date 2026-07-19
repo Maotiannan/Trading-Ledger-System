@@ -201,10 +201,11 @@ Required checks:
 
 Tencent COS uploads were retired by user decision on 2026-07-19. MULEDGER no longer stores cloud credentials, installs COSCLI, or writes new cloud objects. Existing remote objects were not deleted and remain historical recovery evidence.
 
-Historical drills remain valid records of what was tested at that time:
+The active rollout and historical drills remain valid records of what was tested at that time:
 
 | Date | Backup | Result | Evidence |
 | --- | --- | --- | --- |
+| 2026-07-19 | Active NAS database/media snapshot and production rollout | `PASS` | [NAS rollout and restore](restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md) |
 | 2026-07-18 | Historical cloud database/media backup | `PASS` for MU Contract migration | [Migration drill](restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md) |
 | 2026-07-17 | Historical cloud database/media backup | `PASS_WITH_FINDINGS` | [Full drill](restore-drills/2026-07-17-muledger-cos-restore-drill.md) |
 

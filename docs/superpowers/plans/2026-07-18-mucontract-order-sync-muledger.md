@@ -1,6 +1,6 @@
 # MU Contract Order Sync - MULEDGER Implementation Plan
 
-> **Status:** ACTIVE; implementation and review fixes are merged to `main`, while production migration, deployment, reconcile preview, and enablement remain gated by the NAS backup rollout.
+> **Status:** ARCHIVED_COMPLETED; production migration, deployment, Full Reconcile, enablement, idempotent incremental verification, and post-enable backup completed on 2026-07-19. See `docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -1,6 +1,6 @@
 # MU Contract Order Sync - MULEDGER Implementation Plan
 
-> **Status:** ACTIVE on `feat/mucontract-order-sync`; production migration, merge, deployment, and enablement remain gated.
+> **Status:** ACTIVE; implementation and review fixes are merged to `main`, while production migration, deployment, reconcile preview, and enablement remain gated by the NAS backup rollout.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

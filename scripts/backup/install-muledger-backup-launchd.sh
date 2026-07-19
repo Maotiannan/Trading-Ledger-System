@@ -2,8 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-LABEL="${LABEL:-com.muledger.cos-backup}"
+LABEL="${LABEL:-com.muledger.local-backup}"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+LEGACY_PLIST="$HOME/Library/LaunchAgents/com.muledger.cos-backup.plist"
 BACKUP_HOME="${MULEDGER_BACKUP_HOME:-$HOME/.muledger-backup}"
 ENV_FILE="${MULEDGER_BACKUP_ENV:-$BACKUP_HOME/muledger-backup.env}"
 HOUR="${BACKUP_HOUR:-2}"
@@ -18,9 +19,9 @@ cat > "$PLIST" <<EOF
 <dict>
   <key>Label</key>
   <string>$LABEL</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$ROOT_DIR/scripts/backup/muledger-cos-backup.sh</string>
+      <key>ProgramArguments</key>
+      <array>
+        <string>$ROOT_DIR/scripts/backup/muledger-local-backup.sh</string>
     <string>--env</string>
     <string>$ENV_FILE</string>
   </array>
@@ -41,11 +42,15 @@ cat > "$PLIST" <<EOF
 </plist>
 EOF
 
+launchctl unload "$LEGACY_PLIST" >/dev/null 2>&1 || true
+rm -f "$LEGACY_PLIST"
 launchctl unload "$PLIST" >/dev/null 2>&1 || true
 launchctl load "$PLIST"
 
 echo "Installed launchd backup job: $PLIST"
 echo "Schedule: every day at $(printf '%02d:%02d' "$HOUR" "$MINUTE")"
 echo "Logs: $BACKUP_HOME/logs/launchd.out.log and launchd.err.log"
-echo "Manual run:"
-echo "$ROOT_DIR/scripts/backup/muledger-cos-backup.sh --env $ENV_FILE --check-cos"
+echo "Dry run:"
+echo "$ROOT_DIR/scripts/backup/muledger-local-backup.sh --env $ENV_FILE --dry-run"
+echo "Manual backup:"
+echo "$ROOT_DIR/scripts/backup/muledger-local-backup.sh --env $ENV_FILE"

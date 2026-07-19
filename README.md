@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.209`
-- 最近更新：MU Contract 正式 PI 可同步到 Orders，包含 PI 创建日期和正式金额；人工订单优先，财务表和余额不受影响。
+- 版本：`1.0.210`
+- 最近更新：业务数据库和上传文件改为在 NAS 上生成可校验的每日完整快照；MU Contract Orders 同步仍保持关闭，等待上线前对账确认。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -79,7 +79,7 @@ docker compose down -v
 
 完整数据文件、上传目录、清理规则和外部接口说明见：[data-and-integrations.md](docs/data-and-integrations.md)。
 
-腾讯云 COS 备份运行手册见：[muledger-cos-backup.md](docs/backup/muledger-cos-backup.md)。
+NAS 本地备份与恢复手册见：[muledger-local-backup.md](docs/backup/muledger-local-backup.md)。
 
 最近一次完整业务恢复演练见：[2026-07-17 MULEDGER COS 恢复演练](docs/backup/restore-drills/2026-07-17-muledger-cos-restore-drill.md)。
 

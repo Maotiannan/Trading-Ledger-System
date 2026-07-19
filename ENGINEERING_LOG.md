@@ -8,7 +8,7 @@
 
 ## P0（本周必须完成）
 
-- [ ] MULEDGER NAS-only 备份切换：用户明确取消新的腾讯 COS 写入并接受数据库快照与媒体源位于同一 NAS 的整机故障局限。已完成原子快照脚本、只读校验、成功后 30 天保留、互斥锁、路径/空间/文件类型保护、LaunchAgent 切换和 13 项自动化测试；项目内 COS 上传脚本、安装脚本和配置项已删除，历史云端对象与历史恢复演练记录保留不动。正式迁移仍必须等待 PR/CI、真实 NAS 快照校验及该快照的隔离恢复演练通过；MU Contract Orders 同步继续关闭。进行中，2026-07-19
+- [ ] MULEDGER NAS-only 备份切换：用户明确取消新的腾讯 COS 写入并接受数据库快照与媒体源位于同一 NAS 的整机故障局限。已完成原子快照脚本、只读校验、成功后 30 天保留、互斥锁、路径/空间/文件类型保护、LaunchAgent 切换和 13 项备份测试；项目内 COS 上传脚本、安装脚本和配置项已删除，历史云端对象与历史恢复演练记录保留不动。仓库门禁通过 175 suites / 1155 tests、21 个隔离 API 场景、9 个隔离 Playwright 场景、生产构建、Prisma、ESLint、typecheck、i18n audit 和两类 0 漏洞审计；临时测试数据库与 volume 已清理。正式迁移仍必须等待 PR/CI、真实 NAS 快照校验及该快照的隔离恢复演练通过；MU Contract Orders 同步继续关闭。进行中，2026-07-19
 
 - [x] MULEDGER PR #21 审查修复：补齐同一隐藏 PI ID 对人工挂接 Orders 的改名路径，来源 ORDER NO 变更时仅更新订单号、标准化键与搜索 token，保留客户和全部人工字段；目标订单号冲突时不覆盖并记录 `ORDER_NO_COLLISION`。同时给 ADMIN 的同步订单客户解决接口补上服务端层级可见范围校验，防止绕过前端选择其他分支客户。新增 3 个单元回归场景并扩展 isolated API case 95；相关 20 suites / 197 tests、全量 174 suites / 1142 tests、隔离 API、typecheck、全仓 ESLint、Prisma validate、i18n audit 和 `git diff --check` 均通过。隔离测试只使用一次性 MariaDB 与假来源服务并已清理；未连接生产数据库、未运行生产迁移、未重建现有服务、未访问 NAS/COS。✅ 2026-07-18
 

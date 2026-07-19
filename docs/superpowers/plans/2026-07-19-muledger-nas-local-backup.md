@@ -401,7 +401,7 @@ npm run lint
 
 Expected: all commands exit 0; active backup documentation has no COS credentials, endpoints, or commands.
 
-- [ ] **Step 6: Commit docs and version**
+- [x] **Step 6: Commit docs and version**
 
 ```bash
 git add README.md CHANGE_CHECKLIST.md ENGINEERING_LOG.md todolist.md docs package.json package-lock.json
@@ -413,7 +413,7 @@ git commit -m "docs(backup): make NAS snapshots authoritative"
 **Files:**
 - Verify all changed files from Tasks 1-4.
 
-- [ ] **Step 1: Run the complete project gates**
+- [x] **Step 1: Run the complete project gates**
 
 ```bash
 npm run test:ci

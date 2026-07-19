@@ -326,4 +326,19 @@ describe('MULEDGER NAS local backup', () => {
       f.cleanup();
     }
   });
+
+  it('keeps the active backup command, environment example, and launch agent local-only', () => {
+    const active = [
+      'scripts/backup/muledger-local-backup.sh',
+      'scripts/backup/muledger-backup.env.example',
+      'scripts/backup/install-muledger-backup-launchd.sh',
+    ]
+      .map((file) => readFileSync(path.join(process.cwd(), file), 'utf8'))
+      .join('\n');
+
+    expect(active).not.toMatch(/COS_SECRET|coscli|cos:\/\//i);
+    expect(active).toContain('MULEDGER_LOCAL_BACKUP_ROOT');
+    expect(active).toContain('muledger-local-backup.sh');
+    expect(active).toContain('com.muledger.local-backup');
+  });
 });

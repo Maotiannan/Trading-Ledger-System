@@ -28,6 +28,16 @@ export type MuContractApplyResult = {
   orderTrackerId: string | null;
   linkMode: 'MANUAL_ATTACHED' | 'SYNC_CREATED' | null;
   conflictType: MuContractConflictType | null;
+  takeover?: MuContractSourceTakeover;
+};
+
+export type MuContractSourceTakeover = {
+  orderTrackerId: string;
+  normalizedOrderNo: string;
+  oldSourcePiId: string;
+  newSourcePiId: string;
+  oldOfficialAmount: string | null;
+  newOfficialAmount: string | null;
 };
 
 export type MuContractApplyInput = {
@@ -47,6 +57,7 @@ type AppliedTarget = {
   linkMode: ExternalOrderLinkMode;
   customerMatchStatus: ExternalCustomerMatchStatus;
   customerConflictEvidence?: unknown;
+  takeover?: MuContractSourceTakeover;
 };
 
 function sourceMetadata(state: MuContractOrderEvent, cursor: string) {
@@ -263,16 +274,48 @@ async function resolveOtherConflicts(
   });
 }
 
-async function linkedElsewhere(
+async function claimOrderTrackerSource(
   tx: Prisma.TransactionClient,
   orderTrackerId: string,
-  sourcePiId: string,
+  state: MuContractOrderEvent,
+  allowInactiveTakeover = true,
 ) {
   const link = await tx.externalOrderSourceLink.findFirst({
     where: { provider: MU_CONTRACT_PROVIDER, orderTrackerId },
-    select: { id: true, externalId: true, orderTrackerId: true },
+    select: {
+      id: true,
+      externalId: true,
+      orderTrackerId: true,
+      active: true,
+      officialAmount: true,
+    },
   });
-  return link && link.externalId !== sourcePiId ? link : null;
+  if (!link || link.externalId === state.source.piId) {
+    return { blockingLink: null, takeover: undefined };
+  }
+  if (link.active) {
+    return { blockingLink: link, takeover: undefined };
+  }
+  if (!allowInactiveTakeover) {
+    return { blockingLink: null, takeover: undefined };
+  }
+
+  await tx.externalOrderSourceLink.update({
+    where: { id: link.id },
+    data: { orderTrackerId: null },
+  });
+
+  return {
+    blockingLink: null,
+    takeover: {
+      orderTrackerId,
+      normalizedOrderNo: normalizeOrderIdentifier(state.order.orderNo),
+      oldSourcePiId: link.externalId,
+      newSourcePiId: state.source.piId,
+      oldOfficialAmount: link.officialAmount?.toString() ?? null,
+      newOfficialAmount: state.officialAmount?.value ?? null,
+    } satisfies MuContractSourceTakeover,
+  };
 }
 
 async function createOrAttachTarget(
@@ -290,8 +333,8 @@ async function createOrAttachTarget(
     return { target: await resolveForNewTracker(tx, state, actorId), collisionIds: [] };
   }
 
-  const foreignLink = await linkedElsewhere(tx, row.id, state.source.piId);
-  if (foreignLink) {
+  const sourceClaim = await claimOrderTrackerSource(tx, row.id, state);
+  if (sourceClaim.blockingLink) {
     return {
       target: {
         orderTrackerId: existing?.orderTrackerId ?? null,
@@ -307,6 +350,7 @@ async function createOrAttachTarget(
       orderTrackerId: row.id,
       linkMode: ExternalOrderLinkMode.MANUAL_ATTACHED,
       customerMatchStatus: customerStatusForTracker(row),
+      takeover: sourceClaim.takeover,
     },
     collisionIds: [],
   };
@@ -349,8 +393,10 @@ async function applyExistingLinkedOrder(
     where: { normalizedOrderNo, archivedAt: null },
   });
   if (targetRow && targetRow.id !== current.id) {
-    const foreignLink = await linkedElsewhere(tx, targetRow.id, state.source.piId);
-    if (foreignLink) {
+    const canTransferToTarget = existing.linkMode === ExternalOrderLinkMode.SYNC_CREATED
+      && existing.humanEditedAt === null;
+    const sourceClaim = await claimOrderTrackerSource(tx, targetRow.id, state, canTransferToTarget);
+    if (sourceClaim.blockingLink) {
       return {
         target: {
           orderTrackerId: current.id,
@@ -362,10 +408,7 @@ async function applyExistingLinkedOrder(
       };
     }
 
-    if (
-      existing.linkMode === ExternalOrderLinkMode.SYNC_CREATED
-      && existing.humanEditedAt === null
-    ) {
+    if (canTransferToTarget) {
       await tx.orderTracker.update({
         where: { id: current.id },
         data: {
@@ -380,6 +423,7 @@ async function applyExistingLinkedOrder(
           orderTrackerId: targetRow.id,
           linkMode: ExternalOrderLinkMode.MANUAL_ATTACHED,
           customerMatchStatus: customerStatusForTracker(targetRow),
+          takeover: sourceClaim.takeover,
         },
         collisionType: null,
         collisionIds: [],
@@ -523,5 +567,6 @@ export async function applyMuContractOrderState(
     orderTrackerId: target.orderTrackerId,
     linkMode: target.linkMode,
     conflictType: conflicts[0]?.type ?? null,
+    ...(target.takeover ? { takeover: target.takeover } : {}),
   };
 }

@@ -6,37 +6,112 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Loader2 } from 'lucide-react';
-import type { RematchPreviewGroup, RematchSelection } from '../types';
+import type {
+  RematchPreviewGroup,
+  RematchSelection,
+  RematchTargetInvoice,
+  SystemPoolRepairPreview,
+} from '../types';
 
 export type RematchDialogProps = {
   open: boolean;
   groups: RematchPreviewGroup[];
+  poolRepairs: SystemPoolRepairPreview[];
+  targetInvoices: RematchTargetInvoice[];
+  poolSelections: Record<string, string>;
   selections: Record<string, RematchSelection>;
   applying: boolean;
   tx: (zh: string, en: string) => string;
   onOpenChange: (open: boolean) => void;
   onSelectionChange: (groupId: string, value: Partial<RematchSelection>, group: RematchPreviewGroup) => void;
+  onPoolSelectionChange: (sourceOrderId: string, targetInvoiceId: string) => void;
   onApply: () => void;
 };
 
 export function RematchDialog({
   open,
   groups,
+  poolRepairs,
+  targetInvoices,
+  poolSelections,
   selections,
   applying,
   tx,
   onOpenChange,
   onSelectionChange,
+  onPoolSelectionChange,
   onApply,
 }: RematchDialogProps) {
+  const hasUnresolvedManualRepair = poolRepairs.some(
+    (row) => row.repairMode === 'MANUAL' && !poolSelections[row.sourceOrderId],
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-5xl flex-col overflow-hidden p-0 sm:max-w-5xl sm:p-6">
+        <DialogHeader className="px-4 pt-4 sm:px-0 sm:pt-0">
           <DialogTitle>{tx('冲突匹配处理', 'Conflict Match Resolution')}</DialogTitle>
           <DialogDescription>{tx('逐组选择保留订单与处理方式，再执行刷新匹配。', 'Choose keeper and strategy for each group before applying rematch.')}</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 max-h-[60vh] overflow-auto">
+        <div data-testid="rematch-scroll-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-2 sm:px-0">
+          {poolRepairs.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {tx('系统池订单修复', 'System Pool Repairs')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table className="min-w-[760px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ORDER</TableHead>
+                        <TableHead>{tx('来源池', 'Pool')}</TableHead>
+                        <TableHead>{tx('金额', 'Amount')}</TableHead>
+                        <TableHead>{tx('余额', 'Balance')}</TableHead>
+                        <TableHead>{tx('收据数', 'Receipts')}</TableHead>
+                        <TableHead>{tx('目标账单', 'Target invoice')}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {poolRepairs.map((row) => (
+                        <TableRow key={row.sourceOrderId}>
+                          <TableCell className="font-medium">{formatOrderNameDisplay(row.orderNo)}</TableCell>
+                          <TableCell>{row.sourcePool}</TableCell>
+                          <TableCell>{formatUsdAmount(row.amount)}</TableCell>
+                          <TableCell>{formatUsdAmount(row.orderBalance)}</TableCell>
+                          <TableCell>{row.receiptCount}</TableCell>
+                          <TableCell>
+                            {row.repairMode === 'AUTO' ? (
+                              <div className="space-y-1">
+                                <div className="font-medium">{row.targetInvNo || '-'}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {tx('将自动迁移', 'Will move automatically')}
+                                </div>
+                              </div>
+                            ) : (
+                              <select
+                                aria-label={tx(`为 ${formatOrderNameDisplay(row.orderNo)} 选择目标账单`, `Target invoice for ${formatOrderNameDisplay(row.orderNo)}`)}
+                                className="h-9 min-w-44 rounded-md border bg-background px-3 text-sm"
+                                value={poolSelections[row.sourceOrderId] || ''}
+                                onChange={(event) => onPoolSelectionChange(row.sourceOrderId, event.target.value)}
+                              >
+                                <option value="">{tx('请选择账单', 'Select invoice')}</option>
+                                {targetInvoices.map((invoice) => (
+                                  <option key={invoice.id} value={invoice.id}>{invoice.invNo}</option>
+                                ))}
+                              </select>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
           {groups.map((group) => (
             <Card key={group.groupId}>
               <CardHeader>
@@ -95,9 +170,9 @@ export function RematchDialog({
             <div className="text-sm text-gray-500">{tx('未发现冲突组，可直接执行自动刷新匹配。', 'No conflict groups found; automatic rematch will still run.')}</div>
           )}
         </div>
-        <DialogFooter>
+        <DialogFooter data-testid="rematch-dialog-footer" className="shrink-0 border-t px-4 py-3 sm:px-0 sm:pb-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tx('取消', 'Cancel')}</Button>
-          <Button onClick={onApply} disabled={applying}>
+          <Button onClick={onApply} disabled={applying || hasUnresolvedManualRepair}>
             {applying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {tx('确认执行', 'Apply')}
           </Button>

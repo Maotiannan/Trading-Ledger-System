@@ -39,6 +39,8 @@ export const apiCatalog: ApiModule[] = [
       { action: 'deleteOrder', method: 'PUT', description: 'Delete order', bodyExample: { action: 'deleteOrder', orderId: 'order-id' } },
       { action: 'transferBalance', method: 'PUT', description: 'Transfer overpaid balance between orders', bodyExample: { action: 'transferBalance', fromOrderId: 'from-id', toOrderId: 'to-id', transferAmount: 10 } },
       { action: 'rematch', method: 'PUT', description: 'Run rematch process', bodyExample: { action: 'rematch' } },
+      { action: 'rematch-preview', method: 'PUT', description: 'Preview duplicate-order conflicts and visible system-pool repair candidates', bodyExample: { action: 'rematch-preview' } },
+      { action: 'rematch-apply', method: 'PUT', description: 'Apply duplicate-order resolutions and explicit system-pool target invoice choices', bodyExample: { action: 'rematch-apply', resolutions: [], poolResolutions: [{ sourceOrderId: 'pool-order-id', targetInvoiceId: 'invoice-id' }] } },
       { action: 'delete', method: 'DELETE', description: 'Delete invoice', bodyExample: { invoiceId: 'invoice-id' } },
     ],
   },

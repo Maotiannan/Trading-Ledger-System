@@ -1,6 +1,6 @@
 # Implementation Plan Status Index
 
-> Last reviewed: 2026-07-19
+> Last reviewed: 2026-08-24
 
 This file is the authoritative status index for historical implementation plans in this directory.
 
@@ -8,10 +8,11 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-There are currently no `ACTIVE` plans in this directory. The NAS-only backup rollout and MU Contract Orders synchronization were deployed and verified on 2026-07-19.
+There are currently no `ACTIVE` implementation plans. Historical plans remain archived below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
+| `2026-08-24-dashboard-source-deposit-reconciliation.md` | `ARCHIVED_COMPLETED` | One Dashboard customer dialog, inactive MU Contract source takeover, transactional invoice-write migration, and ADMIN Rematch repair controls shipped on the verified feature branch. |
 | `2026-07-19-muledger-nas-local-backup.md` | `ARCHIVED_COMPLETED` | NAS-only daily snapshots, isolated restore, controlled deployment, final verification, and post-enable recovery point completed. |
 | `2026-07-18-mucontract-order-sync-muledger.md` | `ARCHIVED_COMPLETED` | Production migration, Full Reconcile, 53 source links, zero-conflict enablement, and idempotent incremental verification completed. |
 | `2026-07-18-mucontract-order-sync-source.md` | `ARCHIVED_COMPLETED` | MU Contract producer, migration, historical projection initialization, authenticated feed, and MULEDGER consumption are live. |

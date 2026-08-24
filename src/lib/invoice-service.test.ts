@@ -2,6 +2,10 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { resolveCustomer } from '@/lib/customer-matching';
+import {
+  applySystemPoolRepairs,
+  previewSystemPoolRepairs,
+} from '@/lib/invoice-system-pool-reconciliation';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { updateOrderBalance } from '@/lib/matching';
 import {
@@ -76,6 +80,11 @@ jest.mock('@/lib/user-hierarchy', () => ({
 
 jest.mock('@/lib/invoice-write', () => ({
   saveInvoiceWithOrders: jest.fn(),
+}));
+
+jest.mock('@/lib/invoice-system-pool-reconciliation', () => ({
+  applySystemPoolRepairs: jest.fn(),
+  previewSystemPoolRepairs: jest.fn(),
 }));
 
 jest.mock('@/lib/order-alias-db', () => ({
@@ -153,11 +162,27 @@ const mockDb = db as unknown as {
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockSaveInvoiceWithOrders = saveInvoiceWithOrders as jest.Mock;
+const mockApplySystemPoolRepairs = applySystemPoolRepairs as jest.Mock;
+const mockPreviewSystemPoolRepairs = previewSystemPoolRepairs as jest.Mock;
 const mockFindOrderIdByNoOrAlias = findOrderIdByNoOrAlias as jest.Mock;
 const mockSyncOrderAliases = syncOrderAliases as jest.Mock;
 const mockConsolidateGroupedOrders = consolidateGroupedOrders as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
+
+const poolMigrationAudit = {
+  sourceOrderId: 'deposit-order',
+  sourcePool: 'DEPOSIT_POOL',
+  targetInvoiceId: 'inv-1',
+  targetInvNo: 'INV-001',
+  targetOrderId: 'deposit-order',
+  movedReceiptCount: 1,
+  amountBefore: 0,
+  amountAfter: 100,
+  balanceBefore: -20,
+  balanceAfter: 80,
+  operationSource: 'INVOICE_WRITE',
+};
 
 describe('invoice-service', () => {
   beforeEach(() => {
@@ -177,6 +202,13 @@ describe('invoice-service', () => {
       syncedAliases: 0,
     });
     mockUpdateOrderBalance.mockResolvedValue(undefined);
+    mockPreviewSystemPoolRepairs.mockResolvedValue({ poolRepairs: [], targetInvoices: [] });
+    mockApplySystemPoolRepairs.mockResolvedValue({
+      autoMigrations: [],
+      manualMigrations: [],
+      skipped: 0,
+      unresolvedManual: 0,
+    });
   });
 
   it('creates invoice records through saveInvoiceWithOrders and records audit', async () => {
@@ -184,6 +216,7 @@ describe('invoice-service', () => {
       ok: true,
       data: { id: 'inv-1' },
       message: '账单已保存',
+      poolMigrations: [poolMigrationAudit],
     });
 
     const result = await createInvoiceRecord(makeUser(), {
@@ -196,6 +229,7 @@ describe('invoice-service', () => {
       invNo: 'INV-001',
       createdBy: 'sales-1',
       ownerIds: ['sales-1'],
+      operationSource: 'INVOICE_WRITE',
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_CREATE',
@@ -203,6 +237,7 @@ describe('invoice-service', () => {
       metadata: expect.objectContaining({
         invNo: 'INV-001',
         orderCount: 1,
+        systemPoolMigrations: [poolMigrationAudit],
       }),
     }));
   });
@@ -320,6 +355,10 @@ describe('invoice-service', () => {
       ok: true,
       data: { id: 'inv-1' },
       message: '账单已保存',
+      poolMigrations: [{
+        ...poolMigrationAudit,
+        operationSource: 'BULK_IMPORT',
+      }],
     });
 
     const result = await processInvoiceImportRows([
@@ -349,6 +388,7 @@ describe('invoice-service', () => {
     ]);
     expect(mockSaveInvoiceWithOrders).toHaveBeenCalledWith(expect.objectContaining({
       invNo: 'INV-IMPORT-1',
+      operationSource: 'BULK_IMPORT',
       orders: [
         expect.objectContaining({
           orderNo: 'BIG ALPHA-05B',
@@ -360,6 +400,51 @@ describe('invoice-service', () => {
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_IMPORT',
+      metadata: expect.objectContaining({
+        systemPoolMigrations: [expect.objectContaining({
+          sourceOrderId: 'deposit-order',
+          operationSource: 'BULK_IMPORT',
+        })],
+      }),
+    }));
+  });
+
+  it('allows bulk import to migrate an existing DEPOSIT_POOL order', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([{
+      id: 'deposit-order',
+      orderNo: 'AB-13B',
+      customerId: 'customer-ab',
+      customerMark: 'AB',
+      customerName: 'Alpha Buyer',
+      invoice: { invNo: 'DEPOSIT_POOL' },
+    }]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('deposit-order');
+    mockSaveInvoiceWithOrders.mockResolvedValueOnce({
+      ok: true,
+      data: { id: 'inv-990' },
+      message: '账单已保存',
+      poolMigrations: [],
+    });
+
+    const result = await processInvoiceImportRows([{
+      rowNo: 2,
+      invNo: '0000990',
+      shipDateRaw: '',
+      releaseDateRaw: '',
+      orderNo: 'AB-13B',
+      amountRaw: '20000',
+      customerMark: 'AB',
+      customerName: 'Alpha Buyer',
+      customerId: 'customer-ab',
+    }], makeUser());
+
+    expect(result.success).toBe(true);
+    expect(result.issueRows).toEqual([]);
+    expect(mockSaveInvoiceWithOrders).toHaveBeenCalledWith(expect.objectContaining({
+      invNo: '0000990',
+      operationSource: 'BULK_IMPORT',
+      orders: [expect.objectContaining({ orderNo: 'AB-13B', amount: 20000 })],
     }));
   });
 
@@ -494,14 +579,22 @@ describe('invoice-service', () => {
       },
     ]);
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    mockPreviewSystemPoolRepairs.mockResolvedValueOnce({
+      poolRepairs: [expect.objectContaining({ sourceOrderId: 'pool-unique' })],
+      targetInvoices: [{ id: 'inv-1', invNo: 'INV-1' }],
+    });
 
     const result = await previewInvoiceRematch(makeUser());
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual(expect.objectContaining({
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups[0]).toEqual(expect.objectContaining({
       groupType: 'exact',
       groupKey: 'ib-01',
     }));
+    expect(result.poolRepairs).toEqual([
+      expect.objectContaining({ sourceOrderId: 'pool-unique' }),
+    ]);
+    expect(result.targetInvoices).toEqual([{ id: 'inv-1', invNo: 'INV-1' }]);
   });
 
   it('rematches invoices, returns summary, and records audit', async () => {
@@ -637,6 +730,13 @@ describe('invoice-service', () => {
       syncedAliases: 0,
     });
 
+    mockApplySystemPoolRepairs.mockResolvedValueOnce({
+      autoMigrations: [{ ...poolMigrationAudit, operationSource: 'REMATCH_AUTO' }],
+      manualMigrations: [{ ...poolMigrationAudit, operationSource: 'REMATCH_MANUAL' }],
+      skipped: 0,
+      unresolvedManual: 0,
+    });
+
     const result = await applyInvoiceRematch(makeUser(), [
       {
         groupId: 'exact:ib-01',
@@ -644,14 +744,20 @@ describe('invoice-service', () => {
         mode: 'keep',
         orderIds: ['order-1', 'order-2'],
       },
-    ]);
+    ], [{ sourceOrderId: 'pool-manual', targetInvoiceId: 'invoice-2' }]);
 
     expect(result.message).toContain('冲突处理完成');
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_REMATCH_APPLY',
       metadata: expect.objectContaining({
         manualMerged: 1,
+        systemPoolAutoMigrations: [expect.objectContaining({ operationSource: 'REMATCH_AUTO' })],
+        systemPoolManualMigrations: [expect.objectContaining({ operationSource: 'REMATCH_MANUAL' })],
       }),
+    }));
+    expect(mockApplySystemPoolRepairs).toHaveBeenCalledWith(mockDb, expect.objectContaining({
+      poolResolutions: [{ sourceOrderId: 'pool-manual', targetInvoiceId: 'invoice-2' }],
+      requireAllManual: true,
     }));
   });
 

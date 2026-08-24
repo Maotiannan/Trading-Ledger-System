@@ -23,6 +23,7 @@ import {
   type MuContractApplyResult,
 } from '@/lib/integrations/mu-contract-order-applier';
 import { getMuContractSyncSettings } from '@/lib/integrations/mu-contract-sync-settings';
+import { logger } from '@/lib/logger';
 
 export type MuContractSyncErrorCode =
   | 'MU_CONTRACT_INITIAL_RECONCILE_REQUIRED'
@@ -353,6 +354,9 @@ async function runIncremental(
         }
         await renewMuContractLease(database, leaseOwner, now());
         const result = await processEvent(database, event, params.actorId, leaseOwner, now);
+        if (result.takeover) {
+          logger.info('MU Contract inactive source replaced', result.takeover);
+        }
         cursor = event.cursor;
         processed += 1;
         if (result.result === 'BUSINESS_CONFLICT') conflicts += 1;

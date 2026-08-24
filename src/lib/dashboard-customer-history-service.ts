@@ -1,6 +1,10 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
+import {
+  buildDashboardOutstandingSnapshot,
+  dashboardOutstandingInvoiceSelect,
+} from '@/lib/dashboard-customer-outstanding';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { readCustomerHistory, type CustomerHistoryReadInput } from '@/lib/customer-history-service';
 import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
@@ -104,11 +108,34 @@ export async function getDashboardCustomerHistory(
   input: Omit<CustomerHistoryReadInput, 'orderName' | 'customerWhere' | 'orderWhere' | 'receiptWhere'>,
 ) {
   const ownerIds = await getOwnerVisibleIds(currentUser);
-  return readCustomerHistory({
+  const customerWhere = buildCustomerVisibilityWhere(ownerIds);
+  const orderWhere = buildOrderVisibilityWhere(ownerIds);
+  const receiptWhere = buildReceiptVisibilityWhere(ownerIds);
+  const history = await readCustomerHistory({
     ...input,
     orderName: null,
-    customerWhere: buildCustomerVisibilityWhere(ownerIds),
-    orderWhere: buildOrderVisibilityWhere(ownerIds),
-    receiptWhere: buildReceiptVisibilityWhere(ownerIds),
+    customerWhere,
+    orderWhere,
+    receiptWhere,
   });
+  const customerOrderWhere: Prisma.OrderWhereInput = {
+    AND: [orderWhere, { customerId: history.data.customer.id }],
+  };
+  const invoices = await db.invoice.findMany({
+    where: {
+      invNo: { notIn: ['Un_Associated', 'DEPOSIT_POOL'] },
+      orders: { some: customerOrderWhere },
+    },
+    select: dashboardOutstandingInvoiceSelect(customerOrderWhere),
+  });
+  const snapshot = buildDashboardOutstandingSnapshot(invoices);
+
+  return {
+    data: {
+      ...history.data,
+      outstanding: snapshot.customerOutstanding.find(
+        (row) => row.customerId === history.data.customer.id,
+      ) ?? null,
+    },
+  };
 }

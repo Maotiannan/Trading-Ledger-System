@@ -1,8 +1,12 @@
 import { DetailEditRequestStatus, DetailStatus, DeletionStatus, ReceiptEditRequestStatus, SwiftEditRequestStatus } from '@prisma/client';
 import { db } from '@/lib/db';
-import { formatOrderNameDisplay } from '@/lib/display-format';
-import { addMoney, moneyToNumber } from '@/lib/money';
-import { compareStoredOrderBalance, computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import {
+  buildDashboardOutstandingSnapshot,
+  dashboardOutstandingInvoiceSelect,
+  type DashboardCustomerOutstanding,
+  type DashboardReleasedInvoice,
+} from '@/lib/dashboard-customer-outstanding';
+import { compareStoredOrderBalance } from '@/lib/order-balance';
 import { repairOrderBalanceCacheIfNeeded } from '@/lib/order-balance-service';
 import { logger } from '@/lib/logger';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -34,37 +38,8 @@ export type DashboardSummary = {
     totalAmount: number;
     status: string;
   }>;
-  releasedInvoices: Array<{
-    id: string;
-    invNo: string;
-    releaseDate: string;
-    daysSinceRelease: number;
-    outstanding: number;
-    orders: Array<{
-      orderId: string;
-      orderNo: string;
-      amount: number;
-      outstanding: number;
-    }>;
-  }>;
-  customerOutstanding: Array<{
-    customerKey: string;
-    customerLabel: string;
-    totalOutstanding: number;
-    statusSubtotals: {
-      inTransit: number;
-      released: number;
-    };
-    orders: Array<{
-      orderId: string;
-      orderNo: string;
-      invNo: string;
-      outstanding: number;
-      statusGroup: 'IN_TRANSIT' | 'RELEASED';
-      releaseDate: string | null;
-      daysSinceRelease: number | null;
-    }>;
-  }>;
+  releasedInvoices: DashboardReleasedInvoice[];
+  customerOutstanding: DashboardCustomerOutstanding[];
 };
 
 export async function getDashboardSummary(currentUser: CurrentUser): Promise<DashboardSummary> {
@@ -95,29 +70,7 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     db.invoice.count({ where: invoiceWhere }),
     db.invoice.findMany({
       where: invoiceWhere,
-      select: {
-        id: true,
-        invNo: true,
-        releaseDate: true,
-        orders: {
-          where: orderWhere,
-          select: {
-            id: true,
-            orderNo: true,
-            customerId: true,
-            customerName: true,
-            customerMark: true,
-            amount: true,
-            orderBalance: true,
-            receipts: {
-              select: {
-                usd: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
+      select: dashboardOutstandingInvoiceSelect(orderWhere),
     }),
     db.receipt.count({
       where: {
@@ -167,17 +120,12 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     db.swiftEditRequest.count({ where: { status: SwiftEditRequestStatus.PENDING } }),
   ]);
 
-  const computedOrderBalances = new Map<string, number>();
+  const outstandingSnapshot = buildDashboardOutstandingSnapshot(visibleInvoices);
   const balanceRepairTasks: Array<Promise<unknown>> = [];
 
   for (const invoice of visibleInvoices) {
     for (const order of invoice.orders) {
-      const computed = computeOrderBalanceFromReceipts({
-        amount: order.amount,
-        receipts: order.receipts,
-      });
-      computedOrderBalances.set(order.id, computed);
-
+      const computed = outstandingSnapshot.orderBalances.get(order.id) ?? 0;
       const comparison = compareStoredOrderBalance({ stored: order.orderBalance, computed });
       if (!comparison.matches) {
         balanceRepairTasks.push(
@@ -199,111 +147,13 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     }
   }
 
-  const getComputedBalance = (orderId: string) => computedOrderBalances.get(orderId) ?? 0;
-
-  const unpaidTotal = moneyToNumber(addMoney(
-    visibleInvoices.flatMap((invoice) => invoice.orders.map((order) => {
-      const outstanding = getComputedBalance(order.id);
-      return outstanding > 0 ? outstanding : 0;
-    }))
-  ));
-  const now = Date.now();
-  const releasedInvoices: DashboardSummary['releasedInvoices'] = [];
-  const customerOutstandingMap = new Map<string, DashboardSummary['customerOutstanding'][number]>();
-
-  for (const invoice of visibleInvoices) {
-    let invoiceOutstanding = 0;
-
-    for (const order of invoice.orders) {
-      const outstanding = Math.max(getComputedBalance(order.id), 0);
-      invoiceOutstanding += outstanding;
-
-      if (outstanding <= 0) continue;
-      const customerLabel = formatOrderNameDisplay(order.customerName || order.customerMark || order.orderNo);
-      const customerKey = order.customerId ? `customer:${order.customerId}` : `order:${order.id}`;
-      const existing = customerOutstandingMap.get(customerKey);
-      const daysSinceRelease = invoice.releaseDate
-        ? Math.max(0, Math.floor((now - invoice.releaseDate.getTime()) / 86_400_000))
-        : null;
-      const statusGroup = invoice.releaseDate ? 'RELEASED' : 'IN_TRANSIT';
-      const entry = existing || {
-        customerKey,
-        customerLabel,
-        totalOutstanding: 0,
-        statusSubtotals: {
-          inTransit: 0,
-          released: 0,
-        },
-        orders: [],
-      };
-      entry.totalOutstanding += outstanding;
-      if (statusGroup === 'RELEASED') {
-        entry.statusSubtotals.released += outstanding;
-      } else {
-        entry.statusSubtotals.inTransit += outstanding;
-      }
-      entry.orders.push({
-        orderId: order.id,
-        orderNo: formatOrderNameDisplay(order.orderNo),
-        invNo: invoice.invNo,
-        outstanding,
-        statusGroup,
-        releaseDate: invoice.releaseDate ? invoice.releaseDate.toISOString() : null,
-        daysSinceRelease,
-      });
-      customerOutstandingMap.set(customerKey, entry);
-    }
-
-    if (invoice.releaseDate && invoiceOutstanding > 0) {
-      const daysSinceRelease = Math.max(0, Math.floor((now - invoice.releaseDate.getTime()) / 86_400_000));
-      releasedInvoices.push({
-        id: invoice.id,
-        invNo: invoice.invNo,
-        releaseDate: invoice.releaseDate.toISOString(),
-        daysSinceRelease,
-        outstanding: invoiceOutstanding,
-        orders: invoice.orders
-          .map((order) => ({
-            orderId: order.id,
-            orderNo: formatOrderNameDisplay(order.orderNo),
-            amount: Number(moneyToNumber(order.amount).toFixed(2)),
-            outstanding: Number(Math.max(getComputedBalance(order.id), 0).toFixed(2)),
-          }))
-          .sort((a, b) => b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo)),
-      });
-    }
-  }
-
-  releasedInvoices.sort((a, b) => (
-    b.daysSinceRelease - a.daysSinceRelease
-    || a.releaseDate.localeCompare(b.releaseDate)
-    || a.invNo.localeCompare(b.invNo)
-  ));
-
-  const customerOutstanding = Array.from(customerOutstandingMap.values())
-    .map((entry) => ({
-      ...entry,
-      totalOutstanding: Number(entry.totalOutstanding.toFixed(2)),
-      statusSubtotals: {
-        inTransit: Number(entry.statusSubtotals.inTransit.toFixed(2)),
-        released: Number(entry.statusSubtotals.released.toFixed(2)),
-      },
-      orders: entry.orders
-        .map((order) => ({ ...order, outstanding: Number(order.outstanding.toFixed(2)) }))
-        .sort((a, b) => {
-          if (a.statusGroup !== b.statusGroup) return a.statusGroup === 'IN_TRANSIT' ? -1 : 1;
-          return b.outstanding - a.outstanding || a.orderNo.localeCompare(b.orderNo);
-        }),
-    }))
-    .sort((a, b) => b.totalOutstanding - a.totalOutstanding || a.customerLabel.localeCompare(b.customerLabel));
-
   if (balanceRepairTasks.length > 0) {
     await Promise.allSettled(balanceRepairTasks);
   }
 
   return {
     invoiceCount,
-    unpaidTotal,
+    unpaidTotal: outstandingSnapshot.unpaidTotal,
     pendingReceipts,
     pendingReceiptsAmount: Number(pendingReceiptsAmountAgg._sum.usd ?? 0),
     waitingSwift,
@@ -324,10 +174,7 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
       totalAmount: Number(detail.totalAmount),
       status: detail.status,
     })),
-    releasedInvoices: releasedInvoices.map((invoice) => ({
-      ...invoice,
-      outstanding: Number(invoice.outstanding.toFixed(2)),
-    })),
-    customerOutstanding,
+    releasedInvoices: outstandingSnapshot.releasedInvoices,
+    customerOutstanding: outstandingSnapshot.customerOutstanding,
   };
 }

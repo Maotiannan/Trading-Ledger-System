@@ -16,6 +16,7 @@ import {
   type MuContractEventPage,
   type MuContractOrderEvent,
 } from '@/lib/integrations/mu-contract-contract';
+import { logger } from '@/lib/logger';
 
 jest.mock('@/lib/integrations/mu-contract-order-applier', () => ({
   applyMuContractOrderState: jest.fn(),
@@ -25,8 +26,13 @@ jest.mock('@/lib/integrations/mu-contract-sync-settings', () => ({
   getMuContractSyncSettings: jest.fn(),
 }));
 
+jest.mock('@/lib/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+
 const mockApply = applyMuContractOrderState as jest.Mock;
 const mockGetSettings = getMuContractSyncSettings as jest.Mock;
+const mockLoggerInfo = logger.info as jest.Mock;
 
 function eventPage(): MuContractEventPage {
   return parseMuContractEventPage(JSON.parse(readFileSync(
@@ -149,6 +155,43 @@ describe('MU Contract incremental synchronization', () => {
       data: expect.objectContaining({ committedCursor: '1042' }),
     }));
     expect(mockApply).toHaveBeenCalledWith(tx, expect.objectContaining({ cursor: '1042' }));
+  });
+
+  it('logs an inactive source takeover only after its transaction commits', async () => {
+    const takeover = {
+      orderTrackerId: 'tracker-1',
+      normalizedOrderNo: 'ab-12',
+      oldSourcePiId: 'pi-deleted',
+      newSourcePiId: 'pi-recreated',
+      oldOfficialAmount: '10000.00',
+      newOfficialAmount: '12500.00',
+    };
+    const { root } = makeDb();
+    root.$transaction.mockImplementationOnce(async (callback) => {
+      const result = await callback(makeDb().tx);
+      expect(mockLoggerInfo).not.toHaveBeenCalled();
+      return result;
+    });
+    mockApply.mockResolvedValueOnce({
+      result: 'APPLIED',
+      orderTrackerId: 'tracker-1',
+      linkMode: 'MANUAL_ATTACHED',
+      conflictType: null,
+      takeover,
+    });
+
+    await runMuContractSyncNow({
+      actorId: 'admin-1',
+      client: makeClient(),
+      dbClient: root,
+      now: () => fixedNow,
+      leaseOwner: 'lease-1',
+    });
+
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      'MU Contract inactive source replaced',
+      takeover,
+    );
   });
 
   it('does not advance the cursor when the source request fails transiently', async () => {

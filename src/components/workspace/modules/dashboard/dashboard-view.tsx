@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
@@ -24,13 +24,14 @@ import {
   type ReceiptImagePreviewInfo,
 } from '@/components/workspace/modules/receipts/components/receipt-image-preview-dialog';
 import {
-  CustomerOrderHistoryDialog,
   type CustomerOrderHistory,
   type CustomerOrderHistoryReceipt,
 } from '@/components/workspace/modules/customers/components/customer-order-history-dialog';
+import type { DashboardCustomerOutstanding } from '@/lib/dashboard-customer-outstanding';
 import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
 import { CustomerAnalyticsCard } from './components/customer-analytics-card';
 import { DashboardCardPagination } from './components/dashboard-card-pagination';
+import { DashboardCustomerDetailDialog } from './components/dashboard-customer-detail-dialog';
 import {
   CustomerCandidate,
   IMPORT_RESULT_PAGE_SIZE,
@@ -80,25 +81,6 @@ type DashboardReleasedInvoice = {
   }>;
 };
 
-type DashboardCustomerOutstanding = {
-  customerKey: string;
-  customerLabel: string;
-  totalOutstanding: number;
-  statusSubtotals: {
-    inTransit: number;
-    released: number;
-  };
-  orders: Array<{
-    orderId: string;
-    orderNo: string;
-    invNo: string;
-    outstanding: number;
-    statusGroup: 'IN_TRANSIT' | 'RELEASED';
-    releaseDate: string | null;
-    daysSinceRelease: number | null;
-  }>;
-};
-
 type DashboardCustomerSearchItem = {
   customerId: string;
   mark: string;
@@ -109,6 +91,17 @@ type DashboardCustomerSearchItem = {
 type DashboardCustomerSearchResult = {
   query: string;
   items: DashboardCustomerSearchItem[];
+};
+
+type DashboardCustomerDetailTarget = {
+  customerId: string | null;
+  title: string;
+  previewOutstanding: DashboardCustomerOutstanding | null;
+};
+
+type DashboardCustomerHistoryResponse = CustomerOrderHistory & {
+  orderNames?: string[];
+  outstanding?: DashboardCustomerOutstanding | null;
 };
 
 const DASHBOARD_LIST_PAGE_SIZE = 10;
@@ -156,14 +149,14 @@ export function Dashboard() {
   const [dashboardLayout, setDashboardLayout] = useState<DashboardLayoutPreference>(() => normalizeDashboardLayoutPreference(null));
   const [releasedInvoicePage, setReleasedInvoicePage] = useState(1);
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
-  const [selectedCustomer, setSelectedCustomer] = useState<DashboardCustomerOutstanding | null>(null);
   const [selectedReleasedInvoice, setSelectedReleasedInvoice] = useState<DashboardReleasedInvoice | null>(null);
   const [viewingReceiptImage, setViewingReceiptImage] = useState<ReceiptImagePreviewInfo | null>(null);
   const [customerSearchInput, setCustomerSearchInput] = useState('');
   const [customerSearchResult, setCustomerSearchResult] = useState<DashboardCustomerSearchResult | null>(null);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [customerSearchError, setCustomerSearchError] = useState<string | null>(null);
-  const [historyCustomer, setHistoryCustomer] = useState<DashboardCustomerSearchItem | null>(null);
+  const [customerDetailTarget, setCustomerDetailTarget] = useState<DashboardCustomerDetailTarget | null>(null);
+  const [customerDetailOutstanding, setCustomerDetailOutstanding] = useState<DashboardCustomerOutstanding | null>(null);
   const [customerHistory, setCustomerHistory] = useState<CustomerOrderHistory | null>(null);
   const [customerHistoryLoading, setCustomerHistoryLoading] = useState(false);
   const [customerHistoryError, setCustomerHistoryError] = useState('');
@@ -230,14 +223,6 @@ export function Dashboard() {
     (customerOutstandingPage - 1) * DASHBOARD_LIST_PAGE_SIZE,
     customerOutstandingPage * DASHBOARD_LIST_PAGE_SIZE,
   );
-  const selectedCustomerOrdersByStatus = useMemo(() => {
-    const orders = selectedCustomer?.orders ?? [];
-    return {
-      inTransit: orders.filter((order) => order.statusGroup === 'IN_TRANSIT'),
-      released: orders.filter((order) => order.statusGroup === 'RELEASED'),
-    };
-  }, [selectedCustomer]);
-
   useEffect(() => {
     setReleasedInvoicePage((page) => Math.min(page, releasedInvoiceTotalPages));
   }, [releasedInvoiceTotalPages]);
@@ -349,7 +334,7 @@ export function Dashboard() {
   }, [customerSearchInput, loadCustomerSearch]);
 
   const loadCustomerHistory = useCallback(async (
-    customer: DashboardCustomerSearchItem,
+    target: DashboardCustomerDetailTarget,
     pagination: {
       orderPage: number;
       orderPageSize: number;
@@ -357,10 +342,11 @@ export function Dashboard() {
       receiptPageSize: number;
     },
   ) => {
+    if (!target.customerId) return;
     const requestToken = customerHistoryRequestGuard.nextToken();
     const searchParams = new URLSearchParams({
       action: 'history',
-      customerId: customer.customerId,
+      customerId: target.customerId,
       orderPage: String(pagination.orderPage),
       orderPageSize: String(pagination.orderPageSize),
       receiptPage: String(pagination.receiptPage),
@@ -373,7 +359,14 @@ export function Dashboard() {
       const result = await apiCall(`dashboard/customer-history-search?${searchParams.toString()}`);
       if (!customerHistoryRequestGuard.isLatest(requestToken)) return;
       if (result.success && result.data) {
-        setCustomerHistory(result.data as CustomerOrderHistory);
+        const data = result.data as DashboardCustomerHistoryResponse;
+        setCustomerHistory(data);
+        setCustomerDetailOutstanding(data.outstanding ?? target.previewOutstanding);
+        if (data.orderNames?.length) {
+          setCustomerDetailTarget((current) => current?.customerId === target.customerId
+            ? { ...current, title: data.orderNames!.join(' / ') }
+            : current);
+        }
       } else {
         setCustomerHistoryError(String(result.message || result.error || tx('加载失败', 'Load failed')));
       }
@@ -388,11 +381,13 @@ export function Dashboard() {
     }
   }, [customerHistoryRequestGuard, tx]);
 
-  const openCustomerHistory = useCallback((customer: DashboardCustomerSearchItem) => {
-    setHistoryCustomer(customer);
+  const openCustomerDetail = useCallback((target: DashboardCustomerDetailTarget) => {
+    setCustomerDetailTarget(target);
+    setCustomerDetailOutstanding(target.previewOutstanding);
     setCustomerHistory(null);
     setCustomerHistoryError('');
-    void loadCustomerHistory(customer, {
+    if (!target.customerId) return;
+    void loadCustomerHistory(target, {
       orderPage: 1,
       orderPageSize: customerHistoryOrderPageSize,
       receiptPage: 1,
@@ -400,9 +395,17 @@ export function Dashboard() {
     });
   }, [customerHistoryOrderPageSize, customerHistoryReceiptPageSize, loadCustomerHistory]);
 
+  const openCustomerHistory = useCallback((customer: DashboardCustomerSearchItem) => {
+    openCustomerDetail({
+      customerId: customer.customerId,
+      title: customer.orderNames.join(' / ') || customer.mark || customer.name,
+      previewOutstanding: null,
+    });
+  }, [openCustomerDetail]);
+
   const changeCustomerOrderHistoryPage = (orderPage: number) => {
-    if (!historyCustomer) return;
-    void loadCustomerHistory(historyCustomer, {
+    if (!customerDetailTarget?.customerId) return;
+    void loadCustomerHistory(customerDetailTarget, {
       orderPage,
       orderPageSize: customerHistory?.orderPagination?.pageSize || customerHistoryOrderPageSize,
       receiptPage: customerHistory?.receiptPagination?.page || 1,
@@ -411,8 +414,8 @@ export function Dashboard() {
   };
 
   const changeCustomerReceiptHistoryPage = (receiptPage: number) => {
-    if (!historyCustomer) return;
-    void loadCustomerHistory(historyCustomer, {
+    if (!customerDetailTarget?.customerId) return;
+    void loadCustomerHistory(customerDetailTarget, {
       orderPage: customerHistory?.orderPagination?.page || 1,
       orderPageSize: customerHistory?.orderPagination?.pageSize || customerHistoryOrderPageSize,
       receiptPage,
@@ -421,9 +424,9 @@ export function Dashboard() {
   };
 
   const changeCustomerOrderHistoryPageSize = (pageSize: number) => {
-    if (!historyCustomer) return;
+    if (!customerDetailTarget?.customerId) return;
     saveCustomerHistoryOrderPageSize(pageSize);
-    void loadCustomerHistory(historyCustomer, {
+    void loadCustomerHistory(customerDetailTarget, {
       orderPage: 1,
       orderPageSize: pageSize,
       receiptPage: customerHistory?.receiptPagination?.page || 1,
@@ -432,9 +435,9 @@ export function Dashboard() {
   };
 
   const changeCustomerReceiptHistoryPageSize = (pageSize: number) => {
-    if (!historyCustomer) return;
+    if (!customerDetailTarget?.customerId) return;
     saveCustomerHistoryReceiptPageSize(pageSize);
-    void loadCustomerHistory(historyCustomer, {
+    void loadCustomerHistory(customerDetailTarget, {
       orderPage: customerHistory?.orderPagination?.page || 1,
       orderPageSize: customerHistory?.orderPagination?.pageSize || customerHistoryOrderPageSize,
       receiptPage: 1,
@@ -451,61 +454,6 @@ export function Dashboard() {
       invNo: receipt.boundInvNo || receipt.invNo || '-',
       creator: receipt.creatorName || receipt.creatorEmail || '-',
     });
-  };
-
-  const renderCustomerOrderStatusSection = (
-    title: string,
-    orders: DashboardCustomerOutstanding['orders'],
-    subtotal: number,
-    variant: 'inTransit' | 'released',
-  ) => {
-    const isReleased = variant === 'released';
-    return (
-      <div className="rounded-md border">
-        <div className="flex flex-col gap-2 border-b bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <Badge
-            variant="outline"
-            className={isReleased ? 'w-fit border-green-300 bg-green-50 text-green-800' : 'w-fit border-amber-300 bg-amber-50 text-amber-800'}
-          >
-            {title}
-          </Badge>
-          <span className="font-semibold text-red-600">
-            {tx(`小计：${formatUsdAmount(subtotal)}`, `Subtotal: ${formatUsdAmount(subtotal)}`)}
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ORDER NO</TableHead>
-                <TableHead>INV NO</TableHead>
-                {isReleased && <TableHead>{tx('天数', 'Days')}</TableHead>}
-                <TableHead>{tx('余额', 'Balance')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.orderId}>
-                  <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
-                  <TableCell>{order.invNo}</TableCell>
-                  {isReleased && <TableCell>{order.daysSinceRelease ?? '-'}</TableCell>}
-                  <TableCell className="font-medium text-red-600">{formatUsdAmount(order.outstanding)}</TableCell>
-                </TableRow>
-              ))}
-              {orders.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={isReleased ? 4 : 3} className="py-6 text-center text-muted-foreground">
-                    {isReleased
-                      ? tx('暂无已放单未付清订单', 'No released unpaid orders')
-                      : tx('暂无运输中未付清订单', 'No in-transit unpaid orders')}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-    );
   };
 
   const renderDashboardCard = (cardId: DashboardCardId) => {
@@ -609,7 +557,11 @@ export function Dashboard() {
                           type="button"
                           className="font-medium text-blue-700 underline-offset-2 hover:underline"
                           onClick={() => {
-                            setSelectedCustomer(customer);
+                            openCustomerDetail({
+                              customerId: customer.customerId,
+                              title: customer.customerLabel,
+                              previewOutstanding: customer,
+                            });
                           }}
                         >
                           {formatOrderNameDisplay(customer.customerLabel)}
@@ -854,40 +806,6 @@ export function Dashboard() {
       </div>
       {visibleDashboardSections.map(renderDashboardSection)}
 
-      <Dialog open={!!selectedCustomer} onOpenChange={(open) => {
-        if (!open) setSelectedCustomer(null);
-      }}>
-        <DialogContent className="flex max-h-[calc(100vh-24px)] max-w-3xl flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <span>{formatOrderNameDisplay(selectedCustomer?.customerLabel)}</span>
-              {selectedCustomer ? (
-                <span className="text-sm font-semibold text-red-600">
-                  {tx('未付总计', 'Total Unpaid')}: {formatUsdAmount(selectedCustomer.totalOutstanding)}
-                </span>
-              ) : null}
-            </DialogTitle>
-            <DialogDescription>
-              {tx('按已放单和运输中分类查看该客户未付清 ORDER_NAME 余额', 'Unpaid ORDER_NAME balances grouped by released and in-transit status.')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
-            {renderCustomerOrderStatusSection(
-              tx('已放单', 'Released'),
-              selectedCustomerOrdersByStatus.released,
-              selectedCustomer?.statusSubtotals.released ?? 0,
-              'released',
-            )}
-            {renderCustomerOrderStatusSection(
-              tx('运输中', 'In Transit'),
-              selectedCustomerOrdersByStatus.inTransit,
-              selectedCustomer?.statusSubtotals.inTransit ?? 0,
-              'inTransit',
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={!!selectedReleasedInvoice} onOpenChange={(open) => {
         if (!open) setSelectedReleasedInvoice(null);
       }}>
@@ -930,27 +848,36 @@ export function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <CustomerOrderHistoryDialog
-        open={Boolean(historyCustomer)}
-        loading={customerHistoryLoading}
-        error={customerHistoryError}
-        title={historyCustomer?.orderNames.join(' / ') || historyCustomer?.mark || historyCustomer?.name || ''}
-        allOrderNames
-        history={customerHistory}
+      <DashboardCustomerDetailDialog
+        open={Boolean(customerDetailTarget)}
+        customerId={customerDetailTarget?.customerId ?? null}
+        title={customerDetailTarget?.title ?? ''}
+        outstanding={customerDetailOutstanding}
         tx={tx}
-        orderPageSizeOptions={customerHistoryOrderPageSizeOptions}
-        receiptPageSizeOptions={customerHistoryReceiptPageSizeOptions}
-        onOrderPreviousPage={() => changeCustomerOrderHistoryPage(Math.max(1, (customerHistory?.orderPagination?.page || 1) - 1))}
-        onOrderNextPage={() => changeCustomerOrderHistoryPage((customerHistory?.orderPagination?.page || 1) + 1)}
-        onOrderPageSizeChange={changeCustomerOrderHistoryPageSize}
-        onReceiptPreviousPage={() => changeCustomerReceiptHistoryPage(Math.max(1, (customerHistory?.receiptPagination?.page || 1) - 1))}
-        onReceiptNextPage={() => changeCustomerReceiptHistoryPage((customerHistory?.receiptPagination?.page || 1) + 1)}
-        onReceiptPageSizeChange={changeCustomerReceiptHistoryPageSize}
-        onOpenReceiptImage={openCustomerHistoryReceiptImage}
+        unboundMessage={tx(
+          '该订单尚未关联客户，无法显示客户历史。请先修复客户关联。',
+          'Customer history is unavailable because this order is not linked to a customer.',
+        )}
+        historyProps={{
+          loading: customerHistoryLoading,
+          error: customerHistoryError,
+          history: customerHistory,
+          tx,
+          orderPageSizeOptions: customerHistoryOrderPageSizeOptions,
+          receiptPageSizeOptions: customerHistoryReceiptPageSizeOptions,
+          onOrderPreviousPage: () => changeCustomerOrderHistoryPage(Math.max(1, (customerHistory?.orderPagination?.page || 1) - 1)),
+          onOrderNextPage: () => changeCustomerOrderHistoryPage((customerHistory?.orderPagination?.page || 1) + 1),
+          onOrderPageSizeChange: changeCustomerOrderHistoryPageSize,
+          onReceiptPreviousPage: () => changeCustomerReceiptHistoryPage(Math.max(1, (customerHistory?.receiptPagination?.page || 1) - 1)),
+          onReceiptNextPage: () => changeCustomerReceiptHistoryPage((customerHistory?.receiptPagination?.page || 1) + 1),
+          onReceiptPageSizeChange: changeCustomerReceiptHistoryPageSize,
+          onOpenReceiptImage: openCustomerHistoryReceiptImage,
+        }}
         onOpenChange={(open) => {
           if (open) return;
           customerHistoryRequestGuard.nextToken();
-          setHistoryCustomer(null);
+          setCustomerDetailTarget(null);
+          setCustomerDetailOutstanding(null);
           setCustomerHistory(null);
           setCustomerHistoryError('');
         }}

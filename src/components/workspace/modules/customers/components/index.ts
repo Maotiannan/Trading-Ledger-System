@@ -5,4 +5,5 @@ export * from './customer-form-dialog';
 export * from './customer-list';
 export * from './customer-long-text-preview-dialog';
 export * from './customer-order-history-dialog';
+export * from './customer-order-history-content';
 export * from './customer-toolbar';

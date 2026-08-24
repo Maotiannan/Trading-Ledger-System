@@ -3,7 +3,14 @@
 import { useCallback, useState } from 'react';
 import { apiCall, getErrorMessage, toDateInputValue } from '@/components/workspace/shared';
 import type { User } from '@/lib/store';
-import type { BranchAdminOption, RematchPreviewGroup, RematchSelection, TransferFromOrder } from '../types';
+import type {
+  BranchAdminOption,
+  RematchPreviewGroup,
+  RematchSelection,
+  RematchTargetInvoice,
+  SystemPoolRepairPreview,
+  TransferFromOrder,
+} from '../types';
 
 export type InvoiceToolText = (zh: string, en: string) => string;
 type AuthUserOptionRow = Partial<BranchAdminOption> & { role?: string };
@@ -42,6 +49,9 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
   const [applyingRematch, setApplyingRematch] = useState(false);
   const [rematchGroups, setRematchGroups] = useState<RematchPreviewGroup[]>([]);
   const [rematchSelections, setRematchSelections] = useState<Record<string, RematchSelection>>({});
+  const [poolRepairs, setPoolRepairs] = useState<SystemPoolRepairPreview[]>([]);
+  const [rematchTargetInvoices, setRematchTargetInvoices] = useState<RematchTargetInvoice[]>([]);
+  const [poolSelections, setPoolSelections] = useState<Record<string, string>>({});
 
   const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
@@ -251,6 +261,13 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     }));
   };
 
+  const updatePoolSelection = (sourceOrderId: string, targetInvoiceId: string) => {
+    setPoolSelections((previous) => ({
+      ...previous,
+      [sourceOrderId]: targetInvoiceId,
+    }));
+  };
+
   const openRematchDialog = async () => {
     setRematchLoading(true);
     try {
@@ -260,8 +277,19 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
       });
 
       if (result.success) {
-        const groups = Array.isArray(result.data) ? result.data : [];
+        const preview = result.data && typeof result.data === 'object'
+          ? result.data as Record<string, unknown>
+          : {};
+        const groups = Array.isArray(preview.groups) ? preview.groups as RematchPreviewGroup[] : [];
+        const nextPoolRepairs = Array.isArray(preview.poolRepairs)
+          ? preview.poolRepairs as SystemPoolRepairPreview[]
+          : [];
+        const targetInvoices = Array.isArray(preview.targetInvoices)
+          ? preview.targetInvoices as RematchTargetInvoice[]
+          : [];
         setRematchGroups(groups);
+        setPoolRepairs(nextPoolRepairs);
+        setRematchTargetInvoices(targetInvoices);
         const defaultSelections: Record<string, RematchSelection> = {};
         for (const group of groups) {
           const first = group.orders?.[0];
@@ -273,6 +301,13 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
           };
         }
         setRematchSelections(defaultSelections);
+        const defaultPoolSelections: Record<string, string> = {};
+        for (const row of nextPoolRepairs) {
+          if (row.repairMode === 'MANUAL' && row.targetInvoiceId) {
+            defaultPoolSelections[row.sourceOrderId] = row.targetInvoiceId;
+          }
+        }
+        setPoolSelections(defaultPoolSelections);
         setShowRematchDialog(true);
       } else {
         alert(getErrorMessage(result, tx('刷新失败', 'Rematch failed')));
@@ -294,9 +329,22 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
         mode: selection.mode,
         orderIds: selection.orderIds,
       }));
+      const unresolvedManual = poolRepairs.some(
+        (row) => row.repairMode === 'MANUAL' && !poolSelections[row.sourceOrderId],
+      );
+      if (unresolvedManual) {
+        alert(tx('请为所有待修复订单选择目标账单', 'Select a target invoice for every manual repair.'));
+        return;
+      }
+      const poolResolutions = poolRepairs
+        .filter((row) => row.repairMode === 'MANUAL')
+        .map((row) => ({
+          sourceOrderId: row.sourceOrderId,
+          targetInvoiceId: poolSelections[row.sourceOrderId],
+        }));
       const result = await apiCall('invoice', {
         method: 'PUT',
-        body: JSON.stringify({ action: 'rematch-apply', resolutions }),
+        body: JSON.stringify({ action: 'rematch-apply', resolutions, poolResolutions }),
       });
       if (!result.success) {
         alert(getErrorMessage(result, tx('应用失败', 'Apply rematch failed')));
@@ -330,7 +378,11 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     applyingRematch,
     rematchGroups,
     rematchSelections,
+    poolRepairs,
+    rematchTargetInvoices,
+    poolSelections,
     updateRematchSelection,
+    updatePoolSelection,
     openRematchDialog,
     handleRematchApply,
     orderHistoryOpen,

@@ -189,6 +189,7 @@ describe('dashboard-summary-service', () => {
     ]);
     expect(summary.customerOutstanding).toEqual([
       {
+        customerId: 'customer-super-dt2',
         customerKey: 'customer:customer-super-dt2',
         customerLabel: 'SUPER DT2',
         totalOutstanding: 1000,

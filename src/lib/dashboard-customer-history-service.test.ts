@@ -12,6 +12,7 @@ import {
 jest.mock('@/lib/db', () => ({
   db: {
     customer: { findMany: jest.fn() },
+    invoice: { findMany: jest.fn() },
     order: { findUnique: jest.fn() },
   },
 }));
@@ -32,6 +33,7 @@ jest.mock('@/lib/resource-visibility', () => ({
 }));
 
 const mockCustomerFindMany = db.customer.findMany as jest.Mock;
+const mockInvoiceFindMany = db.invoice.findMany as jest.Mock;
 const mockOrderFindUnique = db.order.findUnique as jest.Mock;
 const mockFindOrderIdByNoOrAlias = findOrderIdByNoOrAlias as jest.Mock;
 const mockReadCustomerHistory = readCustomerHistory as jest.Mock;
@@ -59,6 +61,7 @@ describe('searchDashboardCustomers', () => {
     mockBuildReceiptVisibilityWhere.mockReturnValue({ createdBy: { in: ['user-1'] } });
     mockFindOrderIdByNoOrAlias.mockResolvedValue(null);
     mockOrderFindUnique.mockResolvedValue(null);
+    mockInvoiceFindMany.mockResolvedValue([]);
   });
 
   it('returns every visible customer matched by exact MARK or ORDER_NAME and partial NAME', async () => {
@@ -155,6 +158,23 @@ describe('searchDashboardCustomers', () => {
         receipts: [],
       },
     });
+    mockInvoiceFindMany.mockResolvedValue([
+      {
+        id: 'invoice-1',
+        invNo: 'INV-001',
+        releaseDate: new Date('2026-08-01T00:00:00.000Z'),
+        orders: [{
+          id: 'order-1',
+          orderNo: 'PIKIN-20',
+          customerId: 'customer-1',
+          customerName: 'Mamadou Dian Diallo',
+          customerMark: 'PIKIN',
+          amount: 1000,
+          orderBalance: 900,
+          receipts: [{ usd: 250, status: 'RECEIVED' }],
+        }],
+      },
+    ]);
 
     const result = await getDashboardCustomerHistory(currentUser, {
       customerId: 'customer-1',
@@ -172,5 +192,15 @@ describe('searchDashboardCustomers', () => {
       receiptWhere: { createdBy: { in: ['user-1'] } },
     }));
     expect(result.data.orderNames).toEqual(['PIKIN', 'PIKIN OLD']);
+    expect(mockInvoiceFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        invNo: { notIn: ['Un_Associated', 'DEPOSIT_POOL'] },
+      }),
+    }));
+    expect(result.data.outstanding).toMatchObject({
+      customerId: 'customer-1',
+      totalOutstanding: 750,
+      statusSubtotals: { inTransit: 0, released: 750 },
+    });
   });
 });

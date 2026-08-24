@@ -103,6 +103,7 @@ function makeSummary() {
     ],
     customerOutstanding: [
       {
+        customerId: 'super-dt2',
         customerKey: 'customer:super-dt2',
         customerLabel: 'SUPER DT2',
         totalOutstanding: 1000,
@@ -150,6 +151,24 @@ describe('Dashboard customer outstanding status dialog', () => {
   });
 
   it('shows customer outstanding rows split by transit and released status with subtotals', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint === 'dashboard?action=summary') return { success: true, data: makeSummary() };
+      if (endpoint === 'settings?view=user-preferences') return { success: true, data: { dashboardLayout: DEFAULT_DASHBOARD_LAYOUT } };
+      if (endpoint.startsWith('dashboard/customer-history-search?action=history&customerId=super-dt2')) return {
+        success: true,
+        data: {
+          customer: { id: 'super-dt2', mark: 'SUPER DT2', name: 'Super Customer' },
+          orderNames: ['SUPER DT2'],
+          orders: [{ id: 'order-released', orderNo: 'SUPER DT2-09', invNo: 'L25MH090002', amount: 1500, outstanding: 750 }],
+          orderPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+          receipts: [],
+          receiptPagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 },
+          outstanding: makeSummary().customerOutstanding[0],
+        },
+      };
+      return { success: false };
+    });
+
     await act(async () => {
       render(<Dashboard />);
     });
@@ -163,11 +182,15 @@ describe('Dashboard customer outstanding status dialog', () => {
 
     fireEvent.click(customerButton);
 
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
-    const dialog = screen.getByRole('dialog');
+    await waitFor(() => expect(screen.getByTestId('dashboard-customer-detail-dialog')).toBeInTheDocument());
+    const dialog = screen.getByTestId('dashboard-customer-detail-dialog');
 
-    expect(within(dialog).getByText('Unpaid ORDER_NAME balances grouped by released and in-transit status.')).toBeInTheDocument();
     expect(within(dialog).getByText('Total Unpaid: $1,000')).toBeInTheDocument();
+    expect(within(dialog).getByText('Historical Orders')).toBeInTheDocument();
+    expect(within(dialog).getByText('Recent Receipts')).toBeInTheDocument();
+    expect(mockApiCall).toHaveBeenCalledWith(expect.stringContaining(
+      'dashboard/customer-history-search?action=history&customerId=super-dt2',
+    ));
 
     const releasedLabel = within(dialog).getByText('Released');
     const inTransitLabel = within(dialog).getByText('In Transit');
@@ -178,7 +201,7 @@ describe('Dashboard customer outstanding status dialog', () => {
     expect(within(dialog).getByText('SUPER DT2-10')).toBeInTheDocument();
     expect(inTransitLabel).toBeInTheDocument();
     expect(within(dialog).getByText('Subtotal: $750')).toBeInTheDocument();
-    expect(within(dialog).getByText('SUPER DT2-09')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('SUPER DT2-09')).toHaveLength(2);
     expect(within(dialog).getByText('Days')).toBeInTheDocument();
     expect(within(dialog).getByText('7')).toBeInTheDocument();
   });
@@ -329,6 +352,23 @@ describe('Dashboard customer outstanding status dialog', () => {
             imageUrl: '/upload/images/receipts/ocr/mary.jpg', imageName: 'mary.jpg', creatorName: 'User', creatorEmail: 'user@example.com',
           }],
           receiptPagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 },
+          outstanding: {
+            customerId: 'customer-mab',
+            customerKey: 'customer:customer-mab',
+            customerLabel: 'MAB-1 / MARY',
+            totalOutstanding: 350,
+            statusSubtotals: { released: 250, inTransit: 100 },
+            orders: [
+              {
+                orderId: 'order-mab', orderNo: 'MAB-1-10', invNo: 'INV-1', outstanding: 250,
+                statusGroup: 'RELEASED', releaseDate: '2026-07-01T00:00:00.000Z', daysSinceRelease: 32,
+              },
+              {
+                orderId: 'order-mary', orderNo: 'MARY-01', invNo: 'INV-2', outstanding: 100,
+                statusGroup: 'IN_TRANSIT', releaseDate: null, daysSinceRelease: null,
+              },
+            ],
+          },
         },
       };
       return { success: false };
@@ -360,10 +400,13 @@ describe('Dashboard customer outstanding status dialog', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'MARY' }));
 
-    const dialog = await screen.findByRole('dialog');
+    const dialog = await screen.findByTestId('dashboard-customer-detail-dialog');
     expect(within(dialog).getByText(/MAB-1 \/ MARY/)).toBeInTheDocument();
-    expect(within(dialog).getByText('MAB-1-10')).toBeInTheDocument();
-    expect(within(dialog).getAllByText('MARY-01')).toHaveLength(2);
+    expect(within(dialog).getByText('Total Unpaid: $350')).toBeInTheDocument();
+    expect(within(dialog).getByText('Released')).toBeInTheDocument();
+    expect(within(dialog).getByText('In Transit')).toBeInTheDocument();
+    expect(within(dialog).getAllByText('MAB-1-10')).toHaveLength(2);
+    expect(within(dialog).getAllByText('MARY-01').length).toBeGreaterThanOrEqual(2);
     expect(mockApiCall).toHaveBeenCalledWith('dashboard/customer-history-search?action=history&customerId=customer-mab&orderPage=1&orderPageSize=10&receiptPage=1&receiptPageSize=10');
   });
 

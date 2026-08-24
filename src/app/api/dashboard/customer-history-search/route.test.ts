@@ -69,7 +69,19 @@ describe('dashboard customer history search route', () => {
   });
 
   it('loads all ORDER_NAME history for the selected visible customer', async () => {
-    mockHistory.mockResolvedValue({ data: { orderNames: ['MAB-1', 'MARY'], orders: [], receipts: [] } });
+    mockHistory.mockResolvedValue({
+      data: {
+        orderNames: ['MAB-1', 'MARY'],
+        orders: [],
+        receipts: [],
+        outstanding: {
+          customerId: 'customer-1',
+          totalOutstanding: 750,
+          statusSubtotals: { inTransit: 0, released: 750 },
+          orders: [],
+        },
+      },
+    });
 
     const response = await GET({
       url: 'https://example.com/api/dashboard/customer-history-search?action=history&customerId=customer-1&orderPage=2&receiptPage=3',
@@ -87,6 +99,10 @@ describe('dashboard customer history search route', () => {
       defaultReceiptPageSize: 10,
     });
     expect(json.data.orderNames).toEqual(['MAB-1', 'MARY']);
+    expect(json.data.outstanding).toMatchObject({
+      customerId: 'customer-1',
+      totalOutstanding: 750,
+    });
   });
 
   it('returns a readable error for an unknown action', async () => {

@@ -24,6 +24,7 @@ function makeEvent(overrides: {
   reason?: MuContractOrderEvent['reason'];
   currency?: string | null;
   amount?: string | null;
+  piId?: string;
 } = {}): MuContractOrderEvent {
   const active = overrides.active ?? true;
   const currency = overrides.currency === undefined ? 'USD' : overrides.currency;
@@ -36,7 +37,7 @@ function makeEvent(overrides: {
     occurredAt: '2026-07-18T08:00:00.000Z',
     source: {
       system: 'MU_CONTRACT',
-      piId: 'pi-1',
+      piId: overrides.piId ?? 'pi-1',
       version: overrides.version ?? 2,
     },
     order: {
@@ -482,6 +483,8 @@ describe('MU Contract transactional order applier', () => {
       id: 'other-link',
       externalId: 'pi-2',
       orderTrackerId: 'manual-1',
+      active: true,
+      officialAmount: '10000.00',
     });
 
     const result = await apply(tx);
@@ -495,6 +498,87 @@ describe('MU Contract transactional order applier', () => {
       data: expect.objectContaining({ orderTrackerId: null }),
     });
     expect(tx.orderTracker.update).not.toHaveBeenCalled();
+  });
+
+  it('replaces an inactive foreign PI source on the same ORDER NO', async () => {
+    const tx = makeTx();
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow());
+    tx.externalOrderSourceLink.findFirst.mockResolvedValue({
+      id: 'inactive-link',
+      externalId: 'pi-deleted',
+      orderTrackerId: 'manual-1',
+      active: false,
+      officialAmount: '10000.00',
+    });
+
+    const result = await apply(tx, makeEvent({
+      piId: 'pi-recreated',
+      amount: '12500.00',
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      result: 'APPLIED',
+      orderTrackerId: 'manual-1',
+      linkMode: 'MANUAL_ATTACHED',
+      conflictType: null,
+      takeover: expect.objectContaining({
+        oldSourcePiId: 'pi-deleted',
+        newSourcePiId: 'pi-recreated',
+        orderTrackerId: 'manual-1',
+      }),
+    }));
+    expect(tx.externalOrderSourceLink.update).toHaveBeenCalledWith({
+      where: { id: 'inactive-link' },
+      data: { orderTrackerId: null },
+    });
+    expect(tx.externalOrderSourceLink.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        externalId: 'pi-recreated',
+        orderTrackerId: 'manual-1',
+        officialAmount: '12500.00',
+      }),
+    });
+  });
+
+  it('does not let the displaced PI reclaim the Orders row after reactivation', async () => {
+    const tx = makeTx();
+    tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink({
+      externalId: 'pi-deleted',
+      active: false,
+      orderTrackerId: null,
+      orderTracker: null,
+    }));
+    tx.orderTracker.findFirst.mockResolvedValue(manualRow());
+    tx.externalOrderSourceLink.findFirst.mockResolvedValue({
+      id: 'replacement-link',
+      externalId: 'pi-recreated',
+      orderTrackerId: 'manual-1',
+      active: true,
+      officialAmount: '12500.00',
+    });
+
+    const result = await apply(tx, makeEvent({
+      piId: 'pi-deleted',
+      version: 3,
+      amount: '10000.00',
+    }));
+
+    expect(result).toEqual(expect.objectContaining({
+      result: 'BUSINESS_CONFLICT',
+      orderTrackerId: null,
+      conflictType: 'SOURCE_LINK_COLLISION',
+    }));
+    expect(tx.externalOrderSourceLink.update).toHaveBeenCalledWith({
+      where: { id: 'link-1' },
+      data: expect.objectContaining({
+        active: true,
+        orderTrackerId: null,
+      }),
+    });
+    expect(tx.externalOrderSourceLink.update).not.toHaveBeenCalledWith({
+      where: { id: 'replacement-link' },
+      data: { orderTrackerId: null },
+    });
   });
 
   it('ignores a source version lower than the durable PI link version', async () => {

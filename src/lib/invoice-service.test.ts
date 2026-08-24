@@ -159,6 +159,20 @@ const mockConsolidateGroupedOrders = consolidateGroupedOrders as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 
+const poolMigrationAudit = {
+  sourceOrderId: 'deposit-order',
+  sourcePool: 'DEPOSIT_POOL',
+  targetInvoiceId: 'inv-1',
+  targetInvNo: 'INV-001',
+  targetOrderId: 'deposit-order',
+  movedReceiptCount: 1,
+  amountBefore: 0,
+  amountAfter: 100,
+  balanceBefore: -20,
+  balanceAfter: 80,
+  operationSource: 'INVOICE_WRITE',
+};
+
 describe('invoice-service', () => {
   beforeEach(() => {
     jest.resetAllMocks();
@@ -184,6 +198,7 @@ describe('invoice-service', () => {
       ok: true,
       data: { id: 'inv-1' },
       message: '账单已保存',
+      poolMigrations: [poolMigrationAudit],
     });
 
     const result = await createInvoiceRecord(makeUser(), {
@@ -196,6 +211,7 @@ describe('invoice-service', () => {
       invNo: 'INV-001',
       createdBy: 'sales-1',
       ownerIds: ['sales-1'],
+      operationSource: 'INVOICE_WRITE',
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_CREATE',
@@ -203,6 +219,7 @@ describe('invoice-service', () => {
       metadata: expect.objectContaining({
         invNo: 'INV-001',
         orderCount: 1,
+        systemPoolMigrations: [poolMigrationAudit],
       }),
     }));
   });
@@ -320,6 +337,10 @@ describe('invoice-service', () => {
       ok: true,
       data: { id: 'inv-1' },
       message: '账单已保存',
+      poolMigrations: [{
+        ...poolMigrationAudit,
+        operationSource: 'BULK_IMPORT',
+      }],
     });
 
     const result = await processInvoiceImportRows([
@@ -349,6 +370,7 @@ describe('invoice-service', () => {
     ]);
     expect(mockSaveInvoiceWithOrders).toHaveBeenCalledWith(expect.objectContaining({
       invNo: 'INV-IMPORT-1',
+      operationSource: 'BULK_IMPORT',
       orders: [
         expect.objectContaining({
           orderNo: 'BIG ALPHA-05B',
@@ -360,6 +382,51 @@ describe('invoice-service', () => {
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_IMPORT',
+      metadata: expect.objectContaining({
+        systemPoolMigrations: [expect.objectContaining({
+          sourceOrderId: 'deposit-order',
+          operationSource: 'BULK_IMPORT',
+        })],
+      }),
+    }));
+  });
+
+  it('allows bulk import to migrate an existing DEPOSIT_POOL order', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([{
+      id: 'deposit-order',
+      orderNo: 'AB-13B',
+      customerId: 'customer-ab',
+      customerMark: 'AB',
+      customerName: 'Alpha Buyer',
+      invoice: { invNo: 'DEPOSIT_POOL' },
+    }]);
+    mockDb.customerOrderName.findMany.mockResolvedValueOnce([]);
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('deposit-order');
+    mockSaveInvoiceWithOrders.mockResolvedValueOnce({
+      ok: true,
+      data: { id: 'inv-990' },
+      message: '账单已保存',
+      poolMigrations: [],
+    });
+
+    const result = await processInvoiceImportRows([{
+      rowNo: 2,
+      invNo: '0000990',
+      shipDateRaw: '',
+      releaseDateRaw: '',
+      orderNo: 'AB-13B',
+      amountRaw: '20000',
+      customerMark: 'AB',
+      customerName: 'Alpha Buyer',
+      customerId: 'customer-ab',
+    }], makeUser());
+
+    expect(result.success).toBe(true);
+    expect(result.issueRows).toEqual([]);
+    expect(mockSaveInvoiceWithOrders).toHaveBeenCalledWith(expect.objectContaining({
+      invNo: '0000990',
+      operationSource: 'BULK_IMPORT',
+      orders: [expect.objectContaining({ orderNo: 'AB-13B', amount: 20000 })],
     }));
   });
 

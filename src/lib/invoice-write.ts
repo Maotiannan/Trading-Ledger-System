@@ -1,5 +1,10 @@
 import { db } from '@/lib/db';
 import { resolveCustomer } from '@/lib/customer-matching';
+import {
+  migrateSystemPoolOrderForInvoiceRow,
+  type SystemPoolMigrationAudit,
+  type SystemPoolOperationSource,
+} from '@/lib/invoice-system-pool-reconciliation';
 import { updateOrderBalance } from '@/lib/matching';
 import { buildOrderNoWithAliases, normalizeOrderNo } from '@/lib/order-alias';
 import {
@@ -77,6 +82,7 @@ async function persistInvoiceWithOrders(
     normalizedInvNo: string;
     preparedOrders: PreparedInvoiceOrderInput[];
     createdBy: string;
+    operationSource: SystemPoolOperationSource;
     shipDate?: Date | null;
     releaseDate?: Date | null;
   }
@@ -108,6 +114,7 @@ async function persistInvoiceWithOrders(
 
   const mergedOrdersInfo: string[] = [];
   const touchedOrderIds = new Set<string>();
+  const poolMigrations: SystemPoolMigrationAudit[] = [];
 
   for (const preparedOrder of input.preparedOrders) {
     const { canonicalOrderNo, amountNumber, customerResolution } = preparedOrder;
@@ -145,6 +152,24 @@ async function persistInvoiceWithOrders(
         },
       });
       await syncOrderAliases(tx, existingInTarget.id, canonicalOrderNo);
+    }
+
+    const migrated = await migrateSystemPoolOrderForInvoiceRow(tx, {
+      orderNo: canonicalOrderNo,
+      targetInvoice,
+      authoritativeAmount: amountNumber,
+      targetOrderId: existingInTarget?.id ?? null,
+      customer: customerResolution,
+      operationSource: input.operationSource,
+    });
+    if (migrated) {
+      touchedOrderIds.add(migrated.targetOrderId);
+      poolMigrations.push(migrated.audit);
+      mergedOrdersInfo.push(`${canonicalOrderNo} (from ${migrated.audit.sourcePool})`);
+      continue;
+    }
+
+    if (existingInTarget) {
       touchedOrderIds.add(existingInTarget.id);
       continue;
     }
@@ -156,41 +181,6 @@ async function persistInvoiceWithOrders(
           include: { invoice: true },
         })
       : null;
-    const existingSystemOrder = existingGlobalOrder?.invoice.invNo === 'Un_Associated'
-      ? existingGlobalOrder
-      : null;
-
-    if (existingSystemOrder) {
-      const newOrder = await tx.order.create({
-        data: {
-          invoiceId: targetInvoice.id,
-          orderNo: canonicalOrderNo,
-          tokens: serializeOrderTokens(canonicalOrderNo),
-          amount: amountNumber,
-          orderBalance: amountNumber,
-          createdBy: input.createdBy,
-          customerId: customerResolution.customerId,
-          customerMark: customerResolution.customerMark,
-          customerName: customerResolution.customerName,
-          customerPhone: customerResolution.customerPhone,
-          customerCity: customerResolution.customerCity,
-          needsCustomerFix: customerResolution.needsCustomerFix,
-        },
-        select: { id: true, orderNo: true },
-      });
-
-      await tx.receipt.updateMany({
-        where: { orderId: existingSystemOrder.id },
-        data: { orderId: newOrder.id },
-      });
-      await tx.order.delete({ where: { id: existingSystemOrder.id } });
-      await syncOrderAliases(tx, newOrder.id, canonicalOrderNo);
-
-      touchedOrderIds.add(newOrder.id);
-      mergedOrdersInfo.push(`${canonicalOrderNo} (from Un_Associated)`);
-      continue;
-    }
-
     if (existingGlobalOrder) {
       await tx.order.update({
         where: { id: existingGlobalOrder.id },
@@ -242,6 +232,7 @@ async function persistInvoiceWithOrders(
     targetInvoiceId: targetInvoice.id,
     touchedOrderIds: Array.from(touchedOrderIds),
     mergedOrdersInfo,
+    poolMigrations,
   };
 }
 
@@ -283,6 +274,7 @@ export async function saveInvoiceWithOrders(input: {
   invNo: string;
   orders: InvoiceOrderInput[];
   createdBy: string;
+  operationSource: SystemPoolOperationSource;
   shipDate?: Date | null;
   releaseDate?: Date | null;
   ownerIds?: string[];
@@ -304,6 +296,7 @@ export async function saveInvoiceWithOrders(input: {
     normalizedInvNo,
     preparedOrders: prepared.preparedOrders,
     createdBy: input.createdBy,
+    operationSource: input.operationSource,
     shipDate: input.shipDate,
     releaseDate: input.releaseDate,
   }));
@@ -327,6 +320,7 @@ export async function saveInvoiceWithOrders(input: {
   return {
     ok: true as const,
     data: invoice,
+    poolMigrations: persisted.poolMigrations,
     message: messageParts.length > 0 ? `账单已保存，${messageParts.join('；')}` : '账单已保存',
   };
 }

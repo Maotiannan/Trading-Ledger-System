@@ -7,6 +7,7 @@ import { updateOrderBalance } from '@/lib/matching';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
+import type { SystemPoolMigrationAudit } from '@/lib/invoice-system-pool-reconciliation';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
@@ -14,6 +15,7 @@ import { consolidateGroupedOrders, findOrderIdByNoOrAlias, syncOrderAliases } fr
 import { customerAccessWhere } from '@/lib/customer-scope';
 import { extractOrderNamePrefix, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { formatUsdAmount } from '@/lib/display-format';
+import { SYSTEM_POOL_INVOICE_NOS } from '@/lib/payment-type-classifier';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildInvoiceVisibilityWhere as buildInvoiceVisibilityWhereShared,
@@ -167,6 +169,7 @@ export async function processInvoiceImportRows(
       customerId: true,
       customerMark: true,
       customerName: true,
+      invoice: { select: { invNo: true } },
     },
   });
   const orderById = new Map(visibleOrders.map((row) => [row.id, row]));
@@ -275,7 +278,12 @@ export async function processInvoiceImportRows(
       } else {
         const existingOrderId = await findOrderIdByNoOrAlias(orderNo, orderVisibilityWhere);
         if (existingOrderId) {
-          rowErrors.push(`ORDER_NO=${orderNo} 此条已存在`);
+          const existingOrder = orderById.get(existingOrderId);
+          if (!existingOrder || !SYSTEM_POOL_INVOICE_NOS.has(existingOrder.invoice.invNo)) {
+            rowErrors.push(`ORDER_NO=${orderNo} 此条已存在`);
+          } else {
+            batchOrderSet.add(duplicateKey);
+          }
         } else {
           batchOrderSet.add(duplicateKey);
         }
@@ -387,11 +395,13 @@ export async function processInvoiceImportRows(
   }
 
   let successCount = 0;
+  const systemPoolMigrations: SystemPoolMigrationAudit[] = [];
   for (const [invNo, group] of grouped.entries()) {
     const saved = await saveInvoiceWithOrders({
       invNo,
       orders: group.rows,
       createdBy: currentUser.id,
+      operationSource: 'BULK_IMPORT',
       shipDate: group.shipDate,
       releaseDate: group.releaseDate,
       ownerIds,
@@ -405,6 +415,7 @@ export async function processInvoiceImportRows(
       continue;
     }
     successCount++;
+    systemPoolMigrations.push(...(saved.poolMigrations ?? []));
     for (const row of group.rows) importedOrderNos.add(row.orderNo);
     for (const row of group.sourceRows) {
       rowResults.push(toInvoiceRowResult(row, 'SUCCESS', ''));
@@ -432,6 +443,7 @@ export async function processInvoiceImportRows(
       successCount,
       failedRows: issueRows.length,
       importedOrderNos: Array.from(importedOrderNos),
+      systemPoolMigrations,
     },
   });
 
@@ -460,6 +472,7 @@ export async function createInvoiceRecord(currentUser: CurrentUser, input: {
     invNo: String(input.invNo || ''),
     orders: Array.isArray(input.orders) ? input.orders : [],
     createdBy: currentUser.id,
+    operationSource: 'INVOICE_WRITE',
     shipDate: input.shipDate,
     releaseDate: input.releaseDate,
     ownerIds,
@@ -480,6 +493,7 @@ export async function createInvoiceRecord(currentUser: CurrentUser, input: {
     metadata: {
       invNo: input.invNo,
       orderCount: input.orders.length,
+      systemPoolMigrations: saved.poolMigrations ?? [],
     },
   });
   return { data: saved.data, message: saved.message };

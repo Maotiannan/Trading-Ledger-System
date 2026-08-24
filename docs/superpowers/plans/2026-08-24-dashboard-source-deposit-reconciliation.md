@@ -1,5 +1,7 @@
 # Dashboard Customer Detail, MU Contract Source Recovery, and Deposit Pool Reconciliation Implementation Plan
 
+> **Status:** `ARCHIVED_COMPLETED` on 2026-08-24. The original checkboxes below are preserved as execution history; actual commits and verification evidence are recorded in `ENGINEERING_LOG.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make both Dashboard customer entry points open one complete customer detail dialog, let recreated MU Contract PIs replace inactive sources safely, and move matched `DEPOSIT_POOL` orders into formal invoices during writes or explicit Rematch repair.

@@ -46,6 +46,15 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/orders', 'update')?.method).toBe('POST');
   });
 
+  it('should document explicit system-pool resolutions for invoice rematch', () => {
+    expect(findAction('/api/invoice', 'rematch-preview')?.method).toBe('PUT');
+    expect(findAction('/api/invoice', 'rematch-apply')?.bodyExample).toEqual({
+      action: 'rematch-apply',
+      resolutions: [],
+      poolResolutions: [{ sourceOrderId: 'pool-order-id', targetInvoiceId: 'invoice-id' }],
+    });
+  });
+
   it('should expose customer sync endpoint', () => {
     expect(findAction('/api/sync/customers', 'sync')?.method).toBe('GET');
     expect(findAction('/api/sync/customers/by-orders', 'lookup-by-orders')?.method).toBe('POST');

@@ -296,7 +296,8 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
     if (action === 'rematch-apply') {
       const result = await applyInvoiceRematch(
         currentUser,
-        Array.isArray(body?.resolutions) ? body.resolutions : []
+        Array.isArray(body?.resolutions) ? body.resolutions : [],
+        Array.isArray(body?.poolResolutions) ? body.poolResolutions : [],
       );
       return createApiSuccessResponse({ message: result.message }, request);
     }

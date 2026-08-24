@@ -7,7 +7,11 @@ import { updateOrderBalance } from '@/lib/matching';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
-import type { SystemPoolMigrationAudit } from '@/lib/invoice-system-pool-reconciliation';
+import {
+  applySystemPoolRepairs,
+  previewSystemPoolRepairs,
+  type SystemPoolMigrationAudit,
+} from '@/lib/invoice-system-pool-reconciliation';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { canonicalizeOrderNo, normalizeOrderNo, splitCompositeOrderNo } from '@/lib/order-alias';
@@ -527,8 +531,13 @@ async function rematchAllOrders(ownerIds: string[]) {
 
   for (const orders of orderGroups.values()) {
     if (orders.length <= 1) continue;
-    const targetOrder = orders.find((row) => row.invoice.invNo !== 'Un_Associated') || orders[0];
-    const sourceOrders = orders.filter((row) => row.id !== targetOrder.id);
+    const targetOrder = orders.find(
+      (row) => !SYSTEM_POOL_INVOICE_NOS.has(row.invoice.invNo),
+    );
+    if (!targetOrder) continue;
+    const sourceOrders = orders.filter(
+      (row) => row.id !== targetOrder.id && !SYSTEM_POOL_INVOICE_NOS.has(row.invoice.invNo),
+    );
     if (sourceOrders.length === 0) continue;
     await runInTransaction(async (tx) => {
       for (const sourceOrder of sourceOrders) {
@@ -873,24 +882,42 @@ async function applyRematchConflicts(
 
 export async function previewInvoiceRematch(currentUser: CurrentUser) {
   const scope = await getHierarchyScope(currentUser);
-  return listRematchConflictGroupsByScope(Array.from(scope.ownerVisibleIds));
+  const ownerIds = Array.from(scope.ownerVisibleIds);
+  const [groups, poolPreview] = await Promise.all([
+    listRematchConflictGroupsByScope(ownerIds),
+    previewSystemPoolRepairs(db as never, {
+      orderWhere: buildOrderVisibilityWhere(ownerIds),
+      invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
+    }),
+  ]);
+  return { groups, ...poolPreview };
 }
 
 export async function applyInvoiceRematch(
   currentUser: CurrentUser,
-  resolutions: Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>
+  resolutions: Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>,
+  poolResolutions: Array<{ sourceOrderId: string; targetInvoiceId: string }> = [],
 ) {
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
+  const poolApplied = await runInTransaction((tx) => applySystemPoolRepairs(tx, {
+    orderWhere: buildOrderVisibilityWhere(ownerIds),
+    invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
+    poolResolutions,
+    requireAllManual: true,
+  }));
   const applied = await applyRematchConflicts(resolutions, ownerIds);
   const result = await rematchAllOrders(ownerIds);
-  const message = `冲突处理完成（当前可见范围）：人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
+  const message = `冲突处理完成（当前可见范围）：系统池自动修复 ${poolApplied.autoMigrations.length}，系统池人工修复 ${poolApplied.manualMigrations.length}，人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
   await recordAuditEvent({
     action: auditActions.INVOICE_REMATCH_APPLY,
     actorId: currentUser.id,
     targetType: auditTargetTypes.INVOICE,
     metadata: {
       manualMerged: applied.mergedCount,
+      systemPoolAutoMigrations: poolApplied.autoMigrations,
+      systemPoolManualMigrations: poolApplied.manualMigrations,
+      systemPoolSkipped: poolApplied.skipped,
       ...result,
     },
   });
@@ -900,13 +927,24 @@ export async function applyInvoiceRematch(
 export async function rematchInvoices(currentUser: CurrentUser) {
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
+  const poolApplied = await runInTransaction((tx) => applySystemPoolRepairs(tx, {
+    orderWhere: buildOrderVisibilityWhere(ownerIds),
+    invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
+    poolResolutions: [],
+    requireAllManual: false,
+  }));
   const result = await rematchAllOrders(ownerIds);
-  const message = `重新匹配完成（当前可见范围）：合并重复订单 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
+  const message = `重新匹配完成（当前可见范围）：系统池自动修复 ${poolApplied.autoMigrations.length}，待人工选择 ${poolApplied.unresolvedManual}，合并重复订单 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
   await recordAuditEvent({
     action: auditActions.INVOICE_REMATCH,
     actorId: currentUser.id,
     targetType: auditTargetTypes.INVOICE,
-    metadata: result,
+    metadata: {
+      ...result,
+      systemPoolAutoMigrations: poolApplied.autoMigrations,
+      systemPoolSkipped: poolApplied.skipped,
+      unresolvedSystemPoolRepairs: poolApplied.unresolvedManual,
+    },
   });
   return { message };
 }

@@ -2,6 +2,10 @@ import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { resolveCustomer } from '@/lib/customer-matching';
+import {
+  applySystemPoolRepairs,
+  previewSystemPoolRepairs,
+} from '@/lib/invoice-system-pool-reconciliation';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { updateOrderBalance } from '@/lib/matching';
 import {
@@ -76,6 +80,11 @@ jest.mock('@/lib/user-hierarchy', () => ({
 
 jest.mock('@/lib/invoice-write', () => ({
   saveInvoiceWithOrders: jest.fn(),
+}));
+
+jest.mock('@/lib/invoice-system-pool-reconciliation', () => ({
+  applySystemPoolRepairs: jest.fn(),
+  previewSystemPoolRepairs: jest.fn(),
 }));
 
 jest.mock('@/lib/order-alias-db', () => ({
@@ -153,6 +162,8 @@ const mockDb = db as unknown as {
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockSaveInvoiceWithOrders = saveInvoiceWithOrders as jest.Mock;
+const mockApplySystemPoolRepairs = applySystemPoolRepairs as jest.Mock;
+const mockPreviewSystemPoolRepairs = previewSystemPoolRepairs as jest.Mock;
 const mockFindOrderIdByNoOrAlias = findOrderIdByNoOrAlias as jest.Mock;
 const mockSyncOrderAliases = syncOrderAliases as jest.Mock;
 const mockConsolidateGroupedOrders = consolidateGroupedOrders as jest.Mock;
@@ -191,6 +202,13 @@ describe('invoice-service', () => {
       syncedAliases: 0,
     });
     mockUpdateOrderBalance.mockResolvedValue(undefined);
+    mockPreviewSystemPoolRepairs.mockResolvedValue({ poolRepairs: [], targetInvoices: [] });
+    mockApplySystemPoolRepairs.mockResolvedValue({
+      autoMigrations: [],
+      manualMigrations: [],
+      skipped: 0,
+      unresolvedManual: 0,
+    });
   });
 
   it('creates invoice records through saveInvoiceWithOrders and records audit', async () => {
@@ -561,14 +579,22 @@ describe('invoice-service', () => {
       },
     ]);
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    mockPreviewSystemPoolRepairs.mockResolvedValueOnce({
+      poolRepairs: [expect.objectContaining({ sourceOrderId: 'pool-unique' })],
+      targetInvoices: [{ id: 'inv-1', invNo: 'INV-1' }],
+    });
 
     const result = await previewInvoiceRematch(makeUser());
 
-    expect(result).toHaveLength(1);
-    expect(result[0]).toEqual(expect.objectContaining({
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups[0]).toEqual(expect.objectContaining({
       groupType: 'exact',
       groupKey: 'ib-01',
     }));
+    expect(result.poolRepairs).toEqual([
+      expect.objectContaining({ sourceOrderId: 'pool-unique' }),
+    ]);
+    expect(result.targetInvoices).toEqual([{ id: 'inv-1', invNo: 'INV-1' }]);
   });
 
   it('rematches invoices, returns summary, and records audit', async () => {
@@ -704,6 +730,13 @@ describe('invoice-service', () => {
       syncedAliases: 0,
     });
 
+    mockApplySystemPoolRepairs.mockResolvedValueOnce({
+      autoMigrations: [{ ...poolMigrationAudit, operationSource: 'REMATCH_AUTO' }],
+      manualMigrations: [{ ...poolMigrationAudit, operationSource: 'REMATCH_MANUAL' }],
+      skipped: 0,
+      unresolvedManual: 0,
+    });
+
     const result = await applyInvoiceRematch(makeUser(), [
       {
         groupId: 'exact:ib-01',
@@ -711,14 +744,20 @@ describe('invoice-service', () => {
         mode: 'keep',
         orderIds: ['order-1', 'order-2'],
       },
-    ]);
+    ], [{ sourceOrderId: 'pool-manual', targetInvoiceId: 'invoice-2' }]);
 
     expect(result.message).toContain('冲突处理完成');
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_REMATCH_APPLY',
       metadata: expect.objectContaining({
         manualMerged: 1,
+        systemPoolAutoMigrations: [expect.objectContaining({ operationSource: 'REMATCH_AUTO' })],
+        systemPoolManualMigrations: [expect.objectContaining({ operationSource: 'REMATCH_MANUAL' })],
       }),
+    }));
+    expect(mockApplySystemPoolRepairs).toHaveBeenCalledWith(mockDb, expect.objectContaining({
+      poolResolutions: [{ sourceOrderId: 'pool-manual', targetInvoiceId: 'invoice-2' }],
+      requireAllManual: true,
     }));
   });
 

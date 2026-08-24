@@ -56,3 +56,21 @@ export type RematchSelection = {
   mode: 'keep' | 'merge';
   orderIds: string[];
 };
+
+export type SystemPoolRepairPreview = {
+  sourceOrderId: string;
+  orderNo: string;
+  sourcePool: 'DEPOSIT_POOL' | 'Un_Associated';
+  amount: number;
+  orderBalance: number;
+  receiptCount: number;
+  repairMode: 'AUTO' | 'MANUAL';
+  targetOrderId: string | null;
+  targetInvoiceId: string | null;
+  targetInvNo: string | null;
+};
+
+export type RematchTargetInvoice = {
+  id: string;
+  invNo: string;
+};

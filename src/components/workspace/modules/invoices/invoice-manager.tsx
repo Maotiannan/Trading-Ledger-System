@@ -86,7 +86,11 @@ export function InvoiceManager() {
     applyingRematch,
     rematchGroups,
     rematchSelections,
+    poolRepairs,
+    rematchTargetInvoices,
+    poolSelections,
     updateRematchSelection,
+    updatePoolSelection,
     openRematchDialog,
     handleRematchApply,
     orderHistoryOpen,
@@ -317,11 +321,15 @@ export function InvoiceManager() {
       <RematchDialog
         open={showRematchDialog}
         groups={rematchGroups}
+        poolRepairs={poolRepairs}
+        targetInvoices={rematchTargetInvoices}
+        poolSelections={poolSelections}
         selections={rematchSelections}
         applying={applyingRematch}
         tx={tx}
         onOpenChange={setShowRematchDialog}
         onSelectionChange={updateRematchSelection}
+        onPoolSelectionChange={updatePoolSelection}
         onApply={handleRematchApply}
       />
     </div>

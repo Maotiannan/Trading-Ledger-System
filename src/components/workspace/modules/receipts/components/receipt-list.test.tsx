@@ -185,6 +185,7 @@ describe('ReceiptList', () => {
       />,
     );
 
+    expect(screen.getByTitle('修改收据')).toBeInTheDocument();
     expect(screen.getByTitle('申请删除')).toBeInTheDocument();
 
     rerender(

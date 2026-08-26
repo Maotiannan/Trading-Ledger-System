@@ -10,6 +10,7 @@ import { resolveReceiptEditBinding, syncReceiptDetailItemsForBinding } from '@/l
 import { updateOrderBalance } from '@/lib/matching';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 
 type EditableSnapshotSource = Partial<Record<keyof ReceiptEditablePatch, unknown>> | null | undefined;
 
@@ -338,6 +339,7 @@ export async function reviewReceiptEdit(params: {
     }
 
     const nextSnapshot = validateEditablePatch(request.afterSnapshot as EditableSnapshotSource as ReceiptEditablePatch);
+    const nextDate = parseEditableDateValue(nextSnapshot.date);
     const reviewedAt = new Date();
     const claimResult = await tx.receiptEditRequest.updateMany({
       where: {
@@ -399,7 +401,7 @@ export async function reviewReceiptEdit(params: {
         where: { id: request.receiptId },
         data: {
           receiptNo: nextSnapshot.receiptNo,
-          date: parseEditableDateValue(nextSnapshot.date),
+          date: nextDate,
           orderNo: binding.orderNo,
           orderId: binding.orderId,
           invNo: binding.invNo,
@@ -422,6 +424,21 @@ export async function reviewReceiptEdit(params: {
         receiptId: request.receiptId,
         orderNo: binding.orderNo,
         customerMark: nextSnapshot.customerMark,
+      });
+
+      await syncPendingReceiptGeneratorDraft(tx, {
+        receiptId: request.receiptId,
+        status: request.receipt.status,
+        receiptNo: nextSnapshot.receiptNo,
+        date: nextDate,
+        orderId: binding.orderId,
+        orderNo: binding.orderNo,
+        invNo: binding.invNo,
+        customerId: matchedCustomer?.customerId || request.receipt.customerId,
+        customerMark: nextSnapshot.customerMark,
+        customerName: matchedCustomer?.customerName || request.receipt.customerName,
+        payer: nextSnapshot.payer,
+        tel: nextSnapshot.tel,
       });
 
       const previousOrderId = request.receipt.orderId || null;

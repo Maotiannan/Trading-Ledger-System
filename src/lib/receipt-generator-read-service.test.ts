@@ -287,7 +287,13 @@ describe('receipt-generator-read-service', () => {
       orderNo: 'Big Alpha-07',
       invNo: 'L25MH060523',
       customerMark: 'Big Alpha',
-      layoutSnapshot: { customerCompanyName: 'Alpha Trading SARL', paymentMode: 'Transfer', fraisStatus: 'Non payé' },
+      layoutSnapshot: {
+        customerCompanyName: 'Alpha Trading SARL',
+        clientName: 'Edited Payer "Big Alpha"',
+        dateText: '26/08/2026',
+        paymentMode: 'Transfer',
+        fraisStatus: 'Non payé',
+      },
       customerName: 'Alpha Oumar Diallo',
       clientTel: '628 38 63 63',
       usd: 2500,
@@ -314,7 +320,8 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.receiptNo).toBe('0010000');
     expect(result.data.canFinalize).toBe(true);
     expect(result.data.receiptStatus).toBe('SIGNING_PENDING');
-    expect(result.data.layout.clientName).toBe('Alpha Trading SARL "Big Alpha"');
+    expect(result.data.layout.clientName).toBe('Edited Payer "Big Alpha"');
+    expect(result.data.layout.dateText).toBe('26/08/2026');
     expect(result.data.layout.paymentMode).toBe('Virement');
     expect(result.data.layout.fraisStatus).toBe('Non payé');
     expect(result.data.layout.paymentType).toBe('Standard');

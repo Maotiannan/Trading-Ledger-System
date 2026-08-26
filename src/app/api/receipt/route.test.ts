@@ -75,10 +75,12 @@ import type { NextRequest } from 'next/server';
 import { GET, POST } from '@/app/api/receipt/route';
 import { listReceiptEditRequests, requestReceiptEdit, reviewReceiptEdit } from '@/lib/receipt-edit-request-service';
 import { db } from '@/lib/db';
+import { updateReceiptRecord } from '@/lib/receipt-service';
 
 const mockRequestReceiptEdit = requestReceiptEdit as jest.Mock;
 const mockReviewReceiptEdit = reviewReceiptEdit as jest.Mock;
 const mockListReceiptEditRequests = listReceiptEditRequests as jest.Mock;
+const mockUpdateReceiptRecord = updateReceiptRecord as jest.Mock;
 const mockDbReceiptFindMany = (db.receipt.findMany as jest.Mock);
 
 function buildJsonRequest(payload: Record<string, unknown>) {
@@ -161,6 +163,48 @@ describe('receipt route edit-approval actions', () => {
     });
     expect(json.success).toBe(true);
     expect(json.message).toBe('收据修改申请已提交，等待管理员同意');
+  });
+
+  it('submits an admin receipt draft update through the transactional receipt service', async () => {
+    mockUpdateReceiptRecord.mockResolvedValueOnce({
+      data: { id: 'receipt-signing', status: 'SIGNING_PENDING' },
+    });
+
+    const response = await POST(buildJsonRequest({
+      action: 'update',
+      receiptId: 'receipt-signing',
+      data: {
+        receiptNo: '0010010',
+        date: '2026-08-26',
+        orderNo: 'PIKIN-20',
+        invNo: 'INV-2',
+        customerMark: 'PIKIN',
+        payer: 'Mamadou Dian Diallo "PIKIN"',
+        tel: '222',
+      },
+    }));
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateReceiptRecord).toHaveBeenCalledWith({
+      currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
+      receiptId: 'receipt-signing',
+      payload: {
+        receiptNo: '0010010',
+        date: '2026-08-26',
+        orderNo: 'PIKIN-20',
+        invNo: 'INV-2',
+        customerMark: 'PIKIN',
+        payer: 'Mamadou Dian Diallo "PIKIN"',
+        tel: '222',
+      },
+      imagePath: null,
+      imageName: null,
+    });
+    expect(json).toEqual({
+      success: true,
+      data: { id: 'receipt-signing', status: 'SIGNING_PENDING' },
+    });
   });
 
   it('submits review-edit through the receipt edit review service', async () => {

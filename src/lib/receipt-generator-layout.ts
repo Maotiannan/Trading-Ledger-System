@@ -19,6 +19,7 @@ type ReceiptGeneratorLayoutInput = {
   customerMark: string | null;
   customerCompanyName?: string | null;
   customerName: string | null;
+  clientNameOverride?: string | null;
   clientTel: string | null;
   usdAmount: number;
   balanceBefore: number | null;
@@ -27,6 +28,7 @@ type ReceiptGeneratorLayoutInput = {
   paymentType?: ReceiptGeneratorPaymentType | null;
   receivedBy?: string | null;
   generatedAt?: Date;
+  dateText?: string | null;
 };
 
 export type ReceiptGeneratorLayoutData = {
@@ -156,11 +158,13 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
   const customerCompanyName = (input.customerCompanyName || '').trim();
   const customerName = (input.customerName || '').trim();
   const customerMark = (input.customerMark || '').trim();
-  const clientName = formatCustomerPayerLabel({
-    companyName: customerCompanyName,
-    name: customerName,
-    mark: customerMark,
-  }, { fallbackToMark: true }) || '-';
+  const clientName = (input.clientNameOverride || '').trim()
+    || formatCustomerPayerLabel({
+      companyName: customerCompanyName,
+      name: customerName,
+      mark: customerMark,
+    }, { fallbackToMark: true })
+    || '-';
   const motif = buildMotif(paymentType, input.invNo, input.orderNo);
   const resteAPayer = isDeposit
     ? ''
@@ -170,7 +174,7 @@ export function buildReceiptGeneratorLayout(input: ReceiptGeneratorLayoutInput):
 
   return {
     receiptNo: input.receiptNo,
-    dateText: formatGeneratorDate(now),
+    dateText: (input.dateText || '').trim() || formatGeneratorDate(now),
     orderNo: input.orderNo,
     invNo: input.invNo,
     customerMark: input.customerMark,

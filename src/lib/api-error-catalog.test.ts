@@ -25,4 +25,10 @@ describe('api-error-catalog', () => {
       translateApiErrorMessage('收据号 0001001 已存在，请换一个编号', 'en'),
     ).toBe('Receipt No. 0001001 already exists, please choose another number');
   });
+
+  it('translates pending signed-receipt draft consistency errors to english', () => {
+    expect(
+      translateApiErrorMessage('待签字收据缺少有效签字会话，无法修改', 'en'),
+    ).toBe('This pending signed receipt has no active signing session and cannot be edited.');
+  });
 });

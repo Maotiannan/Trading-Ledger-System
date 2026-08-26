@@ -50,6 +50,7 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
     customerMark: session.customerMark,
     customerCompanyName: typeof snapshot?.customerCompanyName === 'string' ? snapshot.customerCompanyName : null,
     customerName: session.customerName,
+    clientNameOverride: typeof snapshot?.clientName === 'string' ? snapshot.clientName : null,
     clientTel: session.clientTel,
     usdAmount: Number(session.usd),
     balanceBefore: session.balanceBefore === null ? null : Number(session.balanceBefore),
@@ -58,6 +59,7 @@ function mapSessionForClient(session: NonNullable<GeneratorSessionRecord>) {
     paymentType: normalizeReceiptGeneratorPaymentType(snapshot?.paymentType),
     receivedBy: normalizeReceiptGeneratorReceivedBy(snapshot?.receivedBy),
     generatedAt: session.createdAt,
+    dateText: typeof snapshot?.dateText === 'string' ? snapshot.dateText : null,
   });
 
   return {

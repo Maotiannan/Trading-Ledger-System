@@ -16,6 +16,7 @@ import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
+import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 
 function badRequest(message: string, detail?: unknown) {
   return createApiError({ code: 'BAD_REQUEST', status: 400, message, detail });
@@ -314,9 +315,6 @@ export async function updateReceiptRecord(params: {
       ownerVisibleIds,
     });
   }
-  if (existingReceipt.status === ReceiptStatus.SIGNING_PENDING) {
-    throw badRequest('签名未完成的收据不能直接修改', { receiptId, status: existingReceipt.status });
-  }
   if (existingReceipt.status === ReceiptStatus.Bank_Transfer) {
     throw badRequest('Bank_Transfer状态下禁止修改', { receiptId, status: existingReceipt.status });
   }
@@ -388,6 +386,21 @@ export async function updateReceiptRecord(params: {
         receiptId,
         orderNo: binding.orderNo,
         customerMark: nextCustomerMark,
+      });
+
+      await syncPendingReceiptGeneratorDraft(tx, {
+        receiptId,
+        status: existingReceipt.status,
+        receiptNo: payload.receiptNo || null,
+        date: nextDate,
+        orderId: binding.orderId,
+        orderNo: binding.orderNo,
+        invNo: binding.invNo,
+        customerId: matchedCustomer?.customerId || existingReceipt.customerId,
+        customerMark: nextCustomerMark,
+        customerName: matchedCustomer?.customerName || existingReceipt.customerName,
+        payer: payload.payer || null,
+        tel: payload.tel || null,
       });
 
       return updatedReceipt;

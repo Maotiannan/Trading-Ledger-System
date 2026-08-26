@@ -8,11 +8,11 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-There is currently one `ACTIVE` implementation plan. Historical plans remain archived below.
+There are currently no `ACTIVE` implementation plans. Historical plans remain archived below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
-| `2026-08-26-dashboard-history-signing-draft-edit.md` | `ACTIVE` | Dashboard history section ordering and transactional unfinished signed-receipt draft editing are in progress on an isolated branch. |
+| `2026-08-26-dashboard-history-signing-draft-edit.md` | `ARCHIVED_COMPLETED` | Dashboard now shows Recent Receipts before Historical Orders, and unfinished signed-receipt drafts update Receipt plus the pending signing session transactionally. |
 | `2026-08-24-dashboard-source-deposit-reconciliation.md` | `ARCHIVED_COMPLETED` | One Dashboard customer dialog, inactive MU Contract source takeover, transactional invoice-write migration, and ADMIN Rematch repair controls shipped on the verified feature branch. |
 | `2026-07-19-muledger-nas-local-backup.md` | `ARCHIVED_COMPLETED` | NAS-only daily snapshots, isolated restore, controlled deployment, final verification, and post-enable recovery point completed. |
 | `2026-07-18-mucontract-order-sync-muledger.md` | `ARCHIVED_COMPLETED` | Production migration, Full Reconcile, 53 source links, zero-conflict enablement, and idempotent incremental verification completed. |

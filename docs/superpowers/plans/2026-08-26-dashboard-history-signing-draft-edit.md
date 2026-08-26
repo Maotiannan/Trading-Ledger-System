@@ -1,6 +1,6 @@
 # Dashboard History Order and Pending Signed Receipt Draft Edit Implementation Plan
 
-> **Status:** `ACTIVE` from 2026-08-26.
+> **Status:** `ARCHIVED_COMPLETED` on 2026-08-26. The original checklist is preserved as execution history; actual verification evidence is recorded in `ENGINEERING_LOG.md`.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

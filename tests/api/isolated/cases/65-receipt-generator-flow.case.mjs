@@ -64,13 +64,13 @@ export default async function run(t) {
     expectedStatus: 200,
   });
   const sessionId = String(createSession.data?.data?.sessionId || '');
-  const receiptNo = String(createSession.data?.data?.receiptNo || '');
+  const initialReceiptNo = String(createSession.data?.data?.receiptNo || '');
   const receiptId = String(createSession.data?.data?.receiptId || '');
   t.assertOk(Boolean(sessionId), 'generator session created');
-  t.assertEqual(receiptNo, '0010000', 'first generator receipt uses atomic receipt number starting at 0010000');
+  t.assertEqual(initialReceiptNo, '0010000', 'first generator receipt uses atomic receipt number starting at 0010000');
 
   const receiptListBeforeFinalize = await t.request('GET', `/api/receipt?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
-  const pendingReceipt = findReceiptByNo(receiptListBeforeFinalize.data?.data, receiptNo);
+  const pendingReceipt = findReceiptByNo(receiptListBeforeFinalize.data?.data, initialReceiptNo);
   t.assertEqual(pendingReceipt?.status, 'SIGNING_PENDING', 'pending receipt is visible before signature finalization');
 
   const pendingWorkflowBlocked = await t.request('POST', '/api/receipt', {
@@ -82,6 +82,42 @@ export default async function run(t) {
   });
   t.assertEqual(pendingWorkflowBlocked.data?.code, 'BAD_REQUEST', 'pending signed receipt cannot enter business workflow early');
 
+  const editedReceiptNo = '0010099';
+  const editedPayer = `Edited Signed Customer ${suffix} "${customerMark}"`;
+  const editedPhone = '620000099';
+  await t.request('POST', '/api/receipt', {
+    json: {
+      action: 'update',
+      receiptId,
+      data: {
+        receiptNo: editedReceiptNo,
+        date: '2026-08-26',
+        orderNo,
+        invNo: invoiceNo,
+        customerMark,
+        payer: editedPayer,
+        tel: editedPhone,
+      },
+    },
+    expectedStatus: 200,
+  });
+
+  const resumedDraft = await t.request('GET', `/api/receipt-generator?action=resume-by-receipt&receiptId=${encodeURIComponent(receiptId)}`, {
+    expectedStatus: 200,
+  });
+  t.assertEqual(resumedDraft.data?.data?.layout?.receiptNo, editedReceiptNo, 'resumed draft uses edited receipt number');
+  t.assertEqual(resumedDraft.data?.data?.layout?.dateText, '26/08/2026', 'resumed draft uses edited payment date');
+  t.assertEqual(resumedDraft.data?.data?.layout?.clientName, editedPayer, 'resumed draft uses edited payer');
+  t.assertEqual(resumedDraft.data?.data?.layout?.clientTel, editedPhone, 'resumed draft uses edited phone');
+  t.assertEqual(resumedDraft.data?.data?.layout?.orderNo, orderNo, 'resumed draft keeps the matched ORDER NO');
+  t.assertEqual(resumedDraft.data?.data?.layout?.invNo, invoiceNo, 'resumed draft keeps the matched INV NO');
+  t.assertEqual(resumedDraft.data?.data?.layout?.balanceBefore, 2500, 'resumed draft recalculates live balance before payment');
+  t.assertEqual(resumedDraft.data?.data?.layout?.balanceAfter, 0, 'resumed draft recalculates balance after payment');
+
+  const receiptListAfterEdit = await t.request('GET', `/api/receipt?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
+  const editedPendingReceipt = findReceiptByNo(receiptListAfterEdit.data?.data, editedReceiptNo);
+  t.assertEqual(editedPendingReceipt?.status, 'SIGNING_PENDING', 'edited draft stays SIGNING_PENDING until signatures are finalized');
+
   const tinyPngPath = t.writeTempFile(`receipt-generator-${suffix}.png`, '');
   writeFileSync(
     tinyPngPath,
@@ -92,20 +128,20 @@ export default async function run(t) {
     form: {
       action: 'finalize',
       sessionId,
-      layoutSnapshot: JSON.stringify({ receiptNo, orderNo }),
+      layoutSnapshot: JSON.stringify(resumedDraft.data?.data?.layout || {}),
       receiptImage: {
         filePath: tinyPngPath,
-        filename: `${receiptNo}.png`,
+        filename: `${editedReceiptNo}.png`,
         contentType: 'image/png',
       },
       receiverSignature: {
         filePath: tinyPngPath,
-        filename: `${receiptNo}-receiver.png`,
+        filename: `${editedReceiptNo}-receiver.png`,
         contentType: 'image/png',
       },
       payerSignature: {
         filePath: tinyPngPath,
-        filename: `${receiptNo}-payer.png`,
+        filename: `${editedReceiptNo}-payer.png`,
         contentType: 'image/png',
       },
     },
@@ -120,7 +156,7 @@ export default async function run(t) {
   t.assertMatch(sessionAfterFinalize.data?.data?.finalImageUrl || '', /\/upload\/images\/receipts\/generated\//, 'final image stored under generated receipt directory');
 
   const receiptListAfterFinalize = await t.request('GET', `/api/receipt?search=${encodeURIComponent(orderNo)}`, { expectedStatus: 200 });
-  const finalizedReceipt = findReceiptByNo(receiptListAfterFinalize.data?.data, receiptNo);
+  const finalizedReceipt = findReceiptByNo(receiptListAfterFinalize.data?.data, editedReceiptNo);
   t.assertEqual(finalizedReceipt?.status, 'SR_Received', 'receipt leaves SIGNING_PENDING after finalize');
   t.assertMatch(finalizedReceipt?.imageUrl || '', /\/upload\/images\/receipts\/generated\//, 'finalized receipt stores generated receipt image');
 

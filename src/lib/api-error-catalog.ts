@@ -127,7 +127,10 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
   },
   '签名未完成的收据不能进入业务流程': { zh: '签名未完成的收据不能进入业务流程', en: 'A receipt with unfinished signatures cannot enter the business workflow' },
   '签名未完成的收据不能进入付款明细流程': { zh: '签名未完成的收据不能进入付款明细流程', en: 'A receipt with unfinished signatures cannot enter the payment-detail workflow' },
-  '签名未完成的收据不能直接修改': { zh: '签名未完成的收据不能直接修改', en: 'A receipt with unfinished signatures cannot be edited directly' },
+  '待签字收据的收据号不能为空': { zh: '待签字收据的收据号不能为空', en: 'A pending signed receipt must have a receipt number.' },
+  '待签字收据的ORDER NO不能为空': { zh: '待签字收据的ORDER NO不能为空', en: 'A pending signed receipt must have an ORDER NO.' },
+  '待签字收据缺少有效签字会话，无法修改': { zh: '待签字收据缺少有效签字会话，无法修改', en: 'This pending signed receipt has no active signing session and cannot be edited.' },
+  '待签字收据的签字状态已变化，请刷新后重试': { zh: '待签字收据的签字状态已变化，请刷新后重试', en: 'The signing status changed. Refresh the receipt and try again.' },
 };
 
 const containsMessageMap: Array<[string, string]> = [

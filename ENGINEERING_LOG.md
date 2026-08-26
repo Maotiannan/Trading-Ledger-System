@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.211
-> 最后更新：2026-08-24
+> 当前版本：v1.0.212
+> 最后更新：2026-08-26
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] Dashboard 历史区块顺序与待签字收据草稿编辑：共享客户历史组件新增调用方可选的区块顺序，Dashboard 两个客户入口统一显示 `Recent Receipts -> Historical Orders`，Customer Management 保持原顺序。移除 `SIGNING_PENDING` 草稿的直接修改禁令，新增事务内 `receipt-generator-draft-service`，管理员直接修改或销售申请获批时同步更新 Receipt、ORDER/INV 绑定、Detail Item 与待签字会话快照；复用实时订单余额和正式收据布局内核，保留付款类型、付款方式、费用状态与收款人选择，并同步编号、业务日期、客户、付款人、电话、余额和 Motif。缺失会话或签字状态并发变化会明确失败并回滚，旧的“不允许修改”错误文案已删除。验证通过 182 suites / 1188 tests、完整 isolated API 21 cases（含真实草稿修改/恢复/最终签字闭环）、isolated Playwright 9/9、typecheck、全仓 ESLint、i18n audit 和 Webpack 生产构建。无 Prisma schema、迁移、Docker、数据库、NAS 上传路径或备份范围变化；隔离测试容器及临时 volume 已清理，现有服务和业务数据未触碰。✅ 2026-08-26
 
 - [x] Dashboard 客户详情、MU Contract 来源恢复与系统池订单对账：新增共享 Dashboard 实时欠款快照，Customer Outstanding Ranking 与 Customer Order & Payment History 统一使用同一个客户详情弹窗，上方展示 Released/In Transit 欠款，下方复用 Historical Orders/Recent Receipts；MU Contract 新 PI 可接替同 ORDER NO 的 inactive 来源，active 来源仍冲突，旧 PI 重新激活不能抢回，并在事务提交后记录不含客户隐私的结构化接替日志；发票手工创建与批量导入统一把匹配的 `DEPOSIT_POOL / Un_Associated` 原 Order 事务迁入正式 INV，或在正式 INV 已有同单时只搬收据、不重复累计池金额，同时同步 Receipt 的 INV/ORDER/客户快照并重算余额。Rematch 新增 ADMIN 可见范围内的系统池预览：唯一正式目标自动修复，无法唯一确定且金额大于 0 的候选必须明确选择正式 INV，支持事务、审计、重复提交幂等和手机安全弹窗。功能提交：`7ed6f11`、`8c69db2`、`835ea49`、`0bd7ebb`、`6601adb`、`fd59216`。验证通过需求定向 17 suites / 126 tests、全量 181 suites / 1180 tests、typecheck、全仓 ESLint、路由权限与数据安全回归；`origin/main` 已通过 Clash SG2 同步确认未前进。`npm audit --omit=dev` 在 2026-08-24 新公告基线下报告 8 项（1 moderate / 7 high），完整修复涉及 Next/Prisma/sharp 越界或破坏性升级，未混入本业务分支。无 Prisma schema、迁移、Docker、数据库、NAS/COS 或备份范围变化；MySQL 完整快照仍覆盖全部相关数据，未执行真实 Rematch、未重建现有服务、未触碰业务数据。✅ 2026-08-24
 

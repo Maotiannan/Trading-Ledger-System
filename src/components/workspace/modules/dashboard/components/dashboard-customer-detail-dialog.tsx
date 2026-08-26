@@ -134,7 +134,7 @@ export function DashboardCustomerDetailDialog({
           />
           {customerId ? (
             <section data-customer-detail-section="history">
-              <CustomerOrderHistoryContent {...historyProps} />
+              <CustomerOrderHistoryContent {...historyProps} sectionOrder="receipts-first" />
             </section>
           ) : (
             <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

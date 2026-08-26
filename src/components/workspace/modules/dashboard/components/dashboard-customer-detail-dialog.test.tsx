@@ -66,8 +66,9 @@ describe('DashboardCustomerDetailDialog', () => {
     expect(within(dialog).getByText('Total Unpaid: $1,250')).toBeInTheDocument();
     expect(within(dialog).getByText('Released')).toBeInTheDocument();
     expect(within(dialog).getByText('In Transit')).toBeInTheDocument();
-    expect(within(dialog).getByText('Historical Orders')).toBeInTheDocument();
-    expect(within(dialog).getByText('Recent Receipts')).toBeInTheDocument();
+    const historicalOrders = within(dialog).getByText('Historical Orders');
+    const recentReceipts = within(dialog).getByText('Recent Receipts');
+    expect(recentReceipts.compareDocumentPosition(historicalOrders) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     const sectionTitles = Array.from(dialog.querySelectorAll('[data-customer-detail-section]'))
       .map((node) => node.getAttribute('data-customer-detail-section'));

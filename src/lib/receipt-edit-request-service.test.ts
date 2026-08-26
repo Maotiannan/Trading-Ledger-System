@@ -8,6 +8,7 @@ import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
 import { updateOrderBalance } from '@/lib/matching';
+import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 import {
   listReceiptEditRequests,
   requestReceiptEdit,
@@ -63,6 +64,10 @@ jest.mock('@/lib/receipt-edit-binding', () => ({
 
 jest.mock('@/lib/matching', () => ({
   updateOrderBalance: jest.fn(),
+}));
+
+jest.mock('@/lib/receipt-generator-draft-service', () => ({
+  syncPendingReceiptGeneratorDraft: jest.fn(),
 }));
 
 function makeUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
@@ -135,6 +140,7 @@ const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
+const mockSyncPendingReceiptGeneratorDraft = syncPendingReceiptGeneratorDraft as jest.Mock;
 const mockTx = {
   receipt: {
     findFirst: jest.fn(),
@@ -368,6 +374,8 @@ function expectPendingBranchesToIncludeIntersection(
 describe('receipt-edit-request-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSyncPendingReceiptGeneratorDraft.mockReset();
+    mockSyncPendingReceiptGeneratorDraft.mockResolvedValue(undefined);
     mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockGetHierarchyScope.mockResolvedValue({
@@ -534,7 +542,7 @@ describe('receipt-edit-request-service', () => {
     expect(mockTx.receipt.findFirst).not.toHaveBeenCalled();
   });
 
-  it('approves a pending request and updates the receipt in one transaction', async () => {
+  it('approves a pending signed-receipt request and updates the receipt plus generator draft in one transaction', async () => {
     mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
       id: 'req-1',
       receiptId: 'receipt-1',
@@ -544,7 +552,7 @@ describe('receipt-edit-request-service', () => {
       receipt: {
         id: 'receipt-1',
         createdBy: 'sales-owner',
-        status: ReceiptStatus.SR_Received,
+        status: ReceiptStatus.SIGNING_PENDING,
         receiptNo: '0001001',
         date: null,
         invNo: 'INV-1',
@@ -609,6 +617,20 @@ describe('receipt-edit-request-service', () => {
         orderNo: 'ORD-2',
         mark: 'MAB-2',
       },
+    });
+    expect(mockSyncPendingReceiptGeneratorDraft).toHaveBeenCalledWith(mockTx, {
+      receiptId: 'receipt-1',
+      status: ReceiptStatus.SIGNING_PENDING,
+      receiptNo: '0001002',
+      date: new Date('2026-05-04T00:00:00.000Z'),
+      orderId: 'order-2',
+      orderNo: 'ORD-2',
+      invNo: 'INV-2',
+      customerId: 'customer-1',
+      customerMark: 'MAB-2',
+      customerName: 'Mamadou',
+      payer: 'BETA',
+      tel: '456',
     });
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-2');
@@ -721,7 +743,7 @@ describe('receipt-edit-request-service', () => {
       receipt: {
         id: 'receipt-1',
         createdBy: 'sales-owner',
-        status: ReceiptStatus.SR_Received,
+        status: ReceiptStatus.SIGNING_PENDING,
         receiptNo: '0001001',
         date: null,
         invNo: 'INV-1',
@@ -748,6 +770,7 @@ describe('receipt-edit-request-service', () => {
     expect(mockDb.receiptHistory.create).not.toHaveBeenCalled();
     expect(mockTx.receipt.update).not.toHaveBeenCalled();
     expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
+    expect(mockSyncPendingReceiptGeneratorDraft).not.toHaveBeenCalled();
     expect(mockTx.receiptEditRequest.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'req-2' },
     }));

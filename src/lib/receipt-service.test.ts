@@ -7,6 +7,7 @@ import { createOrder, findMatchingOrder, updateOrderBalance } from '@/lib/matchi
 import { resolveCustomer } from '@/lib/customer-matching';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
+import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -77,6 +78,10 @@ jest.mock('@/lib/user-hierarchy', () => ({
   getHierarchyScope: jest.fn(),
 }));
 
+jest.mock('@/lib/receipt-generator-draft-service', () => ({
+  syncPendingReceiptGeneratorDraft: jest.fn(),
+}));
+
 jest.mock('@/lib/order-alias-db', () => ({
   syncOrderAliases: jest.fn(),
 }));
@@ -113,10 +118,13 @@ const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
+const mockSyncPendingReceiptGeneratorDraft = syncPendingReceiptGeneratorDraft as jest.Mock;
 
 describe('receipt-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSyncPendingReceiptGeneratorDraft.mockReset();
+    mockSyncPendingReceiptGeneratorDraft.mockResolvedValue(undefined);
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockGetHierarchyScope.mockResolvedValue({
@@ -434,6 +442,120 @@ describe('receipt-service', () => {
     expect(mockResolveCustomer).not.toHaveBeenCalled();
     expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
     expect(result.data.id).toBe('receipt-1');
+  });
+
+  it('updates a signing-pending receipt and its generator draft in the same transaction', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-signing',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SIGNING_PENDING,
+      receiptNo: '0010009',
+      date: new Date('2026-08-20T00:00:00.000Z'),
+      tel: '111',
+      usd: 500,
+      invNo: 'INV-OLD',
+      orderNo: 'OLD-01',
+      payer: 'Old Payer',
+      imageUrl: null,
+      imageName: null,
+      isDeposit: false,
+      customerId: 'customer-old',
+      customerMark: 'OLD',
+      customerName: 'Old Customer',
+      customerPhone: '111',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      orderId: 'order-old',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-signing' });
+    mockResolveReceiptEditBinding.mockResolvedValueOnce({
+      orderId: 'order-new',
+      orderNo: 'PIKIN-20',
+      invNo: 'INV-NEW',
+      matchedCustomer: {
+        customerId: 'customer-new',
+        customerMark: 'PIKIN',
+        customerName: 'Mamadou Dian Diallo',
+        customerPhone: '222',
+        customerCity: 'Conakry',
+        needsCustomerFix: false,
+      },
+    });
+    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-signing', orderId: 'order-new' });
+
+    await updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-signing',
+      payload: {
+        receiptNo: '0010010',
+        date: '2026-08-26',
+        orderNo: 'PIKIN-20',
+        invNo: 'INV-NEW',
+        customerMark: 'PIKIN',
+        payer: 'Mamadou Dian Diallo "PIKIN"',
+        tel: '222',
+      },
+    });
+
+    expect(mockSyncPendingReceiptGeneratorDraft).toHaveBeenCalledWith(mockDb, {
+      receiptId: 'receipt-signing',
+      status: ReceiptStatus.SIGNING_PENDING,
+      receiptNo: '0010010',
+      date: new Date('2026-08-26T00:00:00.000Z'),
+      orderId: 'order-new',
+      orderNo: 'PIKIN-20',
+      invNo: 'INV-NEW',
+      customerId: 'customer-new',
+      customerMark: 'PIKIN',
+      customerName: 'Mamadou Dian Diallo',
+      payer: 'Mamadou Dian Diallo "PIKIN"',
+      tel: '222',
+    });
+  });
+
+  it('does not complete post-transaction work when pending draft synchronization fails', async () => {
+    mockDb.receipt.findUnique.mockResolvedValueOnce({
+      id: 'receipt-signing',
+      createdBy: 'sales-1',
+      status: ReceiptStatus.SIGNING_PENDING,
+      receiptNo: '0010009',
+      date: null,
+      tel: '111',
+      usd: 500,
+      invNo: 'INV-OLD',
+      orderNo: 'OLD-01',
+      payer: 'Old Payer',
+      imageUrl: null,
+      imageName: null,
+      isDeposit: false,
+      customerId: 'customer-old',
+      customerMark: 'OLD',
+      customerName: 'Old Customer',
+      customerPhone: '111',
+      customerCity: 'Conakry',
+      needsCustomerFix: false,
+      orderId: 'order-old',
+    });
+    mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-signing' });
+    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-signing', orderId: 'order-old' });
+    mockSyncPendingReceiptGeneratorDraft.mockRejectedValueOnce(new Error('missing signing session'));
+
+    await expect(updateReceiptRecord({
+      currentUser: makeUser({ role: UserRole.ADMIN }),
+      receiptId: 'receipt-signing',
+      payload: {
+        receiptNo: '0010010',
+        date: null,
+        orderNo: 'OLD-01',
+        invNo: 'INV-OLD',
+        customerMark: 'OLD',
+        payer: 'Old Payer',
+        tel: '111',
+      },
+    })).rejects.toThrow('missing signing session');
+
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    expect(mockUpdateOrderBalance).not.toHaveBeenCalled();
   });
 
   it('maps duplicate receipt number update errors to a readable conflict', async () => {

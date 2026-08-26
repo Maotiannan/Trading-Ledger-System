@@ -91,6 +91,10 @@ describe('CustomerOrderHistoryDialog', () => {
     expect(screen.getByText('$250')).toBeInTheDocument();
     expect(screen.getByText('0001001')).toBeInTheDocument();
     expect(screen.getByText('RECEIVED')).toBeInTheDocument();
+
+    const historicalOrders = screen.getByText('历史订单');
+    const recentReceipts = screen.getByText('最近收据');
+    expect(historicalOrders.compareDocumentPosition(recentReceipts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the existing tables visible while a pagination refresh is loading', () => {

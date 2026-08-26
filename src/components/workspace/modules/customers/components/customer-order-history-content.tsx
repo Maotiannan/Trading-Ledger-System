@@ -61,6 +61,7 @@ export type CustomerOrderHistoryContentProps = {
   onReceiptNextPage: () => void;
   onReceiptPageSizeChange: (pageSize: number) => void;
   onOpenReceiptImage?: (receipt: CustomerOrderHistoryReceipt) => void;
+  sectionOrder?: 'orders-first' | 'receipts-first';
 };
 
 function money(value: number) {
@@ -81,6 +82,158 @@ function OrderNoText({ value }: { value: string | null }) {
   ));
 }
 
+type HistorySectionProps = {
+  history: CustomerOrderHistory;
+  loading: boolean;
+  tx: CustomerOrderHistoryContentProps['tx'];
+};
+
+function HistoricalOrdersSection({
+  history,
+  loading,
+  tx,
+  pageSizeOptions,
+  onPreviousPage,
+  onNextPage,
+  onPageSizeChange,
+}: HistorySectionProps & {
+  pageSizeOptions: readonly number[];
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  return (
+    <section className="space-y-3 md:w-max">
+      <h3 className="font-semibold">{tx('历史订单', 'Historical Orders')}</h3>
+      <div className="rounded-md border">
+        <Table data-testid="customer-order-history-orders-table" className="md:w-max md:table-auto">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-[13ch]">ORDER</TableHead>
+              <TableHead className="whitespace-nowrap">INV NO</TableHead>
+              <TableHead className="whitespace-nowrap">AMOUNT</TableHead>
+              <TableHead className="whitespace-nowrap">O/S</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {history.orders.map((order) => (
+              <TableRow key={order.id}>
+                <TableCell data-testid="customer-order-history-order-value" className="min-w-[13ch] font-medium"><OrderNoText value={order.orderNo} /></TableCell>
+                <TableCell className="whitespace-nowrap">{order.invNo || '-'}</TableCell>
+                <TableCell className="whitespace-nowrap">{money(order.amount)}</TableCell>
+                <TableCell className={order.outstanding > 0 ? 'whitespace-nowrap text-red-600' : 'whitespace-nowrap'}>{money(order.outstanding)}</TableCell>
+              </TableRow>
+            ))}
+            {history.orders.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                  {tx('暂无历史订单', 'No historical orders')}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      {history.orderPagination && (
+        <ListPagination
+          idPrefix="customer-history-orders"
+          tx={tx}
+          currentPage={history.orderPagination.page}
+          totalPages={history.orderPagination.totalPages}
+          totalCount={history.orderPagination.totalItems}
+          pageSize={history.orderPagination.pageSize}
+          pageSizeOptions={pageSizeOptions}
+          compact
+          disabled={loading}
+          onPreviousPage={onPreviousPage}
+          onNextPage={onNextPage}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </section>
+  );
+}
+
+function RecentReceiptsSection({
+  history,
+  loading,
+  tx,
+  pageSizeOptions,
+  onPreviousPage,
+  onNextPage,
+  onPageSizeChange,
+  onOpenReceiptImage,
+}: HistorySectionProps & {
+  pageSizeOptions: readonly number[];
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onOpenReceiptImage?: (receipt: CustomerOrderHistoryReceipt) => void;
+}) {
+  return (
+    <section className="space-y-3 md:w-max">
+      <h3 className="font-semibold">{tx('最近收据', 'Recent Receipts')}</h3>
+      <div className="rounded-md border">
+        <Table data-testid="customer-order-history-receipts-table" className="md:w-max md:table-auto">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="whitespace-nowrap">{tx('创建时间', 'Created At')}</TableHead>
+              <TableHead className="min-w-[13ch]">ORDER</TableHead>
+              <TableHead className="whitespace-nowrap">USD</TableHead>
+              <TableHead className="whitespace-nowrap">Status</TableHead>
+              <TableHead className="whitespace-nowrap">Receipt</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {history.receipts.map((receipt) => (
+              <TableRow key={receipt.id}>
+                <TableCell className="whitespace-nowrap">{formatAppDate(receipt.createdAt)}</TableCell>
+                <TableCell data-testid="customer-order-history-order-value" className="min-w-[13ch]"><OrderNoText value={receipt.orderNo} /></TableCell>
+                <TableCell className="whitespace-nowrap">{money(receipt.usd)}</TableCell>
+                <TableCell className="whitespace-nowrap"><Badge variant="outline">{receipt.status || '-'}</Badge></TableCell>
+                <TableCell className="whitespace-nowrap font-medium">
+                  {receipt.imageUrl && onOpenReceiptImage ? (
+                    <button
+                      type="button"
+                      className="text-blue-700 underline-offset-2 hover:underline"
+                      onClick={() => onOpenReceiptImage(receipt)}
+                    >
+                      {receipt.receiptNo || '-'}
+                    </button>
+                  ) : receipt.receiptNo || '-'}
+                </TableCell>
+              </TableRow>
+            ))}
+            {history.receipts.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
+                  {tx('暂无最近收据', 'No recent receipts')}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
+      {history.receiptPagination && (
+        <ListPagination
+          idPrefix="customer-history-receipts"
+          tx={tx}
+          currentPage={history.receiptPagination.page}
+          totalPages={history.receiptPagination.totalPages}
+          totalCount={history.receiptPagination.totalItems}
+          pageSize={history.receiptPagination.pageSize}
+          pageSizeOptions={pageSizeOptions}
+          compact
+          disabled={loading}
+          onPreviousPage={onPreviousPage}
+          onNextPage={onNextPage}
+          onPageSizeChange={onPageSizeChange}
+        />
+      )}
+    </section>
+  );
+}
+
 export function CustomerOrderHistoryContent({
   loading,
   error,
@@ -95,8 +248,34 @@ export function CustomerOrderHistoryContent({
   onReceiptNextPage,
   onReceiptPageSizeChange,
   onOpenReceiptImage,
+  sectionOrder = 'orders-first',
 }: CustomerOrderHistoryContentProps) {
   const showInitialLoading = loading && !history;
+  const orderSection = history ? (
+    <HistoricalOrdersSection
+      key="orders"
+      history={history}
+      loading={loading}
+      tx={tx}
+      pageSizeOptions={orderPageSizeOptions}
+      onPreviousPage={onOrderPreviousPage}
+      onNextPage={onOrderNextPage}
+      onPageSizeChange={onOrderPageSizeChange}
+    />
+  ) : null;
+  const receiptSection = history ? (
+    <RecentReceiptsSection
+      key="receipts"
+      history={history}
+      loading={loading}
+      tx={tx}
+      pageSizeOptions={receiptPageSizeOptions}
+      onPreviousPage={onReceiptPreviousPage}
+      onNextPage={onReceiptNextPage}
+      onPageSizeChange={onReceiptPageSizeChange}
+      onOpenReceiptImage={onOpenReceiptImage}
+    />
+  ) : null;
 
   return (
     <div className="min-h-0">
@@ -116,115 +295,9 @@ export function CustomerOrderHistoryContent({
       {history && (
         <div data-testid="customer-order-history-scroll" className="md:min-w-0 md:max-w-full md:overflow-x-auto">
           <div data-testid="customer-order-history-grid" className="grid gap-4 md:w-max md:min-w-full md:grid-cols-[max-content_max-content] md:items-start">
-            <section className="space-y-3 md:w-max">
-              <h3 className="font-semibold">{tx('历史订单', 'Historical Orders')}</h3>
-              <div className="rounded-md border">
-                <Table data-testid="customer-order-history-orders-table" className="md:w-max md:table-auto">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[13ch]">ORDER</TableHead>
-                      <TableHead className="whitespace-nowrap">INV NO</TableHead>
-                      <TableHead className="whitespace-nowrap">AMOUNT</TableHead>
-                      <TableHead className="whitespace-nowrap">O/S</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {history.orders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell data-testid="customer-order-history-order-value" className="min-w-[13ch] font-medium"><OrderNoText value={order.orderNo} /></TableCell>
-                        <TableCell className="whitespace-nowrap">{order.invNo || '-'}</TableCell>
-                        <TableCell className="whitespace-nowrap">{money(order.amount)}</TableCell>
-                        <TableCell className={order.outstanding > 0 ? 'whitespace-nowrap text-red-600' : 'whitespace-nowrap'}>{money(order.outstanding)}</TableCell>
-                      </TableRow>
-                    ))}
-                    {history.orders.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
-                          {tx('暂无历史订单', 'No historical orders')}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {history.orderPagination && (
-                <ListPagination
-                  idPrefix="customer-history-orders"
-                  tx={tx}
-                  currentPage={history.orderPagination.page}
-                  totalPages={history.orderPagination.totalPages}
-                  totalCount={history.orderPagination.totalItems}
-                  pageSize={history.orderPagination.pageSize}
-                  pageSizeOptions={orderPageSizeOptions}
-                  compact
-                  disabled={loading}
-                  onPreviousPage={onOrderPreviousPage}
-                  onNextPage={onOrderNextPage}
-                  onPageSizeChange={onOrderPageSizeChange}
-                />
-              )}
-            </section>
-
-            <section className="space-y-3 md:w-max">
-              <h3 className="font-semibold">{tx('最近收据', 'Recent Receipts')}</h3>
-              <div className="rounded-md border">
-                <Table data-testid="customer-order-history-receipts-table" className="md:w-max md:table-auto">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="whitespace-nowrap">{tx('创建时间', 'Created At')}</TableHead>
-                      <TableHead className="min-w-[13ch]">ORDER</TableHead>
-                      <TableHead className="whitespace-nowrap">USD</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="whitespace-nowrap">Receipt</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {history.receipts.map((receipt) => (
-                      <TableRow key={receipt.id}>
-                        <TableCell className="whitespace-nowrap">{formatAppDate(receipt.createdAt)}</TableCell>
-                        <TableCell data-testid="customer-order-history-order-value" className="min-w-[13ch]"><OrderNoText value={receipt.orderNo} /></TableCell>
-                        <TableCell className="whitespace-nowrap">{money(receipt.usd)}</TableCell>
-                        <TableCell className="whitespace-nowrap"><Badge variant="outline">{receipt.status || '-'}</Badge></TableCell>
-                        <TableCell className="whitespace-nowrap font-medium">
-                          {receipt.imageUrl && onOpenReceiptImage ? (
-                            <button
-                              type="button"
-                              className="text-blue-700 underline-offset-2 hover:underline"
-                              onClick={() => onOpenReceiptImage(receipt)}
-                            >
-                              {receipt.receiptNo || '-'}
-                            </button>
-                          ) : receipt.receiptNo || '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {history.receipts.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
-                          {tx('暂无最近收据', 'No recent receipts')}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-              {history.receiptPagination && (
-                <ListPagination
-                  idPrefix="customer-history-receipts"
-                  tx={tx}
-                  currentPage={history.receiptPagination.page}
-                  totalPages={history.receiptPagination.totalPages}
-                  totalCount={history.receiptPagination.totalItems}
-                  pageSize={history.receiptPagination.pageSize}
-                  pageSizeOptions={receiptPageSizeOptions}
-                  compact
-                  disabled={loading}
-                  onPreviousPage={onReceiptPreviousPage}
-                  onNextPage={onReceiptNextPage}
-                  onPageSizeChange={onReceiptPageSizeChange}
-                />
-              )}
-            </section>
+            {sectionOrder === 'receipts-first'
+              ? [receiptSection, orderSection]
+              : [orderSection, receiptSection]}
           </div>
         </div>
       )}

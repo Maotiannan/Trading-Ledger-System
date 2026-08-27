@@ -1,6 +1,6 @@
 # Receipt Transfer Reversal Implementation Plan
 
-> **Status:** ACTIVE; implementation and isolated case 69 are complete. Full release gates, verified backup restore/migration rehearsal, PR/CI, deployment, and the one-time incident repair remain.
+> **Status:** ACTIVE; implementation, full release gates, verified backup restore/migration rehearsal, and isolated incident repair are complete. PR merge, deployment, and the one-time live incident repair remain.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -826,7 +826,8 @@ docker run -d --name "$DRILL_DB_CONTAINER" \
   mariadb:10.6
 
 for attempt in $(seq 1 60); do
-  if docker exec -e MYSQL_PWD="$DRILL_DB_PASSWORD" "$DRILL_DB_CONTAINER" mariadb-admin ping -uroot --silent; then break; fi
+  if docker exec -e MYSQL_PWD="$DRILL_DB_PASSWORD" "$DRILL_DB_CONTAINER" \
+    mariadb -uroot -N -e 'SELECT 1' >/dev/null 2>&1; then break; fi
   test "$attempt" -lt 60
   sleep 1
 done
@@ -842,7 +843,7 @@ done | tee "$DRILL_ROOT/pre-migration-counts.txt"
 
 for table in Order Invoice Receipt Detail DetailItem AuditLog; do
   docker exec -e MYSQL_PWD="$DRILL_DB_PASSWORD" "$DRILL_DB_CONTAINER" \
-    mariadb-dump -uroot --no-create-info --skip-extended-insert --order-by-primary trading_ledger "$table"
+    mariadb-dump -uroot --skip-comments --no-create-info --skip-extended-insert --order-by-primary trading_ledger "$table"
 done | shasum -a 256 | tee "$DRILL_ROOT/pre-migration-business.sha256"
 ```
 
@@ -902,7 +903,7 @@ diff -u "$DRILL_ROOT/pre-migration-counts.txt" "$DRILL_ROOT/post-migration-count
 
 for table in Order Invoice Receipt Detail DetailItem AuditLog; do
   docker exec -e MYSQL_PWD="$DRILL_DB_PASSWORD" "$DRILL_DB_CONTAINER" \
-    mariadb-dump -uroot --no-create-info --skip-extended-insert --order-by-primary trading_ledger "$table"
+    mariadb-dump -uroot --skip-comments --no-create-info --skip-extended-insert --order-by-primary trading_ledger "$table"
 done | shasum -a 256 | tee "$DRILL_ROOT/post-migration-business.sha256"
 diff -u "$DRILL_ROOT/pre-migration-business.sha256" "$DRILL_ROOT/post-migration-business.sha256"
 ```

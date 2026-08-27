@@ -229,6 +229,7 @@ The active rollout and historical drills remain valid records of what was tested
 
 | Date | Backup | Result | Evidence |
 | --- | --- | --- | --- |
+| 2026-08-27 | Active NAS database/media snapshot | `PASS` for Receipt transfer reversal migration and incident repair | [Migration and repair drill](restore-drills/2026-08-27-receipt-transfer-reversal-migration-drill.md) |
 | 2026-07-19 | Active NAS database/media snapshot and production rollout | `PASS` | [NAS rollout and restore](restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md) |
 | 2026-07-18 | Historical cloud database/media backup | `PASS` for MU Contract migration | [Migration drill](restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md) |
 | 2026-07-17 | Historical cloud database/media backup | `PASS_WITH_FINDINGS` | [Full drill](restore-drills/2026-07-17-muledger-cos-restore-drill.md) |

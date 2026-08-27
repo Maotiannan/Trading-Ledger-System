@@ -1,9 +1,10 @@
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { updateOrderBalance } from '@/lib/matching';
+import { updateOrderBalance as updateOrderBalanceCache } from '@/lib/order-balance-service';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
@@ -1572,21 +1573,7 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
       targetOrderId = toOrder.id;
     }
 
-    await tx.balanceTransfer.create({
-      data: {
-        fromOrderId,
-        toOrderId: toOrder.id,
-        amount: transferAmount,
-        createdBy: currentUser.id,
-      },
-    });
-
-    await tx.order.update({
-      where: { id: fromOrderId },
-      data: { amount: { increment: transferAmount } },
-    });
-
-    await tx.receipt.create({
+    const generatedReceipt = await tx.receipt.create({
       data: {
         receiptNo: `TRANSFER-${Date.now()}`,
         usd: transferAmount,
@@ -1599,24 +1586,46 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
         createdBy: currentUser.id,
       },
     });
+
+    const transfer = await tx.balanceTransfer.create({
+      data: {
+        fromOrderId,
+        toOrderId: toOrder.id,
+        generatedReceiptId: generatedReceipt.id,
+        amount: transferAmount,
+        createdBy: currentUser.id,
+      },
+    });
+
+    await tx.order.update({
+      where: { id: fromOrderId },
+      data: { amount: { increment: transferAmount } },
+    });
+
+    await updateOrderBalanceCache(fromOrderId, tx, {
+      actorId: currentUser.id,
+      source: 'INVOICE_BALANCE_TRANSFER',
+    });
+    await updateOrderBalanceCache(toOrder.id, tx, {
+      actorId: currentUser.id,
+      source: 'INVOICE_BALANCE_TRANSFER',
+    });
+
+    await recordAuditEventInTransaction(tx, {
+      action: auditActions.ORDER_TRANSFER_BALANCE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.ORDER,
+      targetId: fromOrderId,
+      metadata: {
+        balanceTransferId: transfer.id,
+        generatedReceiptId: generatedReceipt.id,
+        fromOrderId,
+        toOrderNo: canonicalToOrderNo,
+        toOrderId: toOrder.id,
+        transferAmount,
+      },
+    });
   });
 
-  await updateOrderBalance(fromOrderId);
-  if (targetOrderId) {
-    await updateOrderBalance(targetOrderId);
-  }
-
-  await recordAuditEvent({
-    action: auditActions.ORDER_TRANSFER_BALANCE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.ORDER,
-    targetId: fromOrderId,
-    metadata: {
-      fromOrderId,
-      toOrderNo: canonicalToOrderNo,
-      toOrderId: targetOrderId,
-      transferAmount,
-    },
-  });
   return { message: `成功转移 ${formatUsdAmount(transferAmount)} 到订单 ${canonicalToOrderNo}` };
 }

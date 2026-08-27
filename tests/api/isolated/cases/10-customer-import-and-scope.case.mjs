@@ -150,6 +150,12 @@ export default async function run(t) {
   });
   t.assertEqual(invalidTemplate.data?.code, 'IMPORT_TEMPLATE_INVALID', 'customer import template validation returns IMPORT_TEMPLATE_INVALID code');
 
+  await t.request('POST', '/api/locale', {
+    json: { locale: 'zh' },
+    expectedStatus: 200,
+  });
+  t.step('locale restored after localized customer assertions');
+
   await t.logout();
   await t.login(salesEmail, 'Sales@2026!');
   const scopedList = await t.request('GET', `/api/customer?search=${encodeURIComponent(`ORDER-${suffix}-OK`)}`, { expectedStatus: 200 });

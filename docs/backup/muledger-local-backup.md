@@ -15,6 +15,8 @@ Snapshots are stored under:
 
 The database dump includes all customers, invoices, financial orders, receipts, payment details, SWIFT records, approvals, audit records, account preferences, Orders workflow data, settings, and external synchronization state. The MU Contract integration tables `ExternalOrderSourceLink`, `IntegrationSyncState`, `IntegrationEventReceipt`, `IntegrationSyncConflict`, and `IntegrationReconcilePreview` are covered automatically by the complete `trading_ledger` dump.
 
+Receipt transfer reversal data is also fully covered by the database dump. This includes `BalanceTransfer.generatedReceiptId`, the linked system-generated Receipt, the real Receipt, source and target Orders, and strict reversal audit records. The feature adds no file family outside `UPLOAD_HOST_DIR`.
+
 Do not back up Docker containers, images, `.next`, `node_modules`, logs, or test output as business data.
 
 ### Accepted Limitation
@@ -170,7 +172,29 @@ Correct restore drill:
 
 A production recovery must restore into a new database first and switch only after validation. The backup script intentionally exposes no command that overwrites `trading_ledger`.
 
-## 8. MU Contract Orders Deployment Gate
+## 8. Receipt Transfer Reversal Deployment Gate
+
+Before migration `20260827090000_balance_transfer_generated_receipt` or any live transfer repair:
+
+1. Create and verify a fresh complete NAS snapshot.
+2. Restore that exact database dump into disposable MariaDB with no production volume or network reuse.
+3. Record counts and deterministic fingerprints for `Order`, `Invoice`, `Receipt`, `BalanceTransfer`, `Detail`, `DetailItem`, and `AuditLog` before migration.
+4. Apply the migration only to the restored copy. Confirm the known unique historical transfer links to exactly one Receipt and an intentionally ambiguous fixture remains unlinked.
+5. Run isolated API case `69-receipt-transfer-reversal` against a disposable application/database and verify direct ADMIN, SALES approval, stale retry, ambiguity, protected-reference rollback, permissions, and idempotency.
+6. Re-run counts/fingerprints and confirm the additive relationship changes no financial values, Receipt ownership, Detail linkage, media paths, or unrelated audit rows.
+
+For the one-time `TRANSFER-1787794481934` repair, the authenticated ADMIN action may run only after the exact pre-deployment snapshot has passed verification and restore rehearsal. Immediately verify all postconditions:
+
+- synthetic Receipt `TRANSFER-1787794481934` is absent;
+- its `BalanceTransfer` row is absent;
+- real Receipt `0001170` remains unchanged and bound to `SUPER DT2-08B` / `L25MH090002B`;
+- target live balance is `10,453`;
+- empty incorrect `Super DT2-08 B` / `Un_Associated` source Order is absent;
+- one strict reversal audit row records before/after values and the actor.
+
+Do not use Rematch, generic deletion, direct SQL, or a restore over the active database for this repair.
+
+## 9. MU Contract Orders Deployment Gate
 
 Before migration `20260718090000_mu_contract_order_sync` is applied to the active database:
 
@@ -185,7 +209,7 @@ Before migration `20260718090000_mu_contract_order_sync` is applied to the activ
 
 Do not use Full Reconcile or business Rematch as a migration test. Synchronization stays disabled until the production schema, application, source credential, and ADMIN Full Reconcile preview gates pass.
 
-## 9. Backup Change Gate
+## 10. Backup Change Gate
 
 Any durable data change must update this runbook in the same work item.
 
@@ -197,7 +221,7 @@ Required checks:
 - Run `scripts/backup/muledger-local-backup.sh --dry-run` after backup path or script changes.
 - Run a restore drill when dump tooling, database engines, restore assumptions, or critical table families change.
 
-## 10. Historical Cloud Backups
+## 11. Historical Cloud Backups
 
 Tencent COS uploads were retired by user decision on 2026-07-19. MULEDGER no longer stores cloud credentials, installs COSCLI, or writes new cloud objects. Existing remote objects were not deleted and remain historical recovery evidence.
 

@@ -181,6 +181,7 @@ NAS 完整快照、校验、保留和隔离恢复流程见 `docs/backup/muledger
 - 客户资料、客户多个 `ORDER_NAME`、多个 `CONSIGNEE`
 - 发票、订单、订单余额
 - 收据、付款明细、SWIFT 水单
+- 余额转移及其唯一关联的系统生成收据；`BalanceTransfer.generatedReceiptId` 与对应 Receipt 都在完整数据库快照中
 - 删除审批、修改审批
 - 系统配置、配置审计、操作审计
 - Excel ML token 哈希
@@ -190,6 +191,8 @@ NAS 完整快照、校验、保留和隔离恢复流程见 `docs/backup/muledger
 - MU Contract Orders 来源关联、同步游标、事件幂等收据、冲突与对账预览
 
 注意：MySQL 数据文件不在项目 Git 仓库，也不在 app 容器里。备份数据库时应备份 `trading_ledger` 业务库，而不是只备份项目代码。
+
+余额转移必须通过 `BalanceTransfer.generatedReceiptId` 明确关联到唯一的 `TRANSFER-*` Receipt。该关系用于管理员撤销和收据改绑时的事务校验；历史迁移只回填源订单、目标订单、金额、创建者、文案和创建时间均一致且双方唯一的候选，无法唯一确认的历史记录不会自动猜测。撤销会同步重算源/目标订单余额并写审计，不会新增或移动 NAS 文件。
 
 ## NAS 上传文件目录
 

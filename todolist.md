@@ -1,8 +1,8 @@
 # 收汇管理系统里程碑
 
 > 面向用户的版本里程碑与后续计划  
-> 当前版本：v1.0.212
-> 最后更新：2026-08-26
+> 当前版本：v1.0.213
+> 最后更新：2026-08-27
 
 ## 当前状态
 
@@ -19,6 +19,7 @@
 - `Receipt Management` 顶部动作顺序已固定为 `Create Directly / Generate Signed Receipt / Upload Receipt`
 - Dashboard 客户详情弹窗先显示 `Recent Receipts`，再显示 `Historical Orders`；Customer Management 的原顺序保持不变
 - 未完成签字的收据草稿可以在 Receipt Management 修改；管理员直接生效，销售仍走审批，继续签字会使用修改后的草稿
+- 收据误挂后如果已经产生系统余额转移，管理员改绑真实收据时会先提示确认并在一次操作中撤销重复转移；系统转移记录不能再走普通修改或删除
 - `Customer Management` 的 `CONSIGNEE` 中 `-` 代表空白；系统写入真实收货人时会自动移除空白占位并修正默认项
 - 临时上传图片的 24h 孤儿清理，以及签名收据 `SIGNING_PENDING` 72h 超时清理
 - `Generate Signed Receipt` 的复合订单余额已与账单、收据页面统一：完整复合订单号、单段订单号和别名命中都会按订单金额减去已完成/已入流程收据实时计算，未完成签名的临时收据不参与余额

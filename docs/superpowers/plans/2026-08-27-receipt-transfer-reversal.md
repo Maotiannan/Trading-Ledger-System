@@ -1,5 +1,7 @@
 # Receipt Transfer Reversal Implementation Plan
 
+> **Status:** ACTIVE; implementation and isolated case 69 are complete. Full release gates, verified backup restore/migration rehearsal, PR/CI, deployment, and the one-time incident repair remain.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Prevent duplicate payments when an original Receipt is rebound after a balance transfer, provide an ADMIN-only transactional reversal, repair `TRANSFER-1787794481934`, and localize Receipt edit results.

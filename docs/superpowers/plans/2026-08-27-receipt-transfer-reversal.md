@@ -1,6 +1,6 @@
 # Receipt Transfer Reversal Implementation Plan
 
-> **Status:** ACTIVE; implementation, full release gates, verified backup restore/migration rehearsal, and isolated incident repair are complete. PR merge, deployment, and the one-time live incident repair remain.
+> **Status:** ARCHIVED_COMPLETED; PR #26 merged, v1.0.213 deployed, the production migration applied, and the one-time transfer incident was repaired and verified on 2026-08-27.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -1034,3 +1034,11 @@ rm -rf "$DRILL_ROOT"
 ```
 
 Never remove production volumes or backup snapshots.
+
+## Completion Record
+
+PR #26 merged to `main` as `198c203`. Both the final pull-request CI and post-merge `main` CI passed. The already restored and rehearsed NAS snapshot `muledger-20260827-181124` was reverified immediately before deployment; current protected-table counts and every incident identity, amount, status, binding, and timestamp still matched that snapshot.
+
+The standard `scripts/rebuild-local-app.sh` flow deployed v1.0.213 and applied only migration `20260827090000_balance_transfer_generated_receipt`. The application, maintenance service, MU Contract trigger, HTTPS route, database migration status, and 518-file NAS upload mount passed runtime checks.
+
+The authenticated ADMIN reversal API removed `TRANSFER-1787794481934` and its `BalanceTransfer` in one transaction. Receipt `0001170` remained `RECEIVED` for `$3,213` on `SUPER DT2-08B` / `L25MH090002B`, including its existing Detail Item. The empty incorrect `Super DT2-08 B` system-pool Order was deleted, and the target stored and computed balances both became `$10,453`. Exactly one strict reversal audit row records `$3,213 -> $0` for the source and `$7,240 -> $10,453` for the target. A second identical API request returned `alreadyReversed: true` without another balance or audit change.

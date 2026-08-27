@@ -44,6 +44,10 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   DELETION_REQUEST_NOT_FOUND: { zh: '删除申请不存在', en: 'Deletion request not found' },
   DELETION_REQUEST_ALREADY_PROCESSED: { zh: '删除申请已处理', en: 'Deletion request has already been processed' },
   DELETION_REQUEST_STATE_CHANGED: { zh: '删除申请状态已变化', en: 'Deletion request state has changed' },
+  RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED: {
+    zh: '该收据已发生余额转移。请确认撤销转移后再修改收据。',
+    en: 'This receipt has an existing balance transfer. Confirm reversal before editing the receipt.',
+  },
   EXCEL_TOKEN_REQUIRED: { zh: '缺少Excel API令牌', en: 'Excel API token is required' },
   EXCEL_TOKEN_INVALID: { zh: 'Excel API令牌无效', en: 'Invalid Excel API token' },
   EXCEL_TOKEN_REVOKED: { zh: 'Excel API令牌已撤销', en: 'Excel API token has been revoked' },

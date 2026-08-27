@@ -8,6 +8,7 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
 import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
+import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -82,6 +83,10 @@ jest.mock('@/lib/receipt-generator-draft-service', () => ({
   syncPendingReceiptGeneratorDraft: jest.fn(),
 }));
 
+jest.mock('@/lib/receipt-edit-apply-service', () => ({
+  applyReceiptEditInTransaction: jest.fn(),
+}));
+
 jest.mock('@/lib/order-alias-db', () => ({
   syncOrderAliases: jest.fn(),
 }));
@@ -119,12 +124,19 @@ const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
 const mockSyncPendingReceiptGeneratorDraft = syncPendingReceiptGeneratorDraft as jest.Mock;
+const mockApplyReceiptEdit = applyReceiptEditInTransaction as jest.Mock;
 
 describe('receipt-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb.receipt.update.mockReset();
     mockSyncPendingReceiptGeneratorDraft.mockReset();
     mockSyncPendingReceiptGeneratorDraft.mockResolvedValue(undefined);
+    mockApplyReceiptEdit.mockResolvedValue({
+      receipt: { id: 'receipt-1', orderId: 'order-old' },
+      touchedOrderIds: [],
+      reversedTransferId: null,
+    });
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockGetHierarchyScope.mockResolvedValue({
@@ -408,7 +420,6 @@ describe('receipt-service', () => {
       orderId: 'order-old',
     });
     mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
-    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-old' });
 
     const result = await updateReceiptRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
@@ -424,19 +435,26 @@ describe('receipt-service', () => {
       },
     });
 
-    expect(mockDb.receiptHistory.create).toHaveBeenCalled();
-    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'receipt-1' },
-      data: {
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      tx: mockDb,
+      receiptId: 'receipt-1',
+      source: 'DIRECT_ADMIN_EDIT',
+    }));
+
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      currentUser: expect.objectContaining({ role: UserRole.ADMIN }),
+      ownerIds: ['admin-1', 'sales-1'],
+      patch: {
         receiptNo: 'R-NEW',
         date: null,
         orderNo: 'IB-1',
-        orderId: 'order-old',
         tel: null,
         invNo: null,
         customerMark: 'IB',
         payer: null,
       },
+      nextDate: null,
+      historyNote: '重新识别前保存',
     }));
     expect(mockFindMatchingOrder).not.toHaveBeenCalled();
     expect(mockResolveCustomer).not.toHaveBeenCalled();
@@ -468,20 +486,11 @@ describe('receipt-service', () => {
       orderId: 'order-old',
     });
     mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-signing' });
-    mockResolveReceiptEditBinding.mockResolvedValueOnce({
-      orderId: 'order-new',
-      orderNo: 'PIKIN-20',
-      invNo: 'INV-NEW',
-      matchedCustomer: {
-        customerId: 'customer-new',
-        customerMark: 'PIKIN',
-        customerName: 'Mamadou Dian Diallo',
-        customerPhone: '222',
-        customerCity: 'Conakry',
-        needsCustomerFix: false,
-      },
+    mockApplyReceiptEdit.mockResolvedValueOnce({
+      receipt: { id: 'receipt-signing', orderId: 'order-new' },
+      touchedOrderIds: ['order-old', 'order-new'],
+      reversedTransferId: null,
     });
-    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-signing', orderId: 'order-new' });
 
     await updateReceiptRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
@@ -497,20 +506,15 @@ describe('receipt-service', () => {
       },
     });
 
-    expect(mockSyncPendingReceiptGeneratorDraft).toHaveBeenCalledWith(mockDb, {
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      tx: mockDb,
       receiptId: 'receipt-signing',
-      status: ReceiptStatus.SIGNING_PENDING,
-      receiptNo: '0010010',
-      date: new Date('2026-08-26T00:00:00.000Z'),
-      orderId: 'order-new',
-      orderNo: 'PIKIN-20',
-      invNo: 'INV-NEW',
-      customerId: 'customer-new',
-      customerMark: 'PIKIN',
-      customerName: 'Mamadou Dian Diallo',
-      payer: 'Mamadou Dian Diallo "PIKIN"',
-      tel: '222',
-    });
+      nextDate: new Date('2026-08-26T00:00:00.000Z'),
+      patch: expect.objectContaining({
+        orderNo: 'PIKIN-20',
+        invNo: 'INV-NEW',
+      }),
+    }));
   });
 
   it('does not complete post-transaction work when pending draft synchronization fails', async () => {
@@ -537,8 +541,7 @@ describe('receipt-service', () => {
       orderId: 'order-old',
     });
     mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-signing' });
-    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-signing', orderId: 'order-old' });
-    mockSyncPendingReceiptGeneratorDraft.mockRejectedValueOnce(new Error('missing signing session'));
+    mockApplyReceiptEdit.mockRejectedValueOnce(new Error('missing signing session'));
 
     await expect(updateReceiptRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
@@ -582,7 +585,7 @@ describe('receipt-service', () => {
       orderId: 'order-old',
     });
     mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
-    mockDb.receipt.update.mockRejectedValueOnce({
+    mockApplyReceiptEdit.mockRejectedValueOnce({
       code: 'P2002',
       meta: { target: ['receiptNo'] },
     });
@@ -630,12 +633,11 @@ describe('receipt-service', () => {
       orderId: 'order-old',
     });
     mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
-    mockResolveReceiptEditBinding.mockResolvedValueOnce({
-      orderId: 'order-new',
-      orderNo: 'PIKIN-20',
-      invNo: 'INV-NEW',
+    mockApplyReceiptEdit.mockResolvedValueOnce({
+      receipt: { id: 'receipt-1', orderId: 'order-new' },
+      touchedOrderIds: ['order-old', 'order-new'],
+      reversedTransferId: 'transfer-1',
     });
-    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-1', orderId: 'order-new' });
 
     await updateReceiptRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
@@ -649,22 +651,16 @@ describe('receipt-service', () => {
         payer: null,
         customerMark: 'PIKIN',
       },
+      expectedBalanceTransferId: 'transfer-1',
     });
 
-    expect(mockResolveReceiptEditBinding).toHaveBeenCalledWith(mockDb, expect.objectContaining({
-      orderNo: 'PIKIN-20',
-      invNo: 'INV-NEW',
-      customerMark: 'PIKIN',
-    }));
-    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      patch: expect.objectContaining({
         orderNo: 'PIKIN-20',
-        orderId: 'order-new',
         invNo: 'INV-NEW',
       }),
+      expectedBalanceTransferId: 'transfer-1',
     }));
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
   });
 
   it('allows direct admin rebinding for a RECEIVED receipt and keeps linked detail item aligned', async () => {
@@ -691,13 +687,11 @@ describe('receipt-service', () => {
       orderId: 'order-old',
     });
     mockDb.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-received' });
-    mockResolveReceiptEditBinding.mockResolvedValueOnce({
-      orderId: 'order-new',
-      orderNo: 'NEW-02',
-      invNo: 'INV-NEW',
+    mockApplyReceiptEdit.mockResolvedValueOnce({
+      receipt: { id: 'receipt-received', orderId: 'order-new' },
+      touchedOrderIds: ['order-old', 'order-new'],
+      reversedTransferId: null,
     });
-    mockDb.receipt.update.mockResolvedValueOnce({ id: 'receipt-received', orderId: 'order-new' });
-    mockDb.detailItem.updateMany.mockResolvedValueOnce({ count: 1 });
 
     await updateReceiptRecord({
       currentUser: makeUser({ role: UserRole.ADMIN }),
@@ -713,23 +707,13 @@ describe('receipt-service', () => {
       },
     });
 
-    expect(mockDb.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'receipt-received' },
-      data: expect.objectContaining({
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      receiptId: 'receipt-received',
+      patch: expect.objectContaining({
         orderNo: 'NEW-02',
-        orderId: 'order-new',
         invNo: 'INV-NEW',
       }),
     }));
-    expect(mockDb.detailItem.updateMany).toHaveBeenCalledWith({
-      where: { receiptId: 'receipt-received' },
-      data: {
-        orderNo: 'NEW-02',
-        mark: 'NEW',
-      },
-    });
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
   });
 
   it('rejects direct admin update when the receipt is outside receipt visibility scope', async () => {

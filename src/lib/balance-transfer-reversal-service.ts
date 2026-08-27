@@ -35,6 +35,7 @@ export type ReverseBalanceTransferInput = {
   balanceTransferId: string;
   expectedGeneratedReceiptId: string;
   source: string;
+  deferSourceCleanup?: boolean;
 };
 
 export type BalanceTransferReversalResult = {
@@ -214,7 +215,7 @@ export async function inspectReceiptEditTransferImpact(
   };
 }
 
-async function cleanupSafeSystemPoolSourceOrder(
+export async function cleanupSafeSystemPoolSourceOrderInTransaction(
   tx: DbTransactionClient,
   sourceOrderId: string,
 ): Promise<boolean> {
@@ -318,8 +319,9 @@ export async function reverseBalanceTransferInTransaction(
     source: input.source,
   });
   const sourceAmountAfter = sourceAmountBefore - transferAmount;
-  const sourceOrderDeleted = SYSTEM_POOL_INVOICE_NOS.has(transfer.fromOrder.invoice.invNo)
-    ? await cleanupSafeSystemPoolSourceOrder(tx, transfer.fromOrderId)
+  const sourceOrderDeleted = !input.deferSourceCleanup
+    && SYSTEM_POOL_INVOICE_NOS.has(transfer.fromOrder.invoice.invNo)
+    ? await cleanupSafeSystemPoolSourceOrderInTransaction(tx, transfer.fromOrderId)
     : false;
 
   const result: BalanceTransferReversalResult = {

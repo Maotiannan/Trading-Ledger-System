@@ -6,11 +6,9 @@ import { db } from '@/lib/db';
 import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { ReceiptEditablePatch, ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
-import { resolveReceiptEditBinding, syncReceiptDetailItemsForBinding } from '@/lib/receipt-edit-binding';
-import { updateOrderBalance } from '@/lib/matching';
+import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
-import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 
 type EditableSnapshotSource = Partial<Record<keyof ReceiptEditablePatch, unknown>> | null | undefined;
 
@@ -278,8 +276,15 @@ export async function reviewReceiptEdit(params: {
   requestId: string;
   decision: 'approve' | 'reject';
   comment?: string | null;
+  expectedBalanceTransferId?: string | null;
 }) {
-  const { currentUser, requestId, decision, comment } = params;
+  const {
+    currentUser,
+    requestId,
+    decision,
+    comment,
+    expectedBalanceTransferId,
+  } = params;
 
   if (currentUser.role !== UserRole.ADMIN) {
     throw forbidden('RECEIPT_EDIT_REVIEW_FORBIDDEN', '只有管理员可以审批收据修改申请', {
@@ -295,7 +300,6 @@ export async function reviewReceiptEdit(params: {
   const descendantIds = scope.descendantIds;
   const ownerIds = Array.from(scope.ownerVisibleIds);
 
-  const touchedOrderIds = new Set<string>();
   await runInTransaction(async (tx) => {
     const request = await tx.receiptEditRequest.findUnique({
       where: { id: requestId },
@@ -341,6 +345,21 @@ export async function reviewReceiptEdit(params: {
     const nextSnapshot = validateEditablePatch(request.afterSnapshot as EditableSnapshotSource as ReceiptEditablePatch);
     const nextDate = parseEditableDateValue(nextSnapshot.date);
     const reviewedAt = new Date();
+
+    if (decision === 'approve') {
+      await applyReceiptEditInTransaction({
+        tx,
+        currentUser,
+        ownerIds,
+        receiptId: request.receiptId,
+        patch: nextSnapshot,
+        nextDate,
+        historyNote: '审批修改前保存',
+        source: 'APPROVED_RECEIPT_EDIT_REQUEST',
+        expectedBalanceTransferId,
+      });
+    }
+
     const claimResult = await tx.receiptEditRequest.updateMany({
       where: {
         id: requestId,
@@ -360,98 +379,7 @@ export async function reviewReceiptEdit(params: {
         requestId,
       });
     }
-
-    if (decision === 'approve') {
-      const binding = await resolveReceiptEditBinding(tx, {
-        currentUserId: currentUser.id,
-        ownerIds,
-        orderNo: nextSnapshot.orderNo,
-        invNo: nextSnapshot.invNo,
-        isDeposit: request.receipt.isDeposit,
-        customerId: request.receipt.customerId,
-        customerMark: nextSnapshot.customerMark || request.receipt.customerMark,
-        customerName: request.receipt.customerName,
-        customerPhone: request.receipt.customerPhone,
-        customerCity: request.receipt.customerCity,
-        needsCustomerFix: request.receipt.needsCustomerFix,
-      });
-
-      await tx.receiptHistory.create({
-        data: {
-          receiptId: request.receiptId,
-          receiptNo: request.receipt.receiptNo,
-          date: request.receipt.date,
-          tel: request.receipt.tel,
-          usd: request.receipt.usd,
-          invNo: request.receipt.invNo,
-          orderNo: request.receipt.orderNo,
-          payer: request.receipt.payer,
-          imageUrl: request.receipt.imageUrl,
-          imageName: request.receipt.imageName,
-          status: request.receipt.status,
-          note: '审批修改前保存',
-          createdBy: currentUser.id,
-        },
-      });
-
-      const matchedCustomer = binding.matchedCustomer && binding.matchedCustomer.customerId && !binding.matchedCustomer.needsCustomerFix
-        ? binding.matchedCustomer
-        : null;
-      await tx.receipt.update({
-        where: { id: request.receiptId },
-        data: {
-          receiptNo: nextSnapshot.receiptNo,
-          date: nextDate,
-          orderNo: binding.orderNo,
-          orderId: binding.orderId,
-          invNo: binding.invNo,
-          customerMark: nextSnapshot.customerMark,
-          payer: nextSnapshot.payer,
-          tel: nextSnapshot.tel,
-          ...(matchedCustomer
-            ? {
-                customerId: matchedCustomer.customerId,
-                customerName: matchedCustomer.customerName,
-                customerPhone: matchedCustomer.customerPhone,
-                customerCity: matchedCustomer.customerCity,
-                needsCustomerFix: false,
-              }
-            : {}),
-        },
-      });
-
-      await syncReceiptDetailItemsForBinding(tx, {
-        receiptId: request.receiptId,
-        orderNo: binding.orderNo,
-        customerMark: nextSnapshot.customerMark,
-      });
-
-      await syncPendingReceiptGeneratorDraft(tx, {
-        receiptId: request.receiptId,
-        status: request.receipt.status,
-        receiptNo: nextSnapshot.receiptNo,
-        date: nextDate,
-        orderId: binding.orderId,
-        orderNo: binding.orderNo,
-        invNo: binding.invNo,
-        customerId: matchedCustomer?.customerId || request.receipt.customerId,
-        customerMark: nextSnapshot.customerMark,
-        customerName: matchedCustomer?.customerName || request.receipt.customerName,
-        payer: nextSnapshot.payer,
-        tel: nextSnapshot.tel,
-      });
-
-      const previousOrderId = request.receipt.orderId || null;
-      if (previousOrderId !== binding.orderId) {
-        if (previousOrderId) touchedOrderIds.add(previousOrderId);
-        if (binding.orderId) touchedOrderIds.add(binding.orderId);
-      }
-    }
   });
-
-  for (const orderId of touchedOrderIds) {
-    await updateOrderBalance(orderId);
-  }
 
   await recordAuditEvent({
     action: decision === 'approve'

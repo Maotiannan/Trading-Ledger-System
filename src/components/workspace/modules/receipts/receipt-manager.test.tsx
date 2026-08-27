@@ -72,6 +72,7 @@ const mockUseReceiptForms = useReceiptForms as jest.Mock;
 const mockUseReceiptActions = useReceiptActions as jest.Mock;
 const mockUseReceiptGenerator = useReceiptGenerator as jest.Mock;
 let mockSetViewingImage: jest.Mock;
+let mockHandleReverseTransfer: jest.Mock;
 
 describe('ReceiptManager', () => {
   beforeEach(() => {
@@ -92,6 +93,7 @@ describe('ReceiptManager', () => {
       loadCustomerCandidates: jest.fn(),
     });
     mockSetViewingImage = jest.fn();
+    mockHandleReverseTransfer = jest.fn();
     mockUseReceiptForms.mockReturnValue({
       showUpload: false,
       showDirectCreate: false,
@@ -165,6 +167,7 @@ describe('ReceiptManager', () => {
       handleMarkReceived: jest.fn(),
       handleDirectCreate: jest.fn(),
       handleDeleteReceipt: jest.fn(),
+      handleReverseTransfer: mockHandleReverseTransfer,
       handleSubmitReceiptEdit: jest.fn(),
     });
     mockUseReceiptGenerator.mockReturnValue({
@@ -357,6 +360,7 @@ describe('ReceiptManager', () => {
 
     expect(receiptListProps).toBeDefined();
     expect(receiptListProps?.canEdit).toBe(true);
+    expect(receiptListProps?.onReverseTransfer).toBe(mockHandleReverseTransfer);
     expect(typeof receiptListProps?.onEditReceipt).toBe('function');
     expect(editDialogProps).toBeDefined();
     expect(editDialogProps?.isAdmin).toBe(false);

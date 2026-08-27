@@ -159,6 +159,73 @@ describe('ReceiptList', () => {
     expect(screen.getByTitle('申请删除')).toBeInTheDocument();
   });
 
+  it('shows only the dedicated reverse action for linked system transfers to admins', () => {
+    const onReverseTransfer = jest.fn();
+    const linkedTransfer = {
+      ...baseReceipt,
+      status: 'RECEIVED' as const,
+      isSystemTransfer: true,
+    };
+    const { rerender } = render(
+      <ReceiptList
+        receipts={[linkedTransfer]}
+        paginatedReceipts={[linkedTransfer]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin
+        currentUserId="admin-1"
+        canEdit
+        canResumeSigning
+        tx={(_zh, en) => en}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onReverseTransfer={onReverseTransfer}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    screen.getByTitle('Reverse transfer').click();
+    expect(onReverseTransfer).toHaveBeenCalledWith('receipt-1');
+    expect(screen.queryByTitle('Request deletion')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Edit receipt')).not.toBeInTheDocument();
+
+    rerender(
+      <ReceiptList
+        receipts={[linkedTransfer]}
+        paginatedReceipts={[linkedTransfer]}
+        currentPage={1}
+        totalPages={1}
+        isAdmin={false}
+        currentUserId="sales-1"
+        canEdit
+        canResumeSigning
+        tx={(_zh, en) => en}
+        getStatusBadge={(status) => <span>{status}</span>}
+        onViewImage={() => undefined}
+        onEditReceipt={() => undefined}
+        onMarkReceived={() => undefined}
+        onDeleteReceipt={() => undefined}
+        onReverseTransfer={onReverseTransfer}
+        onResumeSigning={() => undefined}
+        onPreviousPage={() => undefined}
+        onNextPage={() => undefined}
+        pageSize={30}
+        pageSizeOptions={[30, 50, 100, 200]}
+        onPageSizeChange={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByTitle('Reverse transfer')).not.toBeInTheDocument();
+  });
+
   it('shows deletion request action for SIGNING_PENDING receipts to admins and creators only', () => {
     const { rerender } = render(
       <ReceiptList

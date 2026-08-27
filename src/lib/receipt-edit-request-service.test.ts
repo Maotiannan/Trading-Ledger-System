@@ -9,6 +9,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
 import { updateOrderBalance } from '@/lib/matching';
 import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
+import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
 import {
   listReceiptEditRequests,
   requestReceiptEdit,
@@ -68,6 +69,10 @@ jest.mock('@/lib/matching', () => ({
 
 jest.mock('@/lib/receipt-generator-draft-service', () => ({
   syncPendingReceiptGeneratorDraft: jest.fn(),
+}));
+
+jest.mock('@/lib/receipt-edit-apply-service', () => ({
+  applyReceiptEditInTransaction: jest.fn(),
 }));
 
 function makeUser(overrides: Partial<CurrentUser> = {}): CurrentUser {
@@ -141,6 +146,7 @@ const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockSyncPendingReceiptGeneratorDraft = syncPendingReceiptGeneratorDraft as jest.Mock;
+const mockApplyReceiptEdit = applyReceiptEditInTransaction as jest.Mock;
 const mockTx = {
   receipt: {
     findFirst: jest.fn(),
@@ -376,6 +382,11 @@ describe('receipt-edit-request-service', () => {
     jest.clearAllMocks();
     mockSyncPendingReceiptGeneratorDraft.mockReset();
     mockSyncPendingReceiptGeneratorDraft.mockResolvedValue(undefined);
+    mockApplyReceiptEdit.mockResolvedValue({
+      receipt: { id: 'receipt-1', orderId: 'order-2' },
+      touchedOrderIds: ['order-1', 'order-2'],
+      reversedTransferId: null,
+    });
     mockDb.$transaction.mockImplementation(async (callback: (tx: typeof mockTx) => Promise<unknown>) => callback(mockTx));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockGetHierarchyScope.mockResolvedValue({
@@ -589,51 +600,15 @@ describe('receipt-edit-request-service', () => {
       comment: 'looks good',
     });
 
-    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
-    expect(mockTx.receiptHistory.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        receiptId: 'receipt-1',
-        receiptNo: '0001001',
-        invNo: 'INV-1',
-        payer: 'ACME',
-      }),
-    }));
-    expect(mockTx.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'receipt-1' },
-      data: expect.objectContaining({
-        receiptNo: '0001002',
-        date: new Date('2026-05-04'),
-        orderNo: 'ORD-2',
-        orderId: 'order-2',
-        invNo: 'INV-2',
-        customerMark: 'MAB-2',
-        payer: 'BETA',
-        tel: '456',
-      }),
-    }));
-    expect(mockTx.detailItem.updateMany).toHaveBeenCalledWith({
-      where: { receiptId: 'receipt-1' },
-      data: {
-        orderNo: 'ORD-2',
-        mark: 'MAB-2',
-      },
-    });
-    expect(mockSyncPendingReceiptGeneratorDraft).toHaveBeenCalledWith(mockTx, {
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      tx: mockTx,
       receiptId: 'receipt-1',
-      status: ReceiptStatus.SIGNING_PENDING,
-      receiptNo: '0001002',
-      date: new Date('2026-05-04T00:00:00.000Z'),
-      orderId: 'order-2',
-      orderNo: 'ORD-2',
-      invNo: 'INV-2',
-      customerId: 'customer-1',
-      customerMark: 'MAB-2',
-      customerName: 'Mamadou',
-      payer: 'BETA',
-      tel: '456',
-    });
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-2');
+      source: 'APPROVED_RECEIPT_EDIT_REQUEST',
+      patch: validEditPayload,
+      nextDate: new Date('2026-05-04T00:00:00.000Z'),
+    }));
+
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
     expectReceiptLookupById(mockTx.receipt.findFirst, 'receipt-1');
     expect(mockTx.receiptEditRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
@@ -657,6 +632,39 @@ describe('receipt-edit-request-service', () => {
       targetId: 'req-1',
       targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
     }));
+  });
+
+  it('keeps the approval pending when transfer reversal confirmation is required', async () => {
+    mockTx.receiptEditRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-transfer',
+      receiptId: 'receipt-1',
+      status: ReceiptEditRequestStatus.PENDING,
+      requestedBy: 'sales-1',
+      afterSnapshot: validEditPayload,
+      receipt: { id: 'receipt-1' },
+      requester: salesUser,
+    });
+    mockTx.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1' });
+    mockApplyReceiptEdit.mockRejectedValueOnce(Object.assign(
+      new Error('该收据已发生余额转移。请确认撤销转移后再修改收据。'),
+      {
+        code: 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED',
+        status: 409,
+        detail: { balanceTransferId: 'transfer-1' },
+      },
+    ));
+
+    await expect(reviewReceiptEdit({
+      currentUser: adminUser,
+      requestId: 'req-transfer',
+      decision: 'approve',
+    })).rejects.toMatchObject({
+      code: 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED',
+      status: 409,
+    });
+
+    expect(mockTx.receiptEditRequest.updateMany).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
   it('approves a RECEIVED receipt rebinding request and syncs its linked detail item without changing status', async () => {
@@ -697,10 +705,10 @@ describe('receipt-edit-request-service', () => {
     });
     mockTx.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-received' });
     mockTx.receiptEditRequest.updateMany.mockResolvedValueOnce({ count: 1 });
-    mockResolveReceiptEditBinding.mockResolvedValueOnce({
-      orderId: 'order-new',
-      orderNo: 'NEW-02',
-      invNo: 'INV-NEW',
+    mockApplyReceiptEdit.mockResolvedValueOnce({
+      receipt: { id: 'receipt-received', orderId: 'order-new' },
+      touchedOrderIds: ['order-old', 'order-new'],
+      reversedTransferId: 'transfer-received',
     });
 
     await reviewReceiptEdit({
@@ -708,29 +716,18 @@ describe('receipt-edit-request-service', () => {
       requestId: 'req-received',
       decision: 'approve',
       comment: 'move payment to correct order',
+      expectedBalanceTransferId: 'transfer-received',
     });
 
-    expect(mockTx.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'receipt-received' },
-      data: expect.not.objectContaining({ status: expect.anything() }),
-    }));
-    expect(mockTx.receipt.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
+    expect(mockApplyReceiptEdit).toHaveBeenCalledWith(expect.objectContaining({
+      receiptId: 'receipt-received',
+      patch: expect.objectContaining({
         orderNo: 'NEW-02',
-        orderId: 'order-new',
         invNo: 'INV-NEW',
         customerMark: 'NEW',
       }),
+      expectedBalanceTransferId: 'transfer-received',
     }));
-    expect(mockTx.detailItem.updateMany).toHaveBeenCalledWith({
-      where: { receiptId: 'receipt-received' },
-      data: {
-        orderNo: 'NEW-02',
-        mark: 'NEW',
-      },
-    });
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-new');
   });
 
   it('rejects a pending request without mutating the receipt', async () => {
@@ -771,6 +768,7 @@ describe('receipt-edit-request-service', () => {
     expect(mockTx.receipt.update).not.toHaveBeenCalled();
     expect(mockTx.receiptHistory.create).not.toHaveBeenCalled();
     expect(mockSyncPendingReceiptGeneratorDraft).not.toHaveBeenCalled();
+    expect(mockApplyReceiptEdit).not.toHaveBeenCalled();
     expect(mockTx.receiptEditRequest.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'req-2' },
     }));

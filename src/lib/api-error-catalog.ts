@@ -44,6 +44,14 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   DELETION_REQUEST_NOT_FOUND: { zh: '删除申请不存在', en: 'Deletion request not found' },
   DELETION_REQUEST_ALREADY_PROCESSED: { zh: '删除申请已处理', en: 'Deletion request has already been processed' },
   DELETION_REQUEST_STATE_CHANGED: { zh: '删除申请状态已变化', en: 'Deletion request state has changed' },
+  RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED: {
+    zh: '该收据已发生余额转移。请确认撤销转移后再修改收据。',
+    en: 'This receipt has an existing balance transfer. Confirm reversal before editing the receipt.',
+  },
+  BALANCE_TRANSFER_REVERSAL_CONFLICT: {
+    zh: '余额转移数据已变化或关联不完整，请刷新后重试。',
+    en: 'The balance transfer changed or has an incomplete link. Refresh and try again.',
+  },
   EXCEL_TOKEN_REQUIRED: { zh: '缺少Excel API令牌', en: 'Excel API token is required' },
   EXCEL_TOKEN_INVALID: { zh: 'Excel API令牌无效', en: 'Invalid Excel API token' },
   EXCEL_TOKEN_REVOKED: { zh: 'Excel API令牌已撤销', en: 'Excel API token has been revoked' },
@@ -84,6 +92,10 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
   '密码修改成功': { zh: '密码修改成功', en: 'Password updated successfully' },
   '密码修改失败': { zh: '密码修改失败', en: 'Password update failed' },
   '客户MARK不能为空': { zh: '客户MARK不能为空', en: 'Customer MARK is required' },
+  '该收据已发生余额转移。请确认撤销转移后再修改收据。': {
+    zh: '该收据已发生余额转移。请确认撤销转移后再修改收据。',
+    en: 'This receipt has an existing balance transfer. Confirm reversal before editing the receipt.',
+  },
   '收据已直接创建': { zh: '收据已直接创建', en: 'Receipt created directly' },
   '付款明细已直接创建': { zh: '付款明细已直接创建', en: 'Payment detail created directly' },
   'SWIFT已直接创建': { zh: 'SWIFT已直接创建', en: 'SWIFT created directly' },

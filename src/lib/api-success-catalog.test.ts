@@ -4,6 +4,10 @@ describe('api-success-catalog', () => {
   it('translates exact success messages', () => {
     expect(translateApiSuccessMessage('账单已删除', 'en')).toBe('Invoice deleted');
     expect(translateApiSuccessMessage('Password updated successfully', 'zh')).toBe('密码修改成功');
+    expect(translateApiSuccessMessage('收据修改申请已提交，等待管理员同意', 'en'))
+      .toBe('Receipt edit request submitted. Waiting for administrator approval.');
+    expect(translateApiSuccessMessage('修改已完成', 'en')).toBe('Update completed.');
+    expect(translateApiSuccessMessage('余额转移已撤销', 'en')).toBe('Balance transfer reversed.');
   });
 
   it('translates composed success messages', () => {

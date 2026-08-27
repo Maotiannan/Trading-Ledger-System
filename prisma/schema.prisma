@@ -531,6 +531,7 @@ model Receipt {
   mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
   order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
   generatorSession ReceiptGeneratorSession?
+  generatedByBalanceTransfer BalanceTransfer? @relation("BalanceTransferGeneratedReceipt")
   orderId          String?
 
   @@index([orderNo])
@@ -858,6 +859,7 @@ model BalanceTransfer {
   id              String   @id @default(cuid())
   fromOrderId     String
   toOrderId       String
+  generatedReceiptId String? @unique
   amount          Decimal  @db.Decimal(18, 2) // 转移金额
   note            String?  @db.Text // 转移备注
   createdBy       String
@@ -866,6 +868,7 @@ model BalanceTransfer {
   // 关联
   fromOrder Order @relation("TransferFrom", fields: [fromOrderId], references: [id])
   toOrder   Order @relation("TransferTo", fields: [toOrderId], references: [id])
+  generatedReceipt Receipt? @relation("BalanceTransferGeneratedReceipt", fields: [generatedReceiptId], references: [id], onDelete: Restrict)
 
   @@index([fromOrderId])
   @@index([toOrderId])

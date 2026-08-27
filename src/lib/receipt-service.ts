@@ -11,12 +11,11 @@ import { resolveCustomer } from '@/lib/customer-matching';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { syncOrderAliases } from '@/lib/order-alias-db';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
-import { resolveReceiptEditBinding, syncReceiptDetailItemsForBinding } from '@/lib/receipt-edit-binding';
+import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
-import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 
 function badRequest(message: string, detail?: unknown) {
   return createApiError({ code: 'BAD_REQUEST', status: 400, message, detail });
@@ -272,8 +271,16 @@ export async function updateReceiptRecord(params: {
   payload: ReceiptEditablePatch;
   imagePath?: string | null;
   imageName?: string | null;
+  expectedBalanceTransferId?: string | null;
 }) {
-  const { currentUser, receiptId, payload, imagePath, imageName } = params;
+  const {
+    currentUser,
+    receiptId,
+    payload,
+    imagePath,
+    imageName,
+    expectedBalanceTransferId,
+  } = params;
   void imagePath;
   void imageName;
 
@@ -319,92 +326,19 @@ export async function updateReceiptRecord(params: {
     throw badRequest('Bank_Transfer状态下禁止修改', { receiptId, status: existingReceipt.status });
   }
 
-  const previousOrderId = existingReceipt.orderId || null;
-  let updated;
+  let applied;
   try {
-    updated = await runInTransaction(async (tx) => {
-      const binding = await resolveReceiptEditBinding(tx, {
-        currentUserId: currentUser.id,
-        ownerIds: ownerVisibleIds,
-        orderNo: payload.orderNo,
-        invNo: payload.invNo,
-        isDeposit: existingReceipt.isDeposit,
-        customerId: existingReceipt.customerId,
-        customerMark: payload.customerMark || existingReceipt.customerMark,
-        customerName: existingReceipt.customerName,
-        customerPhone: existingReceipt.customerPhone,
-        customerCity: existingReceipt.customerCity,
-        needsCustomerFix: existingReceipt.needsCustomerFix,
-      });
-
-      await tx.receiptHistory.create({
-        data: {
-          receiptId,
-          receiptNo: existingReceipt.receiptNo,
-          date: existingReceipt.date,
-          tel: existingReceipt.tel,
-          usd: existingReceipt.usd,
-          invNo: existingReceipt.invNo,
-          orderNo: existingReceipt.orderNo,
-          payer: existingReceipt.payer,
-          imageUrl: existingReceipt.imageUrl,
-          imageName: existingReceipt.imageName,
-          status: existingReceipt.status,
-          note: '重新识别前保存',
-          createdBy: currentUser.id,
-        },
-      });
-
-      const nextCustomerMark = payload.customerMark || null;
-      const matchedCustomer = binding.matchedCustomer && binding.matchedCustomer.customerId && !binding.matchedCustomer.needsCustomerFix
-        ? binding.matchedCustomer
-        : null;
-      const updatedReceipt = await tx.receipt.update({
-        where: { id: receiptId },
-        data: {
-          receiptNo: payload.receiptNo || null,
-          date: nextDate,
-          tel: payload.tel || null,
-          invNo: binding.invNo,
-          orderNo: binding.orderNo,
-          orderId: binding.orderId,
-          customerMark: nextCustomerMark,
-          payer: payload.payer || null,
-          ...(matchedCustomer
-            ? {
-                customerId: matchedCustomer.customerId,
-                customerName: matchedCustomer.customerName,
-                customerPhone: matchedCustomer.customerPhone,
-                customerCity: matchedCustomer.customerCity,
-                needsCustomerFix: false,
-              }
-            : {}),
-        },
-      });
-
-      await syncReceiptDetailItemsForBinding(tx, {
-        receiptId,
-        orderNo: binding.orderNo,
-        customerMark: nextCustomerMark,
-      });
-
-      await syncPendingReceiptGeneratorDraft(tx, {
-        receiptId,
-        status: existingReceipt.status,
-        receiptNo: payload.receiptNo || null,
-        date: nextDate,
-        orderId: binding.orderId,
-        orderNo: binding.orderNo,
-        invNo: binding.invNo,
-        customerId: matchedCustomer?.customerId || existingReceipt.customerId,
-        customerMark: nextCustomerMark,
-        customerName: matchedCustomer?.customerName || existingReceipt.customerName,
-        payer: payload.payer || null,
-        tel: payload.tel || null,
-      });
-
-      return updatedReceipt;
-    });
+    applied = await runInTransaction((tx) => applyReceiptEditInTransaction({
+      tx,
+      currentUser,
+      ownerIds: ownerVisibleIds,
+      receiptId,
+      patch: payload,
+      nextDate,
+      historyNote: '重新识别前保存',
+      source: 'DIRECT_ADMIN_EDIT',
+      expectedBalanceTransferId,
+    }));
   } catch (error) {
     if (isReceiptNoUniqueError(error)) {
       throw receiptNoConflict(payload.receiptNo);
@@ -412,21 +346,7 @@ export async function updateReceiptRecord(params: {
     throw error;
   }
 
-  const nextOrderId = updated.orderId || null;
-  if (previousOrderId !== nextOrderId) {
-    for (const orderId of Array.from(new Set([previousOrderId, nextOrderId].filter(Boolean)))) {
-      await updateOrderBalance(orderId as string);
-    }
-  }
-
-  await recordAuditEvent({
-    action: auditActions.RECEIPT_UPDATE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.RECEIPT,
-    targetId: receiptId,
-  });
-
-  return { data: updated };
+  return { data: applied.receipt };
 }
 
 export async function markReceiptReceived(params: {

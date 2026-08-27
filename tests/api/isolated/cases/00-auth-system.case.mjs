@@ -39,5 +39,11 @@ export default async function run(t) {
   });
   t.assertEqual(invalidAction.data?.code, 'INVALID_ACTION', 'unknown auth action returns INVALID_ACTION code');
 
+  await t.request('POST', '/api/locale', {
+    json: { locale: 'zh' },
+    expectedStatus: 200,
+  });
+  t.step('locale restored for isolated case independence');
+
   await t.logout();
 }

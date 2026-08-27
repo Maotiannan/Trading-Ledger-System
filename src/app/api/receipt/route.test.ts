@@ -47,6 +47,10 @@ jest.mock('@/lib/receipt-edit-request-service', () => ({
   listReceiptEditRequests: jest.fn(),
 }));
 
+jest.mock('@/lib/balance-transfer-reversal-service', () => ({
+  reverseTransferReceipt: jest.fn(),
+}));
+
 jest.mock('@/lib/db', () => ({
   db: {
     receipt: {
@@ -76,11 +80,13 @@ import { GET, POST } from '@/app/api/receipt/route';
 import { listReceiptEditRequests, requestReceiptEdit, reviewReceiptEdit } from '@/lib/receipt-edit-request-service';
 import { db } from '@/lib/db';
 import { updateReceiptRecord } from '@/lib/receipt-service';
+import { reverseTransferReceipt } from '@/lib/balance-transfer-reversal-service';
 
 const mockRequestReceiptEdit = requestReceiptEdit as jest.Mock;
 const mockReviewReceiptEdit = reviewReceiptEdit as jest.Mock;
 const mockListReceiptEditRequests = listReceiptEditRequests as jest.Mock;
 const mockUpdateReceiptRecord = updateReceiptRecord as jest.Mock;
+const mockReverseTransferReceipt = reverseTransferReceipt as jest.Mock;
 const mockDbReceiptFindMany = (db.receipt.findMany as jest.Mock);
 
 function buildJsonRequest(payload: Record<string, unknown>) {
@@ -173,6 +179,7 @@ describe('receipt route edit-approval actions', () => {
     const response = await POST(buildJsonRequest({
       action: 'update',
       receiptId: 'receipt-signing',
+      expectedBalanceTransferId: 'transfer-1',
       data: {
         receiptNo: '0010010',
         date: '2026-08-26',
@@ -200,10 +207,12 @@ describe('receipt route edit-approval actions', () => {
       },
       imagePath: null,
       imageName: null,
+      expectedBalanceTransferId: 'transfer-1',
     });
     expect(json).toEqual({
       success: true,
       data: { id: 'receipt-signing', status: 'SIGNING_PENDING' },
+      message: '修改已完成',
     });
   });
 
@@ -217,6 +226,7 @@ describe('receipt route edit-approval actions', () => {
       requestId: 'req-1',
       decision: 'approve',
       comment: 'ok',
+      expectedBalanceTransferId: 'transfer-1',
     }));
     const json = await response.json();
 
@@ -226,9 +236,34 @@ describe('receipt route edit-approval actions', () => {
       requestId: 'req-1',
       decision: 'approve',
       comment: 'ok',
+      expectedBalanceTransferId: 'transfer-1',
     });
     expect(json.success).toBe(true);
     expect(json.message).toBe('收据修改申请已通过');
+  });
+
+  it('reverses a linked system transfer using only the receipt ID', async () => {
+    mockReverseTransferReceipt.mockResolvedValueOnce({
+      message: '余额转移已撤销',
+      alreadyReversed: false,
+    });
+
+    const response = await POST(buildJsonRequest({
+      action: 'reverse-transfer',
+      receiptId: 'transfer-receipt-1',
+      amount: 999999,
+      fromOrderId: 'browser-must-not-control-this',
+    }));
+    const json = await response.json();
+
+    expect(mockReverseTransferReceipt).toHaveBeenCalledWith({
+      currentUser: expect.objectContaining({ id: 'admin-1', role: 'ADMIN' }),
+      receiptId: 'transfer-receipt-1',
+    });
+    expect(json).toEqual(expect.objectContaining({
+      success: true,
+      message: '余额转移已撤销',
+    }));
   });
 
   it('lists edit requests through list-edit-requests action', async () => {
@@ -323,5 +358,22 @@ describe('receipt route edit-approval actions', () => {
       }),
     }));
     expect(json.success).toBe(true);
+  });
+
+  it('returns only a boolean system-transfer marker instead of the relation object', async () => {
+    mockDbReceiptFindMany
+      .mockResolvedValueOnce([{
+        id: 'transfer-receipt-1',
+        orderId: null,
+        order: null,
+        generatedByBalanceTransfer: { id: 'transfer-1' },
+      }])
+      .mockResolvedValueOnce([]);
+
+    const response = await GET({ url: 'http://localhost/api/receipt' } as unknown as NextRequest);
+    const json = await response.json();
+
+    expect(json.data[0].isSystemTransfer).toBe(true);
+    expect(json.data[0].generatedByBalanceTransfer).toBeUndefined();
   });
 });

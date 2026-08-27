@@ -1,6 +1,6 @@
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { resolveCustomer } from '@/lib/customer-matching';
 import {
   applySystemPoolRepairs,
@@ -8,6 +8,7 @@ import {
 } from '@/lib/invoice-system-pool-reconciliation';
 import { saveInvoiceWithOrders } from '@/lib/invoice-write';
 import { updateOrderBalance } from '@/lib/matching';
+import { updateOrderBalance as updateOrderBalanceCache } from '@/lib/order-balance-service';
 import {
   addInvoiceOrder,
   assignInvoiceToBranchAdmin,
@@ -72,6 +73,11 @@ jest.mock('@/lib/db', () => ({
 
 jest.mock('@/lib/audit', () => ({
   recordAuditEvent: jest.fn(),
+  recordAuditEventInTransaction: jest.fn(),
+}));
+
+jest.mock('@/lib/order-balance-service', () => ({
+  updateOrderBalance: jest.fn(),
 }));
 
 jest.mock('@/lib/user-hierarchy', () => ({
@@ -160,6 +166,7 @@ const mockDb = db as unknown as {
 };
 
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
+const mockRecordAuditEventInTransaction = recordAuditEventInTransaction as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockSaveInvoiceWithOrders = saveInvoiceWithOrders as jest.Mock;
 const mockApplySystemPoolRepairs = applySystemPoolRepairs as jest.Mock;
@@ -169,6 +176,7 @@ const mockSyncOrderAliases = syncOrderAliases as jest.Mock;
 const mockConsolidateGroupedOrders = consolidateGroupedOrders as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
+const mockUpdateOrderBalanceCache = updateOrderBalanceCache as jest.Mock;
 
 const poolMigrationAudit = {
   sourceOrderId: 'deposit-order',
@@ -202,6 +210,7 @@ describe('invoice-service', () => {
       syncedAliases: 0,
     });
     mockUpdateOrderBalance.mockResolvedValue(undefined);
+    mockUpdateOrderBalanceCache.mockResolvedValue({ computed: 0 });
     mockPreviewSystemPoolRepairs.mockResolvedValue({ poolRepairs: [], targetInvoices: [] });
     mockApplySystemPoolRepairs.mockResolvedValue({
       autoMigrations: [],
@@ -1169,23 +1178,35 @@ describe('invoice-service', () => {
     });
 
     expect(result.message).toContain('成功转移 $30 到订单 IB-02');
+    expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        receiptNo: expect.stringMatching(/^TRANSFER-/),
+        orderId: 'order-to',
+        usd: 30,
+      }),
+    }));
     expect(mockDb.balanceTransfer.create).toHaveBeenCalledWith({
       data: {
         fromOrderId: 'order-from',
         toOrderId: 'order-to',
+        generatedReceiptId: 'receipt-transfer',
         amount: 30,
         createdBy: 'sales-1',
       },
     });
-    expect(mockUpdateOrderBalance).toHaveBeenNthCalledWith(1, 'order-from');
-    expect(mockUpdateOrderBalance).toHaveBeenNthCalledWith(2, 'order-to');
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockUpdateOrderBalanceCache).toHaveBeenNthCalledWith(1, 'order-from', mockDb, expect.any(Object));
+    expect(mockUpdateOrderBalanceCache).toHaveBeenNthCalledWith(2, 'order-to', mockDb, expect.any(Object));
+    expect(mockRecordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({
       action: 'ORDER_TRANSFER_BALANCE',
       targetId: 'order-from',
       metadata: expect.objectContaining({
+        generatedReceiptId: 'receipt-transfer',
         toOrderId: 'order-to',
         transferAmount: 30,
       }),
+    }));
+    expect(mockRecordAuditEvent).not.toHaveBeenCalledWith(expect.objectContaining({
+      action: 'ORDER_TRANSFER_BALANCE',
     }));
   });
 
@@ -1210,6 +1231,75 @@ describe('invoice-service', () => {
         fromBalance: 20,
       }),
     });
+  });
+
+  it('does not create a transfer when the generated receipt cannot be created', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-from',
+      orderNo: 'IB-01',
+      amount: 100,
+      createdBy: 'sales-1',
+    });
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ usd: 150 }]);
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('order-to');
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-to' });
+    mockDb.receipt.create.mockRejectedValueOnce(new Error('receipt unavailable'));
+
+    await expect(transferInvoiceBalance(makeUser(), {
+      fromOrderId: 'order-from',
+      toOrderNo: 'IB-02',
+      transferAmount: 30,
+    })).rejects.toThrow('receipt unavailable');
+
+    expect(mockDb.balanceTransfer.create).not.toHaveBeenCalled();
+    expect(mockUpdateOrderBalanceCache).not.toHaveBeenCalled();
+    expect(mockRecordAuditEventInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not report transfer success when balance recalculation fails', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-from',
+      orderNo: 'IB-01',
+      amount: 100,
+      createdBy: 'sales-1',
+    });
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ usd: 150 }]);
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('order-to');
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-to' });
+    mockDb.receipt.create.mockResolvedValueOnce({ id: 'receipt-transfer' });
+    mockDb.balanceTransfer.create.mockResolvedValueOnce({ id: 'transfer-1' });
+    mockDb.order.update.mockResolvedValueOnce({});
+    mockUpdateOrderBalanceCache.mockRejectedValueOnce(new Error('balance unavailable'));
+
+    await expect(transferInvoiceBalance(makeUser(), {
+      fromOrderId: 'order-from',
+      toOrderNo: 'IB-02',
+      transferAmount: 30,
+    })).rejects.toThrow('balance unavailable');
+
+    expect(mockRecordAuditEventInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('does not report transfer success when strict audit writing fails', async () => {
+    mockDb.order.findFirst.mockResolvedValueOnce({
+      id: 'order-from',
+      orderNo: 'IB-01',
+      amount: 100,
+      createdBy: 'sales-1',
+    });
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ usd: 150 }]);
+    mockFindOrderIdByNoOrAlias.mockResolvedValueOnce('order-to');
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-to' });
+    mockDb.receipt.create.mockResolvedValueOnce({ id: 'receipt-transfer' });
+    mockDb.balanceTransfer.create.mockResolvedValueOnce({ id: 'transfer-1' });
+    mockDb.order.update.mockResolvedValueOnce({});
+    mockRecordAuditEventInTransaction.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    await expect(transferInvoiceBalance(makeUser(), {
+      fromOrderId: 'order-from',
+      toOrderNo: 'IB-02',
+      transferAmount: 30,
+    })).rejects.toThrow('audit unavailable');
   });
 
   it('blocks deleting an order that still has receipts', async () => {

@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ListPagination } from '@/components/workspace/modules/shared/list-pagination';
 import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
-import { Check, Eye, PenSquare, Pencil, Trash2 } from 'lucide-react';
+import { Check, Eye, PenSquare, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 
 export type ReceiptListProps = {
   receipts: Receipt[];
@@ -24,6 +24,7 @@ export type ReceiptListProps = {
   onEditReceipt: (receipt: Receipt) => void;
   onMarkReceived: (receiptId: string) => void;
   onDeleteReceipt: (receiptId: string) => void;
+  onReverseTransfer?: (receiptId: string) => void;
   onResumeSigning: (receiptId: string) => void;
   onPreviousPage: () => void;
   onNextPage: () => void;
@@ -47,6 +48,7 @@ export function ReceiptList({
   onEditReceipt,
   onMarkReceived,
   onDeleteReceipt,
+  onReverseTransfer,
   onResumeSigning,
   onPreviousPage,
   onNextPage,
@@ -74,10 +76,13 @@ export function ReceiptList({
           </TableHeader>
           <TableBody>
             {paginatedReceipts.map((receipt) => {
-              const canEditThisReceipt = canEdit && (receipt.status !== 'RECEIVED' || isAdmin);
+              const canEditThisReceipt = !receipt.isSystemTransfer
+                && canEdit
+                && (receipt.status !== 'RECEIVED' || isAdmin);
               const isSigningPendingCreator = receipt.status === 'SIGNING_PENDING' && receipt.creator?.id === currentUserId;
               const canDeleteThisReceipt =
-                receipt.status !== 'Bank_Transfer'
+                !receipt.isSystemTransfer
+                && receipt.status !== 'Bank_Transfer'
                 && (receipt.status !== 'RECEIVED' || isAdmin)
                 && (receipt.status !== 'SIGNING_PENDING' || isAdmin || isSigningPendingCreator);
               return (
@@ -132,6 +137,17 @@ export function ReceiptList({
                     {canDeleteThisReceipt && (
                       <Button size="sm" variant="ghost" onClick={() => onDeleteReceipt(receipt.id)} title={tx('申请删除', 'Request deletion')}>
                         <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    )}
+                    {isAdmin && receipt.isSystemTransfer && onReverseTransfer && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => onReverseTransfer(receipt.id)}
+                        title={tx('撤销转移', 'Reverse transfer')}
+                        className="text-amber-600 hover:text-amber-700"
+                      >
+                        <RotateCcw className="h-4 w-4" />
                       </Button>
                     )}
                   </div>

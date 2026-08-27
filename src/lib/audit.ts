@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import type { AuditAction, AuditTargetType } from '@/lib/audit-catalog';
 import { logger } from '@/lib/logger';
@@ -13,6 +14,12 @@ export type AuditEvent = {
 
 export interface AuditSink {
   write(event: AuditEvent): Promise<void>;
+}
+
+export interface TransactionalAuditClient {
+  auditLog: {
+    create(input: Prisma.AuditLogCreateArgs): Promise<unknown>;
+  };
 }
 
 class ConsoleAuditSink implements AuditSink {
@@ -74,4 +81,20 @@ export async function recordAuditEvent(event: AuditEvent): Promise<void> {
     logger.warn('AUDIT_FALLBACK', error);
     await fallbackSink.write(normalized);
   }
+}
+
+export async function recordAuditEventInTransaction(
+  client: TransactionalAuditClient,
+  event: AuditEvent,
+): Promise<void> {
+  await client.auditLog.create({
+    data: {
+      action: event.action,
+      actorId: event.actorId,
+      targetType: event.targetType,
+      targetId: event.targetId || null,
+      metadata: event.metadata as Prisma.InputJsonValue | undefined,
+      createdAt: event.at ? new Date(event.at) : new Date(),
+    },
+  });
 }

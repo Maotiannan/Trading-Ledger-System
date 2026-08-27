@@ -99,10 +99,33 @@ reversal_audit_count     1
 
 The structured balance logs also recorded the source balance changing from `3213` to `0` and the target balance changing from `7240` to `10453` under source `ADMIN_RECEIPT_ACTION`.
 
+## Production Deployment And Incident Closure
+
+PR #26 merged to `main` as `198c203849ab6e2f3e76f0eb66338b2d3929a9e0`. The final PR workflow passed on `3c5b0e7`, and the post-merge `main` workflow passed on the merge commit.
+
+Immediately before deployment, snapshot `muledger-20260827-181124` passed verification again. The live database still matched the restored baseline counts for all protected tables, including 168 Orders, 288 Receipts, one BalanceTransfer, and 330,038 AuditLog rows. Every incident ID, amount, status, binding, protected-reference check, and update timestamp also remained unchanged, so the rehearsed snapshot was still the exact pre-deployment recovery point.
+
+The standard safe rebuild deployed v1.0.213. Startup applied only migration `20260827090000_balance_transfer_generated_receipt`; `prisma migrate status` then reported all 27 migrations applied. The app, maintenance service, MU Contract trigger, public HTTPS route, and NAS upload bind all passed. The mounted upload archive still contained 518 files.
+
+The authenticated ADMIN API then completed the one-time production reversal. Final read-only assertions were:
+
+```text
+synthetic_receipt_count  0
+transfer_count           0
+real_receipt             0001170  RECEIVED  3213.00  SUPER DT2-08B  L25MH090002B
+real_detail_item         3213.00  SUPER DT2-08B
+target_stored_balance    10453.00
+target_computed_balance  10453.00
+source_order_count       0
+reversal_audit_count     1
+```
+
+The strict audit records the source amount and balance changing from `$3,213` to `$0`, the target balance changing from `$7,240` to `$10,453`, and safe deletion of the empty system-pool source Order. Repeating the same API call returned `alreadyReversed: true`; the balance and audit count remained unchanged.
+
 ## Data Risk
 
 `checked`
 
 The migration is additive and conservatively backfills only unique historical matches. The drill proved that protected business rows and media were unchanged by migration, the incident reversal is transactional and idempotent, the real Receipt remains intact, and strict audit evidence is committed with the accounting changes.
 
-Production migration and repair still require the verified snapshot above to remain available. The disposable application, MariaDB container, restored media directory, and temporary credentials must be removed after PR evidence is committed.
+Production migration and repair are complete. The verified snapshot remains available, all disposable drill resources and temporary credentials were removed, and the production database, NAS upload directory, and Docker volumes were never replaced or restored over.

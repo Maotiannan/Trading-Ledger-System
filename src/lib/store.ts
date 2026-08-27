@@ -73,6 +73,7 @@ export interface Receipt {
   isMerged: boolean;
   note: string | null;
   balanceAfter?: number | null;
+  isSystemTransfer?: boolean;
   createdAt: string;
   creator: { id: string; name: string | null; email: string };
   order?: Order | null;

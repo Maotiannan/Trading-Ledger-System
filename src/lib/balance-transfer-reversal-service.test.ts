@@ -156,7 +156,7 @@ describe('balance-transfer-reversal-service', () => {
       currentOrderId: 'source-order',
       nextOrderId: 'target-order',
       amount: 3213,
-    })).rejects.toMatchObject({ code: 'CONFLICT' });
+    })).rejects.toMatchObject({ code: 'BALANCE_TRANSFER_REVERSAL_CONFLICT' });
   });
 
   it('blocks ambiguous edit-time transfer matches', async () => {
@@ -171,7 +171,7 @@ describe('balance-transfer-reversal-service', () => {
       currentOrderId: 'source-order',
       nextOrderId: 'target-order',
       amount: 3213,
-    })).rejects.toMatchObject({ code: 'CONFLICT' });
+    })).rejects.toMatchObject({ code: 'BALANCE_TRANSFER_REVERSAL_CONFLICT' });
   });
 
   it('reverses the incident-equivalent transfer and deletes the empty pool order', async () => {
@@ -288,7 +288,7 @@ describe('balance-transfer-reversal-service', () => {
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',
-    })).rejects.toMatchObject({ code: 'CONFLICT' });
+    })).rejects.toMatchObject({ code: 'BALANCE_TRANSFER_REVERSAL_CONFLICT' });
 
     expect(tx.receipt.delete).not.toHaveBeenCalled();
     expect(tx.order.update).not.toHaveBeenCalled();

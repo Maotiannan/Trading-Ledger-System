@@ -1,5 +1,6 @@
 import { UserRole } from '@prisma/client';
 import { createApiError } from '@/lib/api-error';
+import { db } from '@/lib/db';
 import { recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import {
@@ -8,7 +9,12 @@ import {
 } from '@/lib/order-balance-service';
 import { SYSTEM_POOL_INVOICE_NOS } from '@/lib/payment-type-classifier';
 import type { CurrentUser } from '@/lib/request-auth';
-import type { DbTransactionClient } from '@/lib/transaction';
+import {
+  buildOrderVisibilityWhere,
+  buildReceiptVisibilityWhere,
+} from '@/lib/resource-visibility';
+import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 const MONEY_EPSILON = 0.005;
 
@@ -95,7 +101,12 @@ const transferInclude = {
 } as const;
 
 function conflict(message: string, detail?: unknown) {
-  return createApiError({ code: 'CONFLICT', status: 409, message, detail });
+  return createApiError({
+    code: 'BALANCE_TRANSFER_REVERSAL_CONFLICT',
+    status: 409,
+    message,
+    detail,
+  });
 }
 
 function forbidden(message: string) {
@@ -354,4 +365,98 @@ export async function reverseBalanceTransferInTransaction(
   });
 
   return result;
+}
+
+function auditMetadataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+export async function reverseTransferReceipt(params: {
+  currentUser: CurrentUser;
+  receiptId: string;
+}): Promise<{
+  message: string;
+  alreadyReversed: boolean;
+  result?: BalanceTransferReversalResult;
+}> {
+  const { currentUser, receiptId } = params;
+  if (currentUser.role !== UserRole.ADMIN) {
+    throw forbidden('仅管理员可以撤销余额转移');
+  }
+  if (!receiptId) {
+    throw createApiError({ code: 'BAD_REQUEST', status: 400, message: '缺少收据ID' });
+  }
+
+  const scope = await getHierarchyScope(currentUser);
+  const ownerIds = Array.from(scope.ownerVisibleIds);
+  const receipt = await db.receipt.findFirst({
+    where: {
+      AND: [
+        { id: receiptId },
+        buildReceiptVisibilityWhere(ownerIds),
+      ],
+    },
+    select: {
+      id: true,
+      generatedByBalanceTransfer: {
+        select: {
+          id: true,
+          generatedReceiptId: true,
+        },
+      },
+    },
+  });
+
+  if (!receipt) {
+    const priorAudit = await db.auditLog.findFirst({
+      where: {
+        action: auditActions.ORDER_TRANSFER_BALANCE_REVERSE,
+        metadata: {
+          path: '$.generatedReceiptId',
+          equals: receiptId,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { metadata: true },
+    });
+    const metadata = auditMetadataRecord(priorAudit?.metadata);
+    const targetOrderId = typeof metadata.targetOrderId === 'string'
+      ? metadata.targetOrderId
+      : null;
+    const visibleTarget = targetOrderId
+      ? await db.order.findFirst({
+          where: {
+            AND: [
+              { id: targetOrderId },
+              buildOrderVisibilityWhere(ownerIds),
+            ],
+          },
+          select: { id: true },
+        })
+      : null;
+    if (priorAudit && visibleTarget) {
+      return { message: '余额转移已撤销', alreadyReversed: true };
+    }
+    throw notFound('系统转移收据不存在或不在当前可见范围', { receiptId });
+  }
+
+  const transfer = receipt.generatedByBalanceTransfer;
+  if (!transfer || transfer.generatedReceiptId !== receipt.id) {
+    throw conflict('该收据没有可撤销的余额转移关联', { receiptId });
+  }
+
+  const result = await runInTransaction((tx) => reverseBalanceTransferInTransaction(tx, {
+    currentUser,
+    balanceTransferId: transfer.id,
+    expectedGeneratedReceiptId: receipt.id,
+    source: 'ADMIN_RECEIPT_ACTION',
+  }));
+
+  return {
+    message: '余额转移已撤销',
+    alreadyReversed: false,
+    result,
+  };
 }

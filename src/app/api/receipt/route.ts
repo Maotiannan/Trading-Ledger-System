@@ -31,6 +31,7 @@ import {
   requestReceiptEdit,
   reviewReceiptEdit,
 } from '@/lib/receipt-edit-request-service';
+import { reverseTransferReceipt } from '@/lib/balance-transfer-reversal-service';
 
 const receiptEditablePatchSchema = z.object({
   receiptNo: z.string().nullable(),
@@ -135,6 +136,9 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        generatedByBalanceTransfer: {
+          select: { id: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -176,10 +180,14 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       for (const [receiptId, value] of computed.entries()) balanceMap.set(receiptId, value);
     }
 
-    const enrichedReceipts = receipts.map((receipt) => ({
-      ...receipt,
-      balanceAfter: balanceMap.get(receipt.id) ?? null,
-    }));
+    const enrichedReceipts = receipts.map((receipt) => {
+      const { generatedByBalanceTransfer, ...row } = receipt;
+      return {
+        ...row,
+        isSystemTransfer: Boolean(generatedByBalanceTransfer),
+        balanceAfter: balanceMap.get(receipt.id) ?? null,
+      };
+    });
 
     return NextResponse.json({ success: true, data: filterRowsBySearch(enrichedReceipts, search) });
   } catch (error) {
@@ -196,6 +204,9 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const { action, data, file } = await parseActionRequest(request);
     const receiptId = typeof data.receiptId === 'string' ? data.receiptId : '';
+    const expectedBalanceTransferId = typeof data.expectedBalanceTransferId === 'string'
+      ? (data.expectedBalanceTransferId.trim() || null)
+      : null;
 
     if (action === 'recognize') {
       await enforceRateLimit('upload', request, { currentUser });
@@ -307,6 +318,7 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         requestId,
         decision,
         comment: typeof data.comment === 'string' ? data.comment : null,
+        expectedBalanceTransferId,
       });
       return createApiSuccessResponse({
         message: result.message,
@@ -343,8 +355,29 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
         payload,
         imagePath: typeof data.imagePath === 'string' ? data.imagePath : null,
         imageName: typeof data.imageName === 'string' ? data.imageName : null,
+        expectedBalanceTransferId,
       });
-      return NextResponse.json({ success: true, data: result.data });
+      return createApiSuccessResponse({
+        data: result.data,
+        message: '修改已完成',
+      }, request);
+    }
+
+    if (action === 'reverse-transfer') {
+      if (!receiptId) {
+        throw createApiError({
+          code: 'BAD_REQUEST',
+          status: 400,
+          message: '缺少收据ID',
+        });
+      }
+      const result = await reverseTransferReceipt({ currentUser, receiptId });
+      return createApiSuccessResponse({
+        data: {
+          alreadyReversed: result.alreadyReversed,
+        },
+        message: result.message,
+      }, request);
     }
 
     if (action === 'mark-received') {

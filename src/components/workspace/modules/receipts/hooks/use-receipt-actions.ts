@@ -1,13 +1,54 @@
 'use client';
 
 import { useState } from 'react';
-import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
+import {
+  apiCall,
+  apiUploadCall,
+  getApiErrorMessage,
+  getErrorMessage,
+  WorkspaceApiError,
+} from '@/components/workspace/shared';
 import { uploadBusinessImage, type BusinessImageUploadStageEvent } from '@/components/workspace/modules/shared/business-image-upload';
 import type { UserImageCompressionPreference } from '@/components/workspace/modules/settings/types';
 import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { normalizeReceiptOcrResult } from '@/lib/receipt-normalization';
 import { compressReceiptDirectImage } from '../utils/image-compression';
 import type { PendingDirectImageSelection, ReceiptDirectForm } from '../types';
+
+type TransferReversalConfirmationDetail = {
+  balanceTransferId: string;
+  transferReceiptNo: string;
+  sourceOrderNo: string;
+  targetOrderNo: string;
+  amount: number;
+};
+
+function getTransferReversalConfirmationDetail(error: unknown): TransferReversalConfirmationDetail | null {
+  if (
+    !(error instanceof WorkspaceApiError)
+    || error.code !== 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED'
+    || !error.detail
+    || typeof error.detail !== 'object'
+    || Array.isArray(error.detail)
+  ) {
+    return null;
+  }
+
+  const detail = error.detail as Record<string, unknown>;
+  if (
+    typeof detail.balanceTransferId !== 'string'
+    || !detail.balanceTransferId
+    || typeof detail.transferReceiptNo !== 'string'
+    || typeof detail.sourceOrderNo !== 'string'
+    || typeof detail.targetOrderNo !== 'string'
+    || typeof detail.amount !== 'number'
+    || !Number.isFinite(detail.amount)
+  ) {
+    return null;
+  }
+
+  return detail as TransferReversalConfirmationDetail;
+}
 
 export type ReceiptActionText = (zh: string, en: string) => string;
 
@@ -548,6 +589,73 @@ export function useReceiptActions({
     }
   };
 
+  const executeReceiptActionWithTransferConfirmation = async (
+    payload: Record<string, unknown>,
+  ): Promise<{ result: Awaited<ReturnType<typeof apiCall>> | null; cancelled: boolean }> => {
+    try {
+      return {
+        result: await apiCall('receipt', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }),
+        cancelled: false,
+      };
+    } catch (error) {
+      const detail = getTransferReversalConfirmationDetail(error);
+      if (!detail) throw error;
+
+      const amount = `$${detail.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+      const approved = confirm(tx(
+        `检测到 ${detail.sourceOrderNo} 到 ${detail.targetOrderNo} 的余额转移（${amount}，转移收据 ${detail.transferReceiptNo}）。是否撤销转移并修改收据？系统生成的转移收据将被删除，并重新计算两个订单的余额。`,
+        `A ${amount} balance transfer from ${detail.sourceOrderNo} to ${detail.targetOrderNo} was found (transfer receipt ${detail.transferReceiptNo}). Reverse the transfer and modify the receipt? The generated transfer receipt will be removed and both order balances will be recalculated.`,
+      ));
+      if (!approved) return { result: null, cancelled: true };
+
+      return {
+        result: await apiCall('receipt', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...payload,
+            expectedBalanceTransferId: detail.balanceTransferId,
+          }),
+        }),
+        cancelled: false,
+      };
+    }
+  };
+
+  const handleReverseTransfer = async (receiptId: string) => {
+    if (!confirm(tx(
+      '确定撤销这笔余额转移吗？系统生成的转移收据将被删除，并重新计算两个订单的余额。',
+      'Reverse this balance transfer? The generated transfer receipt will be removed and both order balances will be recalculated.',
+    ))) return false;
+
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await apiCall('receipt', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'reverse-transfer', receiptId }),
+      });
+      if (!result.success) {
+        const message = getErrorMessage(result, tx('撤销转移失败，请重试', 'Failed to reverse transfer. Please retry.'));
+        setError(message);
+        alert(message);
+        return false;
+      }
+      alert(result.message || tx('余额转移已撤销', 'Balance transfer reversed.'));
+      await reloadReceiptViews();
+      return true;
+    } catch (error) {
+      const message = getErrorMessage(error, tx('撤销转移失败，请重试', 'Failed to reverse transfer. Please retry.'));
+      setError(message);
+      alert(message);
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmitReceiptEdit = async (params: {
     receiptId: string;
     data: ReceiptEditablePatch;
@@ -556,14 +664,15 @@ export function useReceiptActions({
     setError(null);
     setSubmitting(true);
     try {
-      const result = await apiCall('receipt', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: params.isAdmin ? 'update' : 'request-edit',
-          receiptId: params.receiptId,
-          data: params.data,
-        }),
+      const attempt = await executeReceiptActionWithTransferConfirmation({
+        action: params.isAdmin ? 'update' : 'request-edit',
+        receiptId: params.receiptId,
+        data: params.data,
       });
+      if (attempt.cancelled || !attempt.result) {
+        return { success: false, message: '' };
+      }
+      const result = attempt.result;
 
       if (!result.success) {
         const message = getErrorMessage(result, tx('修改失败，请重试', 'Edit failed, please retry.'));
@@ -594,14 +703,13 @@ export function useReceiptActions({
     setError(null);
     setSubmitting(true);
     try {
-      const result = await apiCall('receipt', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'review-edit',
-          requestId: params.requestId,
-          decision: params.decision,
-        }),
+      const attempt = await executeReceiptActionWithTransferConfirmation({
+        action: 'review-edit',
+        requestId: params.requestId,
+        decision: params.decision,
       });
+      if (attempt.cancelled || !attempt.result) return false;
+      const result = attempt.result;
 
       if (!result.success) {
         const message = getErrorMessage(result, tx('审批失败，请重试', 'Review failed, please retry.'));
@@ -634,6 +742,7 @@ export function useReceiptActions({
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,
+    handleReverseTransfer,
     handleSubmitReceiptEdit,
     handleReviewReceiptEdit,
   };

@@ -190,6 +190,7 @@ export function ReceiptManager() {
     handleMarkReceived,
     handleDirectCreate,
     handleDeleteReceipt,
+    handleReverseTransfer,
     handleSubmitReceiptEdit,
   } = useReceiptActions({
     tx,
@@ -534,6 +535,7 @@ export function ReceiptManager() {
         onEditReceipt={openEditDialog}
         onMarkReceived={handleMarkReceived}
         onDeleteReceipt={handleDeleteReceipt}
+        onReverseTransfer={handleReverseTransfer}
         onResumeSigning={resumeGeneratorSession}
         onPreviousPage={() => setCurrentPage((page) => Math.max(1, page - 1))}
         onNextPage={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}

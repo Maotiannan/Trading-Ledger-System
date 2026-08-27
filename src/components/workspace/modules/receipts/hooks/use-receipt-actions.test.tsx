@@ -4,8 +4,10 @@ import { useReceiptActions } from './use-receipt-actions';
 import { apiCall, apiUploadCall, getApiErrorMessage, getErrorMessage } from '@/components/workspace/shared';
 import { uploadBusinessImage } from '@/components/workspace/modules/shared/business-image-upload';
 import { compressReceiptDirectImage } from '../utils/image-compression';
+import { WorkspaceApiError } from '@/components/workspace/api/client';
 
 jest.mock('@/components/workspace/shared', () => ({
+  WorkspaceApiError: jest.requireActual('@/components/workspace/api/client').WorkspaceApiError,
   apiCall: jest.fn(),
   apiUploadCall: jest.fn(),
   getApiErrorMessage: jest.fn((error: unknown, fallback: string) => {
@@ -58,6 +60,16 @@ const normalizedOcr = (overrides: Record<string, unknown> = {}) => ({
   isDeposit: false,
   ...overrides,
 });
+
+const validEditData = {
+  receiptNo: 'R-UPDATED',
+  date: '2026-05-04',
+  orderNo: 'TARGET-1',
+  invNo: 'INV-UPDATED',
+  customerMark: 'MAB-2',
+  payer: 'BETA',
+  tel: '456',
+};
 
 describe('useReceiptActions', () => {
   const tx = (zh: string, _en: string) => zh;
@@ -1504,6 +1516,134 @@ describe('useReceiptActions', () => {
     expect(window.alert).toHaveBeenCalledWith('修改已完成');
     expect(loadReceipts).toHaveBeenCalledTimes(1);
     expect(loadReceiptEditRequests).toHaveBeenCalledTimes(1);
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('confirms and retries an admin edit that requires transfer reversal', async () => {
+    const detail = {
+      balanceTransferId: 'transfer-1',
+      transferReceiptNo: 'TRANSFER-1',
+      sourceOrderNo: 'SOURCE-1',
+      targetOrderNo: 'TARGET-1',
+      amount: 3213,
+    };
+    mockApiCall
+      .mockRejectedValueOnce(new WorkspaceApiError('confirmation required', {
+        code: 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED',
+        status: 409,
+        detail,
+      }))
+      .mockResolvedValueOnce({ success: true, message: '修改已完成' });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      const outcome = await result.current.handleSubmitReceiptEdit({
+        receiptId: 'receipt-1',
+        data: {
+          receiptNo: 'R-UPDATED',
+          date: '2026-05-04',
+          orderNo: 'TARGET-1',
+          invNo: 'INV-UPDATED',
+          customerMark: 'MAB-2',
+          payer: 'BETA',
+          tel: '456',
+        },
+        isAdmin: true,
+      });
+      expect(outcome.success).toBe(true);
+    });
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('撤销转移并修改收据'));
+    expect(mockApiCall).toHaveBeenLastCalledWith('receipt', expect.objectContaining({
+      body: expect.stringContaining('"expectedBalanceTransferId":"transfer-1"'),
+    }));
+  });
+
+  it('uses an English transfer-reversal prompt and cancels without another write or alert', async () => {
+    jest.mocked(window.confirm).mockReturnValueOnce(false);
+    mockApiCall.mockRejectedValueOnce(new WorkspaceApiError('confirmation required', {
+      code: 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED',
+      status: 409,
+      detail: {
+        balanceTransferId: 'transfer-1',
+        transferReceiptNo: 'TRANSFER-1',
+        sourceOrderNo: 'SOURCE-1',
+        targetOrderNo: 'TARGET-1',
+        amount: 3213,
+      },
+    }));
+    const { result } = renderHook(() => useReceiptActions(createDeps({
+      tx: (_zh, en) => en,
+    })));
+
+    await act(async () => {
+      const outcome = await result.current.handleSubmitReceiptEdit({
+        receiptId: 'receipt-1',
+        data: validEditData,
+        isAdmin: true,
+      });
+      expect(outcome.success).toBe(false);
+    });
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Reverse the transfer and modify the receipt'));
+    expect(mockApiCall).toHaveBeenCalledTimes(1);
+    expect(window.alert).not.toHaveBeenCalled();
+    expect(setError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
+  it('surfaces a stale retry conflict without attempting a third edit', async () => {
+    mockApiCall
+      .mockRejectedValueOnce(new WorkspaceApiError('confirmation required', {
+        code: 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED',
+        status: 409,
+        detail: {
+          balanceTransferId: 'transfer-1',
+          transferReceiptNo: 'TRANSFER-1',
+          sourceOrderNo: 'SOURCE-1',
+          targetOrderNo: 'TARGET-1',
+          amount: 3213,
+        },
+      }))
+      .mockRejectedValueOnce(new WorkspaceApiError('余额转移信息已变化', {
+        code: 'CONFLICT',
+        status: 409,
+      }));
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      const outcome = await result.current.handleSubmitReceiptEdit({
+        receiptId: 'receipt-1',
+        data: validEditData,
+        isAdmin: true,
+      });
+      expect(outcome).toEqual({ success: false, message: '余额转移信息已变化' });
+    });
+
+    expect(mockApiCall).toHaveBeenCalledTimes(2);
+    expect(setError).toHaveBeenCalledWith('余额转移信息已变化');
+  });
+
+  it('reverses a system transfer using only the receipt ID and reloads receipts', async () => {
+    mockApiCall.mockResolvedValueOnce({
+      success: true,
+      message: '余额转移已撤销',
+      data: { alreadyReversed: false },
+    });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      expect(await result.current.handleReverseTransfer('transfer-receipt-1')).toBe(true);
+    });
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('系统生成的转移收据将被删除'));
+    expect(mockApiCall).toHaveBeenCalledWith('receipt', {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'reverse-transfer',
+        receiptId: 'transfer-receipt-1',
+      }),
+    });
+    expect(loadReceipts).toHaveBeenCalledTimes(1);
   });
 
   it('reviews receipt edit requests and reloads visible receipt state', async () => {
@@ -1535,5 +1675,38 @@ describe('useReceiptActions', () => {
     expect(window.alert).toHaveBeenCalledWith('修改已完成');
     expect(loadReceipts).toHaveBeenCalledTimes(1);
     expect(loadReceiptEditRequests).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms and retries approval with the expected transfer ID', async () => {
+    mockApiCall
+      .mockRejectedValueOnce(new WorkspaceApiError('confirmation required', {
+        code: 'RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED',
+        status: 409,
+        detail: {
+          balanceTransferId: 'transfer-1',
+          transferReceiptNo: 'TRANSFER-1',
+          sourceOrderNo: 'SOURCE-1',
+          targetOrderNo: 'TARGET-1',
+          amount: 3213,
+        },
+      }))
+      .mockResolvedValueOnce({ success: true, message: '收据修改申请已通过' });
+    const { result } = renderHook(() => useReceiptActions(createDeps()));
+
+    await act(async () => {
+      expect(await result.current.handleReviewReceiptEdit({
+        requestId: 'request-1',
+        decision: 'approve',
+      })).toBe(true);
+    });
+
+    expect(mockApiCall).toHaveBeenLastCalledWith('receipt', expect.objectContaining({
+      body: JSON.stringify({
+        action: 'review-edit',
+        requestId: 'request-1',
+        decision: 'approve',
+        expectedBalanceTransferId: 'transfer-1',
+      }),
+    }));
   });
 });

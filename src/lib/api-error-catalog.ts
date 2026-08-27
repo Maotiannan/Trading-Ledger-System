@@ -92,6 +92,10 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
   '密码修改成功': { zh: '密码修改成功', en: 'Password updated successfully' },
   '密码修改失败': { zh: '密码修改失败', en: 'Password update failed' },
   '客户MARK不能为空': { zh: '客户MARK不能为空', en: 'Customer MARK is required' },
+  '该收据已发生余额转移。请确认撤销转移后再修改收据。': {
+    zh: '该收据已发生余额转移。请确认撤销转移后再修改收据。',
+    en: 'This receipt has an existing balance transfer. Confirm reversal before editing the receipt.',
+  },
   '收据已直接创建': { zh: '收据已直接创建', en: 'Receipt created directly' },
   '付款明细已直接创建': { zh: '付款明细已直接创建', en: 'Payment detail created directly' },
   'SWIFT已直接创建': { zh: 'SWIFT已直接创建', en: 'SWIFT created directly' },

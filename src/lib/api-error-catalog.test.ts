@@ -31,4 +31,10 @@ describe('api-error-catalog', () => {
       translateApiErrorMessage('待签字收据缺少有效签字会话，无法修改', 'en'),
     ).toBe('This pending signed receipt has no active signing session and cannot be edited.');
   });
+
+  it('translates transfer-aware receipt edit confirmation to english', () => {
+    expect(
+      translateApiErrorMessage('该收据已发生余额转移。请确认撤销转移后再修改收据。', 'en'),
+    ).toBe('This receipt has an existing balance transfer. Confirm reversal before editing the receipt.');
+  });
 });

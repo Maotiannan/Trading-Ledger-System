@@ -128,6 +128,7 @@ export async function applyReceiptEditInTransaction(
   if (transferImpact) {
     await reverseBalanceTransferInTransaction(tx, {
       currentUser,
+      ownerIds,
       balanceTransferId: transferImpact.balanceTransferId,
       expectedGeneratedReceiptId: transferImpact.generatedReceiptId,
       source,

@@ -85,6 +85,7 @@ function makeTx() {
     },
     order: {
       update: jest.fn().mockResolvedValue({ id: 'source-order' }),
+      count: jest.fn().mockResolvedValue(2),
       findUnique: jest.fn().mockResolvedValue({
         id: 'source-order',
         amount: 0,
@@ -180,6 +181,7 @@ describe('balance-transfer-reversal-service', () => {
 
     const result = await reverseBalanceTransferInTransaction(tx as never, {
       currentUser: makeUser(),
+      ownerIds: ['admin-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',
@@ -228,6 +230,7 @@ describe('balance-transfer-reversal-service', () => {
 
     const result = await reverseBalanceTransferInTransaction(tx as never, {
       currentUser: makeUser(),
+      ownerIds: ['admin-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',
@@ -255,6 +258,7 @@ describe('balance-transfer-reversal-service', () => {
 
     const result = await reverseBalanceTransferInTransaction(tx as never, {
       currentUser: makeUser(),
+      ownerIds: ['admin-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',
@@ -269,12 +273,44 @@ describe('balance-transfer-reversal-service', () => {
 
     await expect(reverseBalanceTransferInTransaction(tx as never, {
       currentUser: makeUser(UserRole.SALES),
+      ownerIds: ['admin-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',
     })).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     expect(tx.balanceTransfer.findUnique).not.toHaveBeenCalled();
+    expect(tx.order.update).not.toHaveBeenCalled();
+  });
+
+  it('denies reversal when either linked order is outside the admin visibility scope', async () => {
+    const tx = makeTx();
+    tx.balanceTransfer.findUnique.mockResolvedValue(makeTransfer());
+    tx.order.count.mockResolvedValue(1);
+
+    await expect(reverseBalanceTransferInTransaction(tx as never, {
+      currentUser: makeUser(),
+      ownerIds: ['admin-1'],
+      balanceTransferId: 'transfer-1',
+      expectedGeneratedReceiptId: 'synthetic-receipt',
+      source: 'ADMIN_RECEIPT_ACTION',
+    } as never)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    expect(tx.order.count).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          { id: { in: ['source-order', 'target-order'] } },
+          {
+            OR: [
+              { createdBy: { in: ['admin-1'] } },
+              { customer: { ownerId: { in: ['admin-1'] } } },
+            ],
+          },
+        ],
+      },
+    });
+    expect(tx.balanceTransfer.deleteMany).not.toHaveBeenCalled();
+    expect(tx.receipt.delete).not.toHaveBeenCalled();
     expect(tx.order.update).not.toHaveBeenCalled();
   });
 
@@ -285,6 +321,7 @@ describe('balance-transfer-reversal-service', () => {
 
     await expect(reverseBalanceTransferInTransaction(tx as never, {
       currentUser: makeUser(),
+      ownerIds: ['admin-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',
@@ -301,6 +338,7 @@ describe('balance-transfer-reversal-service', () => {
 
     await expect(reverseBalanceTransferInTransaction(tx as never, {
       currentUser: makeUser(),
+      ownerIds: ['admin-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'ADMIN_RECEIPT_ACTION',

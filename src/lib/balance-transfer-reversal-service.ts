@@ -38,6 +38,7 @@ export type ReceiptEditTransferImpact = {
 
 export type ReverseBalanceTransferInput = {
   currentUser: CurrentUser;
+  ownerIds: string[];
   balanceTransferId: string;
   expectedGeneratedReceiptId: string;
   source: string;
@@ -278,6 +279,22 @@ export async function reverseBalanceTransferInTransaction(
     });
   }
 
+  const transferOrderIds = Array.from(new Set([
+    transfer.fromOrderId,
+    transfer.toOrderId,
+  ]));
+  const visibleOrderCount = await tx.order.count({
+    where: {
+      AND: [
+        { id: { in: transferOrderIds } },
+        buildOrderVisibilityWhere(input.ownerIds),
+      ],
+    },
+  });
+  if (visibleOrderCount !== transferOrderIds.length) {
+    throw forbidden('无权撤销不在当前可见范围内的订单余额转移');
+  }
+
   const generatedReceipt = assertValidGeneratedReceipt(transfer);
   if (generatedReceipt.id !== input.expectedGeneratedReceiptId) {
     throw conflict('余额转移关联已发生变化，请刷新后重试', {
@@ -449,6 +466,7 @@ export async function reverseTransferReceipt(params: {
 
   const result = await runInTransaction((tx) => reverseBalanceTransferInTransaction(tx, {
     currentUser,
+    ownerIds,
     balanceTransferId: transfer.id,
     expectedGeneratedReceiptId: receipt.id,
     source: 'ADMIN_RECEIPT_ACTION',

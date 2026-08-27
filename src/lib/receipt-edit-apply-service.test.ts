@@ -208,6 +208,7 @@ describe('receipt-edit-apply-service', () => {
 
     expect(mockReverseTransfer).toHaveBeenCalledWith(tx, {
       currentUser: admin,
+      ownerIds: ['admin-1', 'sales-1'],
       balanceTransferId: 'transfer-1',
       expectedGeneratedReceiptId: 'synthetic-receipt',
       source: 'DIRECT_ADMIN_EDIT',

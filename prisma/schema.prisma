@@ -26,10 +26,10 @@ enum SwiftStatus {
 // 收据状态枚举
 enum ReceiptStatus {
   SIGNING_PENDING // 签名中，未进入业务流程
-  SR_Received // 已收到收据
-  Waiting_SWIFT // 等待SWIFT
-  Bank_Transfer // 银行已转账
-  RECEIVED // 已签收
+  SR_Received    // 已收到收据
+  Waiting_SWIFT  // 等待SWIFT
+  Bank_Transfer  // 银行已转账
+  RECEIVED       // 已签收
 }
 
 enum ReceiptGeneratorSessionStatus {
@@ -66,10 +66,10 @@ enum UploadedAssetCategory {
 
 // 付款明细状态枚举
 enum DetailStatus {
-  Waiting_SWIFT // 等待SWIFT
-  Bank_Transfer // 银行已转账
-  RECEIVED // 已签收
-  ERROR // 金额不一致错误
+  Waiting_SWIFT  // 等待SWIFT
+  Bank_Transfer  // 银行已转账
+  RECEIVED       // 已签收
+  ERROR          // 金额不一致错误
 }
 
 enum DetailSourceMode {
@@ -117,9 +117,9 @@ enum IntegrationReconcileStatus {
 
 // 删除申请状态枚举
 enum DeletionStatus {
-  PENDING // 待审批
-  APPROVED // 已批准
-  REJECTED // 已拒绝
+  PENDING   // 待审批
+  APPROVED  // 已批准
+  REJECTED  // 已拒绝
 }
 
 enum ReceiptEditRequestStatus {
@@ -149,49 +149,49 @@ enum DeletionTargetType {
 
 // ==================== 用户表 ====================
 model User {
-  id          String   @id @default(cuid())
-  email       String   @unique
-  password    String
-  name        String?
-  role        UserRole @default(USER)
-  level       Int      @default(4)
-  parentId    String?
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String?
+  role         UserRole @default(USER)
+  level        Int      @default(4)
+  parentId     String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // 关联
-  parent                       User?                         @relation("UserParent", fields: [parentId], references: [id], onDelete: SetNull)
-  children                     User[]                        @relation("UserParent")
-  createdBy                    User?                         @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdUsers                 User[]                        @relation("UserCreatedBy")
-  invoices                     Invoice[]
-  orders                       Order[]
-  receipts                     Receipt[]
-  receiptHistories             ReceiptHistory[]
-  details                      Detail[]
-  detailHistories              DetailHistory[]
-  swifts                       Swift[]
-  createdCustomers             Customer[]                    @relation("CustomerCreatedBy")
-  ownedCustomers               Customer[]                    @relation("CustomerOwner")
-  deletionRequests             DeletionRequest[]
-  deletionApprovals            DeletionRequest[]             @relation("ApprovedBy")
-  auditLogs                    AuditLog[]
-  systemSettings               SystemSetting[]               @relation("SystemSettingUpdatedBy")
-  receiptGeneratorSessions     ReceiptGeneratorSession[]     @relation("ReceiptGeneratorSessionCreatedBy")
-  uploadedAssets               UploadedAsset[]
-  excelApiTokens               ExcelApiToken[]
-  preference                   UserPreference?
-  requestedReceiptEditRequests ReceiptEditRequest[]          @relation("ReceiptEditRequester")
-  approvedReceiptEditRequests  ReceiptEditRequest[]          @relation("ReceiptEditApprover")
-  requestedDetailEditRequests  DetailEditRequest[]           @relation("DetailEditRequester")
-  approvedDetailEditRequests   DetailEditRequest[]           @relation("DetailEditApprover")
-  requestedSwiftEditRequests   SwiftEditRequest[]            @relation("SwiftEditRequester")
-  approvedSwiftEditRequests    SwiftEditRequest[]            @relation("SwiftEditApprover")
-  paymentAgents                PaymentAgent[]                @relation("PaymentAgentCreatedBy")
-  paymentAgentFiles            PaymentAgentFile[]            @relation("PaymentAgentFileUploadedBy")
-  orderTrackers                OrderTracker[]                @relation("OrderTrackerCreatedBy")
-  updatedOrderTrackers         OrderTracker[]                @relation("OrderTrackerUpdatedBy")
+  parent            User?             @relation("UserParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children          User[]            @relation("UserParent")
+  createdBy         User?            @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers      User[]           @relation("UserCreatedBy")
+  invoices          Invoice[]
+  orders            Order[]
+  receipts          Receipt[]
+  receiptHistories  ReceiptHistory[]
+  details           Detail[]
+  detailHistories   DetailHistory[]
+  swifts            Swift[]
+  createdCustomers  Customer[]        @relation("CustomerCreatedBy")
+  ownedCustomers    Customer[]        @relation("CustomerOwner")
+  deletionRequests  DeletionRequest[]
+  deletionApprovals DeletionRequest[] @relation("ApprovedBy")
+  auditLogs         AuditLog[]
+  systemSettings    SystemSetting[]   @relation("SystemSettingUpdatedBy")
+  receiptGeneratorSessions ReceiptGeneratorSession[] @relation("ReceiptGeneratorSessionCreatedBy")
+  uploadedAssets   UploadedAsset[]
+  excelApiTokens    ExcelApiToken[]
+  preference       UserPreference?
+  requestedReceiptEditRequests ReceiptEditRequest[] @relation("ReceiptEditRequester")
+  approvedReceiptEditRequests  ReceiptEditRequest[] @relation("ReceiptEditApprover")
+  requestedDetailEditRequests  DetailEditRequest[]  @relation("DetailEditRequester")
+  approvedDetailEditRequests   DetailEditRequest[]  @relation("DetailEditApprover")
+  requestedSwiftEditRequests   SwiftEditRequest[]   @relation("SwiftEditRequester")
+  approvedSwiftEditRequests    SwiftEditRequest[]   @relation("SwiftEditApprover")
+  paymentAgents                PaymentAgent[]       @relation("PaymentAgentCreatedBy")
+  paymentAgentFiles            PaymentAgentFile[]   @relation("PaymentAgentFileUploadedBy")
+  orderTrackers                OrderTracker[]       @relation("OrderTrackerCreatedBy")
+  updatedOrderTrackers         OrderTracker[]       @relation("OrderTrackerUpdatedBy")
   externalOrderSourceEdits     ExternalOrderSourceLink[]     @relation("ExternalOrderSourceHumanEditor")
   integrationSyncStates        IntegrationSyncState[]        @relation("IntegrationSyncServiceActor")
   resolvedIntegrationConflicts IntegrationSyncConflict[]     @relation("IntegrationConflictResolver")
@@ -203,14 +203,14 @@ model User {
 }
 
 model UserPreference {
-  userId                       String
-  imageCompressionEnabled      Boolean  @default(true)
-  imageCompressionQualityFloor Decimal  @default(0.30) @db.Decimal(3, 2)
-  ocrTargetMaxKb               Int      @default(500)
-  dashboardLayout              Json?
-  listPageSizes                Json?
-  createdAt                    DateTime @default(now())
-  updatedAt                    DateTime @updatedAt
+  userId                        String
+  imageCompressionEnabled       Boolean  @default(true)
+  imageCompressionQualityFloor  Decimal  @default(0.30) @db.Decimal(3, 2)
+  ocrTargetMaxKb                Int      @default(500)
+  dashboardLayout               Json?
+  listPageSizes                 Json?
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -263,54 +263,54 @@ model UploadedAsset {
 
 // ==================== 账单表 (Invoice) ====================
 model Invoice {
-  id          String    @id @default(cuid())
-  invNo       String    @unique // INV NO 账单号
-  createdBy   String
-  shipDate    DateTime?
+  id        String   @id @default(cuid())
+  invNo     String   @unique // INV NO 账单号
+  createdBy String
+  shipDate  DateTime?
   releaseDate DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // 关联
   orders  Order[]
-  creator User    @relation(fields: [createdBy], references: [id])
+  creator User @relation(fields: [createdBy], references: [id])
 
   @@index([invNo])
 }
 
 // ==================== 订单表 (Order) ====================
 model Order {
-  id               String   @id @default(cuid())
-  invoiceId        String
-  orderNo          String // ORDER 客户单号
-  tokens           String   @default("[]") @db.Text // 分词结果，JSON格式存储数组
-  amount           Decimal  @db.Decimal(18, 2) // AMOUNT 单个ORDER总金额
-  orderBalance     Decimal  @default(0) @db.Decimal(18, 2) // ORDER BALANCE 未付金额
-  createdBy        String?
-  customerId       String?
-  customerMark     String?
-  customerName     String?
-  customerPhone    String?
-  customerCity     String?
-  needsCustomerFix Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id            String   @id @default(cuid())
+  invoiceId     String
+  orderNo       String   // ORDER 客户单号
+  tokens        String   @default("[]") @db.Text // 分词结果，JSON格式存储数组
+  amount        Decimal  @db.Decimal(18, 2) // AMOUNT 单个ORDER总金额
+  orderBalance  Decimal  @default(0) @db.Decimal(18, 2) // ORDER BALANCE 未付金额
+  createdBy     String?
+  customerId    String?
+  customerMark  String?
+  customerName  String?
+  customerPhone String?
+  customerCity  String?
+  needsCustomerFix Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // 关联
-  invoice              Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  customer             Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  creator              User?             @relation(fields: [createdBy], references: [id])
-  receipts             Receipt[]         @relation("ReceiptOrder")
-  mergedReceipts       Receipt[]         @relation("MergedTo")
-  aliases              OrderAlias[]
-  orderTrackers        OrderTracker[]    @relation("OrderTrackerFinanceOrder")
+  invoice         Invoice          @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  creator         User?            @relation(fields: [createdBy], references: [id])
+  receipts        Receipt[]        @relation("ReceiptOrder")
+  mergedReceipts  Receipt[]        @relation("MergedTo")
+  aliases         OrderAlias[]
+  orderTrackers   OrderTracker[]     @relation("OrderTrackerFinanceOrder")
   balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
   balanceTransfersTo   BalanceTransfer[] @relation("TransferTo")
 
-  @@unique([invoiceId, orderNo])
   @@index([invoiceId])
   @@index([createdBy])
   @@index([orderNo])
+  @@unique([invoiceId, orderNo])
 }
 
 model OrderAlias {
@@ -327,12 +327,12 @@ model OrderAlias {
 
 // ==================== 业务订单跟踪表 (Orders 页面独立使用，不参与财务订单匹配) ====================
 model OrderTracker {
-  id                String    @id @default(cuid())
+  id                String   @id @default(cuid())
   orderNo           String
-  normalizedOrderNo String    @unique
-  tokens            String    @default("[]") @db.Text
-  amount            Decimal   @default(0) @db.Decimal(18, 2)
-  orderBalance      Decimal   @default(0) @db.Decimal(18, 2)
+  normalizedOrderNo String   @unique
+  tokens            String   @default("[]") @db.Text
+  amount            Decimal  @default(0) @db.Decimal(18, 2)
+  orderBalance      Decimal  @default(0) @db.Decimal(18, 2)
   financeOrderId    String?
   createdBy         String
   updatedBy         String?
@@ -341,22 +341,22 @@ model OrderTracker {
   customerName      String?
   customerPhone     String?
   customerCity      String?
-  needsCustomerFix  Boolean   @default(false)
-  status            String    @default("In progress")
+  needsCustomerFix  Boolean  @default(false)
+  status            String   @default("In progress")
   confirmedAt       DateTime?
-  piStatus          Boolean   @default(false)
-  remark            String?   @db.Text
-  systemNote        String?   @db.Text
+  piStatus          Boolean  @default(false)
+  remark            String?  @db.Text
+  systemNote        String?  @db.Text
   archivedAt        DateTime?
-  archiveReason     String?   @db.Text
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  archiveReason     String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  creator                  User                      @relation("OrderTrackerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
-  updater                  User?                     @relation("OrderTrackerUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
-  customer                 Customer?                 @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  financeOrder             Order?                    @relation("OrderTrackerFinanceOrder", fields: [financeOrderId], references: [id], onDelete: SetNull)
-  externalSourceLinks      ExternalOrderSourceLink[]
+  creator  User      @relation("OrderTrackerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  updater  User?     @relation("OrderTrackerUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  financeOrder Order? @relation("OrderTrackerFinanceOrder", fields: [financeOrderId], references: [id], onDelete: SetNull)
+  externalSourceLinks       ExternalOrderSourceLink[]
   integrationEventReceipts IntegrationEventReceipt[]
 
   @@index([financeOrderId])
@@ -497,42 +497,42 @@ model IntegrationReconcilePreview {
 
 // ==================== 收据表 (Receipt) ====================
 model Receipt {
-  id               String        @id @default(cuid())
-  receiptNo        String?       @unique // 收据号 NO.
-  date             DateTime? // 时间
-  tel              String? // 电话 Tel
-  usd              Decimal       @db.Decimal(18, 2) // 付款金额 USD
-  invNo            String? // 账单号 (L**MH开头)
-  orderNo          String? // 客户单号 ORDER
-  payer            String?       @db.Text // 付款人 recu de M./Mme
-  status           ReceiptStatus @default(SR_Received)
-  imageUrl         String?       @db.LongText // 图片路径
-  imageName        String?       @db.Text // 图片原始名称
-  isDeposit        Boolean       @default(false) // 是否为定金
-  isMerged         Boolean       @default(false) // 是否已合并到正式账单
-  mergedToId       String? // 合并到的订单ID
-  customerId       String?
-  customerMark     String?
-  customerName     String?
-  customerPhone    String?
-  customerCity     String?
-  needsCustomerFix Boolean       @default(false)
-  note             String?       @db.Text // 备注
-  createdBy        String
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id           String         @id @default(cuid())
+  receiptNo    String?        @unique // 收据号 NO.
+  date         DateTime?      // 时间
+  tel          String?        // 电话 Tel
+  usd          Decimal        @db.Decimal(18, 2) // 付款金额 USD
+  invNo        String?        // 账单号 (L**MH开头)
+  orderNo      String?        // 客户单号 ORDER
+  payer        String?        @db.Text // 付款人 recu de M./Mme
+  status       ReceiptStatus  @default(SR_Received)
+  imageUrl     String?        @db.LongText // 图片路径
+  imageName    String?        @db.Text // 图片原始名称
+  isDeposit    Boolean        @default(false) // 是否为定金
+  isMerged     Boolean        @default(false) // 是否已合并到正式账单
+  mergedToId   String?        // 合并到的订单ID
+  customerId   String?
+  customerMark String?
+  customerName String?
+  customerPhone String?
+  customerCity String?
+  needsCustomerFix Boolean    @default(false)
+  note         String?        @db.Text // 备注
+  createdBy    String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   // 关联
-  creator                    User                     @relation(fields: [createdBy], references: [id])
-  histories                  ReceiptHistory[]
-  editRequests               ReceiptEditRequest[]
-  detailItems                DetailItem[]
-  customer                   Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  mergedTo                   Order?                   @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
-  order                      Order?                   @relation("ReceiptOrder", fields: [orderId], references: [id])
-  generatorSession           ReceiptGeneratorSession?
-  generatedByBalanceTransfer BalanceTransfer?         @relation("BalanceTransferGeneratedReceipt")
-  orderId                    String?
+  creator          User             @relation(fields: [createdBy], references: [id])
+  histories        ReceiptHistory[]
+  editRequests     ReceiptEditRequest[]
+  detailItems      DetailItem[]
+  customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  mergedTo         Order?           @relation("MergedTo", fields: [mergedToId], references: [id], onDelete: SetNull)
+  order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
+  generatorSession ReceiptGeneratorSession?
+  generatedByBalanceTransfer BalanceTransfer? @relation("BalanceTransferGeneratedReceipt")
+  orderId          String?
 
   @@index([orderNo])
   @@index([invNo])
@@ -542,21 +542,21 @@ model Receipt {
 
 // ==================== 收据历史版本表 ====================
 model ReceiptHistory {
-  id        String        @id @default(cuid())
-  receiptId String
-  receiptNo String?
-  date      DateTime?
-  tel       String?
-  usd       Decimal       @db.Decimal(18, 2)
-  invNo     String?
-  orderNo   String?
-  payer     String?       @db.Text
-  imageUrl  String?       @db.LongText
-  imageName String?       @db.Text
-  status    ReceiptStatus
-  note      String?       @db.Text // 变更备注
-  createdBy String
-  createdAt DateTime      @default(now())
+  id           String   @id @default(cuid())
+  receiptId    String
+  receiptNo    String?
+  date         DateTime?
+  tel          String?
+  usd          Decimal        @db.Decimal(18, 2)
+  invNo        String?
+  orderNo      String?
+  payer        String?   @db.Text
+  imageUrl     String?   @db.LongText
+  imageName    String?   @db.Text
+  status       ReceiptStatus
+  note         String?   @db.Text // 变更备注
+  createdBy    String
+  createdAt    DateTime @default(now())
 
   // 关联
   receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
@@ -566,19 +566,19 @@ model ReceiptHistory {
 }
 
 model ReceiptEditRequest {
-  id               String                   @id @default(cuid())
-  receiptId        String
-  status           ReceiptEditRequestStatus @default(PENDING)
-  requestedBy      String
-  approvedBy       String?
-  pendingReceiptId String?                  @unique
-  requestedAt      DateTime                 @default(now())
-  reviewedAt       DateTime?
-  beforeSnapshot   Json
-  afterSnapshot    Json
-  reviewComment    String?                  @db.Text
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
+  id             String                   @id @default(cuid())
+  receiptId      String
+  status         ReceiptEditRequestStatus @default(PENDING)
+  requestedBy    String
+  approvedBy     String?
+  pendingReceiptId String?                @unique
+  requestedAt    DateTime                 @default(now())
+  reviewedAt     DateTime?
+  beforeSnapshot Json
+  afterSnapshot  Json
+  reviewComment  String?                  @db.Text
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
 
   receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
   requester User    @relation("ReceiptEditRequester", fields: [requestedBy], references: [id], onDelete: Cascade)
@@ -591,24 +591,24 @@ model ReceiptEditRequest {
 
 // ==================== 付款明细表 (Detail) ====================
 model Detail {
-  id          String           @id @default(cuid())
-  date        DateTime? // 明细创建时间
-  status      DetailStatus     @default(Waiting_SWIFT)
-  sourceMode  DetailSourceMode @default(OCR)
-  imageUrl    String?          @db.LongText // 图片路径
-  imageName   String?          @db.Text // 图片原始名称
-  totalAmount Decimal          @default(0) @db.Decimal(18, 2) // 总金额
-  agentId     String?
-  createdBy   String
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id           String        @id @default(cuid())
+  date         DateTime?     // 明细创建时间
+  status       DetailStatus  @default(Waiting_SWIFT)
+  sourceMode   DetailSourceMode @default(OCR)
+  imageUrl     String?       @db.LongText // 图片路径
+  imageName    String?       @db.Text // 图片原始名称
+  totalAmount  Decimal       @default(0) @db.Decimal(18, 2) // 总金额
+  agentId      String?
+  createdBy    String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   // 关联
-  creator      User                @relation(fields: [createdBy], references: [id])
-  agent        PaymentAgent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  items        DetailItem[]
-  histories    DetailHistory[]
-  swift        Swift?
+  creator    User           @relation(fields: [createdBy], references: [id])
+  agent      PaymentAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  items      DetailItem[]
+  histories  DetailHistory[]
+  swift      Swift?
   editRequests DetailEditRequest[]
 
   @@index([status])
@@ -618,14 +618,14 @@ model Detail {
 
 // ==================== 付款明细行项目表 ====================
 model DetailItem {
-  id        String   @id @default(cuid())
-  detailId  String
-  mark      String? // 唛头
-  orderNo   String? // 单号
-  amount    Decimal  @db.Decimal(18, 2) // 金额
-  receiptId String? // 关联的Receipt
-  note      String?  @db.Text // 备注
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  detailId   String
+  mark       String?  // 唛头
+  orderNo    String?  // 单号
+  amount     Decimal  @db.Decimal(18, 2) // 金额
+  receiptId  String?  // 关联的Receipt
+  note       String?  @db.Text // 备注
+  createdAt  DateTime @default(now())
 
   // 关联
   detail  Detail   @relation(fields: [detailId], references: [id], onDelete: Cascade)
@@ -638,16 +638,16 @@ model DetailItem {
 
 // ==================== 付款明细历史版本表 ====================
 model DetailHistory {
-  id        String       @id @default(cuid())
-  detailId  String
-  date      DateTime?
-  items     String       @db.LongText // JSON格式存储DetailItem数组
-  imageUrl  String?      @db.LongText
-  imageName String?      @db.Text
-  status    DetailStatus
-  note      String?      @db.Text // 变更备注
-  createdBy String
-  createdAt DateTime     @default(now())
+  id         String   @id @default(cuid())
+  detailId   String
+  date       DateTime?
+  items      String   @db.LongText // JSON格式存储DetailItem数组
+  imageUrl   String?  @db.LongText
+  imageName  String?  @db.Text
+  status     DetailStatus
+  note       String?  @db.Text // 变更备注
+  createdBy  String
+  createdAt  DateTime @default(now())
 
   // 关联
   detail  Detail @relation(fields: [detailId], references: [id], onDelete: Cascade)
@@ -658,26 +658,26 @@ model DetailHistory {
 
 // ==================== SWIFT水单表 ====================
 model Swift {
-  id              String      @id @default(cuid())
-  detailId        String      @unique // 一张SWIFT对应一张DETAIL
-  status          SwiftStatus @default(Bank_Transfer)
-  amount          Decimal     @db.Decimal(18, 2) // 汇款金额
-  date            DateTime? // 汇款日期
-  senderName      String? // 汇款人姓名
-  senderAddress   String?     @db.Text // 汇款人地址
-  receiverName    String? // 收款人姓名
+  id             String   @id @default(cuid())
+  detailId       String   @unique // 一张SWIFT对应一张DETAIL
+  status         SwiftStatus @default(Bank_Transfer)
+  amount         Decimal  @db.Decimal(18, 2) // 汇款金额
+  date           DateTime? // 汇款日期
+  senderName     String?  // 汇款人姓名
+  senderAddress  String?  @db.Text // 汇款人地址
+  receiverName   String?  // 收款人姓名
   receiverAccount String? // 收款人账号
-  imageUrl        String?     @db.LongText // 图片路径
-  imageName       String?     @db.Text // 图片原始名称
-  hasError        Boolean     @default(false) // 是否有错误(金额不一致)
-  errorMessage    String?     @db.Text // 错误信息
-  createdBy       String
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  imageUrl       String?  @db.LongText // 图片路径
+  imageName      String?  @db.Text // 图片原始名称
+  hasError       Boolean  @default(false) // 是否有错误(金额不一致)
+  errorMessage   String?  @db.Text // 错误信息
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // 关联
-  detail       Detail             @relation(fields: [detailId], references: [id], onDelete: Cascade)
-  creator      User               @relation(fields: [createdBy], references: [id])
+  detail  Detail @relation(fields: [detailId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [createdBy], references: [id])
   editRequests SwiftEditRequest[]
 
   @@index([detailId])
@@ -733,14 +733,14 @@ model SwiftEditRequest {
 }
 
 model PaymentAgent {
-  id             String   @id @default(cuid())
-  companyName    String   @db.Text
-  companyAddress String?  @db.Text
-  contactName    String?  @db.Text
+  id             String             @id @default(cuid())
+  companyName    String             @db.Text
+  companyAddress String?            @db.Text
+  contactName    String?            @db.Text
   contactPhone   String?
   createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   creator User               @relation("PaymentAgentCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
   files   PaymentAgentFile[]
@@ -751,7 +751,7 @@ model PaymentAgent {
 
 model PaymentAgentFile {
   id         String   @id @default(cuid())
-  agentId    String
+  agentId     String
   name       String   @db.Text
   path       String   @db.LongText
   mimeType   String?
@@ -785,12 +785,12 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  creator       User                @relation("CustomerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
-  owner         User                @relation("CustomerOwner", fields: [ownerId], references: [id])
-  orderNames    CustomerOrderName[]
-  consignees    CustomerConsignee[]
-  orders        Order[]
-  receipts      Receipt[]
+  creator User @relation("CustomerCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  owner   User @relation("CustomerOwner", fields: [ownerId], references: [id])
+  orderNames CustomerOrderName[]
+  consignees CustomerConsignee[]
+  orders  Order[]
+  receipts Receipt[]
   orderTrackers OrderTracker[]
 
   @@index([mark])
@@ -816,14 +816,14 @@ model CustomerOrderName {
 }
 
 model CustomerConsignee {
-  id                      String   @id @default(cuid())
-  customerId              String
-  consignee               String   @db.Text
+  id                  String   @id @default(cuid())
+  customerId          String
+  consignee           String   @db.Text
   normalizedConsignee     String   @map("normalized_consignee") @db.Text
   normalizedConsigneeHash String   @map("normalized_consignee_hash")
-  isPrimary               Boolean  @default(false)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  isPrimary           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
@@ -834,16 +834,16 @@ model CustomerConsignee {
 
 // ==================== 删除申请表 ====================
 model DeletionRequest {
-  id          String             @id @default(cuid())
-  targetType  DeletionTargetType // 删除目标类型
-  targetId    String // 目标ID
-  reason      String?            @db.Text // 删除原因
-  status      DeletionStatus     @default(PENDING)
-  requestedBy String
-  approvedBy  String?
-  approvedAt  DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id           String           @id @default(cuid())
+  targetType   DeletionTargetType // 删除目标类型
+  targetId     String           // 目标ID
+  reason       String?          @db.Text // 删除原因
+  status       DeletionStatus   @default(PENDING)
+  requestedBy  String
+  approvedBy   String?
+  approvedAt   DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
   // 关联
   requester User  @relation(fields: [requestedBy], references: [id])
@@ -856,18 +856,18 @@ model DeletionRequest {
 
 // ==================== 余额转移记录表 ====================
 model BalanceTransfer {
-  id                 String   @id @default(cuid())
-  fromOrderId        String
-  toOrderId          String
-  generatedReceiptId String?  @unique
-  amount             Decimal  @db.Decimal(18, 2) // 转移金额
-  note               String?  @db.Text // 转移备注
-  createdBy          String
-  createdAt          DateTime @default(now())
+  id              String   @id @default(cuid())
+  fromOrderId     String
+  toOrderId       String
+  generatedReceiptId String? @unique
+  amount          Decimal  @db.Decimal(18, 2) // 转移金额
+  note            String?  @db.Text // 转移备注
+  createdBy       String
+  createdAt       DateTime @default(now())
 
   // 关联
-  fromOrder        Order    @relation("TransferFrom", fields: [fromOrderId], references: [id])
-  toOrder          Order    @relation("TransferTo", fields: [toOrderId], references: [id])
+  fromOrder Order @relation("TransferFrom", fields: [fromOrderId], references: [id])
+  toOrder   Order @relation("TransferTo", fields: [toOrderId], references: [id])
   generatedReceipt Receipt? @relation("BalanceTransferGeneratedReceipt", fields: [generatedReceiptId], references: [id], onDelete: Restrict)
 
   @@index([fromOrderId])

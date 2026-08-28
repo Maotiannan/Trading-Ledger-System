@@ -120,6 +120,8 @@ POST /api/integrations/mu-contract/actions
 
 Full Reconcile 必须先预览再确认执行；预览 15 分钟后失效。Apply 在写入前重新读取完整分页快照，要求所有页面高水位一致、PI ID 全局唯一且稳定递增，并重新核对来源汇总和本地目标状态；快照分页游标始终使用来源返回值。任何变化都返回 `409` 并要求重新预览。通过后按设置批量事务提交，并以来源 PI ID 保存处理断点。首次 Full Reconcile 完成前，系统拒绝启用普通增量同步。
 
+预览中的 ORDER NO 重复冲突只统计同时有效的来源 PI。来源为保留历史而返回的 inactive PI 不参与重复计数，因此“一个失效旧 PI + 一个有效替代 PI”属于正常接替而不是冲突；同一标准化 ORDER NO 同时存在两个或更多 active PI 时仍按冲突保护，不自动覆盖。
+
 `Sync Now` 或 `apply-reconcile` 遇到有效租约竞争时返回可读的 `409`“未完成”结果，而不是成功响应；设置页保留现有 Full Reconcile 预览供稍后重试。所有成功、失败和对账状态写入都带当前 `leaseOwner` 条件，过期 worker 不能覆盖接管者。
 
 Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / CONFLICT` 的同步行，所选客户必须位于该管理员现有层级可见范围内。它在一个事务中更新 Orders 客户快照与 `needsCustomerFix`、来源匹配状态和人工编辑标记，关闭对应客户冲突，并写入 before/after 审计；普通人工行、已匹配同步行和非 ADMIN 均不能使用，财务表不会被修改。

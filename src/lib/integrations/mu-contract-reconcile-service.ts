@@ -232,10 +232,11 @@ async function buildPreviewAnalysis(
 
   const linksByPi = new Map(links.map((link) => [link.externalId, link]));
   const trackersByOrder = new Map(trackers.map((row) => [row.normalizedOrderNo, row]));
-  const sourceOrderCounts = new Map<string, number>();
+  const activeSourceOrderCounts = new Map<string, number>();
   for (const item of items) {
+    if (!item.order.active) continue;
     const normalized = normalizeOrderIdentifier(item.order.orderNo);
-    sourceOrderCounts.set(normalized, (sourceOrderCounts.get(normalized) ?? 0) + 1);
+    activeSourceOrderCounts.set(normalized, (activeSourceOrderCounts.get(normalized) ?? 0) + 1);
   }
 
   const summary: MuContractReconcileSummary = {
@@ -254,7 +255,7 @@ async function buildPreviewAnalysis(
     const normalized = normalizeOrderIdentifier(item.order.orderNo);
     const link = linksByPi.get(item.source.piId);
     const tracker = trackersByOrder.get(normalized);
-    const duplicateCount = sourceOrderCounts.get(normalized) ?? 0;
+    const duplicateCount = activeSourceOrderCounts.get(normalized) ?? 0;
     let resolutionEvidence: Record<string, unknown> | null = null;
     if (!item.order.active) summary.inactive += 1;
 

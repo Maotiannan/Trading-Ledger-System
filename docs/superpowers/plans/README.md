@@ -8,11 +8,11 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-The MU Contract reconcile preview conflict-count correction is currently `ACTIVE`. Historical plans remain archived below.
+No implementation plans are currently `ACTIVE`. Historical plans remain archived below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
-| `2026-08-28-mu-contract-reconcile-preview-conflict-count.md` | `ACTIVE` | Correct inactive-history duplicate counting while preserving active-source collision protection. |
+| `2026-08-28-mu-contract-reconcile-preview-conflict-count.md` | `ARCHIVED_COMPLETED` | Inactive PI history no longer causes false Full Reconcile preview conflicts; active-source collision protection remains and PR #28 passed CI before merge. |
 | `2026-08-27-receipt-transfer-reversal.md` | `ARCHIVED_COMPLETED` | Transactional transfer reversal shipped in v1.0.213; the verified migration, production deployment, one-time incident repair, postconditions, and idempotent retry all completed. |
 | `2026-08-26-dashboard-history-signing-draft-edit.md` | `ARCHIVED_COMPLETED` | Dashboard now shows Recent Receipts before Historical Orders, and unfinished signed-receipt drafts update Receipt plus the pending signing session transactionally. |
 | `2026-08-24-dashboard-source-deposit-reconciliation.md` | `ARCHIVED_COMPLETED` | One Dashboard customer dialog, inactive MU Contract source takeover, transactional invoice-write migration, and ADMIN Rematch repair controls shipped on the verified feature branch. |

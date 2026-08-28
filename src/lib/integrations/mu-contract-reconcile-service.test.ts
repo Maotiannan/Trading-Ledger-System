@@ -51,6 +51,18 @@ function activeItem(piId: string, orderNo: string): MuContractSnapshotItem {
   };
 }
 
+function inactiveItem(piId: string, orderNo: string): MuContractSnapshotItem {
+  const item = activeItem(piId, orderNo);
+  return {
+    ...item,
+    order: {
+      ...item.order,
+      active: false,
+      deletedAt: '2026-07-02T09:00:00.000Z',
+    },
+  };
+}
+
 function previewRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 'preview-1',
@@ -208,6 +220,92 @@ describe('MU Contract Full Reconcile', () => {
       }),
     });
     expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('does not report an inactive PI and its active replacement as duplicate conflicts', async () => {
+    const tracker = {
+      id: 'tracker-ib-56',
+      orderNo: 'IB-56',
+      normalizedOrderNo: 'ib-56',
+      financeOrderId: null,
+      customerId: 'customer-ib',
+      customerMark: 'IB',
+      customerName: 'Ibrahima Diallo',
+      customerPhone: null,
+      customerCity: null,
+      needsCustomerFix: false,
+      status: 'Confirmed',
+      confirmedAt: null,
+      piStatus: false,
+      remark: null,
+      systemNote: null,
+      archivedAt: null,
+      externalSourceLinks: [{ externalId: 'pi-b-active' }],
+    };
+    const page: MuContractSnapshotPage = {
+      schemaVersion: 1,
+      items: [inactiveItem('pi-a-inactive', 'IB-56'), activeItem('pi-b-active', 'IB-56')],
+      eventHighWatermark: '1042',
+      nextAfter: null,
+      hasMore: false,
+    };
+    const { root } = makeDb();
+    root.externalOrderSourceLink.findMany.mockResolvedValueOnce([
+      {
+        id: 'link-inactive',
+        externalId: 'pi-a-inactive',
+        orderTrackerId: null,
+        sourceVersion: 2,
+        linkMode: 'SYNC_CREATED',
+        active: false,
+        humanEditedAt: null,
+        customerMatchStatus: 'MATCHED',
+        orderTracker: null,
+      },
+      {
+        id: 'link-active',
+        externalId: 'pi-b-active',
+        orderTrackerId: tracker.id,
+        sourceVersion: 1,
+        linkMode: 'MANUAL_ATTACHED',
+        active: true,
+        humanEditedAt: null,
+        customerMatchStatus: 'MATCHED',
+        orderTracker: tracker,
+      },
+    ]);
+    root.orderTracker.findMany.mockResolvedValueOnce([tracker]);
+
+    const result = await previewMuContractReconcile('admin-1', {
+      client: makeClient(page),
+      dbClient: root,
+      now: () => fixedNow,
+    });
+
+    expect(result.summary).toEqual(expect.objectContaining({
+      totalSourceRows: 2,
+      inactive: 1,
+      conflicts: 0,
+    }));
+  });
+
+  it('continues to report each active PI when the same ORDER NO has two active sources', async () => {
+    const page: MuContractSnapshotPage = {
+      schemaVersion: 1,
+      items: [activeItem('pi-active-a', 'IB-56'), activeItem('pi-active-b', 'IB-56')],
+      eventHighWatermark: '1042',
+      nextAfter: null,
+      hasMore: false,
+    };
+    const { root } = makeDb();
+
+    const result = await previewMuContractReconcile('admin-1', {
+      client: makeClient(page),
+      dbClient: root,
+      now: () => fixedNow,
+    });
+
+    expect(result.summary.conflicts).toBe(2);
   });
 
   it('rejects an expired preview before contacting the source', async () => {

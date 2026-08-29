@@ -79,9 +79,27 @@ LOCAL_RETENTION_DAYS=30
 MULEDGER_BACKUP_MIN_FREE_BYTES=5368709120
 MYSQLDUMP_BIN=auto
 MYSQLDUMP_DOCKER_IMAGE=mariadb:10.6
+MULEDGER_BACKUP_DOCKER_IMAGE=muledger-local-backup:1
+MULEDGER_BACKUP_MAX_ATTEMPTS=3
+MULEDGER_BACKUP_RETRY_SECONDS=300
+MULEDGER_BACKUP_MAX_AGE_SECONDS=129600
+MULEDGER_BACKUP_TIMEZONE=Asia/Shanghai
+MULEDGER_BACKUP_REQUIRED_MOUNT=/Volumes/团队文件-DAINTY_SHIPMENT
+MULEDGER_BACKUP_REQUIRED_FILESYSTEM=smbfs
 ```
 
 The script refuses an environment file that is not mode `600`, a database other than `trading_ledger`, overlapping source/backup paths, symbolic links or special files in the media source, insufficient free space, and overlapping backup processes.
+
+The scheduled job must not execute the host backup script directly. macOS can deny a headless LaunchAgent access to an SMB network volume even when the same user can read it in Terminal. Granting Full Disk Access to `/bin/bash` would broaden NAS access to every Bash process, so the supported scheduler uses the dedicated `muledger-local-backup:1` Docker image instead. Docker Desktop already owns the approved NAS mount used by the running application. The backup container receives:
+
+- the repository as read-only
+- `UPLOAD_HOST_DIR` as read-only at `/data/upload`
+- `MULEDGER_LOCAL_BACKUP_ROOT` as writable at `/data/backup`
+- the database URL only through the process environment, never in command arguments or logs
+
+The container is temporary, read-only outside `/tmp` and the backup destination, drops all Linux capabilities, and is removed after every attempt. This fixes the LaunchAgent permission boundary without granting a general-purpose shell access to network volumes.
+
+Before Docker starts, the runner verifies that the configured NAS root is an active `smbfs` mount and that both the media source and backup destination are inside it. This prevents a disconnected NAS with a leftover local directory from producing a false successful backup on the Mac disk.
 
 ## 4. Manual Backup And Verification
 
@@ -94,13 +112,13 @@ mkdir -p /Volumes/团队文件-DAINTY_SHIPMENT/docker/backups/muledger
 Validate without writing:
 
 ```bash
-scripts/backup/muledger-local-backup.sh --dry-run
+scripts/backup/run-muledger-local-backup-docker.sh --dry-run
 ```
 
 Create a complete snapshot:
 
 ```bash
-scripts/backup/muledger-local-backup.sh
+scripts/backup/run-muledger-local-backup-docker.sh
 ```
 
 Find and verify the newest snapshot:
@@ -111,7 +129,7 @@ LATEST_SNAPSHOT="$(
     -mindepth 4 -maxdepth 4 -type d -name 'muledger-*' | sort | tail -1
 )"
 test -n "$LATEST_SNAPSHOT"
-scripts/backup/muledger-local-backup.sh --verify "$LATEST_SNAPSHOT"
+scripts/backup/run-muledger-local-backup-docker.sh --verify "$LATEST_SNAPSHOT"
 ```
 
 Verification checks all SHA-256 files, both gzip streams, archive paths and file types, manifest identity, names, sizes, hashes, and media file count. Verification is read-only and never restores a database.
@@ -139,7 +157,7 @@ Logs:
 ~/.muledger-backup/logs/launchd.err.log
 ```
 
-The installer unloads and removes only the retired `com.muledger.cos-backup` plist. It does not delete historical logs or backup files.
+The installer builds the dedicated local backup image, installs the Docker runner as the LaunchAgent command, unloads and removes only the retired `com.muledger.cos-backup` plist, and uses low-priority background I/O. It does not rebuild the application, restart business containers, delete historical logs, or delete backup files.
 
 ## 6. Retention And Failure Handling
 
@@ -153,7 +171,19 @@ snapshots/YYYY/MM/DD/muledger-YYYYMMDD-HHMMSS
 
 Unexpected files and directories are not removed. `LOCAL_RETENTION_DAYS=0` disables automatic retention.
 
-Treat any non-zero LaunchAgent exit as an operational failure. Check the stderr log, preserve the failed-stage evidence, verify the NAS mount and free space, then rerun `--dry-run`. Never delete `.backup.lock` while a backup process is running.
+The scheduled runner attempts a normal backup up to three times with a five-minute delay. `--dry-run` and `--verify` run once because retrying validation cannot repair an invalid configuration or snapshot. Each scheduled run atomically updates:
+
+`~/.muledger-backup/status.json`
+
+Check it without traversing the NAS:
+
+```bash
+scripts/backup/check-muledger-local-backup-status.sh
+```
+
+The check returns healthy only when the latest scheduled run succeeded and its success time is no older than 36 hours. Missing, malformed, failed, still-running, or stale state exits non-zero and is suitable for the existing Codex watchdog automation.
+
+Treat any non-zero LaunchAgent exit as an operational failure. Check the stderr log, preserve the failed-stage evidence, verify Docker Desktop and the NAS mount, then rerun the Docker `--dry-run`. Never delete `.backup.lock` while a backup process is running.
 
 ## 7. Restore Principle
 
@@ -218,7 +248,7 @@ Required checks:
 - Confirm new database data is inside the full `trading_ledger` dump.
 - Add new upload/generated-file paths to the NAS layout table.
 - Document any persistence outside MySQL and `UPLOAD_HOST_DIR` with its own backup and restore commands.
-- Run `scripts/backup/muledger-local-backup.sh --dry-run` after backup path or script changes.
+- Run `scripts/backup/run-muledger-local-backup-docker.sh --dry-run` after backup path, scheduler, permission, image, or script changes.
 - Run a restore drill when dump tooling, database engines, restore assumptions, or critical table families change.
 
 ## 11. Historical Cloud Backups
@@ -229,6 +259,7 @@ The active rollout and historical drills remain valid records of what was tested
 
 | Date | Backup | Result | Evidence |
 | --- | --- | --- | --- |
+| 2026-08-29 | LaunchAgent NAS permission repair, Docker backup, and isolated restore | `PASS` | [LaunchAgent NAS permission rollout](restore-drills/2026-08-29-launchagent-nas-permission-rollout.md) |
 | 2026-08-27 | Active NAS database/media snapshot | `PASS` for Receipt transfer reversal migration and incident repair | [Migration and repair drill](restore-drills/2026-08-27-receipt-transfer-reversal-migration-drill.md) |
 | 2026-07-19 | Active NAS database/media snapshot and production rollout | `PASS` | [NAS rollout and restore](restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md) |
 | 2026-07-18 | Historical cloud database/media backup | `PASS` for MU Contract migration | [Migration drill](restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md) |

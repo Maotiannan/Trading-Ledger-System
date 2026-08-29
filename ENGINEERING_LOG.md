@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.214
-> 最后更新：2026-08-28
+> 当前版本：v1.0.215
+> 最后更新：2026-08-29
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] macOS LaunchAgent NAS 备份权限修复：复现确认交互终端手工备份和 Docker 的 NAS 挂载均正常，但 `com.muledger.local-backup` 直接执行主机 Bash 时，macOS 对 SMB 网络卷返回 `Operation not permitted`，导致每日任务连续失败。未给通用 `/bin/bash` 增加 Full Disk Access；改为由 LaunchAgent 调用专用临时 Docker 任务，仓库和媒体源只读挂载、备份目标单独可写，容器根文件系统只读、移除全部 capabilities 且不在命令行暴露数据库密码。新增最多三次失败重试、原子 `status.json`、36 小时新鲜度检查、现代 `launchctl bootstrap/bootout` 安装流程和回归测试。后台触发一次成功发布 `muledger-20260829-173120`，独立校验和临时 MariaDB 10.6 恢复通过：34 张表、27 条迁移、518/518 个媒体文件；完整证据见 `docs/backup/restore-drills/2026-08-29-launchagent-nas-permission-rollout.md`。完整数据库与媒体范围、30 天成功后保留规则、原子发布与校验逻辑不变。✅ 2026-08-29
 
 - [x] MU Contract Full Reconcile 预览冲突计数修复：生产只读核对确认 `IB-56` 的旧 inactive PI 已解除绑定、新 active PI 已正确挂接且正式冲突表为 0，但预览仍把两条历史来源分别计为冲突。预览分析现只用 active 来源计算同一标准化 ORDER NO 的重复数；一条 inactive 历史来源与一条 active 替代来源不再误报，两个 active PI 仍按每条来源计入冲突并阻止静默覆盖。新增 `IB-56` 等价回归测试和真实 active 重复保护测试；验证通过 MU Contract 14 suites / 113 tests、全量 185 suites / 1222 tests、isolated API 22 cases、typecheck、全仓 ESLint、Prisma validate、i18n audit 和 Webpack 生产构建。PR #28 的 CI 通过后已合并到 `main`。无 Prisma schema、迁移、数据库写路径、Docker、NAS 上传目录或备份范围变化；隔离测试容器和临时 volume 已清理。✅ 2026-08-28
 

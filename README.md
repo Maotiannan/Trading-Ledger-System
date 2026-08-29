@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.214`
-- 最近更新：修正 MU Contract 完整对账预览把已失效历史 PI 与有效替代 PI 误报为重复冲突的问题。
+- 版本：`1.0.215`
+- 最近更新：修复 macOS 后台备份无法访问 NAS 的问题，并增加 Docker 隔离执行、失败重试和备份状态巡检。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -80,6 +80,8 @@ docker compose down -v
 完整数据文件、上传目录、清理规则和外部接口说明见：[data-and-integrations.md](docs/data-and-integrations.md)。
 
 NAS 本地备份与恢复手册见：[muledger-local-backup.md](docs/backup/muledger-local-backup.md)。
+
+每日后台备份通过专用 Docker 任务访问 NAS，不给系统 Bash 开放全盘权限；失败会重试并写入可供巡检读取的本地状态。
 
 最近一次完整业务恢复演练与上线记录见：[2026-07-19 MULEDGER NAS 备份与同步上线](docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md)。
 

@@ -452,7 +452,10 @@ write_manifest() {
   media_archive="$(find "$STAGING_DIR/media" -type f -name '*.tar.gz' -print -quit)"
   database_relative="database/$(basename "$database_dump")"
   media_relative="media/$(basename "$media_archive")"
-  git_commit="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+  git_commit="${MULEDGER_BACKUP_GIT_COMMIT:-}"
+  if [ -z "$git_commit" ]; then
+    git_commit="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+  fi
   BACKUP_CREATED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
   BACKUP_GIT_COMMIT="$git_commit" \
   BACKUP_DATABASE_FILE="$database_relative" \
@@ -462,7 +465,7 @@ write_manifest() {
   BACKUP_MEDIA_SIZE="$(file_size "$media_archive")" \
   BACKUP_MEDIA_SHA256="$(sha256_value "$media_archive")" \
   BACKUP_MEDIA_COUNT="$MEDIA_FILE_COUNT" \
-  BACKUP_UPLOAD_SOURCE="$UPLOAD_ROOT_RESOLVED" \
+  BACKUP_UPLOAD_SOURCE="${MULEDGER_BACKUP_UPLOAD_SOURCE_LABEL:-$UPLOAD_ROOT_RESOLVED}" \
   node > "$STAGING_DIR/manifest.json" <<'NODE'
 const manifest = {
   project: 'muledger',

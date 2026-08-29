@@ -334,6 +334,8 @@ describe('MULEDGER NAS local backup', () => {
   it('keeps the active backup command, environment example, and launch agent local-only', () => {
     const active = [
       'scripts/backup/muledger-local-backup.sh',
+      'scripts/backup/run-muledger-local-backup-docker.sh',
+      'scripts/backup/check-muledger-local-backup-status.sh',
       'scripts/backup/muledger-backup.env.example',
       'scripts/backup/install-muledger-backup-launchd.sh',
     ]
@@ -343,6 +345,17 @@ describe('MULEDGER NAS local backup', () => {
     expect(active).not.toMatch(/COS_SECRET|coscli|cos:\/\//i);
     expect(active).toContain('MULEDGER_LOCAL_BACKUP_ROOT');
     expect(active).toContain('muledger-local-backup.sh');
+    expect(active).toContain('run-muledger-local-backup-docker.sh');
     expect(active).toContain('com.muledger.local-backup');
+  });
+
+  it('keeps the scheduled dump client on the production MariaDB major version', () => {
+    const dockerfile = readFileSync(
+      path.join(process.cwd(), 'scripts', 'backup', 'Dockerfile'),
+      'utf8',
+    );
+
+    expect(dockerfile).toContain('FROM mariadb:10.6');
+    expect(dockerfile).toContain('COPY --from=node-runtime');
   });
 });

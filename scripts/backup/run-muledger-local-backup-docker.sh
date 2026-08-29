@@ -172,6 +172,8 @@ MULEDGER_BACKUP_MAX_ATTEMPTS="${MULEDGER_BACKUP_MAX_ATTEMPTS:-3}"
 MULEDGER_BACKUP_RETRY_SECONDS="${MULEDGER_BACKUP_RETRY_SECONDS:-300}"
 MULEDGER_BACKUP_MAX_AGE_SECONDS="${MULEDGER_BACKUP_MAX_AGE_SECONDS:-129600}"
 MULEDGER_BACKUP_TIMEZONE="${MULEDGER_BACKUP_TIMEZONE:-Asia/Shanghai}"
+MULEDGER_BACKUP_REQUIRED_MOUNT="${MULEDGER_BACKUP_REQUIRED_MOUNT:-}"
+MULEDGER_BACKUP_REQUIRED_FILESYSTEM="${MULEDGER_BACKUP_REQUIRED_FILESYSTEM:-smbfs}"
 LOCAL_RETENTION_DAYS="${LOCAL_RETENTION_DAYS:-30}"
 MULEDGER_BACKUP_MIN_FREE_BYTES="${MULEDGER_BACKUP_MIN_FREE_BYTES:-5368709120}"
 
@@ -180,6 +182,26 @@ validate_non_negative_integer "MULEDGER_BACKUP_RETRY_SECONDS" "$MULEDGER_BACKUP_
 validate_positive_integer "MULEDGER_BACKUP_MAX_AGE_SECONDS" "$MULEDGER_BACKUP_MAX_AGE_SECONDS"
 case "$UPLOAD_HOST_DIR" in /*) ;; *) log "ERROR: UPLOAD_HOST_DIR must be absolute"; exit 1 ;; esac
 case "$MULEDGER_LOCAL_BACKUP_ROOT" in /*) ;; *) log "ERROR: MULEDGER_LOCAL_BACKUP_ROOT must be absolute"; exit 1 ;; esac
+
+if [ -n "$MULEDGER_BACKUP_REQUIRED_MOUNT" ]; then
+  case "$UPLOAD_HOST_DIR/" in
+    "$MULEDGER_BACKUP_REQUIRED_MOUNT/"*) ;;
+    *) log "ERROR: Upload source is outside the required NAS mount"; exit 1 ;;
+  esac
+  case "$MULEDGER_LOCAL_BACKUP_ROOT/" in
+    "$MULEDGER_BACKUP_REQUIRED_MOUNT/"*) ;;
+    *) log "ERROR: Backup root is outside the required NAS mount"; exit 1 ;;
+  esac
+  mount_line="$(mount | grep -F " on $MULEDGER_BACKUP_REQUIRED_MOUNT (" | head -1 || true)"
+  if [ -z "$mount_line" ]; then
+    log "ERROR: Required NAS mount is not active: $MULEDGER_BACKUP_REQUIRED_MOUNT"
+    exit 1
+  fi
+  if ! printf '%s\n' "$mount_line" | grep -F "($MULEDGER_BACKUP_REQUIRED_FILESYSTEM," >/dev/null; then
+    log "ERROR: Required mount does not use $MULEDGER_BACKUP_REQUIRED_FILESYSTEM"
+    exit 1
+  fi
+fi
 
 if [ "$MODE" = "VERIFY" ]; then
   case "$VERIFY_PATH/" in

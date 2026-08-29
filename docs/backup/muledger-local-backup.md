@@ -84,6 +84,8 @@ MULEDGER_BACKUP_MAX_ATTEMPTS=3
 MULEDGER_BACKUP_RETRY_SECONDS=300
 MULEDGER_BACKUP_MAX_AGE_SECONDS=129600
 MULEDGER_BACKUP_TIMEZONE=Asia/Shanghai
+MULEDGER_BACKUP_REQUIRED_MOUNT=/Volumes/团队文件-DAINTY_SHIPMENT
+MULEDGER_BACKUP_REQUIRED_FILESYSTEM=smbfs
 ```
 
 The script refuses an environment file that is not mode `600`, a database other than `trading_ledger`, overlapping source/backup paths, symbolic links or special files in the media source, insufficient free space, and overlapping backup processes.
@@ -96,6 +98,8 @@ The scheduled job must not execute the host backup script directly. macOS can de
 - the database URL only through the process environment, never in command arguments or logs
 
 The container is temporary, read-only outside `/tmp` and the backup destination, drops all Linux capabilities, and is removed after every attempt. This fixes the LaunchAgent permission boundary without granting a general-purpose shell access to network volumes.
+
+Before Docker starts, the runner verifies that the configured NAS root is an active `smbfs` mount and that both the media source and backup destination are inside it. This prevents a disconnected NAS with a leftover local directory from producing a false successful backup on the Mac disk.
 
 ## 4. Manual Backup And Verification
 

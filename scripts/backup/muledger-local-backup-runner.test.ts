@@ -160,6 +160,35 @@ describe('MULEDGER Docker backup runner', () => {
       f.cleanup();
     }
   });
+
+  it('stops before Docker when the required NAS mount is not active', () => {
+    const f = fixture();
+    try {
+      const missingMount = '/Volumes/muledger-missing-test-volume';
+      writeFileSync(
+        f.envFile,
+        [
+          'DATABASE_URL=mysql://backup-user:secret@192.168.1.3:3306/trading_ledger',
+          `UPLOAD_HOST_DIR=${missingMount}/upload`,
+          `MULEDGER_LOCAL_BACKUP_ROOT=${missingMount}/backup`,
+          'LOCAL_RETENTION_DAYS=30',
+          'MULEDGER_BACKUP_MIN_FREE_BYTES=0',
+        ].join('\n') + '\n',
+      );
+      const result = runRunner(f, {
+        FAKE_DOCKER_SUCCEED_ON: '1',
+        MULEDGER_BACKUP_REQUIRED_MOUNT: missingMount,
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('Required NAS mount is not active');
+      expect(existsSync(f.dockerLog)).toBe(false);
+      const status = JSON.parse(readFileSync(f.statusFile, 'utf8'));
+      expect(status).toMatchObject({ status: 'FAILED', attempts: 0 });
+    } finally {
+      f.cleanup();
+    }
+  });
 });
 
 describe('MULEDGER backup status checker', () => {

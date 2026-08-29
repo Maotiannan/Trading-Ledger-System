@@ -25,6 +25,7 @@ The supported LaunchAgent now starts `run-muledger-local-backup-docker.sh`. It d
 - Linux capabilities: all dropped
 - database client: MariaDB `10.6.27`, matching the production major version
 - retry policy: three attempts, five minutes between attempts
+- preflight: the configured destination must be an active `smbfs` mount, and both protected paths must be inside it
 
 The database credential is passed through the process environment and is absent from Docker command arguments, manifests, and status output.
 

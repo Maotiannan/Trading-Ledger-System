@@ -4,6 +4,7 @@ export * from '@/components/workspace/modules/orders';
 export * from '@/components/workspace/modules/receipts';
 export * from '@/components/workspace/modules/details';
 export * from '@/components/workspace/modules/swifts';
+export * from '@/components/workspace/modules/emails';
 export * from '@/components/workspace/modules/deletions';
 export * from '@/components/workspace/modules/users';
 export * from '@/components/workspace/modules/customers';

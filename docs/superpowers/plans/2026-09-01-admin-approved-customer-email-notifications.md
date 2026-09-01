@@ -646,29 +646,29 @@ git commit -m "feat: deliver approved emails through resend"
 - Consumes: Task 6 list/action API and Task 7 attempt/webhook status data.
 - Produces: `/emails`, visible and reachable only to ADMIN, with server-side filters and explicit send confirmation.
 
-- [ ] **Step 1: Write failing navigation and manager tests**
+- [x] **Step 1: Write failing navigation and manager tests**
 
 Verify ADMIN sees and opens Email Management, SALES/USER do not see it and are redirected if typing `/emails`, filters run only on Search, five-state action availability is correct, batch selection excludes ineligible rows, and send confirmation states exact recipients/test redirection.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `npm test -- --runInBand src/components/workspace/routes.test.ts src/components/workspace/chrome/sidebar.test.tsx src/components/workspace/modules/emails/email-manager.test.tsx`
 
 Expected: FAIL because `emails` is not a workspace view.
 
-- [ ] **Step 3: Add strict ADMIN navigation guards**
+- [x] **Step 3: Add strict ADMIN navigation guards**
 
 Extend `WorkspaceView` with `emails`. Add an `adminOnly` route property separate from current `managerOnly`, because SALES currently counts as manager. Enforce it in both sidebar filtering and workspace layout redirect; backend authorization remains authoritative.
 
-- [ ] **Step 4: Build the management list**
+- [x] **Step 4: Build the management list**
 
 Display creation time, type, customer/MARK, primary email and additional count, language, source identifier, ORDER NO, status, and actions. Provide customer/MARK/ORDER/INV/Receipt search; type/status/date filters; compact pagination; row selection; preview; send; cancel; retry; correction; and attempt history.
 
-- [ ] **Step 5: Build responsive review dialogs**
+- [x] **Step 5: Build responsive review dialogs**
 
 Preview shows intended To/CC or separate recipients, actual test destination, language selector, subject, rendered HTML in a sandboxed preview frame, and plain text. Keep confirmation/footer controls reachable on narrow phones. Do not render raw HTML in the main DOM.
 
-- [ ] **Step 6: Add bilingual UI copy and tests**
+- [x] **Step 6: Add bilingual UI copy and tests**
 
 Translate all page labels, statuses, confirmations, and errors in `zh.json` and `en.json`. Customer email bodies remain English/French based on customer preference, independently of administrator UI locale.
 
@@ -676,7 +676,7 @@ Run: `npm test -- --runInBand src/components/workspace/modules/emails src/compon
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Email Management UI**
+- [x] **Step 7: Commit Email Management UI**
 
 ```bash
 git add src/app/'(workspace)'/emails src/components/workspace/modules/emails src/lib/store.ts src/components/workspace/routes* src/components/workspace/chrome/sidebar* src/components/workspace/navigation/prefetch.ts src/app/'(workspace)'/layout.tsx src/messages

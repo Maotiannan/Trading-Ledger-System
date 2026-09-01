@@ -11,7 +11,7 @@ import { getWorkspacePath, getWorkspaceViewFromPath } from '@/components/workspa
 import { prefetchWorkspaceView } from '@/components/workspace/navigation/prefetch';
 import {
   LogOut, Users, FileText, Receipt, FileSpreadsheet,
-  Building2, Trash2, LayoutDashboard, Settings, PanelLeftClose, PanelLeftOpen, Loader2, ClipboardList
+  Building2, Trash2, LayoutDashboard, Settings, PanelLeftClose, PanelLeftOpen, Loader2, ClipboardList, Mail
 } from 'lucide-react';
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'muledger-sidebar-collapsed';
@@ -65,19 +65,23 @@ export function Sidebar() {
     { id: 'receipts' as const, label: t('receipts'), icon: Receipt },
     { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
+    { id: 'emails' as const, label: t('emails'), icon: Mail, adminOnly: true },
     { id: 'deletions' as const, label: t('deletions'), icon: Trash2, managerOnly: true },
     { id: 'customers' as const, label: tx('客户管理', 'Customers'), icon: Users, managerOnly: true },
     { id: 'settings' as const, label: t('settings'), icon: Settings },
   ]), [t, tx]);
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const isAdmin = user?.role === 'ADMIN';
   const visibleMenuItems = useMemo(
-    () => menuItems.filter((item) => !(item.managerOnly && !isManager)),
-    [isManager, menuItems],
+    () => menuItems.filter((item) => (
+      !(item.managerOnly && !isManager) && !(item.adminOnly && !isAdmin)
+    )),
+    [isAdmin, isManager, menuItems],
   );
 
   const prefetchMenuItem = useCallback((view: ReturnType<typeof getWorkspaceViewFromPath>) => {
-    prefetchWorkspaceView(router, view, { isManager });
-  }, [isManager, router]);
+    prefetchWorkspaceView(router, view, { isManager, isAdmin });
+  }, [isAdmin, isManager, router]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

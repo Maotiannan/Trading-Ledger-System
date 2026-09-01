@@ -10,23 +10,29 @@ const WORKSPACE_DATA_PREFETCHES: Partial<Record<WorkspaceView, string[]>> = {
   receipts: ['receipt'],
   details: ['detail'],
   swifts: ['swift'],
+  emails: ['email-notifications?page=1&pageSize=20'],
   deletions: ['deletion'],
   customers: ['customer', 'customer/fixes'],
   settings: ['settings'],
 };
 
-export function getWorkspaceDataPrefetches(view: WorkspaceView, options: { isManager?: boolean } = {}): string[] {
+export function getWorkspaceDataPrefetches(
+  view: WorkspaceView,
+  options: { isManager?: boolean; isAdmin?: boolean } = {},
+): string[] {
   if (!options.isManager && (view === 'customers' || view === 'deletions')) {
     return [];
   }
+  if (view === 'emails' && !options.isAdmin) return [];
   return WORKSPACE_DATA_PREFETCHES[view] || [];
 }
 
 export function prefetchWorkspaceView(
   router: { prefetch: (href: string) => void },
   view: WorkspaceView,
-  options: { isManager?: boolean } = {},
+  options: { isManager?: boolean; isAdmin?: boolean } = {},
 ) {
+  if (view === 'emails' && !options.isAdmin) return;
   try {
     router.prefetch(getWorkspacePath(view));
   } catch {

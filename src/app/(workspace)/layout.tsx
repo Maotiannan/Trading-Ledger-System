@@ -5,7 +5,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Sidebar, LoginPage } from '@/components/workspace/chrome';
 import { useWorkspaceAuth } from '@/components/workspace/hooks';
-import { getWorkspacePath, getWorkspaceViewFromPath, isManagerOnlyView } from '@/components/workspace/routes';
+import {
+  getWorkspacePath,
+  getWorkspaceViewFromPath,
+  isAdminOnlyView,
+  isManagerOnlyView,
+} from '@/components/workspace/routes';
 import { useStore } from '@/lib/store';
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
@@ -15,9 +20,14 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const { navigationPendingView, setCurrentView, setNavigationPendingView } = useStore();
   const view = getWorkspaceViewFromPath(pathname);
   const isManager = user?.role === 'ADMIN' || user?.role === 'SALES';
+  const isAdmin = user?.role === 'ADMIN';
+  const forbiddenView = Boolean(user && (
+    (isManagerOnlyView(view) && !isManager)
+    || (isAdminOnlyView(view) && !isAdmin)
+  ));
 
   useEffect(() => {
-    if (user && isManagerOnlyView(view) && !isManager) {
+    if (forbiddenView) {
       setCurrentView('dashboard');
       setNavigationPendingView(null);
       router.replace(getWorkspacePath('dashboard'));
@@ -25,7 +35,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     }
     setCurrentView(view);
     setNavigationPendingView(null);
-  }, [isManager, router, setCurrentView, setNavigationPendingView, user, view]);
+  }, [forbiddenView, router, setCurrentView, setNavigationPendingView, user, view]);
 
   if (!initialized) {
     return (
@@ -37,6 +47,14 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   if (!user) {
     return <LoginPage />;
+  }
+
+  if (forbiddenView) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   return (

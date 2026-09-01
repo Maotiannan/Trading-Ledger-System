@@ -9,6 +9,7 @@ export type WorkspaceView =
   | 'receipts'
   | 'details'
   | 'swifts'
+  | 'emails'
   | 'deletions'
   | 'users'
   | 'customers'

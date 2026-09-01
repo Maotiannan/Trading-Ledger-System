@@ -465,7 +465,7 @@ npm test -- --runInBand src/lib/email/email-notification-projector.test.ts src/l
 
 Expected: PASS with one task per event and zero tasks for Balance Transfer.
 
-- [ ] **Step 9: Commit transactional projection**
+- [x] **Step 9: Commit transactional projection**
 
 ```bash
 git add src/lib/email src/lib/receipt-service* src/lib/detail-service* src/lib/receipt-generator-service* src/lib/receipt-edit-apply-service* src/lib/deletion-service.ts src/lib/invoice-write* src/lib/invoice-service*

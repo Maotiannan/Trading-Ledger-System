@@ -19,6 +19,8 @@ services:
       MU_CONTRACT_SYNC_TOKEN: ${MU_CONTRACT_SYNC_TOKEN:-}
       UPLOADED_ASSET_STAGED_TTL_HOURS: ${UPLOADED_ASSET_STAGED_TTL_HOURS:-24}
       SIGNING_PENDING_TTL_HOURS: ${SIGNING_PENDING_TTL_HOURS:-72}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
     volumes:
       - ${UPLOAD_HOST_DIR:-/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload}:/app/upload
 
@@ -56,6 +58,26 @@ services:
           curl -fsS -X POST "$$MAINTENANCE_BASE_URL/api/internal/integrations/mu-contract/pull" \
             -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" >/dev/null || true;
           sleep 5;
+        done
+      '
+
+  email-delivery-trigger:
+    image: curlimages/curl:8.12.1
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      MAINTENANCE_BASE_URL: ${MAINTENANCE_BASE_URL:-http://app:3000}
+      MAINTENANCE_JOB_TOKEN: ${MAINTENANCE_JOB_TOKEN:?MAINTENANCE_JOB_TOKEN must be set to a non-placeholder value}
+      EMAIL_DELIVERY_BATCH_SIZE: ${EMAIL_DELIVERY_BATCH_SIZE:-25}
+      EMAIL_DELIVERY_LOOP_SECONDS: ${EMAIL_DELIVERY_LOOP_SECONDS:-30}
+    command: >
+      sh -c '
+        while true; do
+          curl -fsS -X POST "$$MAINTENANCE_BASE_URL/api/internal/email-delivery/dispatch" \
+            -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" \
+            -H "x-email-delivery-batch-size: $$EMAIL_DELIVERY_BATCH_SIZE" >/dev/null || true;
+          sleep "$$EMAIL_DELIVERY_LOOP_SECONDS";
         done
       '
 

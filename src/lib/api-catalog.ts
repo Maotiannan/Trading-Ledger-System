@@ -233,6 +233,20 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/internal/email-delivery/dispatch',
+    description: 'Maintenance-token trigger for ADMIN-approved email deliveries',
+    actions: [
+      { action: 'dispatch', method: 'POST', description: 'Claim and deliver a bounded batch of approved email snapshots' },
+    ],
+  },
+  {
+    endpoint: '/api/webhooks/resend',
+    description: 'Signed Resend delivery status webhook',
+    actions: [
+      { action: 'delivery-event', method: 'POST', description: 'Verify, deduplicate, and apply a Resend delivery event' },
+    ],
+  },
+  {
     endpoint: '/api/excel/token',
     description: 'Per-account Excel API token management (session authenticated)',
     actions: [
@@ -296,6 +310,10 @@ export const configTemplate = {
     'OCR_OUTPUT_COST_PER_1K',
     'EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS',
     'EXCEL_LOOKUP_RATE_LIMIT_MAX',
+    'RESEND_API_KEY',
+    'RESEND_WEBHOOK_SECRET',
+    'EMAIL_DELIVERY_BATCH_SIZE',
+    'EMAIL_DELIVERY_LOOP_SECONDS',
     'UPLOAD_HOST_DIR',
   ],
 } as const;

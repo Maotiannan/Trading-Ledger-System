@@ -523,7 +523,7 @@ Run: `npm test -- --runInBand src/lib/email/email-notification-service.test.ts s
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit management APIs**
+- [x] **Step 8: Commit management APIs**
 
 ```bash
 git add src/lib/email src/app/api/email-notifications src/lib/api-error.ts src/i18n/workspace/api-error-map.ts
@@ -556,11 +556,11 @@ git commit -m "feat: add admin email review workflow"
 - Produces: `applyVerifiedResendWebhook({ providerEventId, type, data, occurredAt })`.
 - Environment: `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `EMAIL_DELIVERY_BATCH_SIZE`, and `EMAIL_DELIVERY_LOOP_SECONDS`.
 
-- [ ] **Step 1: Write failing adapter, worker, and webhook tests**
+- [x] **Step 1: Write failing adapter, worker, and webhook tests**
 
 Use an injected fake provider. Cover exact Resend payload mapping, stable idempotency key, two-worker claim race, restart recovery of expired claims, explicit provider rejection retry, network-timeout uncertainty, retry cap, separate-recipient isolation, aggregate statuses, valid/invalid signature, duplicate `svix-id`, unknown message ID, and out-of-order terminal events.
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run:
 
@@ -570,7 +570,7 @@ npm test -- --runInBand src/lib/email/resend-email-provider.test.ts src/lib/emai
 
 Expected: FAIL because modules do not exist.
 
-- [ ] **Step 3: Implement the provider-neutral interface and Resend adapter**
+- [x] **Step 3: Implement the provider-neutral interface and Resend adapter**
 
 Map frozen delivery snapshots only:
 
@@ -589,19 +589,19 @@ await resend.emails.send({
 
 Classify a definite provider rejection as safe failure; classify timeout/connection loss after request dispatch as `DELIVERY_UNCERTAIN` and stop automatic retry.
 
-- [ ] **Step 4: Implement atomic worker claims**
+- [x] **Step 4: Implement atomic worker claims**
 
 Select eligible `QUEUED`/retryable rows, claim each with conditional `updateMany` on status and lease expiry, and only send rows successfully claimed by this worker. Write an attempt before the external call, finalize it after the call, and update aggregate status in the same post-call transaction. Expired `SENDING` leases return to claimable only when no uncertain provider outcome was recorded.
 
-- [ ] **Step 5: Implement signed raw-body webhook handling**
+- [x] **Step 5: Implement signed raw-body webhook handling**
 
 Read `await request.text()` before parsing. Verify with Resend/Svix using `svix-id`, `svix-timestamp`, and `svix-signature` plus `RESEND_WEBHOOK_SECRET`. Insert `EmailWebhookEvent` first; a unique collision returns 200 without reapplying. Map `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained`, `email.suppressed`, and `email.failed`. Never regress `DELIVERED`, `BOUNCED`, `COMPLAINED`, or `SUPPRESSED` to an earlier state.
 
-- [ ] **Step 6: Add internal trigger and Docker service**
+- [x] **Step 6: Add internal trigger and Docker service**
 
 Protect `/api/internal/email-delivery/dispatch` with the existing constant-time maintenance-token pattern. Add `email-delivery-trigger` using pinned `curlimages/curl:8.12.1`, calling the internal route at the configured interval. Pass Resend secrets only to `app`; the curl trigger receives only base URL, maintenance token, batch size, and loop interval.
 
-- [ ] **Step 7: Add runtime contract tests and run verification**
+- [x] **Step 7: Add runtime contract tests and run verification**
 
 Run:
 
@@ -612,7 +612,7 @@ docker compose config >/tmp/muledger-email-compose.yml
 
 Expected: tests pass and Compose resolves one app plus the new trigger without exposing secret values in trigger environment.
 
-- [ ] **Step 8: Commit delivery infrastructure**
+- [x] **Step 8: Commit delivery infrastructure**
 
 ```bash
 git add src/lib/email src/app/api/internal/email-delivery src/app/api/webhooks/resend docker-compose.yml src/lib/api-catalog.ts src/app/api/system/config-template/route.ts

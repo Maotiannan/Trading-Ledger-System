@@ -271,35 +271,35 @@ git commit -m "feat: add scoped customer notification contacts"
 - Consumes: Task 2 API actions and customer list fields.
 - Produces: responsive `CustomerNotificationEmailDialog` with zero/many contacts, primary selection, language preference, add/edit/delete, and save-state feedback.
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Verify `EMAIL` displays the primary address plus `+N`, `LANGUAGE PREFERENCE` displays English/Francais, opening the cell loads all addresses, duplicate/backend errors remain visible, the primary radio updates, deleting the primary promotes the returned row, and mobile dialog actions remain reachable.
 
-- [ ] **Step 2: Run component tests and verify failure**
+- [x] **Step 2: Run component tests and verify failure**
 
 Run: `npm test -- --runInBand src/components/workspace/modules/customers/components/customer-notification-email-dialog.test.tsx src/components/workspace/modules/customers/components/customer-list.test.tsx`
 
 Expected: FAIL because the columns/dialog do not exist.
 
-- [ ] **Step 3: Implement the responsive dialog**
+- [x] **Step 3: Implement the responsive dialog**
 
 Use the existing CONSIGNEE dialog's loading/error/action pattern. Keep the footer sticky on mobile, constrain content to `max-h-[85dvh]`, and allow the address list to scroll independently. Disable duplicate submissions while an API call is pending.
 
-- [ ] **Step 4: Add the two customer columns**
+- [x] **Step 4: Add the two customer columns**
 
 `EMAIL` is clickable and shows `-` when empty. `LANGUAGE PREFERENCE` is clickable through the same dialog. Do not place multiple addresses in one cell and do not alter customer financial matching fields.
 
-- [ ] **Step 5: Wire manager state and refresh behavior**
+- [x] **Step 5: Wire manager state and refresh behavior**
 
 After each successful mutation, reload the selected customer's email rows and refresh the customer list so primary/count/language update together. Preserve the user's current customer search string.
 
-- [ ] **Step 6: Run focused UI tests**
+- [x] **Step 6: Run focused UI tests**
 
 Run: `npm test -- --runInBand src/components/workspace/modules/customers`
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit the customer UI slice**
+- [x] **Step 7: Commit the customer UI slice**
 
 ```bash
 git add src/components/workspace/modules/customers

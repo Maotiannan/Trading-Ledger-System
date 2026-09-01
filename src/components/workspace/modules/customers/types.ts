@@ -6,6 +6,16 @@ export type CustomerOwnerOption = {
   level: number;
 };
 
+export type CustomerNotificationLanguage = 'ENGLISH' | 'FRENCH';
+
+export type CustomerNotificationEmailItem = {
+  id: string;
+  email: string;
+  isPrimary: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
 export type CustomerFormState = {
   mark: string;
   orderName: string;

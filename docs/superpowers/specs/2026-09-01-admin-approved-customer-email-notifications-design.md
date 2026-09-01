@@ -58,7 +58,9 @@ Email Notification Settings provides one system-wide multiple-recipient mode:
 
 - Every successful Receipt creation creates one payment notification task.
 - Task creation covers every Receipt write path, including direct creation, uploads, signed-receipt generation, and receipts produced by Payment Details.
+- Synthetic `TRANSFER-*` receipts created by Balance Transfer are excluded because they move an existing payment and are not a new customer payment.
 - The task is created immediately after the Receipt is successfully persisted; it does not wait for final `RECEIVED` status.
+- A signed-receipt draft in `SIGNING_PENDING` is not yet a completed business Receipt. Its payment task is created transactionally when signing is finalized and the Receipt enters the normal business flow.
 - This does not send email automatically. ADMIN review remains mandatory.
 - If the Receipt changes before sending, the pending notification resolves and previews the latest valid business data.
 - If the Receipt is deleted before sending, the pending notification is cancelled.
@@ -119,7 +121,12 @@ Each business notification row shows:
 - `Missing Recipient`: no valid customer email is available.
 - `Queued`: ADMIN approved sending and the worker has not claimed it yet.
 - `Sending`: the worker owns the current attempt.
-- `Sent`: all required delivery operations succeeded.
+- `Sent`: Resend accepted all required delivery operations.
+- `Delivered`: Resend reported delivery to the recipient mail server.
+- `Delivery Delayed`: Resend reported a temporary recipient-side delay.
+- `Bounced`: the recipient mail server permanently rejected the message.
+- `Complained`: the recipient marked the message as spam.
+- `Suppressed`: Resend blocked delivery for the address.
 - `Partially Sent`: separate delivery succeeded for some addresses and failed for others.
 - `Failed`: delivery failed and may be retried.
 - `Delivery Uncertain`: the provider call outcome cannot be determined safely; automatic retry is stopped to prevent duplicate customer email.
@@ -154,9 +161,9 @@ Add an ADMIN-only collapsible Email Notification Settings section containing:
 - test-delivery mode and its ADMIN-owned destination address;
 - English and French templates for Payment Received, Shipment, and Release.
 
-The feature switch defaults to off after deployment. Test-delivery mode redirects delivery to the configured administrator address and must make that redirection explicit in the preview and audit record.
+The feature switch defaults to off after deployment. Business-event tasks are still captured while sending is disabled so no Receipt, Shipment Date, or Release Date event is lost; the switch blocks approval and outbound delivery. Test-delivery mode redirects delivery to the configured administrator address and must make that redirection explicit in the preview and audit record.
 
-Secrets such as the Tencent Cloud API secret are environment variables and never database settings, client responses, source files, or Git content.
+Secrets such as the Resend API key and webhook signing secret are environment variables and never database settings, client responses, source files, or Git content.
 
 ## 7. Templates and Rendering
 
@@ -191,9 +198,13 @@ The initial implementation uses the existing MySQL database as a durable outbox.
 
 ### 8.3 Delivery worker
 
-A lightweight delivery worker runs from the application image as a separate process. It atomically claims ADMIN-approved tasks, calls Tencent Cloud Email Push, records per-recipient delivery outcomes, and applies configured retry rules.
+A lightweight delivery worker runs from the application deployment as a separate trigger process. It atomically claims ADMIN-approved tasks, calls Resend through a provider-independent adapter, records per-recipient delivery outcomes, and applies configured retry rules.
 
 The worker must survive restarts without losing queued work and must not allow two worker instances to send the same claimed delivery concurrently.
+
+Each Resend request carries a stable per-delivery idempotency key. The local database remains the durable source of truth beyond Resend's 24-hour idempotency window.
+
+A public webhook route verifies the raw request body with `RESEND_WEBHOOK_SECRET`, deduplicates the `svix-id`, stores the provider event, and updates the matching delivery for sent, delivered, delayed, bounced, complained, suppressed, and failed outcomes. Invalid signatures never alter delivery state.
 
 For `Primary + CC`, one provider delivery record covers the primary and CC recipients. For `Separate delivery`, one business notification owns separate per-address delivery records so successful addresses are not resent when failed addresses are retried.
 
@@ -208,7 +219,7 @@ The system records:
 - recipient mode and resolved addresses;
 - selected language and template version;
 - final subject, HTML, plain text, and business-value snapshot;
-- every attempt time, result, provider message identifier, and safe failure reason;
+- every attempt time, result, provider message identifier, verified webhook event identifier, and safe failure reason;
 - correction linkage and reason.
 
 Customer-facing and administrator-facing errors use localized, human-readable messages. Provider secrets and raw sensitive responses are excluded from client output and structured logs.
@@ -238,12 +249,14 @@ Automated API, service, and worker tests must verify:
 9. Missing-recipient tasks become pending after email maintenance and return to missing when all addresses are removed.
 10. English and French rendering uses the correct customer preference and required business values.
 11. `Primary + CC` and `Separate delivery` produce the expected recipient operations.
-12. Concurrent approval, worker claiming, retries, and restarts do not duplicate delivery.
+12. Concurrent approval, worker claiming, retries, and restarts do not duplicate delivery, including retries that reuse the same Resend idempotency key.
 13. Separate-delivery retries target only failed addresses.
 14. Source deletion cancels unsent tasks, pending source edits refresh previews, and sent source edits require correction review.
 15. Sent snapshots remain unchanged after later template, language, address, Receipt, or Invoice edits.
-16. Test-delivery mode redirects recipients and records both intended and actual test destinations.
-17. Migration and rollback procedures preserve all existing Customer, Receipt, Invoice, and order-balance behavior.
+16. Signed Resend webhooks update delivery state, duplicated webhook IDs are ignored, out-of-order events do not regress terminal state, and invalid signatures are rejected.
+17. Test-delivery mode redirects recipients and records both intended and actual test destinations.
+18. Balance Transfer does not create a payment notification task.
+19. Migration and rollback procedures preserve all existing Customer, Receipt, Invoice, and order-balance behavior.
 
 ## 12. Delivery Sequence
 
@@ -251,9 +264,9 @@ Automated API, service, and worker tests must verify:
 2. Add Email Notification Settings, provider-independent template rendering, preview, and test-delivery configuration.
 3. Add the shared notification service and transactional outbox integration to all Receipt and Invoice write paths.
 4. Add the ADMIN-only Email Management page and APIs.
-5. Add the provider adapter, delivery worker, retries, duplicate protection, delivery audit, and correction flow.
+5. Add the Resend provider adapter, delivery worker, retries, idempotency keys, signed webhook processing, delivery audit, and correction flow.
 6. Run the full automated suite and isolated migration/restore verification.
-7. Deploy with the feature disabled, configure the verified sending domain, SPF, DKIM, DMARC, sender identity, and Tencent Cloud credentials.
+7. Deploy with the feature disabled, configure the verified sending domain, SPF, DKIM, DMARC, sender identity, Resend API key, and Resend webhook signing secret.
 8. Enable test-delivery mode, inspect real generated previews, and verify actual delivery only to the administrator address.
 9. Enable production manual sending after business-template approval. Automatic customer sending remains out of scope.
 
@@ -261,10 +274,14 @@ Automated API, service, and worker tests must verify:
 
 This is a medium-to-high complexity feature because reliable event coverage, customer isolation, duplicate prevention, and delivery recovery are more important than the provider API call itself. The expected implementation size is approximately six to nine focused development days including migration, frontend, backend, worker, tests, isolated deployment, and verification.
 
-Tencent Cloud Email Push is the recommended first provider. As documented when this design was approved, each account has a one-time 1,000-message free allowance and usage beyond that is billed at CNY 0.0019 per message. The current system volume does not justify a dedicated IP. Provider pricing and account eligibility must be rechecked immediately before implementation:
+Resend is the approved first provider because current Tencent Cloud Email Push accounts normally require provider-reviewed templates and no longer support arbitrary HTML through the standard API. Resend permits the application to send the ADMIN-edited HTML and plain-text snapshots directly.
 
-- https://cloud.tencent.com/document/product/1288/47930
-- https://cloud.tencent.com/document/product/1288/47454
+As documented when this design was approved, Resend's free transactional tier includes 3,000 emails per month with a 100-email daily limit. Paid pricing and account eligibility must be rechecked immediately before implementation:
+
+- https://resend.com/pricing
+- https://resend.com/docs/api-reference/emails/send-email
+- https://resend.com/docs/dashboard/emails/idempotency-keys
+- https://resend.com/docs/webhooks/verify-webhooks-requests
 
 The existing server and MySQL deployment are sufficient; the first release does not require another database, Redis, or a paid message-queue service.
 
@@ -277,4 +294,4 @@ The existing server and MySQL deployment are sufficient; the first release does 
 - No attachments, Receipt images, Invoice PDFs, or release documents.
 - No SMS, WhatsApp, or marketing campaigns.
 - No dedicated sending IP at the current volume.
-
+- No customer payment notification for synthetic Balance Transfer receipts.

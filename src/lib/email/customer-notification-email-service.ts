@@ -1,6 +1,5 @@
 import {
   CustomerEmailLanguage,
-  EmailNotificationStatus,
   Prisma,
   UserRole,
 } from '@prisma/client';
@@ -10,6 +9,7 @@ import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import { customerAccessWhere, canMutateCustomer } from '@/lib/customer-scope';
 import { db } from '@/lib/db';
 import { parseNotificationEmail } from '@/lib/email/email-address';
+import { refreshCustomerNotificationEligibilityInTransaction } from '@/lib/email/email-notification-projector';
 import type { CurrentUser } from '@/lib/request-auth';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 
@@ -130,26 +130,6 @@ function duplicateEmailError() {
   });
 }
 
-async function refreshEligibility(
-  client: Pick<NotificationEmailClient, 'emailNotification'>,
-  customerId: string,
-  hasRecipients: boolean,
-): Promise<void> {
-  await client.emailNotification.updateMany({
-    where: {
-      customerId,
-      status: hasRecipients
-        ? EmailNotificationStatus.MISSING_RECIPIENT
-        : EmailNotificationStatus.PENDING,
-    },
-    data: {
-      status: hasRecipients
-        ? EmailNotificationStatus.PENDING
-        : EmailNotificationStatus.MISSING_RECIPIENT,
-    },
-  });
-}
-
 async function auditCustomerEmailChange(
   client: Pick<NotificationEmailClient, 'auditLog'>,
   input: {
@@ -224,7 +204,7 @@ export async function addCustomerNotificationEmail(
           createdBy: currentUser.id,
         },
       });
-      await refreshEligibility(tx, customer.id, true);
+      await refreshCustomerNotificationEligibilityInTransaction(tx, customer.id);
       await auditCustomerEmailChange(tx, {
         currentUser,
         customerId: customer.id,
@@ -275,7 +255,7 @@ export async function updateCustomerNotificationEmail(
           updatedBy: currentUser.id,
         },
       });
-      await refreshEligibility(tx, customer.id, true);
+      await refreshCustomerNotificationEligibilityInTransaction(tx, customer.id);
       await auditCustomerEmailChange(tx, {
         currentUser,
         customerId: customer.id,
@@ -324,7 +304,7 @@ export async function deleteCustomerNotificationEmail(
         data: { isPrimary: true, updatedBy: currentUser.id },
       });
     }
-    await refreshEligibility(tx, customer.id, remaining.length > 0);
+    await refreshCustomerNotificationEligibilityInTransaction(tx, customer.id);
     await auditCustomerEmailChange(tx, {
       currentUser,
       customerId: customer.id,
@@ -370,7 +350,7 @@ export async function setPrimaryCustomerNotificationEmail(
       where: { id: emailId },
       data: { isPrimary: true, updatedBy: currentUser.id },
     });
-    await refreshEligibility(tx, customer.id, true);
+    await refreshCustomerNotificationEligibilityInTransaction(tx, customer.id);
     await auditCustomerEmailChange(tx, {
       currentUser,
       customerId: customer.id,

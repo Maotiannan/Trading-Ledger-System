@@ -23,6 +23,7 @@ import {
 import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { runInTransaction } from '@/lib/transaction';
+import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { ensureDepositPoolInvoice, updateOrderBalance } from '@/lib/matching';
 import { syncOrderAliases } from '@/lib/order-alias-db';
@@ -444,6 +445,10 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
       if (receipt.orderId) {
         await updateOrderBalance(receipt.orderId, tx);
       }
+      await projectPaymentReceiptInTransaction(tx, {
+        receiptId: receipt.id,
+        actorId: currentUser.id,
+      });
 
       await tx.uploadedAsset.createMany({
         data: [

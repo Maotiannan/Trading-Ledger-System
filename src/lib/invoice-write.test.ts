@@ -8,6 +8,10 @@ import {
   findOrderIdByNoOrAliasWithExecutor,
   syncOrderAliases,
 } from '@/lib/order-alias-db';
+import {
+  projectInvoiceEventsInTransaction,
+  refreshOrderLinkedNotificationsInTransaction,
+} from '@/lib/email/email-notification-projector';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -50,6 +54,11 @@ jest.mock('@/lib/order-alias-db', () => ({
   syncOrderAliases: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  projectInvoiceEventsInTransaction: jest.fn(),
+  refreshOrderLinkedNotificationsInTransaction: jest.fn(),
+}));
+
 const mockDb = db as unknown as {
   invoice: {
     findFirst: jest.Mock;
@@ -77,6 +86,8 @@ const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockConsolidateGroupedOrders = consolidateGroupedOrders as jest.Mock;
 const mockFindOrderIdByNoOrAliasWithExecutor = findOrderIdByNoOrAliasWithExecutor as jest.Mock;
 const mockSyncOrderAliases = syncOrderAliases as jest.Mock;
+const mockProjectInvoiceEvents = projectInvoiceEventsInTransaction as jest.Mock;
+const mockRefreshOrderLinkedNotifications = refreshOrderLinkedNotificationsInTransaction as jest.Mock;
 
 describe('invoice-write', () => {
   beforeEach(() => {
@@ -91,6 +102,8 @@ describe('invoice-write', () => {
     mockSyncOrderAliases.mockResolvedValue(1);
     mockUpdateOrderBalance.mockResolvedValue(undefined);
     mockMigrateSystemPoolOrder.mockResolvedValue(null);
+    mockProjectInvoiceEvents.mockResolvedValue({ projected: 0, refreshed: 0 });
+    mockRefreshOrderLinkedNotifications.mockResolvedValue(undefined);
   });
 
   it('rejects invalid rows before opening a transaction', async () => {
@@ -161,6 +174,17 @@ describe('invoice-write', () => {
         createdBy: 'sales-1',
       }),
     }));
+    expect(mockProjectInvoiceEvents).toHaveBeenCalledWith(mockDb, {
+      invoiceId: 'inv-1',
+      beforeShipDate: null,
+      beforeReleaseDate: null,
+      actorId: 'sales-1',
+    });
+    expect(mockRefreshOrderLinkedNotifications).toHaveBeenCalledWith(mockDb, {
+      orderIds: ['order-1'],
+      invoiceIds: ['inv-1'],
+      actorId: 'sales-1',
+    });
     expect(mockConsolidateGroupedOrders).toHaveBeenCalledWith({ invoiceIds: ['inv-1'] });
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
   });

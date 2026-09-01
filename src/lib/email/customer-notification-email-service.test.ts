@@ -20,6 +20,7 @@ jest.mock('@/lib/db', () => ({
       update: jest.fn(),
       updateMany: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
     },
     emailNotification: { updateMany: jest.fn() },
     auditLog: { create: jest.fn() },
@@ -38,6 +39,7 @@ const mockDb = db as unknown as {
     update: jest.Mock;
     updateMany: jest.Mock;
     delete: jest.Mock;
+    count: jest.Mock;
   };
   emailNotification: { updateMany: jest.Mock };
   auditLog: { create: jest.Mock };
@@ -109,6 +111,7 @@ describe('customer notification email service', () => {
     }));
     mockDb.customerNotificationEmail.updateMany.mockResolvedValue({ count: 1 });
     mockDb.customerNotificationEmail.delete.mockResolvedValue(firstEmail);
+    mockDb.customerNotificationEmail.count.mockResolvedValue(1);
     mockDb.customer.update.mockResolvedValue({
       id: 'customer-1',
       notificationLanguage: CustomerEmailLanguage.FRENCH,
@@ -228,6 +231,7 @@ describe('customer notification email service', () => {
     mockDb.customerNotificationEmail.findMany
       .mockResolvedValueOnce([firstEmail])
       .mockResolvedValueOnce([]);
+    mockDb.customerNotificationEmail.count.mockResolvedValueOnce(0);
 
     await deleteCustomerNotificationEmail(adminUser, 'customer-1', 'email-1');
 

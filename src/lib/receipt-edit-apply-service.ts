@@ -16,6 +16,7 @@ import type { ReceiptEditablePatch } from '@/lib/receipt-edit-types';
 import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { DbTransactionClient } from '@/lib/transaction';
+import { refreshReceiptNotificationInTransaction } from '@/lib/email/email-notification-projector';
 
 export type ApplyReceiptEditInput = {
   tx: DbTransactionClient;
@@ -232,6 +233,10 @@ export async function applyReceiptEditInTransaction(
       nextOrderId: binding.orderId,
       balanceTransferId: transferImpact?.balanceTransferId || null,
     },
+  });
+  await refreshReceiptNotificationInTransaction(tx, {
+    receiptId,
+    actorId: currentUser.id,
   });
 
   return {

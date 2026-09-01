@@ -423,39 +423,39 @@ git commit -m "feat: add configurable email templates and settings"
 - Produces: `refreshReceiptNotificationInTransaction`, `refreshInvoiceNotificationsInTransaction`, `cancelSourceNotificationsInTransaction`, and `refreshCustomerNotificationEligibilityInTransaction`.
 - Event keys: `PAYMENT_RECEIVED:<receiptId>`, `SHIPMENT:<invoiceId>:<customerId>`, and `RELEASE:<invoiceId>:<customerId>`.
 
-- [ ] **Step 1: Write failing pure projection tests**
+- [x] **Step 1: Write failing pure projection tests**
 
 Cover direct/upload Receipt, Detail-generated Receipt, signed finalization, `TRANSFER-*` exclusion, missing customer handling, no-address status, first date transition, repeated saves, clear/repopulate, customer split, same-customer grouping, and cross-customer data exclusion.
 
-- [ ] **Step 2: Run projector tests and verify failure**
+- [x] **Step 2: Run projector tests and verify failure**
 
 Run: `npm test -- --runInBand src/lib/email/email-notification-projector.test.ts`
 
 Expected: FAIL because the projector does not exist.
 
-- [ ] **Step 3: Implement current-source projection**
+- [x] **Step 3: Implement current-source projection**
 
 Load source/customer/order data in one query per source. Resolve the customer from the persisted `customerId` relation rather than reparsing display text. Build the customer-facing label with `formatCustomerPayerLabel` from `src/lib/customer-display.ts`, preserving the shared `COMPANY_NAME` fallback to `NAME` plus `MARK` rule. Store only the current unsent business snapshot on `EmailNotification`; rendering remains deferred. Use `upsert({ where: { eventKey } })` so retries and repeated saves cannot duplicate an original event.
 
 If a Receipt has `generatedByBalanceTransfer` or its number starts `TRANSFER-`, return `{ projected: false, reason: 'BALANCE_TRANSFER' }`. If it is `SIGNING_PENDING`, return `{ projected: false, reason: 'SIGNING_PENDING' }` until finalization.
 
-- [ ] **Step 4: Implement Invoice customer grouping**
+- [x] **Step 4: Implement Invoice customer grouping**
 
 Group orders by non-null `customerId`. For each customer, include only that customer's ORDER NO values and customer snapshot. If no customer is bound, persist no customer-facing task and write a structured warning with invoice/order IDs; do not guess from MARK. Existing event keys survive date clearing, so repopulating refreshes rather than duplicates.
 
-- [ ] **Step 5: Integrate every Receipt path inside its transaction**
+- [x] **Step 5: Integrate every Receipt path inside its transaction**
 
 Call the projector after normal Receipt create, after each Detail auto-created Receipt, and after signed finalization changes `SIGNING_PENDING` into the normal flow. On edit/rebind, refresh pending tasks or set sent tasks to `NEEDS_CORRECTION`. On deletion, cancel unsent tasks and retain sent audit history. Do not call the projector from Balance Transfer creation.
 
-- [ ] **Step 6: Integrate every Invoice path inside its transaction**
+- [x] **Step 6: Integrate every Invoice path inside its transaction**
 
 Capture before dates, save/create/import/update orders and dates, then project from the final transaction state. Invoke refresh after order add/edit/delete/rematch changes membership. On Invoice deletion, cancel unsent tasks and preserve sent snapshots. Ensure the transaction fails as one unit if event persistence fails.
 
-- [ ] **Step 7: Refresh eligibility after customer contact mutations**
+- [x] **Step 7: Refresh eligibility after customer contact mutations**
 
 Wire Task 2 to transition unsent tasks between `MISSING_RECIPIENT` and `PENDING` after add/edit/delete/primary changes. A source task blocked for another reason remains blocked; contact changes must not revive `CANCELLED` or sent states.
 
-- [ ] **Step 8: Run all impacted service tests**
+- [x] **Step 8: Run all impacted service tests**
 
 Run:
 

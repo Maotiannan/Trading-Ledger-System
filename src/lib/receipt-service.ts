@@ -16,6 +16,7 @@ import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
+import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 
 function badRequest(message: string, detail?: unknown) {
   return createApiError({ code: 'BAD_REQUEST', status: 400, message, detail });
@@ -235,6 +236,10 @@ export async function createReceiptRecord(params: {
           attachedId: created.id,
         });
       }
+      await projectPaymentReceiptInTransaction(tx, {
+        receiptId: created.id,
+        actorId: currentUser.id,
+      });
 
       return { created, orderId };
     });

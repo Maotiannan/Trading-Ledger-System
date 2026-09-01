@@ -187,9 +187,9 @@ git commit -m "feat: add durable customer email notification schema"
 - Produces: `parseNotificationEmail(value): { email: string; normalizedEmail: string }`.
 - Produces: `listCustomerNotificationEmails`, `addCustomerNotificationEmail`, `updateCustomerNotificationEmail`, `deleteCustomerNotificationEmail`, `setPrimaryCustomerNotificationEmail`, and `updateCustomerNotificationLanguage`.
 - Consumes: `customerAccessWhere(currentUser)` and `canMutateCustomer(currentUser, ownerId)` from `src/lib/customer-scope.ts`.
-- Consumes later: `refreshCustomerNotificationEligibilityInTransaction(tx, customerId)` from Task 5; until Task 5 lands, expose a no-op-compatible interface in the service test mock and wire the real function in Task 5.
+- Produces an initial transaction-local missing-recipient eligibility transition; Task 5 extracts it behind `refreshCustomerNotificationEligibilityInTransaction(tx, customerId)` for shared event projection use.
 
-- [ ] **Step 1: Write failing validation and service tests**
+- [x] **Step 1: Write failing validation and service tests**
 
 Cover optional empty input, plus-addressing, subdomains, long suffixes, international domains, enterprise domains, surrounding whitespace, malformed missing-`@`, whitespace, duplicate case variants, and primary invariants. Include this authorization matrix:
 
@@ -201,13 +201,13 @@ it.each([
 ])('%s customer email mutation permission is %s', async (role, allowed) => { /* scoped assertion */ });
 ```
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `npm test -- --runInBand src/lib/email/email-address.test.ts src/lib/email/customer-notification-email-service.test.ts`
 
 Expected: FAIL because the modules do not exist.
 
-- [ ] **Step 3: Implement shared syntax validation**
+- [x] **Step 3: Implement shared syntax validation**
 
 Trim and Unicode-normalize the address, reject whitespace/control characters and missing local/domain sections, require a dot-separated domain, cap the stored address at 320 characters, and normalize case only for duplicate detection. Do not maintain a provider/domain allowlist:
 
@@ -215,15 +215,15 @@ Trim and Unicode-normalize the address, reject whitespace/control characters and
 const SIMPLE_MAILBOX = /^[^\s@\u0000-\u001f\u007f]+@[^\s@\u0000-\u001f\u007f]+\.[^\s@\u0000-\u001f\u007f]+$/u;
 ```
 
-- [ ] **Step 4: Implement transactional contact rules**
+- [x] **Step 4: Implement transactional contact rules**
 
 Every mutation must first load the customer with `customerAccessWhere(currentUser)`. USER receives 403. ADMIN and SALES also require `canMutateCustomer`. Use one transaction to serialize the customer's rows, enforce one primary, reject duplicate normalized addresses, and write an `AuditLog` entry with IDs and before/after values but never credentials. When deleting the primary, promote the oldest remaining row; when one row remains, force it primary.
 
-- [ ] **Step 5: Implement the action-based API**
+- [x] **Step 5: Implement the action-based API**
 
 Use GET for scoped list and POST for `add`, `update`, `delete`, `set-primary`, and `update-language`. Return human-readable localized errors via the existing API response helpers. Never accept `customerId` without rechecking visibility in the service.
 
-- [ ] **Step 6: Extend customer list reads without N+1**
+- [x] **Step 6: Extend customer list reads without N+1**
 
 Include `notificationEmails` ordered by primary then creation time and expose:
 
@@ -236,7 +236,7 @@ Include `notificationEmails` ordered by primary then creation time and expose:
 }
 ```
 
-- [ ] **Step 7: Add route tests and run focused verification**
+- [x] **Step 7: Add route tests and run focused verification**
 
 Run:
 
@@ -246,7 +246,7 @@ npm test -- --runInBand src/lib/email/email-address.test.ts src/lib/email/custom
 
 Expected: PASS, including USER denial and out-of-scope ADMIN/SALES denial.
 
-- [ ] **Step 8: Commit the customer API slice**
+- [x] **Step 8: Commit the customer API slice**
 
 ```bash
 git add src/lib/email src/lib/customer-read-service.ts src/app/api/customer-notification-emails src/app/api/customer/route.ts src/app/api/customer/route.test.ts

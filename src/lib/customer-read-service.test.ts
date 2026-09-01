@@ -232,6 +232,45 @@ describe('customer-read-service', () => {
     ]);
   });
 
+  it('returns notification email summaries from the customer list query without extra reads', async () => {
+    mockDb.customer.findMany.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        mark: 'IB',
+        orderName: 'IB',
+        name: 'Ibrahima',
+        phone: '622443103',
+        city: 'Conakry',
+        companyName: null,
+        companyAddress: null,
+        credit: 0,
+        ownerId: 'admin-1',
+        notificationLanguage: 'FRENCH',
+        notificationEmails: [
+          { id: 'email-1', email: 'primary@example.com', isPrimary: true },
+          { id: 'email-2', email: 'copy@example.com', isPrimary: false },
+        ],
+        owner: { id: 'admin-1', email: 'admin@example.com', name: 'Admin', role: UserRole.ADMIN, level: 1 },
+        createdAt: new Date('2026-03-12T00:00:00Z'),
+      },
+    ]);
+
+    const result = await listCustomers(makeUser(), { search: '' });
+
+    expect(mockDb.customer.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: expect.objectContaining({
+        notificationEmails: expect.objectContaining({
+          orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        }),
+      }),
+    }));
+    expect(result.data[0]).toEqual(expect.objectContaining({
+      primaryNotificationEmail: 'primary@example.com',
+      notificationEmailCount: 2,
+      notificationLanguage: 'FRENCH',
+    }));
+  });
+
   it('filters mark lookups while ignoring spaces', async () => {
     mockDb.customer.findMany.mockResolvedValueOnce([
       {

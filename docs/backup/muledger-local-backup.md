@@ -17,6 +17,8 @@ The database dump includes all customers, invoices, financial orders, receipts, 
 
 Receipt transfer reversal data is also fully covered by the database dump. This includes `BalanceTransfer.generatedReceiptId`, the linked system-generated Receipt, the real Receipt, source and target Orders, and strict reversal audit records. The feature adds no file family outside `UPLOAD_HOST_DIR`.
 
+Customer email notification data is fully covered by the same complete database dump. This includes `Customer.notificationLanguage` plus `CustomerNotificationEmail`, `EmailTemplate`, `EmailNotification`, `EmailDelivery`, `EmailDeliveryAttempt`, and `EmailWebhookEvent`. Immutable sent content and recipient snapshots remain in MySQL; the feature adds no uploaded or generated file family outside `UPLOAD_HOST_DIR`, and Resend credentials are environment configuration rather than backed-up business data.
+
 Do not back up Docker containers, images, `.next`, `node_modules`, logs, or test output as business data.
 
 ### Accepted Limitation
@@ -197,7 +199,7 @@ Correct restore drill:
 4. Extract media into a new temporary directory.
 5. Run Prisma migrations only against the temporary database.
 6. Compare protected table counts and row fingerprints.
-7. Verify login, customers, invoices, receipts, payment details, SWIFT, Dashboard, Orders, settings, and representative PNG/JPG/PDF files.
+7. Verify login, customers, customer notification contacts/languages, email templates/tasks/delivery history, invoices, receipts, payment details, SWIFT, Dashboard, Orders, settings, and representative PNG/JPG/PDF files.
 8. Remove only the temporary container and temporary extraction directory after evidence is saved.
 
 A production recovery must restore into a new database first and switch only after validation. The backup script intentionally exposes no command that overwrites `trading_ledger`.

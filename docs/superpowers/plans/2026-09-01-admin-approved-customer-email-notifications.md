@@ -91,7 +91,7 @@
 - Produces: Prisma models `CustomerNotificationEmail`, `EmailTemplate`, `EmailNotification`, `EmailDelivery`, `EmailDeliveryAttempt`, and `EmailWebhookEvent`.
 - Produces: `EmailNotificationTypeValue`, `EmailNotificationStatusValue`, `EmailSettings`, `EmailRenderContext`, and `EmailProvider`-facing DTOs in `email-types.ts`.
 
-- [ ] **Step 1: Write the failing schema contract test**
+- [x] **Step 1: Write the failing schema contract test**
 
 Create a Jest test that reads `prisma/schema.prisma` and the migration and asserts all six models, customer language default, stable unique event identity, unique customer email normalization, unique delivery idempotency key, and unique webhook event identifier:
 
@@ -104,13 +104,13 @@ expect(schema).toContain('providerEventId String @unique');
 expect(migration).not.toMatch(/DROP TABLE|DROP COLUMN|TRUNCATE|DELETE FROM `(?:Customer|Receipt|Invoice|Order)`/i);
 ```
 
-- [ ] **Step 2: Run the contract test and verify it fails**
+- [x] **Step 2: Run the contract test and verify it fails**
 
 Run: `npm test -- --runInBand src/lib/email/email-schema-contract.test.ts`
 
 Expected: FAIL because the email schema and migration do not exist.
 
-- [ ] **Step 3: Add the additive Prisma schema**
+- [x] **Step 3: Add the additive Prisma schema**
 
 Model the durable aggregate with these ownership rules:
 
@@ -135,21 +135,21 @@ model CustomerNotificationEmail {
 
 Use `EmailNotification.eventKey` for original-event deduplication; optional `receiptId`, `invoiceId`, and `parentNotificationId` for source/correction linkage; `sourceActorId`, `approvedBy`, `cancelledBy`, and their timestamps for accountability; `currentSnapshot Json` for the latest unsent projection; and source/customer foreign keys with `onDelete: SetNull` where sent history must survive source deletion. Store immutable subject, HTML, text, intended recipients, actual recipients, language, recipient mode, template version, and business values on `EmailDelivery`. Store one `EmailDeliveryAttempt` per provider call and one deduplicated `EmailWebhookEvent` per verified `svix-id`.
 
-- [ ] **Step 4: Add the exact Resend runtime dependency**
+- [x] **Step 4: Add the exact Resend runtime dependency**
 
 Run: `npm install --save-exact resend@6.25.0`
 
 Expected: `package.json` and `package-lock.json` contain exact version `6.25.0`; no unrelated dependency upgrade appears.
 
-- [ ] **Step 5: Write the migration and rollback notes**
+- [x] **Step 5: Write the migration and rollback notes**
 
 The SQL must only add enums/tables/columns/indexes/foreign keys. Backfill `Customer.notificationLanguage` to `ENGLISH`; do not create addresses from unrelated fields. Add a commented rollback procedure to the migration-adjacent plan notes that exports the six new tables before dropping only feature-owned objects; application rollback must first disable approval and drain/stop the worker.
 
-- [ ] **Step 6: Update backup inventory**
+- [x] **Step 6: Update backup inventory**
 
 Add the six email tables and `Customer.notificationLanguage` to the MySQL inventory in `docs/backup/muledger-local-backup.md`. State that there is no new media path and the complete `trading_ledger` dump remains the only new-data backup boundary.
 
-- [ ] **Step 7: Validate and test**
+- [x] **Step 7: Validate and test**
 
 Run:
 
@@ -162,7 +162,7 @@ npm test -- --runInBand src/lib/email/email-schema-contract.test.ts
 
 Expected: all commands exit 0.
 
-- [ ] **Step 8: Commit the persistence foundation**
+- [x] **Step 8: Commit the persistence foundation**
 
 ```bash
 git add prisma package.json package-lock.json src/lib/email docs/backup/muledger-local-backup.md

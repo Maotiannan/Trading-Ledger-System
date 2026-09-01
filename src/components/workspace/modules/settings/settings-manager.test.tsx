@@ -31,6 +31,7 @@ jest.mock('./components', () => {
     CustomerAnalyticsSettingsCard: () => <div>CustomerAnalyticsSettingsBody</div>,
     DashboardSettingsCard: () => <div>DashboardSettingsBody</div>,
     ExcelTokenCard: () => <div>ExcelTokenBody</div>,
+    EmailNotificationSettingsCard: () => <div>EmailNotificationSettingsBody</div>,
     MuContractSyncSettingsCard: () => <div>MuContractSyncSettingsBody</div>,
     PasswordSettingsCard: () => <div>PasswordSettingsBody</div>,
     SettingsAuditCard: () => <div>SettingsAuditBody</div>,
@@ -185,6 +186,10 @@ describe('SettingsManager', () => {
     expect(screen.queryByText('MuContractSyncSettingsBody')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /MU Contract Order Sync/i }));
     expect(screen.getByText('MuContractSyncSettingsBody')).toBeInTheDocument();
+
+    expect(screen.queryByText('EmailNotificationSettingsBody')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Email Notification Settings/i }));
+    expect(screen.getByText('EmailNotificationSettingsBody')).toBeInTheDocument();
   });
 
   it('omits MU Contract controls for non-admin accounts', () => {
@@ -193,6 +198,7 @@ describe('SettingsManager', () => {
     render(<SettingsManager />);
 
     expect(screen.queryByRole('button', { name: /MU Contract Order Sync/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Email Notification Settings/i })).not.toBeInTheDocument();
     expect(mockUseMuContractSync).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
   });
 });

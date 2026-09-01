@@ -10,6 +10,7 @@ import {
   CollapsibleSettingsSection,
   CustomerAnalyticsSettingsCard,
   DashboardSettingsCard,
+  EmailNotificationSettingsCard,
   ExcelTokenCard,
   MuContractSyncSettingsCard,
   PasswordSettingsCard,
@@ -20,6 +21,7 @@ import {
 import { useExcelTokenSettings, useMuContractSync, useSettingsActions, useSettingsForms } from './hooks';
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
 import { buildSettingsPageViewModel } from './page-view-model';
+import { emailSystemSettingKeys } from '@/lib/system-settings';
 
 export function SettingsManager() {
   const tx = useUiText();
@@ -96,6 +98,7 @@ export function SettingsManager() {
   } = useSettingsForms();
 
   const canManageMuContractSync = user?.role === 'ADMIN';
+  const canManageEmailNotifications = user?.role === 'ADMIN';
   const muContractSync = useMuContractSync({
     enabled: canManageMuContractSync,
     tx,
@@ -199,7 +202,9 @@ export function SettingsManager() {
     message,
     filters: settingsAuditFilters,
     meta: settingsAuditMeta,
-    keyOptions: Object.keys(config),
+    keyOptions: user?.role === 'ADMIN'
+      ? [...Object.keys(config), ...emailSystemSettingKeys]
+      : Object.keys(config),
     entries: settingsAuditEntries,
     exportHistoryEntries: settingsAuditExportHistoryEntries,
     hasMore: settingsAuditHasMore,
@@ -314,6 +319,15 @@ export function SettingsManager() {
           onSave={handleSaveConfig}
         />
       </CollapsibleSettingsSection>
+
+      {canManageEmailNotifications && (
+        <CollapsibleSettingsSection
+          title={tx('邮件通知设置', 'Email Notification Settings')}
+          description={tx('配置客户邮件、英法模板和测试投递。', 'Configure customer email, English/French templates, and test delivery.')}
+        >
+          <EmailNotificationSettingsCard tx={tx} />
+        </CollapsibleSettingsSection>
+      )}
 
       {canManageMuContractSync && (
         <CollapsibleSettingsSection title={tx('MU Contract 订单同步', 'MU Contract Order Sync')}>

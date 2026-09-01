@@ -330,17 +330,17 @@ git commit -m "feat: manage customer email preferences"
 - Produces: six unique template rows keyed by `(PAYMENT_RECEIVED|SHIPMENT|RELEASE, ENGLISH|FRENCH)`.
 - Consumes: `parseNotificationEmail` for sender/reply-to/test destination validation.
 
-- [ ] **Step 1: Write failing settings and renderer tests**
+- [x] **Step 1: Write failing settings and renderer tests**
 
 Assert defaults: outbound disabled, test mode enabled, `PRIMARY_CC`, retry limit 3, intervals `[60, 300, 1800]`, and no exposed secrets. Assert HTML escaping for customer-controlled values such as `<img onerror=...>`, required-variable validation, English/French selection, approved HTTPS logo, and equivalent plain text.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `npm test -- --runInBand src/lib/email/email-settings.test.ts src/lib/email/email-template-renderer.test.ts src/app/api/email-settings/route.test.ts`
 
 Expected: FAIL because the modules do not exist.
 
-- [ ] **Step 3: Define exact setting keys and defaults**
+- [x] **Step 3: Define exact setting keys and defaults**
 
 Store only non-secrets under:
 
@@ -359,7 +359,7 @@ email.logoUrl
 
 Reject enabling outbound delivery when sender address is empty, test mode has no destination, or required templates are invalid. `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` are environment-only and represented to the UI only as booleans `apiKeyConfigured` and `webhookSecretConfigured`.
 
-- [ ] **Step 4: Seed exact default template contracts**
+- [x] **Step 4: Seed exact default template contracts**
 
 Required variables:
 
@@ -371,15 +371,15 @@ RELEASE: customerName, mark, orderNos, invoiceNo, releaseDate
 
 Use concise English/French subject defaults and body text that states the event, identifiers, date, and amount where applicable. Template writes create a new integer version rather than rewriting a version used by a sent snapshot.
 
-- [ ] **Step 5: Implement the safe renderer**
+- [x] **Step 5: Implement the safe renderer**
 
 Resolve only `{{knownVariable}}`; reject unknown or missing required variables. Escape all resolved values. Convert body newlines to `<br>` inside a fixed table-based 600px responsive shell with inline styles, MU logo, heading, event card, and footer. Return `{ subject, html, text, variables, templateVersion }`.
 
-- [ ] **Step 6: Add the ADMIN-only settings API and UI**
+- [x] **Step 6: Add the ADMIN-only settings API and UI**
 
 GET returns typed settings, six active templates, variable catalog, and secret-configuration booleans. POST supports `save-settings`, `save-template`, and `preview-template`. The collapsible Settings section provides recipient mode, sender/reply-to, retry/test controls, language/event tabs, validation messages, and desktop/mobile preview. SALES and USER receive 403 from the API and do not see the section.
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 Run:
 
@@ -389,7 +389,7 @@ npm test -- --runInBand src/lib/email/email-settings.test.ts src/lib/email/email
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit settings and rendering**
+- [x] **Step 8: Commit settings and rendering**
 
 ```bash
 git add src/lib/email src/app/api/email-settings src/components/workspace/modules/settings src/lib/system-settings.ts

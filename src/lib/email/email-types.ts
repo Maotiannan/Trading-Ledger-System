@@ -43,6 +43,19 @@ export type EmailSettings = {
   logoUrl: string;
 };
 
+export const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
+  outboundEnabled: false,
+  recipientMode: 'PRIMARY_CC',
+  senderName: 'MU LEDGER',
+  senderAddress: '',
+  replyToAddress: '',
+  retryLimit: 3,
+  retryIntervalsSeconds: [60, 300, 1800],
+  testModeEnabled: true,
+  testDestination: '',
+  logoUrl: 'https://muledger.dainty.vip/logo.svg',
+};
+
 export const EMAIL_TEMPLATE_VARIABLES = [
   'customerName',
   'mark',
@@ -56,6 +69,27 @@ export const EMAIL_TEMPLATE_VARIABLES = [
 ] as const;
 export type EmailTemplateVariable = (typeof EMAIL_TEMPLATE_VARIABLES)[number];
 export type EmailRenderContext = Partial<Record<EmailTemplateVariable, string>>;
+
+export type EmailTemplateSummary = {
+  id: string;
+  type: EmailNotificationTypeValue;
+  language: CustomerEmailLanguageValue;
+  version: number;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  requiredVariables: EmailTemplateVariable[];
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type RenderedEmailTemplate = {
+  subject: string;
+  html: string;
+  text: string;
+  variables: EmailTemplateVariable[];
+  templateVersion: number;
+};
 
 export type EmailProviderSendInput = {
   notificationId: string;

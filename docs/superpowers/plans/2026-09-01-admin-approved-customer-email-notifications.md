@@ -489,35 +489,35 @@ git commit -m "feat: project customer email tasks transactionally"
 - Consumes: Task 4 settings/rendering and Task 5 source projection.
 - Approval output: frozen one-or-many `EmailDelivery` rows plus aggregate notification state `QUEUED`.
 
-- [ ] **Step 1: Write failing service and route tests**
+- [x] **Step 1: Write failing service and route tests**
 
 Cover filters/search/pagination, ADMIN-only access, current visibility, preview language override without customer mutation, disabled outbound block, missing-recipient block, test-mode redirection, primary+CC versus separate deliveries, batch all-or-nothing validation, concurrent double approval, cancel, failed-recipient-only retry, and explicit correction creation.
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run: `npm test -- --runInBand src/lib/email/email-notification-service.test.ts src/app/api/email-notifications/route.test.ts`
 
 Expected: FAIL because the service and route do not exist.
 
-- [ ] **Step 3: Implement scoped list and preview**
+- [x] **Step 3: Implement scoped list and preview**
 
 Search customer name/company/MARK, ORDER NO, INV NO, and Receipt No. Filter type/status/creation date and paginate server-side. Apply `customerAccessWhere(currentUser)` in the database query. Preview reprojects current unsent source data, resolves current contacts and selected/default language, then renders without freezing or queueing.
 
-- [ ] **Step 4: Implement atomic approval and immutable snapshots**
+- [x] **Step 4: Implement atomic approval and immutable snapshots**
 
 In one transaction, lock/re-read selected tasks, require `PENDING`, validate outbound settings, reproject source, resolve contacts, render, create delivery row(s), record approver/time, and update aggregate to `QUEUED`. If any selected task is invalid, reject the whole batch before creating any delivery. Test mode records both intended and actual destinations and makes redirection visible in preview and audit.
 
-- [ ] **Step 5: Implement cancellation, retry, and correction**
+- [x] **Step 5: Implement cancellation, retry, and correction**
 
 Cancel only unsent states. Retry only safe failed recipients and never successful separate deliveries. `DELIVERY_UNCERTAIN` requires explicit ADMIN action and a warning because provider acceptance is unknown. Correction creation requires `NEEDS_CORRECTION`, links `parentNotificationId`, uses a unique correction event key, and never rewrites the original sent snapshot.
 
 Write an `AuditLog` entry for approval, batch approval, cancellation, retry, correction creation, and test-mode redirection. Record actor, notification/delivery IDs, intended and actual destination counts, and before/after statuses; do not put rendered body content or full provider responses in the general audit log because immutable delivery snapshots already preserve them.
 
-- [ ] **Step 6: Add human-readable localized API errors**
+- [x] **Step 6: Add human-readable localized API errors**
 
 Add stable codes for missing recipient, outbound disabled, invalid template, already approved, unsafe retry, changed source, missing provider configuration, and provider rejection. Return no raw Resend body or secret.
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 Run: `npm test -- --runInBand src/lib/email/email-notification-service.test.ts src/app/api/email-notifications/route.test.ts src/i18n/workspace`
 

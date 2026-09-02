@@ -690,32 +690,33 @@ git commit -m "feat: add admin email management workspace"
 **Files:**
 - Create: `tests/api/isolated/cases/72-customer-email-notifications.case.mjs`
 - Create: `tests/api/isolated/cases/73-email-delivery-workflow.case.mjs`
+- Create: `tests/api/isolated/helpers/resend-server.mjs`
 - Create: `tests/e2e/customer-email-preferences.spec.ts`
 - Create: `tests/e2e/email-management.spec.ts`
 - Modify: `scripts/test-api-isolated.sh`
-- Modify: `docker-compose.test.yml`
+- Modify: `scripts/test-e2e-isolated.sh`
 
 **Interfaces:**
 - Consumes all earlier APIs through HTTP.
 - Produces repeatable proof of authorization, transactional task creation, deduplication, test-mode delivery, and webhook behavior without using a real customer mailbox.
 
-- [ ] **Step 1: Add a local fake Resend HTTP fixture contract**
+- [x] **Step 1: Add a local fake Resend HTTP fixture contract**
 
 Configure isolated tests to inject the provider interface or an internal fake transport that records request bodies, idempotency keys, and controlled success/failure/timeout responses. Production code must still instantiate real Resend only outside the test injection boundary.
 
-- [ ] **Step 2: Write the isolated customer/contact case**
+- [x] **Step 2: Write the isolated customer/contact case**
 
 Through HTTP: create hierarchy users/customers, verify USER denial, verify SALES visible-scope maintenance, reject out-of-scope customer changes, maintain two addresses and primary selection, switch French, and confirm missing-recipient tasks become pending after adding an address.
 
-- [ ] **Step 3: Write the isolated business/delivery case**
+- [x] **Step 3: Write the isolated business/delivery case**
 
 Through HTTP: create direct Receipt, Detail-generated Receipt, finalized signed Receipt, Balance Transfer, multi-customer Invoice, Shipment Date, and Release Date. Assert exact task counts, no Balance Transfer task, customer data isolation, disabled-send rejection, test-mode approval, fake provider payloads, idempotent double dispatch, failed-recipient-only retry, and signed webhook deduplication.
 
-- [ ] **Step 4: Write Playwright workflows**
+- [x] **Step 4: Write Playwright workflows**
 
 Verify Customer Management email dialog on desktop/mobile and ADMIN Email Management preview/send confirmation. Verify SALES cannot see or navigate to `/emails`. Use test mode and fake delivery only; no real message leaves the isolated environment.
 
-- [ ] **Step 5: Run isolated suites**
+- [x] **Step 5: Run isolated suites**
 
 ```bash
 npm run test:api:isolated -- --case customer-email-notifications
@@ -725,10 +726,10 @@ npm run test:e2e:isolated
 
 Expected: all cases pass, existing data services remain untouched, and no outbound Internet email is sent.
 
-- [ ] **Step 6: Commit integration coverage**
+- [x] **Step 6: Commit integration coverage**
 
 ```bash
-git add tests scripts/test-api-isolated.sh docker-compose.test.yml
+git add tests scripts/test-api-isolated.sh scripts/test-e2e-isolated.sh docs/superpowers/plans/2026-09-01-admin-approved-customer-email-notifications.md
 git commit -m "test: cover customer email notification workflows"
 ```
 

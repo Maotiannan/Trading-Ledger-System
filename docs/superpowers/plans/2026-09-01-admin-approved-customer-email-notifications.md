@@ -751,7 +751,7 @@ git commit -m "test: cover customer email notification workflows"
 **Interfaces:**
 - Produces: verified migration/restore evidence, operator configuration guide, rollback order, release version, and completed plan status.
 
-- [ ] **Step 1: Synchronize latest `main` before release verification**
+- [x] **Step 1: Synchronize latest `main` before release verification**
 
 ```bash
 git fetch origin
@@ -760,23 +760,23 @@ git merge origin/main
 
 Expected: merge completes without dropping feature commits. Resolve conflicts by preserving current main behavior plus this plan's additive email changes.
 
-- [ ] **Step 2: Perform an isolated restore and migration rehearsal**
+- [x] **Step 2: Perform an isolated restore and migration rehearsal**
 
 Use a fresh isolated MySQL container/database. Restore a recent scrubbed/full backup according to `docs/backup/muledger-local-backup.md`, record pre-migration counts for Customer/Receipt/Invoice/Order, deploy the migration, seed defaults, create notification records, dump, restore again, and compare business plus email table counts. Do not connect the rehearsal app to the running data database or NAS upload path.
 
-- [ ] **Step 3: Record restore and rollback evidence**
+- [x] **Step 3: Record restore and rollback evidence**
 
 Document commands, image/database names, timestamps, migration result, table counts, email snapshot readability, and cleanup in the restore-drill file. Rollback order: disable approval, stop trigger, preserve new tables, roll application back, and retain records until an explicit data-removal decision.
 
-- [ ] **Step 4: Document Resend operations**
+- [x] **Step 4: Document Resend operations**
 
 Document verified domain setup, SPF/DKIM/DMARC, sender/reply-to, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, webhook URL and event types, free-tier limits, test destination, trigger health, delivery audit, and safe key rotation. Do not include real keys.
 
-- [ ] **Step 5: Update the single-source version**
+- [x] **Step 5: Update the single-source version**
 
 Increment only `package.json` patch version after all code/tests pass. `src/lib/app-version.ts` must continue deriving the UI label from `package.json`; do not create another version constant.
 
-- [ ] **Step 6: Run full verification**
+- [x] **Step 6: Run full verification**
 
 ```bash
 npm run typecheck
@@ -791,7 +791,7 @@ git diff --check
 
 Expected: every command exits 0. If any command fails, stop before deployment and report the full command, exit code, error output, and data-risk assessment.
 
-- [ ] **Step 7: Commit release documentation and version**
+- [x] **Step 7: Commit release documentation and version**
 
 ```bash
 git add docs README.md CHANGE_CHECKLIST.md ENGINEERING_LOG.md package.json package-lock.json .github

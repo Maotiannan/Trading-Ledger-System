@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.215`
-- 最近更新：修复 macOS 后台备份无法访问 NAS 的问题，并增加 Docker 隔离执行、失败重试和备份状态巡检。
+- 版本：`1.0.216`
+- 最近更新：新增管理员审核后发送的客户收款、出运和放单邮件通知，并完成数据库与媒体的隔离恢复演练。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -36,9 +36,10 @@
 | Receipt Management | 上传收据、直接创建收据、生成签名收据 |
 | Payment Detail Management | 上传或创建付款明细，导出付款明细图片；默认聚焦未完成明细 |
 | SWIFT Management | 上传图片或 PDF 水单，完成银行转账链路；默认聚焦未完成水单 |
+| Email Management | 仅管理员可见；审核、预览、发送、重试和追踪客户邮件通知 |
 | Approval | 审批删除申请和修改申请 |
 | Customer Management | 维护客户、ORDER_NAME、CONSIGNEE、绑定关系和客户公司文件 |
-| Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、审计和 MU Contract Orders 同步 |
+| Settings | 管理账号、系统配置、Dashboard 卡片、图片压缩、Excel Token、邮件模板、审计和 MU Contract Orders 同步 |
 
 ## 推荐使用流程
 
@@ -61,7 +62,7 @@
 | 角色 | 权限说明 |
 |---|---|
 | ADMIN | 可查看全局数据、审批、管理账号、修改系统配置 |
-| SALES | 可维护自己权限范围内的客户和业务数据；部分修改需要上级审批 |
+| SALES | 可维护自己权限范围内的客户和业务数据及客户通知邮箱；部分修改需要上级审批，不能发送客户邮件 |
 | USER | 只能查看和处理自己可见范围内的数据，不能做系统管理 |
 
 ## 数据安全
@@ -83,7 +84,7 @@ NAS 本地备份与恢复手册见：[muledger-local-backup.md](docs/backup/mule
 
 每日后台备份通过专用 Docker 任务访问 NAS，不给系统 Bash 开放全盘权限；失败会重试并写入可供巡检读取的本地状态。
 
-最近一次完整业务恢复演练与上线记录见：[2026-07-19 MULEDGER NAS 备份与同步上线](docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md)。
+最近一次完整业务恢复演练见：[2026-09-02 邮件通知迁移与恢复演练](docs/backup/restore-drills/2026-09-02-email-notifications-migration-drill.md)。
 
 MU Contract 同步迁移演练见：[2026-07-18 MU Contract Orders 迁移演练](docs/backup/restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md)。
 
@@ -116,4 +117,5 @@ docker compose up -d --build
 - [CHANGE_CHECKLIST.md](CHANGE_CHECKLIST.md)：每类改动必须同步检查的事项。
 - [API_TESTING.md](docs/API_TESTING.md)：API 自动化测试说明。
 - [data-and-integrations.md](docs/data-and-integrations.md)：数据文件、外部接口、上传目录和清理规则。
+- [email-notification-operations.md](docs/email-notification-operations.md)：Resend 域名、密钥、测试模式、发送和回滚运维说明。
 - [Implementation Plan Status Index](docs/superpowers/plans/README.md)：历史实施计划的唯一状态索引。

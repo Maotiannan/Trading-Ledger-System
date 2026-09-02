@@ -61,6 +61,8 @@ The manifest records file names, sizes, SHA-256 values, media file count, Git co
 
 The script writes into `.staging`, verifies the complete payload, and then renames it into `snapshots`. A failed run removes only its incomplete staging directory, leaves every published snapshot unchanged, skips retention, and exits non-zero.
 
+Concurrent runs are blocked with an atomic `.backup.lock` directory. The lock directory must remain empty for its whole lifetime. Do not add an owner or diagnostic file inside it: deleting a file on the SMB destination can leave a `.smbdelete*` tombstone and make a completed run look permanently locked. Process details belong in the host status/log files, not inside the NAS lock directory.
+
 ## 3. Local Configuration
 
 Create the local mode-600 environment file:
@@ -185,7 +187,7 @@ scripts/backup/check-muledger-local-backup-status.sh
 
 The check returns healthy only when the latest scheduled run succeeded and its success time is no older than 36 hours. Missing, malformed, failed, still-running, or stale state exits non-zero and is suitable for the existing Codex watchdog automation.
 
-Treat any non-zero LaunchAgent exit as an operational failure. Check the stderr log, preserve the failed-stage evidence, verify Docker Desktop and the NAS mount, then rerun the Docker `--dry-run`. Never delete `.backup.lock` while a backup process is running.
+Treat any non-zero LaunchAgent exit as an operational failure. Check the stderr log, preserve the failed-stage evidence, verify Docker Desktop and the NAS mount, then rerun the Docker `--dry-run`. Never delete `.backup.lock` while a backup process is running. A stale lock may be removed only after proving no `muledger-local-backup` container or process is active; removal must target the lock directory only and must not restart Docker or touch snapshots, the production database, or the upload source.
 
 ## 7. Restore Principle
 
@@ -261,6 +263,7 @@ The active rollout and historical drills remain valid records of what was tested
 
 | Date | Backup | Result | Evidence |
 | --- | --- | --- | --- |
+| 2026-09-02 | Empty-directory SMB lock repair plus email schema migration and round-trip restore | `PASS` | [Email migration restore drill](restore-drills/2026-09-02-email-notifications-migration-drill.md) |
 | 2026-08-29 | LaunchAgent NAS permission repair, Docker backup, and isolated restore | `PASS` | [LaunchAgent NAS permission rollout](restore-drills/2026-08-29-launchagent-nas-permission-rollout.md) |
 | 2026-08-27 | Active NAS database/media snapshot | `PASS` for Receipt transfer reversal migration and incident repair | [Migration and repair drill](restore-drills/2026-08-27-receipt-transfer-reversal-migration-drill.md) |
 | 2026-07-19 | Active NAS database/media snapshot and production rollout | `PASS` | [NAS rollout and restore](restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md) |

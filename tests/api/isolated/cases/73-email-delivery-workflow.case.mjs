@@ -245,7 +245,7 @@ export default async function run(t) {
     mark: customerA.mark,
     customerName: customerA.name,
   });
-  const paymentCountBeforeTransfer = rows(await listNotifications(t))
+  const paymentCountBeforeTransfer = rows(await listNotifications(t, suffix))
     .filter((row) => row.type === 'PAYMENT_RECEIVED').length;
   const sourceInvoiceSearch = await t.request(
     'GET',
@@ -263,7 +263,7 @@ export default async function run(t) {
     },
     expectedStatus: 200,
   });
-  const paymentTasksAfterTransfer = rows(await listNotifications(t))
+  const paymentTasksAfterTransfer = rows(await listNotifications(t, suffix))
     .filter((row) => row.type === 'PAYMENT_RECEIVED');
   t.assertEqual(paymentTasksAfterTransfer.length, paymentCountBeforeTransfer, 'balance transfer creates no additional payment task');
   t.assertOk(
@@ -280,7 +280,7 @@ export default async function run(t) {
     },
     expectedStatus: 200,
   });
-  const allAfterDates = rows(await listNotifications(t));
+  const allAfterDates = rows(await listNotifications(t, suffix));
   t.assertEqual(allAfterDates.length, 8, 'four payment tasks plus four customer-scoped invoice tasks are projected');
   const invoiceTasks = allAfterDates.filter((row) => row.invoiceId === invoiceId);
   t.assertEqual(invoiceTasks.filter((row) => row.type === 'SHIPMENT').length, 2, 'shipment creates one task per invoice customer');
@@ -300,7 +300,7 @@ export default async function run(t) {
     },
     expectedStatus: 200,
   });
-  t.assertEqual(rows(await listNotifications(t)).length, 8, 'repeated invoice date save does not duplicate tasks');
+  t.assertEqual(rows(await listNotifications(t, suffix)).length, 8, 'repeated invoice date save does not duplicate tasks');
 
   const disabledApproval = await t.request('POST', '/api/email-notifications', {
     json: { action: 'approve', notificationIds: [directTask.id] },

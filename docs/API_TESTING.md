@@ -116,7 +116,50 @@ npm run test:api:isolated -- --case 36-dashboard-customer-analytics
 
 This case verifies USER/ADMIN visibility, all three rankings and details, zero-payment customers, receipt de-duplication, settings authorization, and transactional threshold validation against a temporary MariaDB instance.
 
-## 2.4 MU Contract Orders synchronization
+## 2.4 Customer email notifications
+
+SALES and ADMIN can maintain notification addresses and language only for customers inside their existing visibility and edit scope. USER is rejected. All Email Management actions require ADMIN.
+
+```bash
+# List one customer's notification profile.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/customer-notification-emails?customerId=CUSTOMER_ID"
+
+# Add the first address; it becomes primary automatically.
+curl -b cookie.txt -X POST http://127.0.0.1/api/customer-notification-emails \
+  -H "Content-Type: application/json" \
+  --data '{"action":"add","customerId":"CUSTOMER_ID","email":"accounts@example.com"}'
+
+# Save the language preference.
+curl -b cookie.txt -X POST http://127.0.0.1/api/customer-notification-emails \
+  -H "Content-Type: application/json" \
+  --data '{"action":"update-language","customerId":"CUSTOMER_ID","language":"FRENCH"}'
+
+# ADMIN: list settings and provider-configured flags. Secret values are never returned.
+curl -b cookie.txt http://127.0.0.1/api/email-settings
+
+# ADMIN: find a review task, preview it, then explicitly approve it.
+curl -b cookie.txt \
+  "http://127.0.0.1/api/email-notifications?search=RECEIPT_OR_ORDER"
+curl -b cookie.txt -X POST http://127.0.0.1/api/email-notifications \
+  -H "Content-Type: application/json" \
+  --data '{"action":"preview","notificationId":"NOTIFICATION_ID","language":"ENGLISH"}'
+curl -b cookie.txt -X POST http://127.0.0.1/api/email-notifications \
+  -H "Content-Type: application/json" \
+  --data '{"action":"approve","notificationIds":["NOTIFICATION_ID"]}'
+```
+
+Approval is expected to fail while outbound delivery is disabled. In isolated tests, use the fake Resend server bound to `127.0.0.1`; never use a real customer address or production API key.
+
+```bash
+npm run test:api:isolated -- --case customer-email-notifications
+npm run test:api:isolated -- --case email-delivery-workflow
+npm run test:e2e:isolated
+```
+
+These cases verify scope isolation, SALES/USER restrictions, optional and multiple addresses, primary selection, language updates, task eligibility, disabled approval, test redirection, stable idempotency keys, retry, signed/duplicate webhook handling, and ADMIN-only UI behavior without sending Internet email.
+
+## 2.5 MU Contract Orders synchronization
 
 The source URL and token are environment-only. Do not paste real credentials into curl history or test fixtures. Administrator status and manual actions use the logged-in session; the scheduler uses the existing maintenance token.
 

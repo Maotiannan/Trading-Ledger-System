@@ -212,6 +212,27 @@ If the documentation changes an operational rule that developers must follow, al
 - this checklist
 - `todolist.md`
 
+## 9.2 If Customer Email Delivery Changes
+
+Examples:
+- customer email or language maintenance
+- notification event creation
+- templates, recipients, approval, retry, correction, or delivery status
+- provider adapter, dispatch trigger, webhook, or sender configuration
+
+Must do:
+- keep business-event task creation transactionally coupled to the Receipt or Invoice write
+- require explicit ADMIN approval; never let a business save action send customer mail directly
+- keep provider credentials environment-only and out of database settings, browser payloads, logs, fixtures, and Git
+- preserve immutable approved/sent recipients and content for audit
+- use stable delivery idempotency keys, bounded retry, and a separate `Delivery Uncertain` path for unknown provider outcomes
+- verify webhook signatures against the raw body, deduplicate provider event IDs, and prevent old events from regressing final state
+- test SALES customer-contact maintenance and ADMIN-only Email Management independently
+- run provider workflow tests against a loopback-only fake service, never a real recipient or production key
+- start rollout with outbound disabled and test mode enabled
+- update `docs/email-notification-operations.md`, `docs/data-and-integrations.md`, and the backup/restore evidence when persistence changes
+- confirm all durable email history remains inside the complete `trading_ledger` snapshot; document any new file storage separately
+
 ## 10. Version, Git, CI, Local Service
 
 If the change affects code, behavior, tests, runtime, or operations:

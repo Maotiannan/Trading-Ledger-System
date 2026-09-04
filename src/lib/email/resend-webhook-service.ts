@@ -3,7 +3,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { Resend } from 'resend';
-import { deriveEmailNotificationStatus } from '@/lib/email/email-delivery-status';
+import { refreshEmailNotificationAggregateInTransaction } from '@/lib/email/email-delivery-status';
 import { db } from '@/lib/db';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 
@@ -25,6 +25,21 @@ type VerifiedWebhook = {
   type: string;
   data: Record<string, unknown>;
   occurredAt: Date;
+};
+
+type StoredWebhookEvent = {
+  id: string;
+  providerMessageId: string;
+  eventType: string;
+  occurredAt: Date;
+  deliveryId: string | null;
+  appliedAt: Date | null;
+};
+
+type WebhookDelivery = {
+  id: string;
+  notificationId: string;
+  status: EmailDeliveryStatus;
 };
 
 const STATUS_BY_EVENT: Record<string, EmailDeliveryStatus | undefined> = {
@@ -97,21 +112,67 @@ function safeErrorFields(type: string): { lastErrorCode: string | null; lastErro
   return { lastErrorCode: null, lastErrorMessage: null };
 }
 
-async function refreshAggregate(tx: WebhookClient, notificationId: string) {
-  const deliveries = await tx.emailDelivery.findMany({
-    where: { notificationId },
-    select: { status: true },
-  });
-  const status = deriveEmailNotificationStatus(deliveries.map((delivery) => delivery.status));
-  if (status) {
-    await tx.emailNotification.update({ where: { id: notificationId }, data: { status } });
+const WEBHOOK_EVENT_SELECT = {
+  id: true,
+  providerMessageId: true,
+  eventType: true,
+  occurredAt: true,
+  deliveryId: true,
+  appliedAt: true,
+} as const;
+
+async function applyStoredWebhookEvent(
+  tx: WebhookClient,
+  event: StoredWebhookEvent,
+): Promise<{ applied: boolean; unknownMessage: boolean }> {
+  if (event.deliveryId || event.appliedAt) {
+    return { applied: false, unknownMessage: false };
   }
-  return status;
+
+  const delivery = event.providerMessageId
+    ? await tx.emailDelivery.findUnique({ where: { providerMessageId: event.providerMessageId } })
+    : null;
+  if (!delivery) return { applied: false, unknownMessage: true };
+
+  const claimed = await tx.emailWebhookEvent.updateMany({
+    where: { id: event.id, deliveryId: null, appliedAt: null },
+    data: { deliveryId: delivery.id },
+  });
+  if (claimed.count !== 1) return { applied: false, unknownMessage: false };
+
+  const targetStatus = STATUS_BY_EVENT[event.eventType];
+  const latestApplied = await tx.emailWebhookEvent.findFirst({
+    where: { deliveryId: delivery.id, appliedAt: { not: null } },
+    orderBy: { occurredAt: 'desc' },
+    select: { occurredAt: true },
+  });
+  const inOrder = !latestApplied || latestApplied.occurredAt <= event.occurredAt;
+  const monotonic = targetStatus
+    ? STATUS_RANK[targetStatus] >= STATUS_RANK[(delivery as WebhookDelivery).status]
+    : false;
+  const applied = Boolean(targetStatus && inOrder && monotonic);
+
+  if (applied && targetStatus) {
+    await tx.emailDelivery.update({
+      where: { id: delivery.id },
+      data: {
+        status: targetStatus,
+        ...(targetStatus === EmailDeliveryStatus.DELIVERED ? { deliveredAt: event.occurredAt } : {}),
+        ...safeErrorFields(event.eventType),
+      },
+    });
+    await refreshEmailNotificationAggregateInTransaction(tx, delivery.notificationId);
+    await tx.emailWebhookEvent.update({
+      where: { id: event.id },
+      data: { appliedAt: new Date() },
+    });
+  }
+  return { applied, unknownMessage: false };
 }
 
 export async function applyVerifiedResendWebhook(input: VerifiedWebhook) {
   return runInTransaction(async (tx) => {
-    let webhookEvent: { id: string };
+    let webhookEvent: StoredWebhookEvent;
     try {
       webhookEvent = await tx.emailWebhookEvent.create({
         data: {
@@ -125,51 +186,21 @@ export async function applyVerifiedResendWebhook(input: VerifiedWebhook) {
           } as Prisma.InputJsonValue,
           occurredAt: input.occurredAt,
         },
-        select: { id: true },
+        select: WEBHOOK_EVENT_SELECT,
       });
     } catch (error) {
-      if (isUniqueConstraintError(error)) return { duplicate: true, applied: false };
+      if (isUniqueConstraintError(error)) {
+        const existing = await tx.emailWebhookEvent.findUnique({
+          where: { providerEventId: input.providerEventId },
+          select: WEBHOOK_EVENT_SELECT,
+        });
+        if (!existing) throw error;
+        const outcome = await applyStoredWebhookEvent(tx, existing);
+        return { duplicate: true, ...outcome };
+      }
       throw error;
     }
-
-    const providerMessageId = String(input.data.email_id || '');
-    const delivery = providerMessageId
-      ? await tx.emailDelivery.findUnique({ where: { providerMessageId } })
-      : null;
-    if (!delivery) {
-      return { duplicate: false, applied: false, unknownMessage: true };
-    }
-
-    const targetStatus = STATUS_BY_EVENT[input.type];
-    const latestApplied = await tx.emailWebhookEvent.findFirst({
-      where: { deliveryId: delivery.id, appliedAt: { not: null } },
-      orderBy: { occurredAt: 'desc' },
-      select: { occurredAt: true },
-    });
-    const inOrder = !latestApplied || latestApplied.occurredAt <= input.occurredAt;
-    const monotonic = targetStatus
-      ? STATUS_RANK[targetStatus] >= STATUS_RANK[delivery.status]
-      : false;
-    const applied = Boolean(targetStatus && inOrder && monotonic);
-
-    if (applied && targetStatus) {
-      await tx.emailDelivery.update({
-        where: { id: delivery.id },
-        data: {
-          status: targetStatus,
-          ...(targetStatus === EmailDeliveryStatus.DELIVERED ? { deliveredAt: input.occurredAt } : {}),
-          ...safeErrorFields(input.type),
-        },
-      });
-      await refreshAggregate(tx, delivery.notificationId);
-    }
-    await tx.emailWebhookEvent.update({
-      where: { id: webhookEvent.id },
-      data: {
-        deliveryId: delivery.id,
-        ...(applied ? { appliedAt: new Date() } : {}),
-      },
-    });
-    return { duplicate: false, applied, unknownMessage: false };
+    const outcome = await applyStoredWebhookEvent(tx, webhookEvent);
+    return { duplicate: false, ...outcome };
   });
 }

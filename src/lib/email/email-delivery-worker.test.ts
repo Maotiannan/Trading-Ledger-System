@@ -148,8 +148,13 @@ function makeWorkerState(initialDeliveries: Delivery[] = [deliveryFixture()]) {
   };
 
   const emailNotification = {
-    updateMany: jest.fn(async ({ where, data }: { where: { id: string }; data: { status: EmailNotificationStatus } }) => {
+    updateMany: jest.fn(async ({ where, data }: {
+      where: { id: string; status?: { notIn?: EmailNotificationStatus[] } };
+      data: { status: EmailNotificationStatus };
+    }) => {
       if (!notifications.has(where.id)) return { count: 0 };
+      const currentStatus = notifications.get(where.id);
+      if (where.status?.notIn?.includes(currentStatus as EmailNotificationStatus)) return { count: 0 };
       notifications.set(where.id, data.status);
       return { count: 1 };
     }),
@@ -258,6 +263,26 @@ describe('email-delivery-worker', () => {
     });
     expect(state.attempts[0]).toMatchObject({ status: EmailAttemptStatus.ACCEPTED });
     expect(state.notifications.get('notification-1')).toBe(EmailNotificationStatus.SENT);
+  });
+
+  it('does not overwrite a correction raised while the provider request is in flight', async () => {
+    const state = makeWorkerState();
+    mockTransactionClient = state.client;
+    Object.assign(mockDb, state.client);
+    const send = jest.fn().mockImplementation(async () => {
+      state.notifications.set('notification-1', EmailNotificationStatus.NEEDS_CORRECTION);
+      return { providerMessageId: 'resend-1' };
+    });
+
+    await dispatchQueuedEmailDeliveries({
+      workerId: 'worker-a',
+      limit: 10,
+      now,
+      provider: provider(send),
+    });
+
+    expect(state.deliveries[0].status).toBe(EmailDeliveryStatus.SENT);
+    expect(state.notifications.get('notification-1')).toBe(EmailNotificationStatus.NEEDS_CORRECTION);
   });
 
   it('allows only one worker to win the same conditional claim', async () => {

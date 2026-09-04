@@ -61,11 +61,12 @@ Subscribe it to the events processed by MULEDGER:
 - `email.suppressed`
 - `email.failed`
 
-Resend signs each request. MULEDGER verifies the unmodified raw body with `svix-id`, `svix-timestamp`, `svix-signature`, and `RESEND_WEBHOOK_SECRET`; duplicate event IDs are stored only once and old events cannot move a completed delivery backward.
+Resend signs each request. MULEDGER verifies the unmodified raw body with `svix-id`, `svix-timestamp`, `svix-signature`, and `RESEND_WEBHOOK_SECRET`; duplicate event IDs are stored only once and old events cannot move a completed delivery backward. If a valid event arrives before the sending worker has stored Resend's message ID, MULEDGER keeps the event and returns `503`; Resend then retries it, and the duplicate event is linked and applied after the message ID is available instead of being discarded.
 
 Official references:
 
 - [Resend webhook event types](https://resend.com/docs/webhooks/event-types)
+- [Resend webhook retries and replays](https://resend.com/docs/webhooks/retries-and-replays)
 - [Resend API key handling and rotation](https://resend.com/docs/knowledge-base/how-to-handle-api-keys)
 
 ## MULEDGER Settings
@@ -101,6 +102,7 @@ Before enabling outbound delivery:
 - Approval freezes recipients and rendered content so later customer edits cannot rewrite what was approved.
 - `email-delivery-trigger` calls the internal dispatch endpoint every configured interval and atomically claims queued deliveries.
 - Provider acceptance, retry, uncertainty, bounce, complaint, suppression, and webhook events remain in MySQL for audit.
+- If a Receipt or Invoice changes while an approved email is already being sent, the delivery history may still complete, but the task remains `Needs Correction`; delivery completion and later webhooks cannot hide that source change.
 - A timeout with an unknown provider outcome becomes `Delivery Uncertain`; do not blindly retry it because that can duplicate customer mail. ADMIN must explicitly confirm the retry.
 - A changed business source is not silently reused. Create a correction task from the original sent history when a follow-up is required.
 

@@ -105,6 +105,19 @@ describe('Resend webhook route', () => {
     expect(json).toMatchObject({ success: true, data: { duplicate: true } });
   });
 
+  it('asks Resend to retry when the provider message has not been persisted yet', async () => {
+    mockApply.mockResolvedValueOnce({ duplicate: false, applied: false, unknownMessage: true });
+
+    const response = await POST(request());
+    const json = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(json).toMatchObject({
+      success: false,
+      code: 'EMAIL_WEBHOOK_DELIVERY_PENDING',
+    });
+  });
+
   it('returns a generic server failure for storage errors', async () => {
     mockApply.mockRejectedValueOnce(new Error('DATABASE_URL mysql://secret'));
 

@@ -2,6 +2,14 @@ import {
   EmailDeliveryStatus,
   EmailNotificationStatus,
 } from '@prisma/client';
+import type { DbTransactionClient } from '@/lib/transaction';
+
+type AggregateClient = Pick<DbTransactionClient, 'emailDelivery' | 'emailNotification'>;
+
+const SOURCE_OVERRIDE_STATUSES = [
+  EmailNotificationStatus.CANCELLED,
+  EmailNotificationStatus.NEEDS_CORRECTION,
+];
 
 const SUCCESS_OR_PROVIDER_TERMINAL = new Set<EmailDeliveryStatus>([
   EmailDeliveryStatus.SENT,
@@ -46,4 +54,25 @@ export function deriveEmailNotificationStatus(
     return EmailNotificationStatus.SENT;
   }
   return null;
+}
+
+export async function refreshEmailNotificationAggregateInTransaction(
+  tx: AggregateClient,
+  notificationId: string,
+): Promise<EmailNotificationStatus | null> {
+  const deliveries = await tx.emailDelivery.findMany({
+    where: { notificationId },
+    select: { status: true },
+  });
+  const status = deriveEmailNotificationStatus(deliveries.map((delivery) => delivery.status));
+  if (!status) return null;
+
+  const updated = await tx.emailNotification.updateMany({
+    where: {
+      id: notificationId,
+      status: { notIn: SOURCE_OVERRIDE_STATUSES },
+    },
+    data: { status },
+  });
+  return updated.count === 1 ? status : null;
 }

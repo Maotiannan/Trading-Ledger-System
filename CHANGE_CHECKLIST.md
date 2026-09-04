@@ -227,7 +227,10 @@ Must do:
 - preserve immutable approved/sent recipients and content for audit
 - use stable delivery idempotency keys, bounded retry, and a separate `Delivery Uncertain` path for unknown provider outcomes
 - verify webhook signatures against the raw body, deduplicate provider event IDs, and prevent old events from regressing final state
+- treat an in-flight delivery as possibly sent when its Receipt or Invoice changes, and never let a later delivery aggregate overwrite `NEEDS_CORRECTION` or `CANCELLED`
+- persist a webhook that arrives before its provider message ID is stored, return a retryable response, and reconcile the same deduplicated event on provider retry
 - test SALES customer-contact maintenance and ADMIN-only Email Management independently
+- regression-test source changes during provider calls and webhooks arriving before provider message persistence
 - run provider workflow tests against a loopback-only fake service, never a real recipient or production key
 - start rollout with outbound disabled and test mode enabled
 - update `docs/email-notification-operations.md`, `docs/data-and-integrations.md`, and the backup/restore evidence when persistence changes

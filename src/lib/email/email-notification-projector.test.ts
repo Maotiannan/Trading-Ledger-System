@@ -41,6 +41,7 @@ function makeTransaction(input: {
   recipientCounts?: Record<string, number>;
   linkedReceiptIds?: string[];
   beforeNotificationCreate?: (notifications: NotificationRow[]) => void;
+  beforeNotificationWrite?: (notifications: NotificationRow[]) => void;
 }) {
   const notifications = [...(input.notifications || [])];
   let nextId = notifications.length + 1;
@@ -52,8 +53,10 @@ function makeTransaction(input: {
   const customerNotificationEmailCount = jest.fn(async ({ where }: { where: { customerId: string } }) => (
     input.recipientCounts?.[where.customerId] || 0
   ));
-  const emailNotificationFindUnique = jest.fn(async ({ where }: { where: { eventKey: string } }) => (
-    notifications.find((row) => row.eventKey === where.eventKey) || null
+  const emailNotificationFindUnique = jest.fn(async ({ where }: { where: { id?: string; eventKey?: string } }) => (
+    notifications.find((row) => (
+      (where.id && row.id === where.id) || (where.eventKey && row.eventKey === where.eventKey)
+    )) || null
   ));
   const emailNotificationFindMany = jest.fn(async ({ where }: { where?: Record<string, unknown> }) => (
     notifications.filter((row) => {
@@ -78,6 +81,7 @@ function makeTransaction(input: {
     where: { id?: string; eventKey?: string };
     data: Partial<NotificationRow>;
   }) => {
+    input.beforeNotificationWrite?.(notifications);
     const row = notifications.find((candidate) => (
       (where.id && candidate.id === where.id) || (where.eventKey && candidate.eventKey === where.eventKey)
     ));
@@ -101,6 +105,7 @@ function makeTransaction(input: {
     where: Record<string, unknown>;
     data: Partial<NotificationRow>;
   }) => {
+    input.beforeNotificationWrite?.(notifications);
     let count = 0;
     for (const row of notifications) {
       if (where.id && row.id !== where.id) continue;
@@ -516,7 +521,7 @@ describe('email-notification-projector', () => {
     });
   });
 
-  it('cancels only unsent source tasks and preserves sent history for correction', async () => {
+  it('cancels only definitely unsent source tasks and preserves in-flight or sent history for correction', async () => {
     const state = makeTransaction({
       notifications: [
         {
@@ -541,6 +546,17 @@ describe('email-notification-projector', () => {
           currentSnapshot: {},
           sourceActorId: 'sales-1',
         },
+        {
+          id: 'notification-3',
+          eventKey: 'PAYMENT_RECEIVED:receipt-3',
+          type: 'PAYMENT_RECEIVED',
+          status: EmailNotificationStatus.SENDING,
+          customerId: 'customer-1',
+          receiptId: 'receipt-3',
+          invoiceId: null,
+          currentSnapshot: {},
+          sourceActorId: 'sales-1',
+        },
       ],
     });
 
@@ -554,9 +570,48 @@ describe('email-notification-projector', () => {
       actorId: 'admin-1',
       reason: 'SOURCE_DELETED',
     });
+    await cancelSourceNotificationsInTransaction(state.tx as never, {
+      receiptId: 'receipt-3',
+      actorId: 'admin-1',
+      reason: 'SOURCE_DELETED',
+    });
 
     expect(state.notifications[0]).toMatchObject({ status: 'CANCELLED' });
     expect(state.notifications[1]).toMatchObject({ status: 'NEEDS_CORRECTION' });
+    expect(state.notifications[2]).toMatchObject({ status: 'NEEDS_CORRECTION' });
+  });
+
+  it('rechecks a queued task that becomes sending while its source is being removed', async () => {
+    let raced = false;
+    const state = makeTransaction({
+      notifications: [{
+        id: 'notification-1',
+        eventKey: 'PAYMENT_RECEIVED:receipt-1',
+        type: 'PAYMENT_RECEIVED',
+        status: EmailNotificationStatus.QUEUED,
+        customerId: 'customer-1',
+        receiptId: 'receipt-1',
+        invoiceId: null,
+        currentSnapshot: {},
+        sourceActorId: 'sales-1',
+      }],
+      beforeNotificationWrite: (notifications) => {
+        if (raced) return;
+        raced = true;
+        notifications[0].status = EmailNotificationStatus.SENDING;
+      },
+    });
+
+    await cancelSourceNotificationsInTransaction(state.tx as never, {
+      receiptId: 'receipt-1',
+      actorId: 'admin-1',
+      reason: 'SOURCE_DELETED',
+    });
+
+    expect(state.notifications[0]).toMatchObject({
+      status: EmailNotificationStatus.NEEDS_CORRECTION,
+      correctionReason: 'SOURCE_DELETED',
+    });
   });
 
   it('moves only eligible customer tasks between missing recipient and pending', async () => {

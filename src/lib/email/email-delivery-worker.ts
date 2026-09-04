@@ -5,7 +5,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { db } from '@/lib/db';
-import { deriveEmailNotificationStatus } from '@/lib/email/email-delivery-status';
+import { refreshEmailNotificationAggregateInTransaction } from '@/lib/email/email-delivery-status';
 import {
   asEmailProviderFailure,
   EmailProviderFailureKind,
@@ -14,12 +14,7 @@ import {
 import { createResendEmailProvider } from '@/lib/email/resend-email-provider';
 import { getEmailSettings } from '@/lib/email/email-settings';
 import type { EmailProviderSendInput } from '@/lib/email/email-types';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
-
-type WorkerClient = Pick<
-  DbTransactionClient,
-  'emailDelivery' | 'emailDeliveryAttempt' | 'emailNotification'
->;
+import { runInTransaction } from '@/lib/transaction';
 
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 
@@ -55,24 +50,6 @@ function providerInput(delivery: FrozenDelivery): EmailProviderSendInput {
     text: delivery.textBody,
     idempotencyKey: delivery.idempotencyKey,
   };
-}
-
-export async function refreshEmailNotificationAggregateInTransaction(
-  tx: WorkerClient,
-  notificationId: string,
-): Promise<EmailNotificationStatus | null> {
-  const deliveries = await tx.emailDelivery.findMany({
-    where: { notificationId },
-    select: { status: true },
-  });
-  const status = deriveEmailNotificationStatus(deliveries.map((delivery) => delivery.status));
-  if (status) {
-    await tx.emailNotification.update({
-      where: { id: notificationId },
-      data: { status },
-    });
-  }
-  return status;
 }
 
 async function claimDelivery(

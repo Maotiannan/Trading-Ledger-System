@@ -46,6 +46,7 @@ const EDITABLE_NOTIFICATION_STATUSES = new Set<EmailNotificationStatus>([
 ]);
 
 const SENT_OR_POSSIBLY_SENT_STATUSES = new Set<EmailNotificationStatus>([
+  EmailNotificationStatus.SENDING,
   EmailNotificationStatus.SENT,
   EmailNotificationStatus.DELIVERED,
   EmailNotificationStatus.DELIVERY_DELAYED,
@@ -377,26 +378,36 @@ async function markNotificationRowsForSourceRemoval(
   input: { actorId: string; reason: string },
 ): Promise<number> {
   for (const row of rows) {
-    if (SENT_OR_POSSIBLY_SENT_STATUSES.has(row.status)) {
-      await tx.emailNotification.update({
-        where: { id: row.id },
-        data: {
-          status: EmailNotificationStatus.NEEDS_CORRECTION,
-          correctionReason: input.reason,
-          sourceActorId: input.actorId,
-        },
+    let currentStatus = row.status;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const possiblySent = SENT_OR_POSSIBLY_SENT_STATUSES.has(currentStatus);
+      const updated = await tx.emailNotification.updateMany({
+        where: { id: row.id, status: currentStatus },
+        data: possiblySent
+          ? {
+              status: EmailNotificationStatus.NEEDS_CORRECTION,
+              correctionReason: input.reason,
+              sourceActorId: input.actorId,
+            }
+          : {
+              status: EmailNotificationStatus.CANCELLED,
+              correctionReason: input.reason,
+              sourceActorId: input.actorId,
+              cancelledBy: input.actorId,
+              cancelledAt: new Date(),
+            },
       });
-    } else {
-      await tx.emailNotification.update({
+      if (updated.count === 1) break;
+
+      const current = await tx.emailNotification.findUnique({
         where: { id: row.id },
-        data: {
-          status: EmailNotificationStatus.CANCELLED,
-          correctionReason: input.reason,
-          sourceActorId: input.actorId,
-          cancelledBy: input.actorId,
-          cancelledAt: new Date(),
-        },
+        select: { status: true },
       });
+      if (!current) break;
+      currentStatus = current.status;
+      if (attempt === 3) {
+        throw new Error(`Email notification ${row.id} changed concurrently too many times`);
+      }
     }
   }
   return rows.length;

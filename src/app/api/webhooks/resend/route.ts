@@ -42,6 +42,21 @@ export async function POST(request: Request) {
 
   try {
     const data = await applyVerifiedResendWebhook(verified);
+    if (data.unknownMessage) {
+      logger.warn('Resend webhook is waiting for provider message persistence', {
+        code: 'EMAIL_WEBHOOK_DELIVERY_PENDING',
+        providerEventId: id,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Webhook delivery is not ready yet.',
+          code: 'EMAIL_WEBHOOK_DELIVERY_PENDING',
+          detail: null,
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json({ success: true, data });
   } catch {
     logger.error('Resend webhook persistence failed', {

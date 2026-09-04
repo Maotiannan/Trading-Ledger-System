@@ -40,15 +40,37 @@ function makeWebhookState() {
       if (events.some((row) => row.providerEventId === data.providerEventId)) {
         throw Object.assign(new Error('unique'), { code: 'P2002' });
       }
-      const row = { id: `event-${events.length + 1}`, ...data };
+      const row = {
+        id: `event-${events.length + 1}`,
+        deliveryId: null,
+        appliedAt: null,
+        ...data,
+      };
       events.push(row);
       return row;
     }),
+    findUnique: jest.fn(async ({ where }: { where: { id?: string; providerEventId?: string } }) => (
+      events.find((row) => (
+        (where.id && row.id === where.id)
+        || (where.providerEventId && row.providerEventId === where.providerEventId)
+      )) || null
+    )),
     findFirst: jest.fn(async ({ where }: { where: { deliveryId: string } }) => (
       [...events]
         .filter((row) => row.deliveryId === where.deliveryId && row.appliedAt)
         .sort((a, b) => Number(new Date(String(b.occurredAt))) - Number(new Date(String(a.occurredAt))))[0] || null
     )),
+    updateMany: jest.fn(async ({ where, data }: {
+      where: { id: string; deliveryId?: string | null; appliedAt?: null };
+      data: Record<string, unknown>;
+    }) => {
+      const row = events.find((candidate) => candidate.id === where.id);
+      if (!row) return { count: 0 };
+      if ('deliveryId' in where && (row.deliveryId ?? null) !== where.deliveryId) return { count: 0 };
+      if ('appliedAt' in where && (row.appliedAt ?? null) !== where.appliedAt) return { count: 0 };
+      Object.assign(row, data);
+      return { count: 1 };
+    }),
     update: jest.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
       const row = events.find((candidate) => candidate.id === where.id);
       Object.assign(row!, data);
@@ -66,6 +88,15 @@ function makeWebhookState() {
     }),
   };
   const emailNotification = {
+    updateMany: jest.fn(async ({ where, data }: {
+      where: { id: string; status?: { notIn?: EmailNotificationStatus[] } };
+      data: { status: EmailNotificationStatus };
+    }) => {
+      if (where.id !== 'notification-1') return { count: 0 };
+      if (where.status?.notIn?.includes(notificationStatus)) return { count: 0 };
+      notificationStatus = data.status;
+      return { count: 1 };
+    }),
     update: jest.fn(async ({ data }: { data: { status: EmailNotificationStatus } }) => {
       notificationStatus = data.status;
       return { id: 'notification-1', status: data.status };
@@ -155,6 +186,26 @@ describe('resend-webhook-service', () => {
       unknownMessage: true,
     });
     expect(state.client.emailDelivery.update).not.toHaveBeenCalled();
+    expect(state.events).toHaveLength(1);
+  });
+
+  it('reconciles a previously unknown provider message when Resend retries the same event', async () => {
+    const state = makeWebhookState();
+    state.delivery.providerMessageId = 'not-persisted-yet';
+    mockTransactionClient = state.client;
+    Object.assign(mockDb, state.client);
+
+    await expect(applyVerifiedResendWebhook(event('email.delivered', 'svix-early'))).resolves.toMatchObject({
+      unknownMessage: true,
+    });
+    state.delivery.providerMessageId = 'resend-1';
+
+    await expect(applyVerifiedResendWebhook(event('email.delivered', 'svix-early'))).resolves.toMatchObject({
+      duplicate: true,
+      applied: true,
+      unknownMessage: false,
+    });
+    expect(state.delivery.status).toBe(EmailDeliveryStatus.DELIVERED);
     expect(state.events).toHaveLength(1);
   });
 

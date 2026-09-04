@@ -13,6 +13,7 @@ import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
 import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
 import { logger } from '@/lib/logger';
+import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -112,10 +113,11 @@ async function processDetailItems(params: {
   receiptMatchOptions?: FindMatchingReceiptOptions;
   requiredExplicitReceiptStatus?: ReceiptStatus;
   tx: DbTransactionClient;
-}): Promise<{ items: DetailProcessedItem[]; touchedOrderIds: string[] }> {
+}): Promise<{ items: DetailProcessedItem[]; touchedOrderIds: string[]; createdReceiptIds: string[] }> {
   const processedItems: DetailProcessedItem[] = [];
   const touchedOrderIds = new Set<string>();
   const usedReceiptIds = new Set<string>();
+  const createdReceiptIds: string[] = [];
 
   for (const item of params.items) {
     let receiptId = item.receiptId;
@@ -176,6 +178,7 @@ async function processDetailItems(params: {
         },
       });
       receiptId = newReceipt.id;
+      createdReceiptIds.push(newReceipt.id);
       touchedOrderIds.add(orderId);
 
       await params.tx.order.update({
@@ -202,7 +205,11 @@ async function processDetailItems(params: {
     }
   }
 
-  return { items: processedItems, touchedOrderIds: Array.from(touchedOrderIds) };
+  return {
+    items: processedItems,
+    touchedOrderIds: Array.from(touchedOrderIds),
+    createdReceiptIds,
+  };
 }
 
 function normalizeItems(payload: DetailPayload) {
@@ -375,6 +382,12 @@ export async function createDetailRecord(params: {
       .map((item) => item.receiptId)
       .filter((receiptId): receiptId is string => Boolean(receiptId));
     await setReceiptsWaitingSwift(tx, receiptIds);
+    for (const receiptId of processedItems.createdReceiptIds) {
+      await projectPaymentReceiptInTransaction(tx, {
+        receiptId,
+        actorId: currentUser.id,
+      });
+    }
     if (created.imageUrl) {
       await attachUploadedAssetByPath({
         client: tx,

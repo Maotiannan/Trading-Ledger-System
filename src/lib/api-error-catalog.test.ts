@@ -37,4 +37,14 @@ describe('api-error-catalog', () => {
       translateApiErrorMessage('该收据已发生余额转移。请确认撤销转移后再修改收据。', 'en'),
     ).toBe('This receipt has an existing balance transfer. Confirm reversal before editing the receipt.');
   });
+
+  it.each([
+    ['邮件外发功能尚未启用', 'Outbound email is not enabled'],
+    ['客户尚未配置通知邮箱', 'The customer has no notification email'],
+    ['邮件任务已审批或状态已变化', 'The email task was already approved or its status changed'],
+    ['该邮件可能已经发出，确认承担重复发送风险后才能重试', 'This email may already have been sent. Confirm before retrying.'],
+    ['邮件服务或发件人尚未正确配置', 'The email provider or sender is not configured'],
+  ])('translates email management error "%s"', (message, expected) => {
+    expect(translateApiErrorMessage(message, 'en')).toBe(expected);
+  });
 });

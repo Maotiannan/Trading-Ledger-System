@@ -237,6 +237,34 @@ describe('MULEDGER NAS local backup', () => {
     }
   });
 
+  it('uses an empty directory lock so SMB does not retain a deleted lock file', () => {
+    const f = fixture();
+    try {
+      const inspection = path.join(f.root, 'lock-contents.txt');
+      const inspectingDump = path.join(f.bin, 'inspect-lock-mariadb-dump');
+      writeFileSync(
+        inspectingDump,
+        `#!/bin/sh
+set -eu
+ls -A "$MULEDGER_LOCAL_BACKUP_ROOT/.backup.lock" > "$LOCK_INSPECTION_PATH"
+printf '%s\n' 'CREATE TABLE sample(id INT);' 'INSERT INTO sample VALUES (1);'
+`,
+      );
+      chmodSync(inspectingDump, 0o700);
+
+      const result = runBackup(f, [], {
+        MYSQLDUMP_BIN: inspectingDump,
+        LOCK_INSPECTION_PATH: inspection,
+      });
+
+      expect(result.status).toBe(0);
+      expect(readFileSync(inspection, 'utf8')).toBe('');
+      expect(existsSync(path.join(f.backup, '.backup.lock'))).toBe(false);
+    } finally {
+      f.cleanup();
+    }
+  });
+
   it('preserves existing snapshots and skips retention when the dump fails', () => {
     const f = fixture();
     try {

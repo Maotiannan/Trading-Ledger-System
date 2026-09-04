@@ -4,6 +4,7 @@ export type WorkspaceRouteItem = {
   id: WorkspaceView;
   path: string;
   managerOnly?: boolean;
+  adminOnly?: boolean;
 };
 
 export const WORKSPACE_ROUTES: WorkspaceRouteItem[] = [
@@ -13,6 +14,7 @@ export const WORKSPACE_ROUTES: WorkspaceRouteItem[] = [
   { id: 'receipts', path: '/receipts' },
   { id: 'details', path: '/details' },
   { id: 'swifts', path: '/swifts' },
+  { id: 'emails', path: '/emails', adminOnly: true },
   { id: 'deletions', path: '/deletions', managerOnly: true },
   { id: 'customers', path: '/customers', managerOnly: true },
   { id: 'settings', path: '/settings' },
@@ -36,4 +38,8 @@ export function getWorkspaceViewFromPath(pathname: string): WorkspaceView {
 
 export function isManagerOnlyView(view: WorkspaceView): boolean {
   return Boolean(WORKSPACE_ROUTES.find((item) => item.id === view)?.managerOnly);
+}
+
+export function isAdminOnlyView(view: WorkspaceView): boolean {
+  return Boolean(WORKSPACE_ROUTES.find((item) => item.id === view)?.adminOnly);
 }

@@ -58,4 +58,15 @@ describe('api-success-catalog', () => {
       translateApiSuccessMessage('账单列表已加载，共 7 个账单', 'en'),
     ).toBe('Invoice list loaded: 7 invoices');
   });
+
+  it('translates email management success and dynamic count messages', () => {
+    expect(translateApiSuccessMessage('邮件任务已取消', 'en')).toBe('Email task cancelled');
+    expect(translateApiSuccessMessage('失败邮件已重新排队', 'en')).toBe('Failed email queued for retry');
+    expect(translateApiSuccessMessage('更正邮件任务已创建，请审核后发送', 'en'))
+      .toBe('Correction email task created. Review it before sending.');
+    expect(translateApiSuccessMessage('已批准 3 个邮件任务，等待发送', 'en'))
+      .toBe('Approved 3 email tasks and queued them for delivery');
+    expect(translateApiSuccessMessage('邮件任务已加载，共 12 条', 'en'))
+      .toBe('Email tasks loaded: 12');
+  });
 });

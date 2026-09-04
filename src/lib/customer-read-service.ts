@@ -58,6 +58,20 @@ function annotatePhoneConflicts<T extends Record<string, unknown>>(rows: T[]): A
   }));
 }
 
+function annotateNotificationEmails<T extends Record<string, unknown>>(rows: T[]) {
+  return rows.map((row) => {
+    const notificationEmails = Array.isArray(row.notificationEmails)
+      ? row.notificationEmails.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+      : [];
+    const primary = notificationEmails.find((item) => Boolean(item.isPrimary)) || notificationEmails[0] || null;
+    return {
+      ...row,
+      primaryNotificationEmail: primary ? trimStr(primary.email) || null : null,
+      notificationEmailCount: notificationEmails.length,
+    };
+  });
+}
+
 export async function listCustomerOwnerOptions(currentUser: CurrentUser) {
   ensureManager(currentUser);
 
@@ -129,6 +143,16 @@ export async function listCustomers(
         },
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
       },
+      notificationEmails: {
+        select: {
+          id: true,
+          email: true,
+          isPrimary: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      },
       owner: {
         select: {
           id: true,
@@ -143,7 +167,8 @@ export async function listCustomers(
   });
 
   const showExtended = currentUser.role === UserRole.ADMIN || await canSalesEditExtendedCustomerFields();
-  const conflictAnnotatedRows = annotatePhoneConflicts(rows as Array<Record<string, unknown>>);
+  const notificationAnnotatedRows = annotateNotificationEmails(rows as Array<Record<string, unknown>>);
+  const conflictAnnotatedRows = annotatePhoneConflicts(notificationAnnotatedRows);
   const normalizedMark = mark ? normalizeOrderIdentifier(mark) : '';
   const markedRows = normalizedMark
     ? conflictAnnotatedRows.filter((row) => normalizeOrderIdentifier(trimStr(row.mark)) === normalizedMark)

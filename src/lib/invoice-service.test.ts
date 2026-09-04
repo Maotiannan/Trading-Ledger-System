@@ -29,6 +29,11 @@ import {
   syncOrderAliases,
 } from '@/lib/order-alias-db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import {
+  cancelSourceNotificationsInTransaction,
+  projectInvoiceEventsInTransaction,
+  refreshOrderLinkedNotificationsInTransaction,
+} from '@/lib/email/email-notification-projector';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -107,6 +112,12 @@ jest.mock('@/lib/matching', () => ({
   updateOrderBalance: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  cancelSourceNotificationsInTransaction: jest.fn(),
+  projectInvoiceEventsInTransaction: jest.fn(),
+  refreshOrderLinkedNotificationsInTransaction: jest.fn(),
+}));
+
 function makeUser(overrides: Partial<{
   id: string;
   role: UserRole;
@@ -177,6 +188,9 @@ const mockConsolidateGroupedOrders = consolidateGroupedOrders as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockUpdateOrderBalanceCache = updateOrderBalanceCache as jest.Mock;
+const mockCancelSourceNotifications = cancelSourceNotificationsInTransaction as jest.Mock;
+const mockProjectInvoiceEvents = projectInvoiceEventsInTransaction as jest.Mock;
+const mockRefreshOrderLinkedNotifications = refreshOrderLinkedNotificationsInTransaction as jest.Mock;
 
 const poolMigrationAudit = {
   sourceOrderId: 'deposit-order',
@@ -218,6 +232,9 @@ describe('invoice-service', () => {
       skipped: 0,
       unresolvedManual: 0,
     });
+    mockCancelSourceNotifications.mockResolvedValue({ cancelled: 0 });
+    mockProjectInvoiceEvents.mockResolvedValue({ projected: 0, refreshed: 0 });
+    mockRefreshOrderLinkedNotifications.mockResolvedValue(undefined);
   });
 
   it('creates invoice records through saveInvoiceWithOrders and records audit', async () => {
@@ -650,6 +667,7 @@ describe('invoice-service', () => {
       .mockResolvedValueOnce([
         {
           id: 'order-1',
+          invoiceId: 'inv-1',
           orderNo: 'TEST-1-05',
           customerId: null,
           customerMark: 'ASD-DSA',
@@ -707,6 +725,11 @@ describe('invoice-service', () => {
         customerCity: 'Conakry',
         needsCustomerFix: false,
       },
+    });
+    expect(mockRefreshOrderLinkedNotifications).toHaveBeenCalledWith(mockDb, {
+      orderIds: ['order-1'],
+      invoiceIds: ['inv-1'],
+      actorId: 'sales-1',
     });
   });
 
@@ -768,6 +791,11 @@ describe('invoice-service', () => {
       poolResolutions: [{ sourceOrderId: 'pool-manual', targetInvoiceId: 'invoice-2' }],
       requireAllManual: true,
     }));
+    expect(mockRefreshOrderLinkedNotifications).toHaveBeenCalledWith(mockDb, {
+      orderIds: ['deposit-order'],
+      invoiceIds: ['inv-1'],
+      actorId: 'sales-1',
+    });
   });
 
   it('updates invoice dates in transaction and records before/after audit values', async () => {
@@ -795,6 +823,12 @@ describe('invoice-service', () => {
         shipDate: new Date('2026-03-15'),
         releaseDate: new Date('2026-03-16'),
       },
+    });
+    expect(mockProjectInvoiceEvents).toHaveBeenCalledWith(mockDb, {
+      invoiceId: 'inv-1',
+      beforeShipDate: new Date('2026-03-01T00:00:00.000Z'),
+      beforeReleaseDate: null,
+      actorId: 'sales-1',
     });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_UPDATE_DATES',
@@ -874,6 +908,11 @@ describe('invoice-service', () => {
       },
     });
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockRefreshOrderLinkedNotifications).toHaveBeenCalledWith(mockDb, {
+      orderIds: ['order-1'],
+      invoiceIds: [],
+      actorId: 'sales-1',
+    });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'ORDER_UPDATE',
       targetId: 'order-1',
@@ -1022,6 +1061,11 @@ describe('invoice-service', () => {
     const result = await deleteInvoiceRecord(makeUser(), 'inv-1');
 
     expect(result).toEqual({ message: '账单已删除' });
+    expect(mockCancelSourceNotifications).toHaveBeenCalledWith(mockDb, {
+      invoiceId: 'inv-1',
+      actorId: 'sales-1',
+      reason: 'SOURCE_DELETED',
+    });
     expect(mockDb.invoice.delete).toHaveBeenCalledWith({ where: { id: 'inv-1' } });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'INVOICE_DELETE',
@@ -1043,6 +1087,11 @@ describe('invoice-service', () => {
 
     expect(result).toEqual({ message: '订单已删除' });
     expect(mockDb.order.delete).toHaveBeenCalledWith({ where: { id: 'order-1' } });
+    expect(mockCancelSourceNotifications).toHaveBeenCalledWith(mockDb, {
+      invoiceId: 'inv-1',
+      actorId: 'sales-1',
+      reason: 'SOURCE_DELETED',
+    });
     expect(mockDb.invoice.delete).toHaveBeenCalledWith({ where: { id: 'inv-1' } });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'ORDER_DELETE',
@@ -1142,6 +1191,11 @@ describe('invoice-service', () => {
       customerId: 'customer-1',
       customerOrderNo: 'IB-02',
       ownerIds: ['sales-1'],
+    });
+    expect(mockRefreshOrderLinkedNotifications).toHaveBeenCalledWith(mockDb, {
+      orderIds: ['order-new'],
+      invoiceIds: ['inv-1'],
+      actorId: 'sales-1',
     });
     expect(mockConsolidateGroupedOrders).toHaveBeenCalledWith({ invoiceIds: ['inv-1'] });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({

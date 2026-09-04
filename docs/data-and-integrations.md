@@ -191,6 +191,7 @@ NAS 完整快照、校验、保留和隔离恢复流程见 `docs/backup/muledger
 - 签名收据会话与收据编号计数器
 - Payment Agent 资料与文件索引
 - MU Contract Orders 来源关联、同步游标、事件幂等收据、冲突与对账预览
+- 客户通知邮箱和语言偏好、邮件模板、待审核任务、冻结后的收件人/正文、发送尝试和 Resend webhook 事件
 
 注意：MySQL 数据文件不在项目 Git 仓库，也不在 app 容器里。备份数据库时应备份 `trading_ledger` 业务库，而不是只备份项目代码。
 
@@ -301,9 +302,31 @@ docker volume rm ...
 | `MAINTENANCE_JOB_TOKEN` | Docker `maintenance` 服务调用内部清理接口 |
 | `MU_CONTRACT_SYNC_BASE_URL` | MU Contract 只读 Orders feed 地址，仅传入 app |
 | `MU_CONTRACT_SYNC_TOKEN` | MU Contract Orders feed 独立令牌，仅传入 app |
+| `RESEND_API_KEY` | Resend 服务端发送密钥，仅传入 app，不进入数据库或浏览器 |
+| `RESEND_WEBHOOK_SECRET` | 验证 Resend 回执签名，仅传入 app |
 | `TRUST_PROXY_HEADERS` | 是否信任 Caddy 重写后的代理 IP 头，Docker/Caddy 部署建议为 `true` |
 
 如果缺少 `SESSION_SECRET` 或 `MAINTENANCE_JOB_TOKEN`，`docker compose` 会拒绝启动，避免系统用公开默认值悄悄运行。
+
+## 客户邮件通知与 Resend
+
+收据确认、Invoice 首次填写 Shipment Date、首次填写 Release Date 时，后端会在同一业务事务中生成或更新邮件任务。任务写入不等于发送：只有 ADMIN 可以在独立的 Email Management 页面预览并批准，SALES 只能维护其可见客户的邮箱和语言偏好。
+
+持久化数据全部位于 `trading_ledger`：
+
+| 表或字段 | 用途 |
+| --- | --- |
+| `Customer.notificationLanguage` | 客户邮件语言，默认 English，可选 Francais |
+| `CustomerNotificationEmail` | 客户一个或多个通知邮箱及主邮箱 |
+| `EmailTemplate` | 收款、出运、放单的英法模板版本 |
+| `EmailNotification` | 业务事件、当前审核状态和不可变发送快照 |
+| `EmailDelivery` | 每个实际收件操作及 Resend message ID |
+| `EmailDeliveryAttempt` | 发送、重试、拒绝或不确定结果 |
+| `EmailWebhookEvent` | 已验签并去重的服务商状态回执 |
+
+Docker `email-delivery-trigger` 只持有内部维护令牌，按固定间隔调用应用内部发送器；Resend 密钥只存在于 app 环境。对外 webhook 为 `POST /api/webhooks/resend`。外发默认关闭，测试模式默认开启；测试模式会把已批准邮件重定向到一个内部测试地址。
+
+配置、域名验证、配额、密钥轮换、状态追踪和回滚顺序见 [客户邮件通知运维手册](email-notification-operations.md)。数据库和媒体恢复证据见 [2026-09-02 邮件通知迁移与恢复演练](backup/restore-drills/2026-09-02-email-notifications-migration-drill.md)。该功能不新增 NAS 文件目录。
 
 ## 项目内置模板资源
 

@@ -14,6 +14,7 @@ import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 import { addMoney, moneyToNumber } from '@/lib/money';
+import { cancelSourceNotificationsInTransaction } from '@/lib/email/email-notification-projector';
 
 const AUTO_DETAIL_RECEIPT_NOTES = new Set(['由付款明细自动创建', '由付款明细直接创建']);
 
@@ -182,6 +183,11 @@ async function approveReceiptDeletion(
     },
   });
 
+  await cancelSourceNotificationsInTransaction(tx, {
+    receiptId: targetId,
+    actorId,
+    reason: 'SOURCE_DELETED',
+  });
   await tx.detailItem.deleteMany({ where: { receiptId: targetId } });
   await tx.receipt.delete({ where: { id: targetId } });
 
@@ -202,7 +208,8 @@ async function approveReceiptDeletion(
 
 async function approveDetailDeletion(
   tx: DbTransactionClient,
-  targetId: string
+  targetId: string,
+  actorId: string,
 ): Promise<void> {
   const detail = await tx.detail.findUnique({
     where: { id: targetId },
@@ -261,6 +268,11 @@ async function approveDetailDeletion(
       continue;
     }
 
+    await cancelSourceNotificationsInTransaction(tx, {
+      receiptId: receipt.id,
+      actorId,
+      reason: 'SOURCE_DELETED',
+    });
     await tx.receipt.delete({ where: { id: receipt.id } });
     if (receipt.orderId) {
       autoOrderCandidates.add(receipt.orderId);
@@ -476,7 +488,7 @@ export async function reviewDeletionRequest({
       const result = await approveReceiptDeletion(tx, requestInTx.targetId, currentUser.id);
       affectedReceiptOrderId = result.affectedOrderId;
     } else if (requestInTx.targetType === DeletionTargetType.DETAIL) {
-      await approveDetailDeletion(tx, requestInTx.targetId);
+      await approveDetailDeletion(tx, requestInTx.targetId, currentUser.id);
     } else if (requestInTx.targetType === DeletionTargetType.SWIFT) {
       await approveSwiftDeletion(tx, requestInTx.targetId);
     }

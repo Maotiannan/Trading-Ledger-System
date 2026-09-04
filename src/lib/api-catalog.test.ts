@@ -82,4 +82,14 @@ describe('api-catalog consistency', () => {
     expect(findAction('/api/excel/ml', 'lookup')?.method).toBe('GET');
     expect(findAction('/api/excel/ml/batch', 'batch-lookup')?.method).toBe('POST');
   });
+
+  it('should expose customer email maintenance and admin notification workflows', () => {
+    expect(findAction('/api/customer-notification-emails', 'list')?.method).toBe('GET');
+    expect(findAction('/api/customer-notification-emails', 'update-language')?.method).toBe('POST');
+    expect(findAction('/api/email-settings', 'save-settings')?.method).toBe('POST');
+    expect(findAction('/api/email-settings', 'preview-template')?.method).toBe('POST');
+    expect(findAction('/api/email-notifications', 'list')?.method).toBe('GET');
+    expect(findAction('/api/email-notifications', 'approve')?.method).toBe('POST');
+    expect(findAction('/api/email-notifications', 'create-correction')?.method).toBe('POST');
+  });
 });

@@ -9,6 +9,13 @@ const mockRequestGuard = {
   nextToken: jest.fn(() => Symbol('request')),
   isLatest: jest.fn(() => true),
 };
+const mockLoadOwnerOptions = jest.fn(async () => undefined);
+const mockHandleCreateOrUpdate = jest.fn();
+const mockHandleDelete = jest.fn();
+const mockSubmitFix = jest.fn();
+const mockDownloadCustomerImportTemplate = jest.fn();
+const mockHandleCustomerExcelImport = jest.fn();
+const mockRetryCustomerIssueRows = jest.fn();
 
 jest.mock('@/lib/store', () => ({
   useStore: () => ({ user: { id: 'admin-1', role: 'ADMIN' } }),
@@ -26,6 +33,7 @@ jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
   peekPrefetchedApiResult: jest.fn(() => null),
   rememberPrefetchedApiResult: jest.fn((_: string, result: unknown) => result),
+  getApiErrorMessage: jest.fn((error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)),
   getErrorMessage: jest.fn((error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)),
   useLatestRequestGuard: () => mockRequestGuard,
   useUiText: () => (zh: string) => zh,
@@ -52,13 +60,13 @@ jest.mock('@/components/workspace/hooks', () => ({
 jest.mock('./hooks', () => ({
   useCustomerImportColumns: () => [],
   useCustomerActions: () => ({
-    loadOwnerOptions: jest.fn(async () => undefined),
-    handleCreateOrUpdate: jest.fn(),
-    handleDelete: jest.fn(),
-    submitFix: jest.fn(),
-    downloadCustomerImportTemplate: jest.fn(),
-    handleCustomerExcelImport: jest.fn(),
-    retryCustomerIssueRows: jest.fn(),
+    loadOwnerOptions: mockLoadOwnerOptions,
+    handleCreateOrUpdate: mockHandleCreateOrUpdate,
+    handleDelete: mockHandleDelete,
+    submitFix: mockSubmitFix,
+    downloadCustomerImportTemplate: mockDownloadCustomerImportTemplate,
+    handleCustomerExcelImport: mockHandleCustomerExcelImport,
+    retryCustomerIssueRows: mockRetryCustomerIssueRows,
   }),
   useCustomerForms: () => ({
     customerImportInputRef: { current: null },
@@ -123,9 +131,11 @@ jest.mock('./components', () => ({
   CustomerList: ({
     onOpenConsignees,
     onOpenOrderNameHistory,
+    onOpenNotificationEmails,
   }: {
     onOpenConsignees: (row: Record<string, unknown>) => void;
     onOpenOrderNameHistory: (row: Record<string, unknown>, orderName: string) => void;
+    onOpenNotificationEmails: (row: Record<string, unknown>) => void;
   }) => (
     <>
       <button type="button" onClick={() => onOpenConsignees({ id: 'customer-1', mark: 'MAB', name: 'Customer' })}>
@@ -133,6 +143,9 @@ jest.mock('./components', () => ({
       </button>
       <button type="button" onClick={() => onOpenOrderNameHistory({ id: 'customer-1' }, 'MAB-1')}>
         open order history
+      </button>
+      <button type="button" onClick={() => onOpenNotificationEmails({ id: 'customer-1', mark: 'MAB', name: 'Customer' })}>
+        open notification emails
       </button>
     </>
   ),
@@ -151,6 +164,49 @@ jest.mock('./components', () => ({
       <button type="button" onClick={() => onSetPrimary('consignee-2')}>set primary</button>
       <span data-testid="consignee-submitting">{submitting ? 'yes' : 'no'}</span>
       <span role="alert">{error}</span>
+    </div>
+  ) : null,
+  CustomerNotificationEmailDialog: ({
+    open,
+    emails,
+    language,
+    inputValue,
+    editingEmailId,
+    submitting,
+    error,
+    onInputChange,
+    onSubmit,
+    onStartEdit,
+    onDelete,
+    onSetPrimary,
+    onLanguageChange,
+  }: {
+    open: boolean;
+    emails: Array<{ id: string; email: string; isPrimary: boolean }>;
+    language: string;
+    inputValue: string;
+    editingEmailId: string | null;
+    submitting: boolean;
+    error: string;
+    onInputChange: (value: string) => void;
+    onSubmit: () => void;
+    onStartEdit: (email: { id: string; email: string; isPrimary: boolean }) => void;
+    onDelete: (id: string) => void;
+    onSetPrimary: (id: string) => void;
+    onLanguageChange: (language: 'ENGLISH' | 'FRENCH') => void;
+  }) => open ? (
+    <div>
+      <span data-testid="notification-emails">{emails.map((item) => item.email).join(',')}</span>
+      <span data-testid="notification-primary">{emails.find((item) => item.isPrimary)?.email || '-'}</span>
+      <span data-testid="notification-language">{language}</span>
+      <span data-testid="notification-submitting">{submitting ? 'yes' : 'no'}</span>
+      <span role="alert">{error}</span>
+      <input aria-label="notification email input" value={inputValue} onChange={(event) => onInputChange(event.target.value)} />
+      <button type="button" onClick={onSubmit}>{editingEmailId ? 'save notification email' : 'add notification email'}</button>
+      <button type="button" onClick={() => onStartEdit(emails[1] || emails[0])}>edit notification email</button>
+      <button type="button" onClick={() => onSetPrimary(emails[1]?.id || '')}>set notification primary</button>
+      <button type="button" onClick={() => onDelete(emails[0]?.id || '')}>delete notification primary</button>
+      <button type="button" onClick={() => onLanguageChange('FRENCH')}>set notification French</button>
     </div>
   ) : null,
 }));
@@ -199,6 +255,116 @@ describe('CustomerManager consignee dialog', () => {
         customerId: 'customer-1',
         consigneeId: 'consignee-2',
       }),
+    })));
+  });
+});
+
+describe('CustomerManager notification email dialog', () => {
+  const initialEmails = [
+    { id: 'email-1', email: 'primary@example.com', isPrimary: true },
+    { id: 'email-2', email: 'accounts@example.com', isPrimary: false },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('loads the full notification profile when the email or language cell opens', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('customer-notification-emails?customerId=')) {
+        return { success: true, data: initialEmails, language: 'FRENCH' };
+      }
+      return { success: true, data: [] };
+    });
+
+    render(<CustomerManager />);
+    fireEvent.click(screen.getByRole('button', { name: 'open notification emails' }));
+
+    await waitFor(() => expect(screen.getByTestId('notification-emails')).toHaveTextContent(
+      'primary@example.com,accounts@example.com',
+    ));
+    expect(screen.getByTestId('notification-language')).toHaveTextContent('FRENCH');
+    expect(mockApiCall).toHaveBeenCalledWith('customer-notification-emails?customerId=customer-1');
+  });
+
+  it('keeps a backend duplicate error visible and releases the submit lock', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint.startsWith('customer-notification-emails?customerId=')) {
+        return { success: true, data: initialEmails, language: 'ENGLISH' };
+      }
+      if (endpoint === 'customer-notification-emails' && options?.method === 'POST') {
+        return { success: false, message: '该客户已存在相同邮箱' };
+      }
+      return { success: true, data: [] };
+    });
+
+    render(<CustomerManager />);
+    fireEvent.click(screen.getByRole('button', { name: 'open notification emails' }));
+    await waitFor(() => expect(screen.getByTestId('notification-emails')).toHaveTextContent('primary@example.com'));
+    fireEvent.change(screen.getByLabelText('notification email input'), { target: { value: 'PRIMARY@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'add notification email' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('该客户已存在相同邮箱'));
+    expect(screen.getByTestId('notification-submitting')).toHaveTextContent('no');
+    expect(screen.getByLabelText('notification email input')).toHaveValue('PRIMARY@example.com');
+  });
+
+  it('reloads the profile after primary selection and deletion so promotion is shown', async () => {
+    let profile = initialEmails;
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (endpoint.startsWith('customer-notification-emails?customerId=')) {
+        return { success: true, data: profile, language: 'ENGLISH' };
+      }
+      if (endpoint === 'customer-notification-emails' && options?.method === 'POST') {
+        const body = JSON.parse(String(options.body || '{}')) as { action?: string };
+        if (body.action === 'set-primary') {
+          profile = [
+            { ...initialEmails[1], isPrimary: true },
+            { ...initialEmails[0], isPrimary: false },
+          ];
+        } else if (body.action === 'delete') {
+          profile = [{ ...initialEmails[0], isPrimary: true }];
+        }
+        return { success: true };
+      }
+      return { success: true, data: [] };
+    });
+
+    render(<CustomerManager />);
+    fireEvent.click(screen.getByRole('button', { name: 'open notification emails' }));
+    await waitFor(() => expect(screen.getByTestId('notification-primary')).toHaveTextContent('primary@example.com'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'set notification primary' }));
+    await waitFor(() => expect(screen.getByTestId('notification-primary')).toHaveTextContent('accounts@example.com'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'delete notification primary' }));
+    await waitFor(() => expect(screen.getByTestId('notification-primary')).toHaveTextContent('primary@example.com'));
+  });
+
+  it('uses the update and language actions and refreshes the current customer search', async () => {
+    mockApiCall.mockImplementation(async (endpoint: string) => {
+      if (endpoint.startsWith('customer-notification-emails?customerId=')) {
+        return { success: true, data: initialEmails, language: 'ENGLISH' };
+      }
+      return { success: true, data: [] };
+    });
+
+    render(<CustomerManager />);
+    fireEvent.click(screen.getByRole('button', { name: 'open notification emails' }));
+    await waitFor(() => expect(screen.getByTestId('notification-emails')).toHaveTextContent('accounts@example.com'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'edit notification email' }));
+    fireEvent.change(screen.getByLabelText('notification email input'), { target: { value: 'billing@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'save notification email' }));
+    await waitFor(() => expect(mockApiCall).toHaveBeenCalledWith('customer-notification-emails', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ action: 'update', customerId: 'customer-1', emailId: 'email-2', email: 'billing@example.com' }),
+    })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'set notification French' }));
+    await waitFor(() => expect(mockApiCall).toHaveBeenCalledWith('customer-notification-emails', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ action: 'update-language', customerId: 'customer-1', language: 'FRENCH' }),
     })));
   });
 });

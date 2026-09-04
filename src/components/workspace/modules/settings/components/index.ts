@@ -3,6 +3,7 @@ export * from './collapsible-settings-section';
 export * from './customer-analytics-settings-card';
 export * from './dashboard-settings-card';
 export * from './excel-token-card';
+export * from './email-notification-settings-card';
 export * from './mu-contract-sync-settings-card';
 export * from './password-settings-card';
 export * from './settings-audit-card';

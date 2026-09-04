@@ -10,12 +10,14 @@ TMP_BASE="${TMPDIR:-/tmp}"
 COOKIE_FILE="$(mktemp "${TMP_BASE}/tls-api-cookie.XXXXXX")"
 APP_LOG="$(mktemp "${TMP_BASE}/tls-api-app.XXXXXX")"
 SOURCE_LOG="$(mktemp "${TMP_BASE}/tls-mu-contract-source.XXXXXX")"
+RESEND_LOG="$(mktemp "${TMP_BASE}/tls-resend-source.XXXXXX")"
 UPLOAD_DIR="$(mktemp -d "${TMP_BASE}/tls-upload.XXXXXX")"
 DIST_DIR=".next-api-isolated"
 COMPOSE_FILE="$ROOT_DIR/docker-compose.test.yml"
 COMPOSE_PROJECT_NAME="trading-ledger-system-test"
 APP_PID=""
 SOURCE_PID=""
+RESEND_PID=""
 
 compose() {
   docker compose -p "$COMPOSE_PROJECT_NAME" -f "$COMPOSE_FILE" "$@"
@@ -30,8 +32,12 @@ cleanup() {
     kill "$SOURCE_PID" >/dev/null 2>&1 || true
     wait "$SOURCE_PID" >/dev/null 2>&1 || true
   fi
+  if [ -n "$RESEND_PID" ] && kill -0 "$RESEND_PID" >/dev/null 2>&1; then
+    kill "$RESEND_PID" >/dev/null 2>&1 || true
+    wait "$RESEND_PID" >/dev/null 2>&1 || true
+  fi
   compose down -v >/dev/null 2>&1 || true
-  rm -f "$COOKIE_FILE" "$APP_LOG" "$SOURCE_LOG"
+  rm -f "$COOKIE_FILE" "$APP_LOG" "$SOURCE_LOG" "$RESEND_LOG"
   rm -rf "$UPLOAD_DIR"
   rm -rf "$ROOT_DIR/$DIST_DIR"
 }
@@ -46,6 +52,10 @@ fail() {
   if [ -f "$SOURCE_LOG" ]; then
     echo "--- MU Contract fake source log ---"
     tail -n 120 "$SOURCE_LOG" || true
+  fi
+  if [ -f "$RESEND_LOG" ]; then
+    echo "--- fake Resend log ---"
+    tail -n 120 "$RESEND_LOG" || true
   fi
   exit 1
 }
@@ -94,10 +104,20 @@ export MU_CONTRACT_FAKE_TOKEN="test-mu-contract-order-sync-token-1234567890"
 export MU_CONTRACT_FAKE_CONTROL_TOKEN="test-mu-contract-control-token-1234567890"
 export MU_CONTRACT_SYNC_BASE_URL="http://127.0.0.1:${MU_CONTRACT_FAKE_PORT}"
 export MU_CONTRACT_SYNC_TOKEN="$MU_CONTRACT_FAKE_TOKEN"
+export RESEND_FAKE_PORT="${RESEND_FAKE_PORT:-$((3800 + RANDOM % 500))}"
+export RESEND_FAKE_CONTROL_TOKEN="test-resend-control-token-1234567890"
+export RESEND_FAKE_CONTROL_BASE_URL="http://127.0.0.1:${RESEND_FAKE_PORT}"
+export RESEND_API_KEY="re_isolated_test_only"
+export RESEND_BASE_URL="$RESEND_FAKE_CONTROL_BASE_URL"
+export RESEND_WEBHOOK_SECRET="whsec_dGVzdC1yZXNlbmQtd2ViaG9vay1zZWNyZXQtMzItYnl0ZXMhISE="
 
 node tests/api/isolated/helpers/mu-contract-order-feed-server.mjs >"$SOURCE_LOG" 2>&1 &
 SOURCE_PID="$!"
 wait_for_http "$MU_CONTRACT_SYNC_BASE_URL/__control/ready" || fail "MU Contract fake source not ready"
+
+node tests/api/isolated/helpers/resend-server.mjs >"$RESEND_LOG" 2>&1 &
+RESEND_PID="$!"
+wait_for_http "$RESEND_FAKE_CONTROL_BASE_URL/__control/ready" || fail "fake Resend not ready"
 
 npx prisma migrate deploy >/dev/null
 rm -rf "$ROOT_DIR/$DIST_DIR"

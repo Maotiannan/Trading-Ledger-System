@@ -12,6 +12,7 @@ import {
 } from '@/lib/receipt-edit-binding';
 import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
 import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
+import { refreshReceiptNotificationInTransaction } from '@/lib/email/email-notification-projector';
 
 jest.mock('@/lib/audit', () => ({
   recordAuditEventInTransaction: jest.fn(),
@@ -36,6 +37,10 @@ jest.mock('@/lib/receipt-generator-draft-service', () => ({
   syncPendingReceiptGeneratorDraft: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  refreshReceiptNotificationInTransaction: jest.fn(),
+}));
+
 const mockRecordAudit = recordAuditEventInTransaction as jest.Mock;
 const mockInspectTransfer = inspectReceiptEditTransferImpact as jest.Mock;
 const mockReverseTransfer = reverseBalanceTransferInTransaction as jest.Mock;
@@ -44,6 +49,7 @@ const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveBinding = resolveReceiptEditBinding as jest.Mock;
 const mockSyncDetail = syncReceiptDetailItemsForBinding as jest.Mock;
 const mockSyncDraft = syncPendingReceiptGeneratorDraft as jest.Mock;
+const mockRefreshReceiptNotification = refreshReceiptNotificationInTransaction as jest.Mock;
 
 const admin = {
   id: 'admin-1',
@@ -150,6 +156,7 @@ describe('receipt-edit-apply-service', () => {
     mockReverseTransfer.mockResolvedValue({ sourceOrderDeleted: false });
     mockCleanupPoolOrder.mockResolvedValue(true);
     mockUpdateOrderBalance.mockResolvedValue({ computed: 0 });
+    mockRefreshReceiptNotification.mockResolvedValue({ refreshed: true });
   });
 
   it('applies a normal edit without transfer reversal', async () => {
@@ -172,6 +179,10 @@ describe('receipt-edit-apply-service', () => {
     expect(mockSyncDraft).toHaveBeenCalled();
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('source-order', tx, expect.any(Object));
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('target-order', tx, expect.any(Object));
+    expect(mockRefreshReceiptNotification).toHaveBeenCalledWith(tx, {
+      receiptId: 'real-receipt',
+      actorId: 'admin-1',
+    });
     expect(result).toMatchObject({
       touchedOrderIds: ['source-order', 'target-order'],
       reversedTransferId: null,

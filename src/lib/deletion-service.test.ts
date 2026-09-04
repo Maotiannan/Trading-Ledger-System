@@ -9,6 +9,7 @@ import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { updateOrderBalance } from '@/lib/matching';
+import { cancelSourceNotificationsInTransaction } from '@/lib/email/email-notification-projector';
 import {
   createDeletionRequest,
   ensureDeletionTargetType,
@@ -91,6 +92,10 @@ jest.mock('@/lib/matching', () => ({
   updateOrderBalance: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  cancelSourceNotificationsInTransaction: jest.fn(),
+}));
+
 const mockDb = db as unknown as {
   deletionRequest: {
     findMany: jest.Mock;
@@ -134,12 +139,14 @@ const mockDb = db as unknown as {
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
+const mockCancelSourceNotifications = cancelSourceNotificationsInTransaction as jest.Mock;
 
 describe('deletion-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockUpdateOrderBalance.mockResolvedValue(undefined);
+    mockCancelSourceNotifications.mockResolvedValue({ cancelled: 1 });
   });
 
   it('filters deletion requests by requester for USER role', async () => {
@@ -536,6 +543,11 @@ describe('deletion-service', () => {
 
     expect(result).toEqual({ message: '删除成功，状态已回退' });
     expect(tx.receiptHistory.create).toHaveBeenCalled();
+    expect(mockCancelSourceNotifications).toHaveBeenCalledWith(tx, {
+      receiptId: 'receipt-7',
+      actorId: 'admin-1',
+      reason: 'SOURCE_DELETED',
+    });
     expect(tx.detailItem.deleteMany).toHaveBeenCalledWith({ where: { receiptId: 'receipt-7' } });
     expect(tx.receipt.delete).toHaveBeenCalledWith({ where: { id: 'receipt-7' } });
     expect(tx.detail.update).toHaveBeenCalledWith({
@@ -543,6 +555,70 @@ describe('deletion-service', () => {
       data: { totalAmount: 12 },
     });
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-7');
+  });
+
+  it('records the approving admin when detail deletion removes an auto-created receipt', async () => {
+    mockDb.deletionRequest.findUnique.mockResolvedValueOnce({
+      id: 'req-detail',
+      status: DeletionStatus.PENDING,
+      targetType: DeletionTargetType.DETAIL,
+      targetId: 'detail-1',
+    });
+    const tx = {
+      deletionRequest: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'req-detail',
+          status: DeletionStatus.PENDING,
+          targetType: DeletionTargetType.DETAIL,
+          targetId: 'detail-1',
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      detail: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'detail-1',
+          createdBy: 'sales-creator',
+          items: [{ receiptId: 'receipt-auto' }],
+        }),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      receipt: {
+        findMany: jest.fn().mockResolvedValue([{
+          id: 'receipt-auto',
+          note: '由付款明细自动创建',
+          orderId: 'order-auto',
+          createdBy: 'sales-creator',
+        }]),
+        update: jest.fn().mockResolvedValue({}),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      detailItem: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      order: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+    };
+    mockDb.$transaction.mockImplementationOnce(async (callback: (trx: typeof tx) => Promise<unknown>) => callback(tx));
+
+    await reviewDeletionRequest({
+      currentUser: makeUser({
+        id: 'admin-approver',
+        role: UserRole.ADMIN,
+        level: 1,
+        parentId: null,
+        createdById: null,
+      }),
+      action: 'approve',
+      requestId: 'req-detail',
+    });
+
+    expect(mockCancelSourceNotifications).toHaveBeenCalledWith(tx, {
+      receiptId: 'receipt-auto',
+      actorId: 'admin-approver',
+      reason: 'SOURCE_DELETED',
+    });
   });
 
   it('fails approval when request state changes inside transaction', async () => {

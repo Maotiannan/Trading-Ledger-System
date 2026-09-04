@@ -118,6 +118,18 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/customer-notification-emails',
+    description: 'Account-scoped customer notification email and language maintenance',
+    actions: [
+      { action: 'list', method: 'GET', description: 'List notification addresses and language for one visible customer', bodyExample: { query: 'customerId=customer-id' } },
+      { action: 'add', method: 'POST', description: 'Add a notification address for one visible customer (SALES or ADMIN)', bodyExample: { action: 'add', customerId: 'customer-id', email: 'accounts@example.com' } },
+      { action: 'update', method: 'POST', description: 'Update a customer notification address', bodyExample: { action: 'update', customerId: 'customer-id', emailId: 'email-id', email: 'accounts@example.com' } },
+      { action: 'delete', method: 'POST', description: 'Delete a customer notification address', bodyExample: { action: 'delete', customerId: 'customer-id', emailId: 'email-id' } },
+      { action: 'set-primary', method: 'POST', description: 'Make one customer notification address primary', bodyExample: { action: 'set-primary', customerId: 'customer-id', emailId: 'email-id' } },
+      { action: 'update-language', method: 'POST', description: 'Set the customer email language', bodyExample: { action: 'update-language', customerId: 'customer-id', language: 'ENGLISH|FRENCH' } },
+    ],
+  },
+  {
     endpoint: '/api/dashboard/customer-history-search',
     description: 'Account-scoped Dashboard customer and payment history search',
     actions: [
@@ -233,6 +245,43 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/email-settings',
+    description: 'ADMIN-only customer email delivery settings and templates',
+    actions: [
+      { action: 'list', method: 'GET', description: 'Read settings, templates, variable catalog, and provider configuration flags' },
+      { action: 'save-settings', method: 'POST', description: 'Validate and save system-wide email settings', bodyExample: { action: 'save-settings', settings: { outboundEnabled: false, testModeEnabled: true, testDestination: 'internal@example.com' } } },
+      { action: 'save-template', method: 'POST', description: 'Save one English or French business-event template', bodyExample: { action: 'save-template', template: { type: 'PAYMENT_RECEIVED', language: 'ENGLISH', subjectTemplate: 'Payment received', bodyTemplate: 'Hello {{customerName}}' } } },
+      { action: 'preview-template', method: 'POST', description: 'Render a template preview without sending email', bodyExample: { action: 'preview-template', template: { type: 'PAYMENT_RECEIVED', language: 'ENGLISH', subjectTemplate: 'Payment received', bodyTemplate: 'Hello {{customerName}}' } } },
+    ],
+  },
+  {
+    endpoint: '/api/email-notifications',
+    description: 'ADMIN-only review, approval, correction, and delivery history for customer email tasks',
+    actions: [
+      { action: 'list', method: 'GET', description: 'List and filter durable email notification tasks' },
+      { action: 'attempts', method: 'GET', description: 'List delivery attempts for one notification', bodyExample: { query: 'action=attempts&notificationId=notification-id' } },
+      { action: 'preview', method: 'POST', description: 'Preview current recipients and rendered content without sending', bodyExample: { action: 'preview', notificationId: 'notification-id', language: 'ENGLISH' } },
+      { action: 'approve', method: 'POST', description: 'Freeze and queue one or more reviewed notifications', bodyExample: { action: 'approve', notificationIds: ['notification-id'] } },
+      { action: 'cancel', method: 'POST', description: 'Cancel one unsent notification task', bodyExample: { action: 'cancel', notificationId: 'notification-id' } },
+      { action: 'retry', method: 'POST', description: 'Retry a failed delivery; uncertain outcomes require explicit confirmation', bodyExample: { action: 'retry', notificationId: 'notification-id', confirmUncertain: false } },
+      { action: 'create-correction', method: 'POST', description: 'Create a reviewable correction from immutable sent history', bodyExample: { action: 'create-correction', notificationId: 'notification-id' } },
+    ],
+  },
+  {
+    endpoint: '/api/internal/email-delivery/dispatch',
+    description: 'Maintenance-token trigger for ADMIN-approved email deliveries',
+    actions: [
+      { action: 'dispatch', method: 'POST', description: 'Claim and deliver a bounded batch of approved email snapshots' },
+    ],
+  },
+  {
+    endpoint: '/api/webhooks/resend',
+    description: 'Signed Resend delivery status webhook',
+    actions: [
+      { action: 'delivery-event', method: 'POST', description: 'Verify, deduplicate, and apply a Resend delivery event' },
+    ],
+  },
+  {
     endpoint: '/api/excel/token',
     description: 'Per-account Excel API token management (session authenticated)',
     actions: [
@@ -296,6 +345,10 @@ export const configTemplate = {
     'OCR_OUTPUT_COST_PER_1K',
     'EXCEL_LOOKUP_RATE_LIMIT_WINDOW_MS',
     'EXCEL_LOOKUP_RATE_LIMIT_MAX',
+    'RESEND_API_KEY',
+    'RESEND_WEBHOOK_SECRET',
+    'EMAIL_DELIVERY_BATCH_SIZE',
+    'EMAIL_DELIVERY_LOOP_SECONDS',
     'UPLOAD_HOST_DIR',
   ],
 } as const;

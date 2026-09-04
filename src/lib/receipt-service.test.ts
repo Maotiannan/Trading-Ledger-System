@@ -9,6 +9,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { resolveReceiptEditBinding } from '@/lib/receipt-edit-binding';
 import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-service';
 import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
+import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -87,6 +88,10 @@ jest.mock('@/lib/receipt-edit-apply-service', () => ({
   applyReceiptEditInTransaction: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  projectPaymentReceiptInTransaction: jest.fn(),
+}));
+
 jest.mock('@/lib/order-alias-db', () => ({
   syncOrderAliases: jest.fn(),
 }));
@@ -125,6 +130,7 @@ const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 const mockResolveReceiptEditBinding = resolveReceiptEditBinding as jest.Mock;
 const mockSyncPendingReceiptGeneratorDraft = syncPendingReceiptGeneratorDraft as jest.Mock;
 const mockApplyReceiptEdit = applyReceiptEditInTransaction as jest.Mock;
+const mockProjectPaymentReceipt = projectPaymentReceiptInTransaction as jest.Mock;
 
 describe('receipt-service', () => {
   beforeEach(() => {
@@ -137,6 +143,7 @@ describe('receipt-service', () => {
       touchedOrderIds: [],
       reversedTransferId: null,
     });
+    mockProjectPaymentReceipt.mockResolvedValue({ projected: true });
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockGetHierarchyScope.mockResolvedValue({
@@ -254,6 +261,10 @@ describe('receipt-service', () => {
         attachedId: 'receipt-asset',
       }),
     }));
+    expect(mockProjectPaymentReceipt).toHaveBeenCalledWith(mockDb, {
+      receiptId: 'receipt-asset',
+      actorId: 'sales-1',
+    });
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 

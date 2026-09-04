@@ -28,6 +28,11 @@ import {
   buildReceiptVisibilityWhere as buildReceiptVisibilityWhereShared,
 } from '@/lib/resource-visibility';
 import { runInTransaction } from '@/lib/transaction';
+import {
+  cancelSourceNotificationsInTransaction,
+  projectInvoiceEventsInTransaction,
+  refreshOrderLinkedNotificationsInTransaction,
+} from '@/lib/email/email-notification-projector';
 
 export function parseDateInput(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
@@ -504,7 +509,7 @@ export async function createInvoiceRecord(currentUser: CurrentUser, input: {
   return { data: saved.data, message: saved.message };
 }
 
-async function rematchAllOrders(ownerIds: string[]) {
+async function rematchAllOrders(ownerIds: string[], actorId: string) {
   const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
   const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
 
@@ -552,6 +557,14 @@ async function rematchAllOrders(ownerIds: string[]) {
         mergedCount++;
       }
       await updateOrderBalance(targetOrder.id, tx);
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: [targetOrder.id],
+        invoiceIds: Array.from(new Set([
+          targetOrder.invoiceId,
+          ...sourceOrders.map((row) => row.invoiceId),
+        ])),
+        actorId,
+      });
     });
   }
 
@@ -559,6 +572,7 @@ async function rematchAllOrders(ownerIds: string[]) {
     where: orderVisibilityWhere,
     select: {
       id: true,
+      invoiceId: true,
       orderNo: true,
       customerId: true,
       customerMark: true,
@@ -618,6 +632,12 @@ async function rematchAllOrders(ownerIds: string[]) {
         });
         customerSyncedCount += syncedReceipts.count;
       }
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: targetOrderIds,
+        invoiceIds: Array.from(new Set(grouped.map((row) => row.invoiceId))),
+        receiptIds: targetReceiptIds,
+        actorId,
+      });
     });
   }
 
@@ -643,6 +663,11 @@ async function rematchAllOrders(ownerIds: string[]) {
           needsCustomerFix: false,
         },
       });
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: [row.id],
+        invoiceIds: [row.invoiceId],
+        actorId,
+      });
     });
     customerSyncedCount++;
   }
@@ -664,6 +689,12 @@ async function rematchAllOrders(ownerIds: string[]) {
           data: { orderId: sameOrderId },
         });
         await updateOrderBalance(sameOrderId, tx);
+        await refreshOrderLinkedNotificationsInTransaction(tx, {
+          orderIds: [sameOrderId],
+          invoiceIds: [],
+          receiptIds: [receipt.id],
+          actorId,
+        });
       });
       receiptMatchedCount++;
       continue;
@@ -683,6 +714,12 @@ async function rematchAllOrders(ownerIds: string[]) {
           data: { orderId: matchedByGroup.id },
         });
         await updateOrderBalance(matchedByGroup.id, tx);
+        await refreshOrderLinkedNotificationsInTransaction(tx, {
+          orderIds: [matchedByGroup.id],
+          invoiceIds: [],
+          receiptIds: [receipt.id],
+          actorId,
+        });
       });
       receiptMatchedCount++;
     }
@@ -697,12 +734,22 @@ async function rematchAllOrders(ownerIds: string[]) {
     : [];
   for (const invoice of invoices) {
     if (invoice._count.orders === 0) {
-      await runInTransaction((tx) => tx.invoice.delete({ where: { id: invoice.id } }));
+      await runInTransaction(async (tx) => {
+        await cancelSourceNotificationsInTransaction(tx, {
+          invoiceId: invoice.id,
+          actorId,
+          reason: 'SOURCE_DELETED',
+        });
+        await tx.invoice.delete({ where: { id: invoice.id } });
+      });
       deletedInvoiceCount++;
     }
   }
 
-  const orderIds = await db.order.findMany({ where: orderVisibilityWhere, select: { id: true } });
+  const orderIds = await db.order.findMany({
+    where: orderVisibilityWhere,
+    select: { id: true, invoiceId: true },
+  });
   for (const row of orderIds) {
     await runInTransaction((tx) => updateOrderBalance(row.id, tx));
   }
@@ -723,11 +770,25 @@ async function rematchAllOrders(ownerIds: string[]) {
   });
   for (const order of zeroOrders) {
     if (order._count.receipts > 0) continue;
-    await runInTransaction((tx) => tx.order.delete({ where: { id: order.id } }));
+    await runInTransaction(async (tx) => {
+      await tx.order.delete({ where: { id: order.id } });
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: [],
+        invoiceIds: [order.invoiceId],
+        actorId,
+      });
+    });
     deletedZeroOrdersCount++;
   }
 
   const consolidated = await consolidateGroupedOrders({ orderWhere: orderVisibilityWhere });
+  if (touchedInvoiceIds.length > 0) {
+    await runInTransaction((tx) => refreshOrderLinkedNotificationsInTransaction(tx, {
+      orderIds: [],
+      invoiceIds: touchedInvoiceIds,
+      actorId,
+    }));
+  }
 
   return {
     mergedCount,
@@ -828,7 +889,8 @@ async function listRematchConflictGroupsByScope(ownerIds: string[]): Promise<Rem
 
 async function applyRematchConflicts(
   resolutions: Array<{ groupId: string; keepOrderId: string; mode: 'keep' | 'merge'; orderIds: string[] }>,
-  ownerIds: string[]
+  ownerIds: string[],
+  actorId: string,
 ) {
   const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
   let mergedCount = 0;
@@ -875,6 +937,11 @@ async function applyRematchConflicts(
         });
       }
       await updateOrderBalance(keepRow.id, tx);
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: [keepRow.id],
+        invoiceIds: Array.from(new Set(rows.map((row) => row.invoiceId))),
+        actorId,
+      });
     });
   }
 
@@ -901,14 +968,23 @@ export async function applyInvoiceRematch(
 ) {
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
-  const poolApplied = await runInTransaction((tx) => applySystemPoolRepairs(tx, {
-    orderWhere: buildOrderVisibilityWhere(ownerIds),
-    invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
-    poolResolutions,
-    requireAllManual: true,
-  }));
-  const applied = await applyRematchConflicts(resolutions, ownerIds);
-  const result = await rematchAllOrders(ownerIds);
+  const poolApplied = await runInTransaction(async (tx) => {
+    const applied = await applySystemPoolRepairs(tx, {
+      orderWhere: buildOrderVisibilityWhere(ownerIds),
+      invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
+      poolResolutions,
+      requireAllManual: true,
+    });
+    const migrations = [...applied.autoMigrations, ...applied.manualMigrations];
+    await refreshOrderLinkedNotificationsInTransaction(tx, {
+      orderIds: Array.from(new Set(migrations.map((row) => row.targetOrderId))),
+      invoiceIds: Array.from(new Set(migrations.map((row) => row.targetInvoiceId))),
+      actorId: currentUser.id,
+    });
+    return applied;
+  });
+  const applied = await applyRematchConflicts(resolutions, ownerIds, currentUser.id);
+  const result = await rematchAllOrders(ownerIds, currentUser.id);
   const message = `冲突处理完成（当前可见范围）：系统池自动修复 ${poolApplied.autoMigrations.length}，系统池人工修复 ${poolApplied.manualMigrations.length}，人工合并 ${applied.mergedCount}，自动合并 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
   await recordAuditEvent({
     action: auditActions.INVOICE_REMATCH_APPLY,
@@ -928,13 +1004,22 @@ export async function applyInvoiceRematch(
 export async function rematchInvoices(currentUser: CurrentUser) {
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
-  const poolApplied = await runInTransaction((tx) => applySystemPoolRepairs(tx, {
-    orderWhere: buildOrderVisibilityWhere(ownerIds),
-    invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
-    poolResolutions: [],
-    requireAllManual: false,
-  }));
-  const result = await rematchAllOrders(ownerIds);
+  const poolApplied = await runInTransaction(async (tx) => {
+    const applied = await applySystemPoolRepairs(tx, {
+      orderWhere: buildOrderVisibilityWhere(ownerIds),
+      invoiceWhere: buildInvoiceVisibilityWhere(ownerIds),
+      poolResolutions: [],
+      requireAllManual: false,
+    });
+    const migrations = [...applied.autoMigrations, ...applied.manualMigrations];
+    await refreshOrderLinkedNotificationsInTransaction(tx, {
+      orderIds: Array.from(new Set(migrations.map((row) => row.targetOrderId))),
+      invoiceIds: Array.from(new Set(migrations.map((row) => row.targetInvoiceId))),
+      actorId: currentUser.id,
+    });
+    return applied;
+  });
+  const result = await rematchAllOrders(ownerIds, currentUser.id);
   const message = `重新匹配完成（当前可见范围）：系统池自动修复 ${poolApplied.autoMigrations.length}，待人工选择 ${poolApplied.unresolvedManual}，合并重复订单 ${result.mergedCount}，组合合并 ${result.groupedMergedCount}，补匹配收据 ${result.receiptMatchedCount}，同步客户 ${result.customerSyncedCount}，清理空账单 ${result.deletedInvoiceCount}，清理空订单 ${result.deletedZeroOrdersCount}`;
   await recordAuditEvent({
     action: auditActions.INVOICE_REMATCH,
@@ -1077,10 +1162,19 @@ export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
     throw badRequest('缺少可更新字段');
   }
 
-  const updated = await runInTransaction(async (tx) => tx.invoice.update({
-    where: { id: targetInvoiceId },
-    data: updateData,
-  }));
+  const updated = await runInTransaction(async (tx) => {
+    const row = await tx.invoice.update({
+      where: { id: targetInvoiceId },
+      data: updateData,
+    });
+    await projectInvoiceEventsInTransaction(tx, {
+      invoiceId: targetInvoiceId,
+      beforeShipDate: visibleInvoice.shipDate,
+      beforeReleaseDate: visibleInvoice.releaseDate,
+      actorId: currentUser.id,
+    });
+    return row;
+  });
   await recordAuditEvent({
     action: auditActions.INVOICE_UPDATE_DATES,
     actorId: currentUser.id,
@@ -1258,20 +1352,36 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
         needsCustomerFix: customerData.needsCustomerFix,
       },
     });
+    const invoiceIdsToRefresh = Array.from(new Set([
+      order.invoiceId || null,
+      nextInvoiceId || null,
+    ].filter((invoiceId): invoiceId is string => Boolean(invoiceId))));
     if (nextInvoiceId && order.invoiceId && nextInvoiceId !== order.invoiceId) {
       const remainingOrders = await tx.order.count({
         where: { invoiceId: order.invoiceId },
       });
       if (remainingOrders === 0) {
+        await cancelSourceNotificationsInTransaction(tx, {
+          invoiceId: order.invoiceId,
+          actorId: currentUser.id,
+          reason: 'SOURCE_DELETED',
+        });
         await tx.invoice.delete({ where: { id: order.invoiceId } });
+        const oldIndex = invoiceIdsToRefresh.indexOf(order.invoiceId);
+        if (oldIndex >= 0) invoiceIdsToRefresh.splice(oldIndex, 1);
       }
     }
+    await refreshOrderLinkedNotificationsInTransaction(tx, {
+      orderIds: [orderId],
+      invoiceIds: invoiceIdsToRefresh,
+      actorId: currentUser.id,
+    });
     return updatedOrder;
   });
 
   await updateOrderBalance(orderId);
   if (normalizeOrderNo(incomingOrderNo) !== normalizeOrderNo(order.orderNo)) {
-    await rematchAllOrders(ownerIds);
+    await rematchAllOrders(ownerIds, currentUser.id);
   }
 
   await recordAuditEvent({
@@ -1363,6 +1473,11 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
         },
       });
       await syncOrderAliases(tx, row.id, incomingOrderNo);
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: [row.id],
+        invoiceIds: [row.invoiceId],
+        actorId: currentUser.id,
+      });
       return row;
     });
     await consolidateGroupedOrders({ invoiceIds: [updated.invoiceId] });
@@ -1398,6 +1513,11 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
       },
     });
     await syncOrderAliases(tx, created.id, incomingOrderNo);
+    await refreshOrderLinkedNotificationsInTransaction(tx, {
+      orderIds: [created.id],
+      invoiceIds: [payload.invoiceId],
+      actorId: currentUser.id,
+    });
     return created;
   });
   await consolidateGroupedOrders({ invoiceIds: [payload.invoiceId] });
@@ -1446,7 +1566,18 @@ export async function deleteInvoiceOrder(currentUser: CurrentUser, orderId: stri
     await tx.order.delete({ where: { id: orderId } });
     const remaining = await tx.order.count({ where: { invoiceId: order.invoiceId } });
     if (remaining === 0) {
+      await cancelSourceNotificationsInTransaction(tx, {
+        invoiceId: order.invoiceId,
+        actorId: currentUser.id,
+        reason: 'SOURCE_DELETED',
+      });
       await tx.invoice.delete({ where: { id: order.invoiceId } });
+    } else {
+      await refreshOrderLinkedNotificationsInTransaction(tx, {
+        orderIds: [],
+        invoiceIds: [order.invoiceId],
+        actorId: currentUser.id,
+      });
     }
   });
   await recordAuditEvent({
@@ -1488,6 +1619,11 @@ export async function deleteInvoiceRecord(currentUser: CurrentUser, invoiceId: s
   }
 
   await runInTransaction(async (tx) => {
+    await cancelSourceNotificationsInTransaction(tx, {
+      invoiceId,
+      actorId: currentUser.id,
+      reason: 'SOURCE_DELETED',
+    });
     await tx.invoice.delete({ where: { id: invoiceId } });
   });
   await recordAuditEvent({

@@ -12,7 +12,6 @@ ENV_EXPLICIT=0
 DRY_RUN=0
 VERIFY_PATH=""
 LOCK_ACQUIRED=0
-LOCK_TOKEN=""
 LOCK_DIR=""
 STAGING_DIR=""
 
@@ -45,10 +44,9 @@ cleanup() {
     find "$STAGING_DIR" -depth -delete 2>/dev/null || true
   fi
   if [ "$LOCK_ACQUIRED" -eq 1 ] && [ -n "$LOCK_DIR" ] && [ -d "$LOCK_DIR" ]; then
-    recorded_token="$(sed -n 's/.*"token":"\([^"]*\)".*/\1/p' "$LOCK_DIR/owner.json" 2>/dev/null || true)"
-    if [ "$recorded_token" = "$LOCK_TOKEN" ]; then
-      rm -f "$LOCK_DIR/owner.json"
-      rmdir "$LOCK_DIR" 2>/dev/null || true
+    if ! rmdir "$LOCK_DIR" 2>/dev/null; then
+      log "ERROR: Unable to remove the backup lock directory: $LOCK_DIR"
+      if [ "$exit_code" -eq 0 ]; then exit_code=1; fi
     fi
   fi
   exit "$exit_code"
@@ -356,13 +354,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 LOCK_DIR="$BACKUP_ROOT_RESOLVED/.backup.lock"
-LOCK_TOKEN="$(openssl rand -hex 16 2>/dev/null || printf '%s-%s' "$$" "$(date +%s)")"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   fail "Another MULEDGER local backup is already running: $LOCK_DIR"
 fi
 LOCK_ACQUIRED=1
-printf '{"pid":%s,"token":"%s","startedAt":"%s"}\n' \
-  "$$" "$LOCK_TOKEN" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$LOCK_DIR/owner.json"
 
 timestamp="$(date '+%Y%m%d-%H%M%S')"
 day_path="$(date '+%Y/%m/%d')"

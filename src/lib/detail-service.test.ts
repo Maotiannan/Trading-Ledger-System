@@ -7,6 +7,7 @@ import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance } from '@/li
 import { resolveCustomer } from '@/lib/customer-matching';
 import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
 import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
+import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 
 jest.mock('@/lib/db', () => ({
   db: {
@@ -63,6 +64,10 @@ jest.mock('@/lib/detail-image-assets', () => ({
   ensureDetailPreviewImage: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  projectPaymentReceiptInTransaction: jest.fn(),
+}));
+
 function makeUser(overrides: Partial<{ id: string; role: UserRole }> = {}) {
   return {
     id: 'sales-1',
@@ -93,6 +98,7 @@ const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockResolveCustomer = resolveCustomer as jest.Mock;
 const mockResolveAccessiblePaymentAgentId = resolveAccessiblePaymentAgentId as jest.Mock;
 const mockEnsureDetailPreviewImage = ensureDetailPreviewImage as jest.Mock;
+const mockProjectPaymentReceipt = projectPaymentReceiptInTransaction as jest.Mock;
 
 describe('detail-service', () => {
   beforeEach(() => {
@@ -112,6 +118,7 @@ describe('detail-service', () => {
       path: '/upload/images/details/ocr/payment-detail_100_today_Mitty_Group.jpg',
       name: 'payment-detail_100_today_Mitty_Group.jpg',
     });
+    mockProjectPaymentReceipt.mockResolvedValue({ projected: true });
   });
 
   it('creates missing receipts/orders during direct detail creation', async () => {
@@ -140,6 +147,10 @@ describe('detail-service', () => {
         status: ReceiptStatus.SR_Received,
       }),
     }));
+    expect(mockProjectPaymentReceipt).toHaveBeenCalledWith(mockDb, {
+      receiptId: 'receipt-new',
+      actorId: 'sales-1',
+    });
     expect(mockDb.order.update).toHaveBeenCalled();
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
     expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-1');

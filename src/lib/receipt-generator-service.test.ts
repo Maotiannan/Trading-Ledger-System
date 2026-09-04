@@ -14,6 +14,7 @@ import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { allocateNextReceiptNo } from '@/lib/receipt-number';
 import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { ensureDepositPoolInvoice, updateOrderBalance } from '@/lib/matching';
+import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 import {
   createReceiptGeneratorSession,
   finalizeReceiptGeneratorSession,
@@ -73,6 +74,10 @@ jest.mock('@/lib/matching', () => ({
   updateOrderBalance: jest.fn(),
 }));
 
+jest.mock('@/lib/email/email-notification-projector', () => ({
+  projectPaymentReceiptInTransaction: jest.fn(),
+}));
+
 jest.mock('fs/promises', () => ({
   rm: jest.fn(),
 }));
@@ -106,6 +111,7 @@ const mockUpdateOrderBalance = updateOrderBalance as jest.Mock;
 const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockRm = rm as jest.MockedFunction<typeof rm>;
+const mockProjectPaymentReceipt = projectPaymentReceiptInTransaction as jest.Mock;
 
 describe('receipt-generator-service', () => {
   beforeEach(() => {
@@ -116,6 +122,7 @@ describe('receipt-generator-service', () => {
     mockEnsureDepositPoolInvoice.mockResolvedValue('deposit-pool-invoice');
     mockUpdateOrderBalance.mockResolvedValue(undefined);
     mockRm.mockResolvedValue(undefined);
+    mockProjectPaymentReceipt.mockResolvedValue({ projected: true });
     mockDb.invoice.findFirst.mockResolvedValue({ id: 'deposit-pool-invoice', invNo: 'DEPOSIT_POOL' });
     mockDb.invoice.create.mockResolvedValue({ id: 'deposit-pool-invoice', invNo: 'DEPOSIT_POOL' });
     mockDb.order.create.mockResolvedValue({ id: 'order-deposit-pool', orderNo: 'AKD-01' });
@@ -193,6 +200,7 @@ describe('receipt-generator-service', () => {
       }),
     }));
     expect(result.data.signingPath).toBe('/receipt-generator/session-1');
+    expect(mockProjectPaymentReceipt).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
@@ -499,6 +507,10 @@ describe('receipt-generator-service', () => {
     }));
     expect(mockDb.receiptGeneratorSession.update).toHaveBeenCalled();
     expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1', mockDb);
+    expect(mockProjectPaymentReceipt).toHaveBeenCalledWith(mockDb, {
+      receiptId: 'receipt-1',
+      actorId: 'admin-1',
+    });
     expect(result.data.receiptStatus).toBe('SR_Received');
   });
 

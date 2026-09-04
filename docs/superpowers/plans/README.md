@@ -1,6 +1,6 @@
 # Implementation Plan Status Index
 
-> Last reviewed: 2026-08-28
+> Last reviewed: 2026-09-04
 
 This file is the authoritative status index for historical implementation plans in this directory.
 
@@ -8,10 +8,11 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-No implementation plans are currently `ACTIVE`. Historical plans remain archived below.
+The following implementation plan is currently `ACTIVE`. Historical plans remain archived below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
+| `2026-09-01-admin-approved-customer-email-notifications.md` | `ACTIVE` | Implementation, isolated workflow tests, backup recovery, operations documentation, PR review fixes, and required CI are complete; merge, disabled rollout, and production-domain activation remain. |
 | `2026-08-28-mu-contract-reconcile-preview-conflict-count.md` | `ARCHIVED_COMPLETED` | Inactive PI history no longer causes false Full Reconcile preview conflicts; active-source collision protection remains and PR #28 passed CI before merge. |
 | `2026-08-27-receipt-transfer-reversal.md` | `ARCHIVED_COMPLETED` | Transactional transfer reversal shipped in v1.0.213; the verified migration, production deployment, one-time incident repair, postconditions, and idempotent retry all completed. |
 | `2026-08-26-dashboard-history-signing-draft-edit.md` | `ARCHIVED_COMPLETED` | Dashboard now shows Recent Receipts before Historical Orders, and unfinished signed-receipt drafts update Receipt plus the pending signing session transactionally. |

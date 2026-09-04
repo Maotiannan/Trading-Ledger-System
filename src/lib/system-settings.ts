@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { DEFAULT_EMAIL_SETTINGS } from '@/lib/email/email-types';
 
 export const customerAnalyticsSystemSettingKeys = [
   'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
@@ -16,6 +17,34 @@ export const muContractSyncSettingKeys = [
   'MU_CONTRACT_SYNC_INTERVAL_SECONDS',
   'MU_CONTRACT_SYNC_BATCH_SIZE',
 ] as const;
+
+export const emailSystemSettingKeys = [
+  'email.outboundEnabled',
+  'email.recipientMode',
+  'email.senderName',
+  'email.senderAddress',
+  'email.replyToAddress',
+  'email.retryLimit',
+  'email.retryIntervalsSeconds',
+  'email.testModeEnabled',
+  'email.testDestination',
+  'email.logoUrl',
+] as const;
+
+export type EmailSystemSettingKey = (typeof emailSystemSettingKeys)[number];
+
+export const emailSystemSettingDefaults: Record<EmailSystemSettingKey, string> = {
+  'email.outboundEnabled': String(DEFAULT_EMAIL_SETTINGS.outboundEnabled),
+  'email.recipientMode': DEFAULT_EMAIL_SETTINGS.recipientMode,
+  'email.senderName': DEFAULT_EMAIL_SETTINGS.senderName,
+  'email.senderAddress': DEFAULT_EMAIL_SETTINGS.senderAddress,
+  'email.replyToAddress': DEFAULT_EMAIL_SETTINGS.replyToAddress,
+  'email.retryLimit': String(DEFAULT_EMAIL_SETTINGS.retryLimit),
+  'email.retryIntervalsSeconds': JSON.stringify(DEFAULT_EMAIL_SETTINGS.retryIntervalsSeconds),
+  'email.testModeEnabled': String(DEFAULT_EMAIL_SETTINGS.testModeEnabled),
+  'email.testDestination': DEFAULT_EMAIL_SETTINGS.testDestination,
+  'email.logoUrl': DEFAULT_EMAIL_SETTINGS.logoUrl,
+};
 
 export const editableSystemSettingKeys = [
   'OCR_DISABLED',

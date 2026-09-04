@@ -14,6 +14,10 @@ import {
 } from '@/lib/order-alias-db';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import {
+  projectInvoiceEventsInTransaction,
+  refreshOrderLinkedNotificationsInTransaction,
+} from '@/lib/email/email-notification-projector';
 
 export type InvoiceOrderInput = {
   orderNo: string;
@@ -89,8 +93,10 @@ async function persistInvoiceWithOrders(
 ) {
   let targetInvoice = await tx.invoice.findFirst({
     where: { invNo: input.normalizedInvNo },
-    select: { id: true, invNo: true },
+    select: { id: true, invNo: true, shipDate: true, releaseDate: true },
   });
+  const beforeShipDate = targetInvoice?.shipDate ?? null;
+  const beforeReleaseDate = targetInvoice?.releaseDate ?? null;
 
   if (!targetInvoice) {
     targetInvoice = await tx.invoice.create({
@@ -100,7 +106,7 @@ async function persistInvoiceWithOrders(
         shipDate: input.shipDate ?? null,
         releaseDate: input.releaseDate ?? null,
       },
-      select: { id: true, invNo: true },
+      select: { id: true, invNo: true, shipDate: true, releaseDate: true },
     });
   } else if (input.shipDate !== undefined || input.releaseDate !== undefined) {
     await tx.invoice.update({
@@ -227,6 +233,18 @@ async function persistInvoiceWithOrders(
     await syncOrderAliases(tx, created.id, canonicalOrderNo);
     touchedOrderIds.add(created.id);
   }
+
+  await refreshOrderLinkedNotificationsInTransaction(tx, {
+    orderIds: Array.from(touchedOrderIds),
+    invoiceIds: [targetInvoice.id],
+    actorId: input.createdBy,
+  });
+  await projectInvoiceEventsInTransaction(tx, {
+    invoiceId: targetInvoice.id,
+    beforeShipDate,
+    beforeReleaseDate,
+    actorId: input.createdBy,
+  });
 
   return {
     targetInvoiceId: targetInvoice.id,

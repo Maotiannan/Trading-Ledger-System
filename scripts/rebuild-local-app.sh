@@ -101,6 +101,9 @@ docker compose up -d --no-deps --force-recreate maintenance
 log 'refreshing MU Contract trigger so its token/config matches app'
 docker compose up -d --no-deps --force-recreate mucontract-sync-trigger
 
+log 'refreshing email delivery trigger so its token/config matches app'
+docker compose up -d --no-deps --force-recreate email-delivery-trigger
+
 log 'waiting for app health endpoint'
 if ! wait_for_app; then
   log 'app health check failed; recent app logs follow'

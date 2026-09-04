@@ -140,6 +140,61 @@ enum SwiftEditRequestStatus {
   REJECTED
 }
 
+enum CustomerEmailLanguage {
+  ENGLISH
+  FRENCH
+}
+
+enum EmailRecipientMode {
+  PRIMARY_CC
+  SEPARATE
+}
+
+enum EmailNotificationType {
+  PAYMENT_RECEIVED
+  SHIPMENT
+  RELEASE
+}
+
+enum EmailNotificationStatus {
+  MISSING_RECIPIENT
+  PENDING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  DELIVERY_DELAYED
+  BOUNCED
+  COMPLAINED
+  SUPPRESSED
+  PARTIALLY_SENT
+  FAILED
+  DELIVERY_UNCERTAIN
+  CANCELLED
+  NEEDS_CORRECTION
+}
+
+enum EmailDeliveryStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  DELIVERY_DELAYED
+  BOUNCED
+  COMPLAINED
+  SUPPRESSED
+  FAILED
+  DELIVERY_UNCERTAIN
+  CANCELLED
+}
+
+enum EmailAttemptStatus {
+  STARTED
+  ACCEPTED
+  REJECTED
+  UNCERTAIN
+}
+
 // 删除目标类型枚举
 enum DeletionTargetType {
   RECEIPT
@@ -196,6 +251,12 @@ model User {
   integrationSyncStates        IntegrationSyncState[]        @relation("IntegrationSyncServiceActor")
   resolvedIntegrationConflicts IntegrationSyncConflict[]     @relation("IntegrationConflictResolver")
   integrationReconcilePreviews IntegrationReconcilePreview[] @relation("IntegrationReconcilePreviewCreator")
+  createdCustomerNotificationEmails CustomerNotificationEmail[] @relation("CustomerNotificationEmailCreatedBy")
+  updatedCustomerNotificationEmails CustomerNotificationEmail[] @relation("CustomerNotificationEmailUpdatedBy")
+  createdEmailTemplates             EmailTemplate[]             @relation("EmailTemplateCreatedBy")
+  sourcedEmailNotifications         EmailNotification[]         @relation("EmailNotificationSourceActor")
+  approvedEmailNotifications        EmailNotification[]         @relation("EmailNotificationApprover")
+  cancelledEmailNotifications       EmailNotification[]         @relation("EmailNotificationCanceller")
 
   @@index([parentId])
   @@index([createdById])
@@ -274,6 +335,7 @@ model Invoice {
   // 关联
   orders  Order[]
   creator User @relation(fields: [createdBy], references: [id])
+  emailNotifications EmailNotification[]
 
   @@index([invNo])
 }
@@ -532,6 +594,7 @@ model Receipt {
   order            Order?           @relation("ReceiptOrder", fields: [orderId], references: [id])
   generatorSession ReceiptGeneratorSession?
   generatedByBalanceTransfer BalanceTransfer? @relation("BalanceTransferGeneratedReceipt")
+  emailNotifications EmailNotification[]
   orderId          String?
 
   @@index([orderNo])
@@ -780,6 +843,7 @@ model Customer {
   companyName    String?  @db.Text
   credit         Decimal? @db.Decimal(18, 2)
   companyAddress String?  @db.Text
+  notificationLanguage CustomerEmailLanguage @default(ENGLISH)
   createdBy      String
   ownerId        String
   createdAt      DateTime @default(now())
@@ -792,6 +856,8 @@ model Customer {
   orders  Order[]
   receipts Receipt[]
   orderTrackers OrderTracker[]
+  notificationEmails CustomerNotificationEmail[]
+  emailNotifications EmailNotification[]
 
   @@index([mark])
   @@index([normalizedMark])
@@ -830,6 +896,167 @@ model CustomerConsignee {
   @@unique([customerId, normalizedConsigneeHash])
   @@index([normalizedConsigneeHash])
   @@index([customerId, isPrimary])
+}
+
+model CustomerNotificationEmail {
+  id              String   @id @default(cuid())
+  customerId      String
+  email           String   @db.VarChar(320)
+  normalizedEmail String   @db.VarChar(320)
+  isPrimary       Boolean  @default(false)
+  createdBy       String
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  creator  User     @relation("CustomerNotificationEmailCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  updater  User?    @relation("CustomerNotificationEmailUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([customerId, normalizedEmail])
+  @@index([customerId, isPrimary])
+  @@index([createdBy])
+  @@index([updatedBy])
+}
+
+model EmailTemplate {
+  id                String                    @id @default(cuid())
+  type              EmailNotificationType
+  language          CustomerEmailLanguage
+  version           Int                       @default(1)
+  subjectTemplate   String                    @db.Text
+  bodyTemplate      String                    @db.LongText
+  requiredVariables Json
+  isActive          Boolean                   @default(true)
+  createdBy         String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  creator    User?           @relation("EmailTemplateCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  deliveries EmailDelivery[]
+
+  @@unique([type, language, version])
+  @@index([type, language, isActive])
+  @@index([createdBy])
+}
+
+model EmailNotification {
+  id                   String                   @id @default(cuid())
+  eventKey             String                   @unique
+  type                 EmailNotificationType
+  status               EmailNotificationStatus @default(PENDING)
+  customerId           String?
+  receiptId            String?
+  invoiceId            String?
+  parentNotificationId String?
+  sourceActorId        String?
+  currentSnapshot      Json
+  correctionReason     String?                  @db.Text
+  approvedBy           String?
+  approvedAt           DateTime?
+  cancelledBy          String?
+  cancelledAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  customer    Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  receipt     Receipt?            @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  invoice     Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  parent      EmailNotification?  @relation("EmailNotificationCorrections", fields: [parentNotificationId], references: [id], onDelete: SetNull)
+  corrections EmailNotification[] @relation("EmailNotificationCorrections")
+  sourceActor User?               @relation("EmailNotificationSourceActor", fields: [sourceActorId], references: [id], onDelete: SetNull)
+  approver    User?               @relation("EmailNotificationApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  canceller   User?               @relation("EmailNotificationCanceller", fields: [cancelledBy], references: [id], onDelete: SetNull)
+  deliveries  EmailDelivery[]
+
+  @@index([status, createdAt])
+  @@index([customerId, type])
+  @@index([receiptId])
+  @@index([invoiceId])
+  @@index([parentNotificationId])
+  @@index([sourceActorId])
+  @@index([approvedBy])
+  @@index([cancelledBy])
+}
+
+model EmailDelivery {
+  id                String                @id @default(cuid())
+  notificationId    String
+  templateId        String?
+  status            EmailDeliveryStatus   @default(QUEUED)
+  recipientMode     EmailRecipientMode
+  language          CustomerEmailLanguage
+  templateVersion   Int
+  senderName        String
+  senderAddress     String                @db.VarChar(320)
+  replyToAddress    String?               @db.VarChar(320)
+  intendedTo        Json
+  intendedCc        Json
+  actualTo          Json
+  actualCc          Json
+  subject           String                @db.Text
+  htmlBody          String                @db.LongText
+  textBody          String                @db.LongText
+  businessSnapshot  Json
+  providerMessageId String?               @unique
+  idempotencyKey    String                @unique
+  claimToken        String?
+  claimExpiresAt    DateTime?
+  nextAttemptAt     DateTime?
+  acceptedAt        DateTime?
+  deliveredAt       DateTime?
+  lastErrorCode     String?
+  lastErrorMessage  String?               @db.Text
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  notification EmailNotification     @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  template     EmailTemplate?         @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  attempts     EmailDeliveryAttempt[]
+  webhookEvents EmailWebhookEvent[]
+
+  @@index([status, nextAttemptAt])
+  @@index([claimExpiresAt])
+  @@index([notificationId])
+  @@index([templateId])
+}
+
+model EmailDeliveryAttempt {
+  id                String             @id @default(cuid())
+  deliveryId        String
+  attemptNo         Int
+  status            EmailAttemptStatus @default(STARTED)
+  idempotencyKey    String
+  providerMessageId String?
+  failureCode       String?
+  failureMessage    String?            @db.Text
+  responseMetadata  Json?
+  startedAt         DateTime           @default(now())
+  finishedAt        DateTime?
+
+  delivery EmailDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@unique([deliveryId, attemptNo])
+  @@index([status, startedAt])
+  @@index([providerMessageId])
+}
+
+model EmailWebhookEvent {
+  id                String    @id @default(cuid())
+  providerEventId   String    @unique
+  deliveryId        String?
+  providerMessageId String
+  eventType         String
+  payload           Json
+  occurredAt        DateTime
+  receivedAt        DateTime  @default(now())
+  appliedAt         DateTime?
+
+  delivery EmailDelivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+
+  @@index([providerMessageId, occurredAt])
+  @@index([deliveryId])
+  @@index([eventType, occurredAt])
 }
 
 // ==================== 删除申请表 ====================

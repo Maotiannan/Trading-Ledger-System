@@ -19,6 +19,7 @@ import {
   CustomerFixDialog,
   CustomerFixQueue,
   CustomerConsigneeDialog,
+  CustomerNotificationEmailDialog,
   CustomerFormDialog,
   CustomerList,
   CustomerLongTextPreviewDialog,
@@ -27,10 +28,11 @@ import {
   type CustomerConsigneeItem,
   type CustomerOrderHistory,
 } from './components';
-import type { CustomerOwnerOption } from './types';
+import type { CustomerNotificationEmailItem, CustomerNotificationLanguage, CustomerOwnerOption } from './types';
 import type { CustomerCompanyFileOverwriteProposal, CustomerCompanyFileSummary } from './types';
 import { useCustomerActions, useCustomerForms, useCustomerImportColumns } from './hooks';
 import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
+import { parseNotificationEmail } from '@/lib/email/email-address';
 
 function normalizePhoneToken(value: unknown): string {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -42,10 +44,29 @@ function splitPhoneTokens(value: unknown): string[] {
   return Array.from(new Set(raw.split('/').map((part) => normalizePhoneToken(part)).filter(Boolean)));
 }
 
+function normalizeNotificationEmailRows(rawRows: unknown): CustomerNotificationEmailItem[] {
+  if (!Array.isArray(rawRows)) return [];
+  return rawRows.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    const id = String(row.id || '').trim();
+    const email = String(row.email || '').trim();
+    if (!id || !email) return [];
+    return [{
+      id,
+      email,
+      isPrimary: Boolean(row.isPrimary),
+      createdAt: typeof row.createdAt === 'string' ? row.createdAt : null,
+      updatedAt: typeof row.updatedAt === 'string' ? row.updatedAt : null,
+    }];
+  });
+}
+
 export function CustomerManager() {
   const tx = useUiText();
   const { user } = useStore();
   const isAdmin = user?.role === 'ADMIN';
+  const canManageNotifications = user?.role === 'ADMIN' || user?.role === 'SALES';
   const defaultOwnerId = isAdmin ? (user?.id || '') : (user?.id || '');
   const [customers, setCustomers] = useState<Array<Record<string, unknown>>>([]);
   const [ownerOptions, setOwnerOptions] = useState<CustomerOwnerOption[]>([]);
@@ -69,12 +90,21 @@ export function CustomerManager() {
   const [consigneeLoading, setConsigneeLoading] = useState(false);
   const [consigneeSubmitting, setConsigneeSubmitting] = useState(false);
   const [consigneeError, setConsigneeError] = useState('');
+  const [notificationDialogCustomer, setNotificationDialogCustomer] = useState<Record<string, unknown> | null>(null);
+  const [notificationEmails, setNotificationEmails] = useState<CustomerNotificationEmailItem[]>([]);
+  const [notificationLanguage, setNotificationLanguage] = useState<CustomerNotificationLanguage>('ENGLISH');
+  const [notificationEmailInput, setNotificationEmailInput] = useState('');
+  const [editingNotificationEmailId, setEditingNotificationEmailId] = useState<string | null>(null);
+  const [notificationEmailLoading, setNotificationEmailLoading] = useState(false);
+  const [notificationEmailSubmitting, setNotificationEmailSubmitting] = useState(false);
+  const [notificationEmailError, setNotificationEmailError] = useState('');
   const [companyFiles, setCompanyFiles] = useState<CustomerCompanyFileSummary[]>([]);
   const [companyFileUploading, setCompanyFileUploading] = useState(false);
   const [companyFileError, setCompanyFileError] = useState('');
   const [companyFileProposal, setCompanyFileProposal] = useState<CustomerCompanyFileOverwriteProposal | null>(null);
   const customerRequestGuard = useLatestRequestGuard();
   const orderHistoryRequestGuard = useLatestRequestGuard();
+  const notificationEmailRequestGuard = useLatestRequestGuard();
   const {
     pageSize: orderHistoryOrderPageSize,
     pageSizeOptions: orderHistoryOrderPageSizeOptions,
@@ -607,10 +637,105 @@ export function CustomerManager() {
     }
   };
 
+  const loadNotificationProfile = useCallback(async (customerId: string) => {
+    const id = customerId.trim();
+    if (!id) return;
+    const requestToken = notificationEmailRequestGuard.nextToken();
+    setNotificationEmailLoading(true);
+    setNotificationEmailError('');
+    try {
+      const result = await apiCall(`customer-notification-emails?customerId=${encodeURIComponent(id)}`);
+      if (!notificationEmailRequestGuard.isLatest(requestToken)) return;
+      if (!result.success) {
+        setNotificationEmailError(String(result.message || result.error || tx('客户通知邮箱加载失败', 'Failed to load customer notification emails.')));
+        return;
+      }
+      setNotificationEmails(normalizeNotificationEmailRows(result.data));
+      setNotificationLanguage(String(result.language || 'ENGLISH').toUpperCase() === 'FRENCH' ? 'FRENCH' : 'ENGLISH');
+    } catch (error) {
+      if (notificationEmailRequestGuard.isLatest(requestToken)) {
+        setNotificationEmailError(getApiErrorMessage(error, tx('客户通知邮箱加载失败', 'Failed to load customer notification emails.')));
+      }
+    } finally {
+      if (notificationEmailRequestGuard.isLatest(requestToken)) {
+        setNotificationEmailLoading(false);
+      }
+    }
+  }, [notificationEmailRequestGuard, tx]);
+
+  const openNotificationEmailManager = (row: Record<string, unknown>) => {
+    if (!canManageNotifications) return;
+    const customerId = String(row.id || '').trim();
+    if (!customerId) return;
+    setNotificationDialogCustomer(row);
+    setNotificationEmails(normalizeNotificationEmailRows(row.notificationEmails));
+    setNotificationLanguage(String(row.notificationLanguage || 'ENGLISH').toUpperCase() === 'FRENCH' ? 'FRENCH' : 'ENGLISH');
+    setNotificationEmailInput('');
+    setEditingNotificationEmailId(null);
+    setNotificationEmailError('');
+    void loadNotificationProfile(customerId);
+  };
+
+  const mutateNotificationProfile = async (body: Record<string, unknown>, resetInput = false) => {
+    const customerId = String(notificationDialogCustomer?.id || '').trim();
+    if (!customerId || notificationEmailSubmitting) return;
+    setNotificationEmailSubmitting(true);
+    setNotificationEmailError('');
+    try {
+      const { action, ...fields } = body;
+      const result = await apiCall('customer-notification-emails', {
+        method: 'POST',
+        body: JSON.stringify({ action, customerId, ...fields }),
+      });
+      if (!result.success) {
+        setNotificationEmailError(String(result.message || result.error || tx('客户通知设置保存失败', 'Failed to save customer notification settings.')));
+        return;
+      }
+      if (resetInput) {
+        setNotificationEmailInput('');
+        setEditingNotificationEmailId(null);
+      }
+      await Promise.all([
+        loadNotificationProfile(customerId),
+        loadCustomers(),
+      ]);
+    } catch (error) {
+      setNotificationEmailError(getApiErrorMessage(error, tx('客户通知设置保存失败', 'Failed to save customer notification settings.')));
+    } finally {
+      setNotificationEmailSubmitting(false);
+    }
+  };
+
+  const submitNotificationEmail = async () => {
+    let email: string;
+    try {
+      email = parseNotificationEmail(notificationEmailInput).email;
+    } catch {
+      setNotificationEmailError(tx('邮箱格式不正确', 'Invalid email format.'));
+      return;
+    }
+    if (editingNotificationEmailId) {
+      await mutateNotificationProfile({
+        action: 'update',
+        emailId: editingNotificationEmailId,
+        email,
+      }, true);
+      return;
+    }
+    await mutateNotificationProfile({ action: 'add', email }, true);
+  };
+
   const consigneeDialogCustomerLabel = (() => {
     if (!consigneeDialogCustomer) return '';
     const mark = String(consigneeDialogCustomer.mark || '').trim();
     const name = String(consigneeDialogCustomer.companyName || consigneeDialogCustomer.name || '').trim();
+    return [mark, name].filter(Boolean).join(' / ');
+  })();
+
+  const notificationDialogCustomerLabel = (() => {
+    if (!notificationDialogCustomer) return '';
+    const mark = String(notificationDialogCustomer.mark || '').trim();
+    const name = String(notificationDialogCustomer.companyName || notificationDialogCustomer.name || '').trim();
     return [mark, name].filter(Boolean).join(' / ');
   })();
 
@@ -651,6 +776,7 @@ export function CustomerManager() {
             customers={customers}
             canSeeExtended={canSeeExtended}
             isAdmin={isAdmin}
+            canManageNotifications={canManageNotifications}
             tx={tx}
             phoneConflictMessage={phoneConflictMessage}
             formatOwnerLabel={formatOwnerLabel}
@@ -658,6 +784,7 @@ export function CustomerManager() {
             onPreviewLongText={(label, value) => setCustomerLongTextPreview({ label, value })}
             onOpenOrderNameHistory={(row, orderName) => { void openOrderNameHistory(row, orderName); }}
             onOpenConsignees={openConsigneeManager}
+            onOpenNotificationEmails={openNotificationEmailManager}
             onEdit={openEdit}
             onDelete={handleDelete}
           />
@@ -817,6 +944,45 @@ export function CustomerManager() {
         onAdd={() => { void submitConsignee(); }}
         onDelete={(id) => { void deleteConsignee(id); }}
         onSetPrimary={(id) => { void setPrimaryConsignee(id); }}
+      />
+
+      <CustomerNotificationEmailDialog
+        open={Boolean(notificationDialogCustomer)}
+        customerLabel={notificationDialogCustomerLabel}
+        emails={notificationEmails}
+        language={notificationLanguage}
+        inputValue={notificationEmailInput}
+        editingEmailId={editingNotificationEmailId}
+        loading={notificationEmailLoading}
+        submitting={notificationEmailSubmitting}
+        error={notificationEmailError}
+        tx={tx}
+        onOpenChange={(open) => {
+          if (!open) {
+            notificationEmailRequestGuard.nextToken();
+            setNotificationDialogCustomer(null);
+            setNotificationEmails([]);
+            setNotificationLanguage('ENGLISH');
+            setNotificationEmailInput('');
+            setEditingNotificationEmailId(null);
+            setNotificationEmailError('');
+          }
+        }}
+        onInputChange={setNotificationEmailInput}
+        onSubmit={() => { void submitNotificationEmail(); }}
+        onStartEdit={(item) => {
+          setEditingNotificationEmailId(item.id);
+          setNotificationEmailInput(item.email);
+          setNotificationEmailError('');
+        }}
+        onCancelEdit={() => {
+          setEditingNotificationEmailId(null);
+          setNotificationEmailInput('');
+          setNotificationEmailError('');
+        }}
+        onDelete={(emailId) => { void mutateNotificationProfile({ action: 'delete', emailId }, true); }}
+        onSetPrimary={(emailId) => { void mutateNotificationProfile({ action: 'set-primary', emailId }); }}
+        onLanguageChange={(language) => { void mutateNotificationProfile({ action: 'update-language', language }); }}
       />
     </div>
   );

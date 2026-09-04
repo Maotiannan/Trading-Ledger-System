@@ -66,6 +66,13 @@ const exactSuccessMessages: Record<string, Record<SupportedLocale, string>> = {
   'Excel ML批量查询完成': { zh: 'Excel ML批量查询完成', en: 'Excel ML batch lookup completed' },
   'MU Contract 同步状态已加载': { zh: 'MU Contract 同步状态已加载', en: 'MU Contract sync status loaded' },
   'MU Contract 增量同步已完成': { zh: 'MU Contract 增量同步已完成', en: 'MU Contract incremental sync completed' },
+  '邮件预览已生成': { zh: '邮件预览已生成', en: 'Email preview generated' },
+  '邮件任务已取消': { zh: '邮件任务已取消', en: 'Email task cancelled' },
+  '失败邮件已重新排队': { zh: '失败邮件已重新排队', en: 'Failed email queued for retry' },
+  '更正邮件任务已创建，请审核后发送': {
+    zh: '更正邮件任务已创建，请审核后发送',
+    en: 'Correction email task created. Review it before sending.',
+  },
   'Full Reconcile 预览已生成': { zh: 'Full Reconcile 预览已生成', en: 'Full Reconcile preview generated' },
   'Full Reconcile 已完成': { zh: 'Full Reconcile 已完成', en: 'Full Reconcile completed' },
 };
@@ -180,6 +187,21 @@ export function translateApiSuccessMessage(raw: string, locale: SupportedLocale)
     const orderReceiptMatch = /^订单收据记录已加载，共 (\d+) 条$/.exec(raw);
     if (orderReceiptMatch) {
       return `Order receipt records loaded: ${orderReceiptMatch[1]} entries`;
+    }
+
+    const emailTaskListMatch = /^邮件任务已加载，共 (\d+) 条$/.exec(raw);
+    if (emailTaskListMatch) {
+      return `Email tasks loaded: ${emailTaskListMatch[1]}`;
+    }
+
+    const emailApprovalMatch = /^已批准 (\d+) 个邮件任务，等待发送$/.exec(raw);
+    if (emailApprovalMatch) {
+      return `Approved ${emailApprovalMatch[1]} email tasks and queued them for delivery`;
+    }
+
+    const emailAttemptListMatch = /^邮件发送记录已加载，共 (\d+) 条$/.exec(raw);
+    if (emailAttemptListMatch) {
+      return `Email delivery attempts loaded: ${emailAttemptListMatch[1]}`;
     }
   }
 

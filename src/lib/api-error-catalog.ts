@@ -20,6 +20,14 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   FILE_ACCESS_DENIED: { zh: '无权访问文件', en: 'File access denied' },
   FILE_READ_FAILED: { zh: '文件读取失败', en: 'Failed to read file' },
   EMAIL_ALREADY_EXISTS: { zh: '邮箱已存在', en: 'Email already exists' },
+  EMAIL_MISSING_RECIPIENT: { zh: '客户尚未配置通知邮箱', en: 'The customer has no notification email' },
+  EMAIL_OUTBOUND_DISABLED: { zh: '邮件外发功能尚未启用', en: 'Outbound email is not enabled' },
+  EMAIL_TEMPLATE_INVALID: { zh: '邮件模板无效', en: 'The email template is invalid' },
+  EMAIL_ALREADY_APPROVED: { zh: '邮件任务已审批或状态已变化', en: 'The email task was already approved or its status changed' },
+  EMAIL_UNSAFE_RETRY: { zh: '该邮件可能已经发出，需要确认后才能重试', en: 'This email may already have been sent. Confirm before retrying.' },
+  EMAIL_SOURCE_CHANGED: { zh: '邮件对应的业务数据已变化', en: 'The source business data has changed' },
+  EMAIL_PROVIDER_CONFIG_MISSING: { zh: '邮件服务尚未正确配置', en: 'The email provider is not configured' },
+  EMAIL_PROVIDER_REJECTED: { zh: '邮件服务拒绝了发送请求', en: 'The email provider rejected the send request' },
   PARENT_NOT_FOUND: { zh: '指定上级不存在', en: 'Parent account does not exist' },
   PARENT_SCOPE_FORBIDDEN: { zh: '无权指定该上级账户', en: 'Cannot assign the selected parent account' },
   ROLE_NOT_ALLOWED: { zh: '角色操作不允许', en: 'Role change is not allowed' },
@@ -71,6 +79,77 @@ const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
   '参数错误': { zh: '参数错误', en: 'Invalid request' },
   '密码错误': { zh: '密码错误', en: 'Incorrect password' },
   '网络错误，请重试': { zh: '网络错误，请重试', en: 'Network error, please retry.' },
+  '邮件外发功能尚未启用': { zh: '邮件外发功能尚未启用', en: 'Outbound email is not enabled' },
+  '客户尚未配置通知邮箱': { zh: '客户尚未配置通知邮箱', en: 'The customer has no notification email' },
+  '邮件任务已审批或状态已变化': {
+    zh: '邮件任务已审批或状态已变化',
+    en: 'The email task was already approved or its status changed',
+  },
+  '邮件任务状态已变化，请刷新后重试': {
+    zh: '邮件任务状态已变化，请刷新后重试',
+    en: 'The email task status changed. Refresh and try again.',
+  },
+  '业务数据在审批过程中发生变化，请重新预览': {
+    zh: '业务数据在审批过程中发生变化，请重新预览',
+    en: 'The source data changed during approval. Generate a new preview.',
+  },
+  '该邮件可能已经发出，确认承担重复发送风险后才能重试': {
+    zh: '该邮件可能已经发出，确认承担重复发送风险后才能重试',
+    en: 'This email may already have been sent. Confirm before retrying.',
+  },
+  '没有可安全重试的失败收件人': {
+    zh: '没有可安全重试的失败收件人',
+    en: 'There are no failed recipients that can be retried safely.',
+  },
+  '邮件服务或发件人尚未正确配置': {
+    zh: '邮件服务或发件人尚未正确配置',
+    en: 'The email provider or sender is not configured',
+  },
+  '测试模式缺少测试收件邮箱': {
+    zh: '测试模式缺少测试收件邮箱',
+    en: 'Test mode requires a test recipient address.',
+  },
+  '找不到当前语言对应的有效邮件模板': {
+    zh: '找不到当前语言对应的有效邮件模板',
+    en: 'No active email template exists for the selected language.',
+  },
+  '邮件模板无法使用当前业务数据生成内容': {
+    zh: '邮件模板无法使用当前业务数据生成内容',
+    en: 'The email template cannot render the current business data.',
+  },
+  '当前状态不能生成待发送预览': {
+    zh: '当前状态不能生成待发送预览',
+    en: 'The current email status cannot generate a pending preview.',
+  },
+  '邮件对应的业务数据已删除或失效，请刷新后处理': {
+    zh: '邮件对应的业务数据已删除或失效，请刷新后处理',
+    en: 'The source business data was deleted or is no longer valid. Refresh before continuing.',
+  },
+  '邮件业务快照无效': { zh: '邮件业务快照无效', en: 'The email business snapshot is invalid.' },
+  '当前邮件状态不能取消': { zh: '当前邮件状态不能取消', en: 'The current email status cannot be cancelled.' },
+  '邮件已开始发送，不能取消': { zh: '邮件已开始发送，不能取消', en: 'The email has started sending and cannot be cancelled.' },
+  '邮件已被发送服务接管，请刷新后确认状态': {
+    zh: '邮件已被发送服务接管，请刷新后确认状态',
+    en: 'The delivery worker claimed this email. Refresh to confirm its status.',
+  },
+  '邮件状态已变化': { zh: '邮件状态已变化', en: 'The email status changed.' },
+  '该邮件不需要创建更正通知': {
+    zh: '该邮件不需要创建更正通知',
+    en: 'This email does not require a correction notice.',
+  },
+  '当前业务变化已经创建过更正邮件': {
+    zh: '当前业务变化已经创建过更正邮件',
+    en: 'A correction email already exists for the current source change.',
+  },
+  '邮件任务不存在或无权限': {
+    zh: '邮件任务不存在或无权限',
+    en: 'The email task does not exist or is outside your access scope.',
+  },
+  '部分邮件任务不存在或无权限': {
+    zh: '部分邮件任务不存在或无权限',
+    en: 'Some email tasks do not exist or are outside your access scope.',
+  },
+  '邮件语言无效': { zh: '邮件语言无效', en: 'The email language is invalid.' },
   '请求体过大': { zh: '请求体过大', en: 'Request body too large' },
   '请求过于频繁，请稍后再试': { zh: '请求过于频繁，请稍后再试', en: 'Too many requests, please retry later' },
   '上传中断，请在更稳定的网络下重试': { zh: '上传中断，请在更稳定的网络下重试', en: 'Upload interrupted. Please try again on a more stable network.' },

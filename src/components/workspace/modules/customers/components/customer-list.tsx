@@ -10,6 +10,7 @@ export type CustomerListProps = {
   customers: Array<Record<string, unknown>>;
   canSeeExtended: boolean;
   isAdmin: boolean;
+  canManageNotifications: boolean;
   tx: (zh: string, en: string) => string;
   phoneConflictMessage: string;
   formatOwnerLabel: (row: Record<string, unknown>) => string;
@@ -17,6 +18,7 @@ export type CustomerListProps = {
   onPreviewLongText: (label: string, value: string) => void;
   onOpenOrderNameHistory: (row: Record<string, unknown>, orderName: string) => void;
   onOpenConsignees: (row: Record<string, unknown>) => void;
+  onOpenNotificationEmails: (row: Record<string, unknown>) => void;
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (id: string) => void;
 };
@@ -25,6 +27,7 @@ export function CustomerList({
   customers,
   canSeeExtended,
   isAdmin,
+  canManageNotifications,
   tx,
   phoneConflictMessage,
   formatOwnerLabel,
@@ -32,6 +35,7 @@ export function CustomerList({
   onPreviewLongText,
   onOpenOrderNameHistory,
   onOpenConsignees,
+  onOpenNotificationEmails,
   onEdit,
   onDelete,
 }: CustomerListProps) {
@@ -65,6 +69,16 @@ export function CustomerList({
     };
   };
 
+  const getNotificationEmailSummary = (row: Record<string, unknown>) => {
+    const primary = String(row.primaryNotificationEmail || '').trim();
+    const rawCount = Number(row.notificationEmailCount);
+    const count = Number.isFinite(rawCount) && rawCount > 0 ? Math.floor(rawCount) : (primary ? 1 : 0);
+    return {
+      text: primary ? `${primary}${count > 1 ? ` +${count - 1}` : ''}` : '-',
+      title: primary || tx('未设置邮箱', 'Email not set'),
+    };
+  };
+
   return (
     <Card>
       <CardContent className="p-0">
@@ -77,6 +91,8 @@ export function CustomerList({
               <TableHead>PHONE</TableHead>
               <TableHead>CITY</TableHead>
               <TableHead>CONSIGNEE</TableHead>
+              <TableHead>EMAIL</TableHead>
+              <TableHead>{tx('语言偏好', 'LANGUAGE PREFERENCE')}</TableHead>
               <TableHead>{tx('绑定账户', 'Binding')}</TableHead>
               {canSeeExtended && <TableHead>COMPANY_NAME</TableHead>}
               {canSeeExtended && <TableHead>CREDIT</TableHead>}
@@ -87,6 +103,7 @@ export function CustomerList({
           <TableBody>
             {customers.map((row) => {
               const consigneeSummary = getConsigneeSummary(row);
+              const notificationEmailSummary = getNotificationEmailSummary(row);
               const companyNameFull = String(row.companyName || '').trim();
               const addressFull = String(row.companyAddress || '').trim();
               const orderNames = getOrderNames(row);
@@ -124,6 +141,36 @@ export function CustomerList({
                     >
                       {consigneeSummary.text}
                     </button>
+                  </TableCell>
+                  <TableCell>
+                    {canManageNotifications ? (
+                      <button
+                        type="button"
+                        className="max-w-[260px] truncate text-left text-blue-700 hover:underline"
+                        aria-label={notificationEmailSummary.text === '-' ? notificationEmailSummary.title : notificationEmailSummary.text}
+                        title={notificationEmailSummary.title}
+                        onClick={() => onOpenNotificationEmails(row)}
+                      >
+                        {notificationEmailSummary.text}
+                      </button>
+                    ) : (
+                      <span className="inline-block max-w-[260px] truncate" title={notificationEmailSummary.title}>
+                        {notificationEmailSummary.text}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {canManageNotifications ? (
+                      <button
+                        type="button"
+                        className="text-left text-blue-700 hover:underline"
+                        onClick={() => onOpenNotificationEmails(row)}
+                      >
+                        {String(row.notificationLanguage || 'ENGLISH').toUpperCase() === 'FRENCH' ? 'Francais' : 'English'}
+                      </button>
+                    ) : (
+                      <span>{String(row.notificationLanguage || 'ENGLISH').toUpperCase() === 'FRENCH' ? 'Francais' : 'English'}</span>
+                    )}
                   </TableCell>
                   <TableCell>{formatOwnerLabel(row)}</TableCell>
                   {canSeeExtended && (

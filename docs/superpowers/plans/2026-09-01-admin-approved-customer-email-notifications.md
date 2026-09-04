@@ -1,5 +1,7 @@
 # Admin-Approved Customer Email Notifications Implementation Plan
 
+> **Status:** `ARCHIVED_COMPLETED` on 2026-09-04 after merged CI, additive migration, disabled rollout, and post-deployment verification succeeded.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Do not dispatch subagents unless the user explicitly authorizes them. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add durable, ADMIN-approved English/French customer email notifications for received payments, first Shipment Date entry, and first Release Date entry through Resend without allowing automatic customer sending.
@@ -802,15 +804,17 @@ git commit -m "docs: complete email notification rollout guide"
 
 Push the feature branch, open/update the PR, wait until every required GitHub Actions check reaches a terminal state, and record the final check names/results. Do not report completion while CI is pending.
 
-PR #30 was updated through commit `e99601b`. GitHub Actions run `33854924273`, job `100965893626`, completed successfully on 2026-09-04; required check `validate` passed in 10m56s. Both automated review findings were reproduced, fixed, covered by regression tests, and answered in their original review threads before this result was recorded.
+PR #30 was updated through commit `ea40558`. GitHub Actions run `33857207252`, job `100973159037`, completed successfully on 2026-09-04; required check `validate` passed in 5m44s. Both automated review findings were reproduced, fixed, covered by regression tests, and answered in their original review threads before merge.
 
-- [ ] **Step 9: Deploy only after explicit user instruction**
+- [x] **Step 9: Deploy only after explicit user instruction**
 
 Before touching the local running service, confirm current backup health and migration rehearsal evidence. Use the project's safe rebuild workflow, with outbound disabled and test mode enabled. Report any rebuild error with full output, failed stage, exit code, relevant Compose logs, and database/NAS risk. Verify health, version, ADMIN-only navigation, pending task capture, and test-destination delivery before production sending can be enabled.
 
 Pre-deployment review on 2026-09-04 confirmed that the app container runs additive migrations through `npx prisma migrate deploy`. It also found that the safe rebuild script did not yet refresh the new `email-delivery-trigger`; the script and its safety-contract test were updated before merge so a normal agent rebuild deploys all internal trigger services without touching database volumes or NAS uploads. Backup status was `HEALTHY` before this correction was submitted.
 
-- [ ] **Step 10: Close the plan after verified rollout**
+PR #30 merged as `36d011c`. Main CI run `33857744701`, job `100974854469`, passed in 7m10s before deployment. `scripts/rebuild-local-app.sh` then completed with exit code 0; startup applied only `20260901120000_admin_approved_email_notifications`, and Prisma reported all 28 migrations current. App v1.0.216, the maintenance service, MU Contract trigger, email delivery trigger, public HTTPS, and the unchanged NAS bind mount were verified. Runtime settings resolved to outbound disabled and test mode enabled; a live internal dispatch probe returned `disabled: true` with zero candidates and zero sends.
+
+- [x] **Step 10: Close the plan after verified rollout**
 
 Change this plan from `ACTIVE` to `ARCHIVED_COMPLETED` in `docs/superpowers/plans/README.md`, preserve checklist history, and record the actual shipped behavior and CI/deployment evidence in `ENGINEERING_LOG.md`.
 

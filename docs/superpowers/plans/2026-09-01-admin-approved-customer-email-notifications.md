@@ -798,9 +798,11 @@ git add docs README.md CHANGE_CHECKLIST.md ENGINEERING_LOG.md package.json packa
 git commit -m "docs: complete email notification rollout guide"
 ```
 
-- [ ] **Step 8: Push and wait for CI**
+- [x] **Step 8: Push and wait for CI**
 
 Push the feature branch, open/update the PR, wait until every required GitHub Actions check reaches a terminal state, and record the final check names/results. Do not report completion while CI is pending.
+
+PR #30 was updated through commit `e99601b`. GitHub Actions run `33854924273`, job `100965893626`, completed successfully on 2026-09-04; required check `validate` passed in 10m56s. Both automated review findings were reproduced, fixed, covered by regression tests, and answered in their original review threads before this result was recorded.
 
 - [ ] **Step 9: Deploy only after explicit user instruction**
 
@@ -819,6 +821,6 @@ Change this plan from `ACTIVE` to `ARCHIVED_COMPLETED` in `docs/superpowers/plan
 - [x] First Shipment/Release transitions, repeated saves, clear/repopulate, grouping, and customer isolation are covered.
 - [x] SALES customer-maintenance permission and ADMIN-only email-management permission are both backend-enforced.
 - [x] Missing-recipient recovery, current pending preview, immutable sent history, and explicit correction behavior are covered.
-- [x] `PRIMARY_CC`, `SEPARATE`, test redirection, idempotency, uncertainty, retries, and webhook deduplication are covered.
+- [x] `PRIMARY_CC`, `SEPARATE`, test redirection, idempotency, uncertainty, retries, webhook deduplication, in-flight source changes, and early webhook reconciliation are covered.
 - [x] No credentials, arbitrary customer HTML, attachments, new persistent file path, Redis, or automatic sending were introduced.
 - [x] Migration, full MySQL backup coverage, isolated restore rehearsal, version single source, CI wait, and disabled rollout are covered.

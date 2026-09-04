@@ -10,6 +10,7 @@ describe('local rebuild script safety contract', () => {
     expect(script).toContain('docker compose up -d --no-deps --build app');
     expect(script).toContain('docker compose up -d --no-deps --force-recreate maintenance');
     expect(script).toContain('docker compose up -d --no-deps --force-recreate mucontract-sync-trigger');
+    expect(script).toContain('docker compose up -d --no-deps --force-recreate email-delivery-trigger');
     expect(script).toContain('MAINTENANCE_JOB_TOKEN');
     expect(script).toContain('SESSION_SECRET');
     expect(script).toContain('/api/system/health');

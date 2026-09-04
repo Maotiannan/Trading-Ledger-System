@@ -808,6 +808,8 @@ PR #30 was updated through commit `e99601b`. GitHub Actions run `33854924273`, j
 
 Before touching the local running service, confirm current backup health and migration rehearsal evidence. Use the project's safe rebuild workflow, with outbound disabled and test mode enabled. Report any rebuild error with full output, failed stage, exit code, relevant Compose logs, and database/NAS risk. Verify health, version, ADMIN-only navigation, pending task capture, and test-destination delivery before production sending can be enabled.
 
+Pre-deployment review on 2026-09-04 confirmed that the app container runs additive migrations through `npx prisma migrate deploy`. It also found that the safe rebuild script did not yet refresh the new `email-delivery-trigger`; the script and its safety-contract test were updated before merge so a normal agent rebuild deploys all internal trigger services without touching database volumes or NAS uploads. Backup status was `HEALTHY` before this correction was submitted.
+
 - [ ] **Step 10: Close the plan after verified rollout**
 
 Change this plan from `ACTIVE` to `ARCHIVED_COMPLETED` in `docs/superpowers/plans/README.md`, preserve checklist history, and record the actual shipped behavior and CI/deployment evidence in `ENGINEERING_LOG.md`.

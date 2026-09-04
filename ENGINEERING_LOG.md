@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.216
-> 最后更新：2026-09-04
+> 当前版本：v1.0.217
+> 最后更新：2026-09-05
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [ ] 依赖安全维护 2026-09：在 12 个新公告包（10 high / 2 moderate；生产 8 个包）基线上，升级 `next / eslint-config-next 16.2.10 -> 16.3.4`、`sharp 0.34.5 -> 0.35.4`、`postcss 8.5.19 -> 8.5.23`，并在现有兼容范围内更新 `nanoid`、三条 `brace-expansion` 及仅开发环境使用的 `@humanfs/node / browserslist / fast-uri / js-yaml`。完整和生产审计均收敛为同一 Prisma CLI 配置链 3 项 high：`prisma 6.19.3 -> @prisma/config 6.19.3 -> deepmerge-ts 7.1.5`；npm 只建议强制降级到 Prisma 6.12.0，当前调用只读取本地可信 Prisma 配置，因此不降级、不强制覆盖不兼容的 `deepmerge-ts 8`，等待 Prisma 官方兼容修复。Docker 构建改为 `npm ci`，构建后 `npm prune --omit=dev`，runner 不再复制完整开发依赖；新增静态契约回归。临时镜像 `muledger-security-test:1.0.216` 验证 Next 16.3.4、Sharp 0.35.4 实际 PNG 生成、Prisma CLI/Client 加载且 Jest 不存在，镜像由约 452 MB 降至 414 MB。当前本地门禁：typecheck、ESLint、Prisma validate/generate、208 suites / 1382 tests、isolated API 24 cases、isolated Playwright 13/13、Webpack production build 通过。待完成远端 PR/CI、合并和用户批准后的 app-only 部署；无 Prisma schema、迁移、业务数据、Docker volume、NAS/COS 路径或备份范围变化。2026-09-05
 
 - [x] macOS LaunchAgent NAS 备份权限修复：复现确认交互终端手工备份和 Docker 的 NAS 挂载均正常，但 `com.muledger.local-backup` 直接执行主机 Bash 时，macOS 对 SMB 网络卷返回 `Operation not permitted`，导致每日任务连续失败。未给通用 `/bin/bash` 增加 Full Disk Access；改为由 LaunchAgent 调用专用临时 Docker 任务，仓库和媒体源只读挂载、备份目标单独可写，容器根文件系统只读、移除全部 capabilities 且不在命令行暴露数据库密码。新增最多三次失败重试、原子 `status.json`、36 小时新鲜度检查、现代 `launchctl bootstrap/bootout` 安装流程和回归测试。后台触发一次成功发布 `muledger-20260829-173120`，独立校验和临时 MariaDB 10.6 恢复通过：34 张表、27 条迁移、518/518 个媒体文件；完整证据见 `docs/backup/restore-drills/2026-08-29-launchagent-nas-permission-rollout.md`。完整数据库与媒体范围、30 天成功后保留规则、原子发布与校验逻辑不变。✅ 2026-08-29
 

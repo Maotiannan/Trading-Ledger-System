@@ -1,6 +1,6 @@
 # Implementation Plan Status Index
 
-> Last reviewed: 2026-09-04
+> Last reviewed: 2026-09-05
 
 This file is the authoritative status index for historical implementation plans in this directory.
 
@@ -8,10 +8,11 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-No implementation plan is currently `ACTIVE`. Historical plans remain archived below.
+One implementation plan is currently `ACTIVE`; historical plans remain archived below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
+| `2026-09-05-dependency-security-maintenance.md` | `ACTIVE` | Compatible advisory fixes and production-image pruning pass local gates; PR, CI, merge, and deployment closure remain. |
 | `2026-09-01-admin-approved-customer-email-notifications.md` | `ARCHIVED_COMPLETED` | ADMIN-approved notifications, isolated recovery, PR review fixes, additive migration, disabled/test-mode rollout, and post-deployment verification completed; production sending remains intentionally disabled until domain and template approval. |
 | `2026-08-28-mu-contract-reconcile-preview-conflict-count.md` | `ARCHIVED_COMPLETED` | Inactive PI history no longer causes false Full Reconcile preview conflicts; active-source collision protection remains and PR #28 passed CI before merge. |
 | `2026-08-27-receipt-transfer-reversal.md` | `ARCHIVED_COMPLETED` | Transactional transfer reversal shipped in v1.0.213; the verified migration, production deployment, one-time incident repair, postconditions, and idempotent retry all completed. |

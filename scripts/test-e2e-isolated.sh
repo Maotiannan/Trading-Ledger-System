@@ -84,7 +84,10 @@ export OCR_DISABLED="true"
 export UPLOAD_DIR="$UPLOAD_DIR"
 export NEXT_DIST_DIR="$DIST_DIR"
 export MAINTENANCE_JOB_TOKEN="test-maintenance-token-12345678901234567890"
-export RESEND_FAKE_PORT="${RESEND_FAKE_PORT:-$((4300 + RANDOM % 500))}"
+if [ -z "${RESEND_FAKE_PORT:-}" ]; then
+  RESEND_FAKE_PORT="$(node scripts/select-isolated-test-ports.mjs 1)"
+fi
+export RESEND_FAKE_PORT
 export RESEND_FAKE_CONTROL_TOKEN="test-resend-control-token-1234567890"
 export RESEND_FAKE_CONTROL_BASE_URL="http://127.0.0.1:${RESEND_FAKE_PORT}"
 export RESEND_API_KEY="re_isolated_test_only"

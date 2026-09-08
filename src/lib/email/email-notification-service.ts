@@ -393,7 +393,7 @@ async function renderNotification(
       version: template.version,
       subjectTemplate: template.subjectTemplate,
       bodyTemplate: template.bodyTemplate,
-    }, renderContext(row.currentSnapshot), { logoUrl: settings.logoUrl });
+    }, renderContext(row.currentSnapshot), settings);
     return { template, rendered };
   } catch (error) {
     throw createApiError({

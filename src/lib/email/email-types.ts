@@ -30,7 +30,25 @@ export const EMAIL_NOTIFICATION_STATUSES = [
 ] as const;
 export type EmailNotificationStatusValue = (typeof EMAIL_NOTIFICATION_STATUSES)[number];
 
-export type EmailSettings = {
+export type EmailContactSettings = {
+  contactName: string;
+  contactPhone: string;
+  whatsappUrl: string;
+  contactEmail: string;
+  companyAddress: string;
+};
+
+export const DEFAULT_EMAIL_CONTACT: EmailContactSettings = {
+  contactName: 'Leo Mao',
+  contactPhone: '+86 13819858718',
+  whatsappUrl: 'https://wa.me/+8613819858718',
+  contactEmail: 'maotiannan@gmail.com',
+  companyAddress: 'MU Group\nNo. 2506, Yongjiang Avenue, Yinzhou District,\nNingbo City, Zhejiang Province',
+};
+
+export const EMAIL_CONTACT_FIELDS = ['contactName', 'contactPhone', 'whatsappUrl', 'contactEmail', 'companyAddress'] as const;
+
+export type EmailSettings = EmailContactSettings & {
   outboundEnabled: boolean;
   recipientMode: EmailRecipientModeValue;
   senderName: string;
@@ -44,16 +62,17 @@ export type EmailSettings = {
 };
 
 export const DEFAULT_EMAIL_SETTINGS: EmailSettings = {
+  ...DEFAULT_EMAIL_CONTACT,
   outboundEnabled: false,
   recipientMode: 'PRIMARY_CC',
-  senderName: 'MU LEDGER',
+  senderName: 'Leo Mao',
   senderAddress: '',
   replyToAddress: '',
   retryLimit: 3,
   retryIntervalsSeconds: [60, 300, 1800],
   testModeEnabled: true,
   testDestination: '',
-  logoUrl: 'https://muledger.dainty.vip/logo.svg',
+  logoUrl: 'https://muledger.dainty.vip/detail-export/payment-detail-logo.png',
 };
 
 export const EMAIL_TEMPLATE_VARIABLES = [

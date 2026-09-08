@@ -130,6 +130,8 @@ describe('EmailNotificationSettingsCard', () => {
     await waitFor(() => expect(screen.getByLabelText('Sender name')).toHaveValue('MU LEDGER'));
 
     fireEvent.change(screen.getByLabelText('Sender address'), { target: { value: 'notify@example.com' } });
+    fireEvent.change(screen.getByLabelText('Contact name'), { target: { value: 'Leo Updated' } });
+    fireEvent.change(screen.getByLabelText('Company address (multiple lines allowed)'), { target: { value: 'MU Group\nNingbo' } });
     fireEvent.change(screen.getByLabelText('Retry intervals (seconds)'), { target: { value: '60, 600, 3600' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }));
 
@@ -140,6 +142,9 @@ describe('EmailNotificationSettingsCard', () => {
     const saveCall = mockApiCall.mock.calls.find((call) => call[1]?.method === 'POST');
     const payload = JSON.parse(String(saveCall[1].body));
     expect(payload.settings.retryIntervalsSeconds).toEqual([60, 600, 3600]);
+    expect(payload.settings.contactName).toBe('Leo Updated');
+    expect(payload.settings.companyAddress).toBe('MU Group\nNingbo');
+    expect(payload.settings.whatsappUrl).toBe('https://wa.me/+8613819858718');
     expect(JSON.stringify(payload)).not.toMatch(/RESEND_API_KEY|RESEND_WEBHOOK_SECRET/);
   });
 

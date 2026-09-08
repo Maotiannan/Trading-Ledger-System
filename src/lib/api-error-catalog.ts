@@ -72,6 +72,10 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
 };
 
 const exactMessageMap: Record<string, Record<SupportedLocale, string>> = {
+  '联系信息无效：请填写姓名、地址、有效电话和邮箱，WhatsApp 链接必须为 https://wa.me/号码': {
+    zh: '联系信息无效：请填写姓名、地址、有效电话和邮箱，WhatsApp 链接必须为 https://wa.me/号码',
+    en: 'Invalid contact information. Enter a name, address, valid phone and email. Use an HTTPS wa.me phone-number link for WhatsApp.',
+  },
   '未登录': { zh: '未登录', en: 'Not logged in' },
   '无权限': { zh: '无权限', en: 'Permission denied' },
   '服务器错误': { zh: '服务器错误', en: 'Server error' },

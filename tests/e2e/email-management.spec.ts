@@ -109,6 +109,19 @@ test('ADMIN previews recipients and explicitly approves a test-mode email', asyn
   await expect(preview).toContainText(fixture.recipient);
   await expect(preview).toContainText('test-destination@example.com');
   await expect(preview.locator('iframe')).toHaveAttribute('sandbox', '');
+  const content = preview.frameLocator('iframe');
+  await expect(content.getByText('Leo Mao', { exact: true })).toBeVisible();
+  await expect(content.locator('a[href="https://wa.me/+8613819858718"]')).toBeVisible();
+  await expect(content.locator('a[href="mailto:maotiannan@gmail.com"]')).toBeVisible();
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(content.getByText('Ningbo City, Zhejiang Province', { exact: false })).toBeVisible();
+    const sizes = await content.locator('html').evaluate((element) => ({
+      scroll: element.scrollWidth, client: element.clientWidth,
+    }));
+    expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(preview.getByTestId('email-preview-send')).toBeInViewport();
   await preview.getByTestId('email-preview-send').click();
 

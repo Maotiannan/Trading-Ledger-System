@@ -29,6 +29,11 @@ export const emailSystemSettingKeys = [
   'email.testModeEnabled',
   'email.testDestination',
   'email.logoUrl',
+  'email.contactName',
+  'email.contactPhone',
+  'email.whatsappUrl',
+  'email.contactEmail',
+  'email.companyAddress',
 ] as const;
 
 export type EmailSystemSettingKey = (typeof emailSystemSettingKeys)[number];
@@ -44,6 +49,11 @@ export const emailSystemSettingDefaults: Record<EmailSystemSettingKey, string> =
   'email.testModeEnabled': String(DEFAULT_EMAIL_SETTINGS.testModeEnabled),
   'email.testDestination': DEFAULT_EMAIL_SETTINGS.testDestination,
   'email.logoUrl': DEFAULT_EMAIL_SETTINGS.logoUrl,
+  'email.contactName': DEFAULT_EMAIL_SETTINGS.contactName,
+  'email.contactPhone': DEFAULT_EMAIL_SETTINGS.contactPhone,
+  'email.whatsappUrl': DEFAULT_EMAIL_SETTINGS.whatsappUrl,
+  'email.contactEmail': DEFAULT_EMAIL_SETTINGS.contactEmail,
+  'email.companyAddress': DEFAULT_EMAIL_SETTINGS.companyAddress,
 };
 
 export const editableSystemSettingKeys = [

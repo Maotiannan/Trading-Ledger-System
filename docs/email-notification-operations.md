@@ -81,6 +81,35 @@ In `Settings -> Email Notification Settings`, ADMIN configures:
 - test destination;
 - English and French payment, shipment, and release templates.
 
+### Shared Contact Footer
+
+The five contact settings (`contactName`, `contactPhone`, `whatsappUrl`,
+`contactEmail`, `companyAddress`) are stored under `email.*` in `SystemSetting`.
+All six templates use this one footer in HTML and plain text. Save settings
+before previewing. Approval freezes the rendered footer with the rest of the
+delivery snapshot; subsequent edits never rewrite approved or sent mail.
+
+The September 2026 rollout uses Leo Mao, phone `+86 13819858718`, WhatsApp
+`https://wa.me/+8613819858718`, and contact/reply-to `maotiannan@gmail.com`.
+The address is stored with these display line breaks:
+
+```text
+MU Group
+No. 2506, Yongjiang Avenue, Yinzhou District,
+Ningbo City, Zhejiang Province
+```
+
+The intended sender is `Leo Mao <notifications@notice.dainty.vip>`. These
+operational sender, reply-to and test-destination values must be explicitly saved
+after domain verification; deployment does not turn outbound delivery on.
+The default logo reuses the existing full MU Group PNG at
+`/detail-export/payment-detail-logo.png`, preserving its aspect ratio. The shared
+600px shell uses Arial, 16px body text, a single-column contact section, and an
+English/French notice that the sending address does not accept incoming mail.
+
+Rollout progress and remaining gates are tracked in
+[the contact and activation plan](superpowers/plans/2026-09-08-email-contact-rollout.md).
+
 Customer notification addresses and language preference are maintained in Customer Management within the existing account visibility tree. They are optional. SALES may maintain visible customer contact data but cannot view Email Management, preview a task, approve sending, retry, cancel, or create a correction.
 
 Before enabling outbound delivery:

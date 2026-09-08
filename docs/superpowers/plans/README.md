@@ -12,6 +12,7 @@ No implementation plan is currently `ACTIVE`; historical plans remain archived b
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
+| `2026-09-08-email-contact-rollout.md` | `ACTIVE` | Shared contact footer and settings implemented; Resend domain/credentials, real delivery verification, CI and production activation remain gated. |
 | `2026-09-05-dependency-security-maintenance.md` | `ARCHIVED_COMPLETED` | Compatible advisory fixes and production-image pruning shipped in v1.0.217 through PR #31; CI, merge, safe deployment, migration, health, log, and NAS mount verification completed. |
 | `2026-09-01-admin-approved-customer-email-notifications.md` | `ARCHIVED_COMPLETED` | ADMIN-approved notifications, isolated recovery, PR review fixes, additive migration, disabled/test-mode rollout, and post-deployment verification completed; production sending remains intentionally disabled until domain and template approval. |
 | `2026-08-28-mu-contract-reconcile-preview-conflict-count.md` | `ARCHIVED_COMPLETED` | Inactive PI history no longer causes false Full Reconcile preview conflicts; active-source collision protection remains and PR #28 passed CI before merge. |

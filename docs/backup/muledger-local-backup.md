@@ -19,6 +19,13 @@ Receipt transfer reversal data is also fully covered by the database dump. This 
 
 Customer email notification data is fully covered by the same complete database dump. This includes `Customer.notificationLanguage` plus `CustomerNotificationEmail`, `EmailTemplate`, `EmailNotification`, `EmailDelivery`, `EmailDeliveryAttempt`, and `EmailWebhookEvent`. Immutable sent content and recipient snapshots remain in MySQL; the feature adds no uploaded or generated file family outside `UPLOAD_HOST_DIR`, and Resend credentials are environment configuration rather than backed-up business data.
 
+The shared email footer is also covered through `SystemSetting`: `email.contactName`,
+`email.contactPhone`, `email.whatsappUrl`, `email.contactEmail`, and
+`email.companyAddress`. During email recovery verification, confirm these values
+and address line breaks, then compare an approved delivery's stored HTML/plain
+text to its original snapshot; do not regenerate historical messages from current
+settings. This extension needs no schema migration or additional media archive.
+
 Do not back up Docker containers, images, `.next`, `node_modules`, logs, or test output as business data.
 
 ### Accepted Limitation

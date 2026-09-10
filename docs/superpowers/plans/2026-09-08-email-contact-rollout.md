@@ -43,9 +43,13 @@ delivery and callback verification pass. This plan continues the completed
 - [x] Final rendered browser inspection: full PNG logo loads at original aspect
   ratio; mobile 390px layout and French long-name/long-order 320px layout have no
   horizontal overflow; exact phone/WhatsApp/mailto links present, no console errors.
-- [x] Google login succeeds; existing `dainty.vip` is verified. Prepared but did not
-  submit `notice.dainty.vip` creation. No DNS changes or Resend keys created.
-- [ ] PR and CI (deferred while domain registration awaits action-time consent).
+- [x] Google login succeeds; existing `dainty.vip` remains unchanged and verified.
+- [x] With user confirmation, created `notice.dainty.vip` in Resend on September 8.
+  On September 10 added exactly four DNS records after separate confirmation:
+  TXT `resend._domainkey.notice`, TXT/MX `send.notice`, and TXT `_dmarc.notice`
+  (`v=DMARC1; p=none;`). Authoritative Cloudflare DNS returns all four correct values;
+  Resend verification started. No keys created and no real emails sent yet.
+- [ ] PR and CI.
 - [ ] Create/verify sending subdomain and configure scoped key plus webhook.
 - [ ] Preview all six templates and verify internal real delivery and callback.
 - [ ] Verify backup, deploy with outbound disabled/test mode enabled, then verify

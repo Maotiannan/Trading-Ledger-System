@@ -49,7 +49,15 @@ delivery and callback verification pass. This plan continues the completed
   TXT `resend._domainkey.notice`, TXT/MX `send.notice`, and TXT `_dmarc.notice`
   (`v=DMARC1; p=none;`). Authoritative Cloudflare DNS returns all four correct values;
   Resend verification started. No keys created and no real emails sent yet.
-- [ ] PR and CI.
+- [x] PR #34 initial CI `34455717364` passed (6m16s). Review found mismatched
+  displayed phone/WhatsApp URL possible after partial edits; regression reproduced
+  and normalization-based equality validation added before merge.
+- [x] Resend shows `notice.dainty.vip` Verified. Scoped sending key created with
+  user confirmation; saved outside Git under `~/.muledger-secrets/` with mode 600.
+- [x] Production webhook created on September 11 with explicit confirmation,
+  endpoint `https://muledger.dainty.vip/api/webhooks/resend`, seven supported events.
+  Signing secret saved locally mode 600. Runtime has not loaded credentials yet.
+- [ ] Final reviewed-commit and post-merge CI.
 - [ ] Create/verify sending subdomain and configure scoped key plus webhook.
 - [ ] Preview all six templates and verify internal real delivery and callback.
 - [ ] Verify backup, deploy with outbound disabled/test mode enabled, then verify

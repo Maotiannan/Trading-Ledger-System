@@ -62,6 +62,8 @@ describe('email settings', () => {
   });
 
   it.each([
+    { contactPhone: '+86 13900000000' },
+    { whatsappUrl: 'https://wa.me/8613900000000' },
     { whatsappUrl: 'javascript:alert(1)' },
     { whatsappUrl: 'https://wa.me.evil.example/+8613819858718' },
     { whatsappUrl: 'https://user:password@wa.me/+8613819858718' },
@@ -71,6 +73,13 @@ describe('email settings', () => {
   ])('rejects unsafe contact settings without persistence: %j', async (settings) => {
     await expect(updateEmailSettings(admin, settings)).rejects.toMatchObject({ status: 400 });
     expect(mockDb.systemSetting.upsert).not.toHaveBeenCalled();
+  });
+
+  it('accepts matching phone numbers with different display formatting', async () => {
+    const result = await updateEmailSettings(admin, {
+      contactPhone: '+86 (138) 1985-8718', whatsappUrl: 'https://wa.me/8613819858718',
+    });
+    expect(result.settings.contactPhone).toBe('+86 (138) 1985-8718');
   });
 
   beforeEach(() => {

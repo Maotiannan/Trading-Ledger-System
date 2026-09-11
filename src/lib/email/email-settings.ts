@@ -164,7 +164,7 @@ function mergeAndValidateSettings(current: EmailSettings, input: unknown): Email
   try {
     validateEmailContact(merged);
   } catch {
-    throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: '联系信息无效：请填写姓名、地址、有效电话和邮箱，WhatsApp 链接必须为 https://wa.me/号码' });
+    throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: '联系信息无效：请填写姓名、地址、有效电话和邮箱，WhatsApp 链接必须为 https://wa.me/号码，且与联系电话一致' });
   }
   if ('outboundEnabled' in raw) {
     if (typeof raw.outboundEnabled !== 'boolean') {

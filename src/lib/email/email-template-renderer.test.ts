@@ -7,6 +7,34 @@ import {
 import { renderEmailTemplate, validateEmailTemplate } from '@/lib/email/email-template-renderer';
 
 describe('email template catalog and renderer', () => {
+  it('uses semantic font hierarchy without changing plain-text business content', () => {
+    const template = { ...getDefaultEmailTemplate('PAYMENT_RECEIVED', 'ENGLISH'), version: 1 };
+    const result = renderEmailTemplate(template, getEmailTemplatePreviewContext('PAYMENT_RECEIVED'), {
+      logoUrl: 'https://example.com/logo.png',
+    });
+    expect(result.html).toContain('font-size:20px;font-weight:700;color:#172033;">$3,674</strong>');
+    expect(result.html).toContain('font-size:16px;font-weight:700;color:#172033;">PIKIN-20</strong>');
+    expect(result.html).toContain('font-size:13px;line-height:1.5;color:#5d6b82;">ORDER NO:</span>');
+    expect(result.text).toContain('ORDER NO: PIKIN-20');
+    expect(result.text).toContain('ORDER BALANCE AFTER PAYMENT: $3,674');
+  });
+  it.each(['ENGLISH', 'FRENCH'] as const)('renders payment order context and missing-value placeholders in %s', (language) => {
+    const template = { ...getDefaultEmailTemplate('PAYMENT_RECEIVED', language), version: 1 };
+    const context = getEmailTemplatePreviewContext('PAYMENT_RECEIVED');
+    const options = { logoUrl: 'https://example.com/logo.png' };
+    const result = renderEmailTemplate(template, context, options);
+    expect(result.text).toContain('$3,674');
+    expect(result.text).toContain('L26MH000001');
+    expect(result.text).toContain('15/09/2026');
+    const missing = { ...context };
+    delete missing.invoiceNo; delete missing.orderBalance; delete missing.shipmentDate; delete missing.releaseDate;
+    const absent = renderEmailTemplate(template, missing, options);
+    expect(absent.text.match(/—/g)).toHaveLength(4);
+    expect(() => validateEmailTemplate({ ...template,
+      bodyTemplate: '{{customerName}} {{mark}} {{orderNos}} {{receiptNo}} {{amount}} {{paymentDate}}',
+    })).not.toThrow();
+  });
+
   it('uses edited contact values, escapes markup and leaves previous rendered snapshots unchanged', () => {
     const template = { ...getDefaultEmailTemplate('PAYMENT_RECEIVED', 'ENGLISH'), version: 1 };
     const context = getEmailTemplatePreviewContext(template.type);
@@ -92,6 +120,9 @@ describe('email template catalog and renderer', () => {
     expect(result.subject).toContain('0010000');
     expect(result.html).toContain('https://muledger.dainty.vip/logo.svg');
     expect(result.html).toContain('max-width:600px');
+    expect(result.html).toContain('@media only screen and (max-width:480px)');
+    expect(result.html).toContain('.email-logo { width: 170px');
+    expect(result.html).toContain('.email-body-wrap { padding: 8px 12px 18px');
     expect(result.html).toContain('&lt;img src=x onerror=alert(1)&gt;');
     expect(result.html).toContain('MAB &amp; CO');
     expect(result.html).not.toContain('<img src=x onerror=alert(1)>');

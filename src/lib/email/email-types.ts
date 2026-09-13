@@ -82,6 +82,7 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   'invoiceNo',
   'receiptNo',
   'amount',
+  'orderBalance',
   'paymentDate',
   'shipmentDate',
   'releaseDate',

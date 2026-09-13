@@ -336,6 +336,9 @@ export default async function run(t) {
     expectedStatus: 200,
   });
   t.assertEqual(preview.data?.testModeRedirected, true, 'preview explicitly reports test-mode redirection');
+  t.assertOk(preview.data?.preview?.text?.includes(invoiceNo), 'payment preview uses linked invoice number');
+  t.assertOk(preview.data?.preview?.text?.includes('ORDER BALANCE AFTER PAYMENT:'), 'payment preview includes linked order live balance');
+  t.assertOk(preview.data?.preview?.text?.includes('20/08/2026') && preview.data?.preview?.text?.includes('30/08/2026'), 'payment preview refreshes current invoice shipment and release dates');
   t.assertEqual(preview.data?.intendedRecipients?.length, 2, 'separate mode preserves two intended customer recipients');
   t.assertOk(
     preview.data?.actualRecipients?.every((item) => item.to?.[0] === 'test-destination@example.com'),

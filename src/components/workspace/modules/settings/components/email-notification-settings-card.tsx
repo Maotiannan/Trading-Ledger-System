@@ -420,7 +420,7 @@ export function EmailNotificationSettingsCard({ tx }: EmailNotificationSettingsC
 
               <div className="rounded-md border bg-muted/40 p-3">
                 <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {tx('可用且必填的变量', 'Available required variables')}
+                  {tx('可用变量（收款通知的发票、余额和日期允许缺省）', 'Available variables (payment invoice, balance and dates may be unavailable)')}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(variableCatalog[selectedType] || []).map((variable) => (

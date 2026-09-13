@@ -152,6 +152,36 @@ function makeTransaction(input: {
   };
 }
 
+describe('payment order context', () => {
+  it.each([null, { customerId: 'another-customer', amount: 5000, receipts: [], invoice: { invNo: 'PRIVATE' } }])('never falls back to OCR or another customer order: %j', async (order) => {
+    const { tx, notifications } = makeTransaction({ receipt: receipt({ order, invNo: 'OCR-ONLY' }) });
+    await projectPaymentReceiptInTransaction(tx as never, { receiptId: 'receipt-1', actorId: 'admin' });
+    expect(notifications[0].currentSnapshot).toMatchObject({ invoiceNo: null, orderBalance: null });
+    expect(notifications[0].currentSnapshot).not.toHaveProperty('shipmentDate');
+  });
+
+  it('uses linked order live balance and invoice dates, not cached balance or OCR invoice', async () => {
+    const { tx, notifications } = makeTransaction({ receipt: {
+      id: 'payment-live', customerId: 'c-live', customer: customer('c-live', 'DEMO'),
+      orderNo: 'DEMO-01/DEMO-02', receiptNo: 'R-LIVE', invNo: 'OCR-WRONG', usd: 15000,
+      status: ReceiptStatus.RECEIVED, date: new Date('2026-09-11'),
+      order: { customerId: 'c-live', amount: 28674, orderBalance: 38674,
+        receipts: [
+          { usd: 10000, status: ReceiptStatus.SR_Received },
+          { usd: 15000, status: ReceiptStatus.RECEIVED },
+          { usd: 2000, status: ReceiptStatus.SIGNING_PENDING },
+        ],
+        invoice: { invNo: 'INV-CORRECT', shipDate: new Date('2026-09-01'), releaseDate: new Date('2026-09-05') },
+      },
+    } });
+    await projectPaymentReceiptInTransaction(tx as never, { receiptId: 'payment-live', actorId: 'admin' });
+    expect(notifications[0].currentSnapshot).toMatchObject({
+      orderBalance: 3674, invoiceNo: 'INV-CORRECT',
+      shipmentDate: '2026-09-01T00:00:00.000Z', releaseDate: '2026-09-05T00:00:00.000Z',
+    });
+  });
+});
+
 function customer(id: string, mark: string, overrides: Record<string, unknown> = {}) {
   return {
     id,
@@ -176,6 +206,10 @@ function receipt(overrides: Record<string, unknown> = {}) {
     customerId: 'customer-1',
     customer: customer('customer-1', 'AB'),
     generatedByBalanceTransfer: null,
+    order: { customerId: 'customer-1', amount: 5000,
+      receipts: [{ usd: 1250, status: ReceiptStatus.SR_Received }],
+      invoice: { invNo: 'INV-001', shipDate: null, releaseDate: null },
+    },
     ...overrides,
   };
 }
@@ -362,6 +396,7 @@ describe('email-notification-projector', () => {
             invoiceNo: 'INV-001',
             receiptNo: '0010001',
             amount: 1250,
+            orderBalance: 3750,
             paymentDate: '2026-08-31T00:00:00.000Z',
           },
           sourceActorId: 'sales-1',

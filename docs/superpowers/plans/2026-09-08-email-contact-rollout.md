@@ -1,7 +1,8 @@
 # Email Contact Layout And Production Activation
 
-Status: ACTIVE. Production outbound delivery must remain disabled until real
-delivery and callback verification pass. This plan continues the completed
+Status: ACTIVE. Latest user instruction: deploy the accepted templates without
+resending samples; production outbound remains disabled pending final activation.
+This plan continues the completed
 2026-09-01 email feature; it does not reopen the financial implementation.
 
 ## Confirmed Request
@@ -48,7 +49,7 @@ delivery and callback verification pass. This plan continues the completed
   On September 10 added exactly four DNS records after separate confirmation:
   TXT `resend._domainkey.notice`, TXT/MX `send.notice`, and TXT `_dmarc.notice`
   (`v=DMARC1; p=none;`). Authoritative Cloudflare DNS returns all four correct values;
-  Resend verification started. No keys created and no real emails sent yet.
+  Resend verification subsequently completed.
 - [x] PR #34 initial CI `34455717364` passed (6m16s). Review found mismatched
   displayed phone/WhatsApp URL possible after partial edits; regression reproduced
   and normalization-based equality validation added before merge.
@@ -58,12 +59,49 @@ delivery and callback verification pass. This plan continues the completed
   endpoint `https://muledger.dainty.vip/api/webhooks/resend`, seven supported events.
   Signing secret saved locally mode 600. Runtime has not loaded credentials yet.
 - [ ] Final reviewed-commit and post-merge CI.
-- [ ] Create/verify sending subdomain and configure scoped key plus webhook.
-- [ ] Preview all six templates and verify internal real delivery and callback.
+- [x] Create/verify sending subdomain and configure scoped key plus webhook.
+- [x] Six synthetic samples sent only to the internal test inbox on September 12;
+  all six were Delivered in Resend and the user confirmed receipt. This proves
+  provider delivery, not production callback processing (credentials were not loaded).
+- [x] User approved final mobile width and font hierarchy on September 13 and
+  explicitly requested no further sample resend. Narrow-screen Gmail re-delivery
+  of this final version is therefore intentionally not performed.
+- [ ] Production callback processing verification (do not describe Delivered as callback success).
 - [ ] Verify backup, deploy with outbound disabled/test mode enabled, then verify
   production callback/configuration and ensure no test sends remain queued.
 - [ ] Enable outbound and disable test mode only after acceptance. Never approve
   existing customer tasks as part of rollout.
+
+## Template Review Follow-up (2026-09-11)
+
+User confirmed: payment notifications display the linked ORDER NO balance after
+payment (not the whole invoice balance), INV NO, shipment date and release date.
+Read the receipt's persisted order relation and its invoice, require the same
+customer, and reuse `computeOrderBalanceFromReceipts`; do not trust cached
+`orderBalance` or fall back to OCR invoice text. Unavailable fields render as an
+em dash; system pool names are not customer invoice numbers. Pending preview and
+approval refresh the current order balance; approved/sent rendered snapshots stay
+unchanged. No new financial formula or schema migration.
+
+New default English/French payment templates include these fields. Existing
+customized templates remain valid and are not overwritten; optional variables
+are available for template editing. Final template selection/approval is complete.
+Shipment container number is deferred until the user defines its data
+source and matching rule; no placeholder collection or invented container data.
+
+The local six-sample review artifact uses synthetic data only and calls the same
+renderer. September 13 approval permits release/deployment, not another resend.
+
+Final layout: Arial, 22px bold blue title, 20px bold amount/balance, 13px muted
+labels on their own line, 16px values with bold order/invoice/receipt numbers,
+17px contact name, 14px contact links and 13px footer. Mobile uses 4px external
+horizontal padding, 12px body wrapper and 14px body padding; desktop spacing is
+preserved. HTML styling never changes plain-text content or approved snapshots.
+
+Verification: 1407 tests / 209 suites, full TypeScript and ESLint passed for final
+release code; earlier isolated delivery API covers linked invoice/date refresh,
+live balance and immutable approved contact snapshots. CI reruns the full isolated
+API and browser suites before/after merge.
 
 ## Safety And Recovery
 

@@ -7,6 +7,8 @@ import {
 import { isDeepStrictEqual } from 'node:util';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { logger } from '@/lib/logger';
+import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { SYSTEM_POOL_INVOICE_NOS } from '@/lib/payment-type-classifier';
 import type { DbTransactionClient } from '@/lib/transaction';
 
 type ProjectionClient = Pick<
@@ -35,6 +37,7 @@ type NotificationSnapshot = {
   invoiceNo: string | null;
   receiptNo?: string;
   amount?: number;
+  orderBalance?: number | null;
   paymentDate?: string;
   shipmentDate?: string;
   releaseDate?: string;
@@ -254,6 +257,11 @@ export async function projectPaymentReceiptInTransaction(
         },
       },
       generatedByBalanceTransfer: { select: { id: true } },
+      order: { select: {
+        customerId: true, amount: true,
+        receipts: { select: { usd: true, status: true } },
+        invoice: { select: { invNo: true, shipDate: true, releaseDate: true } },
+      } },
     },
   });
   if (!receipt) return { projected: false as const, reason: 'SOURCE_NOT_FOUND' as const };
@@ -274,6 +282,10 @@ export async function projectPaymentReceiptInTransaction(
   }
 
   const paymentDate = dateToIso(receipt.date || receipt.createdAt);
+  const order = receipt.order?.customerId === receipt.customerId ? receipt.order : null;
+  const linkedInvoice = order?.invoice;
+  const formalInvoice = linkedInvoice && !SYSTEM_POOL_INVOICE_NOS.has(linkedInvoice.invNo)
+    ? linkedInvoice : null;
   const action = await upsertCurrentNotification(tx, {
     eventKey: `PAYMENT_RECEIVED:${receipt.id}`,
     type: EmailNotificationType.PAYMENT_RECEIVED,
@@ -283,7 +295,10 @@ export async function projectPaymentReceiptInTransaction(
     snapshot: {
       ...buildCustomerSnapshot(receipt.customer),
       orderNos: splitOrderNos(receipt.orderNo),
-      invoiceNo: receipt.invNo || null,
+      invoiceNo: formalInvoice?.invNo || null,
+      orderBalance: order ? computeOrderBalanceFromReceipts(order) : null,
+      ...(formalInvoice?.shipDate ? { shipmentDate: dateToIso(formalInvoice.shipDate) } : {}),
+      ...(formalInvoice?.releaseDate ? { releaseDate: dateToIso(formalInvoice.releaseDate) } : {}),
       receiptNo: receipt.receiptNo || receipt.id,
       amount: Number(receipt.usd),
       ...(paymentDate ? { paymentDate } : {}),

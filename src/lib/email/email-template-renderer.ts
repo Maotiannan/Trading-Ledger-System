@@ -5,7 +5,9 @@ import {
   type EmailRenderContext,
   type EmailTemplateVariable,
 } from '@/lib/email/email-types';
-import { getEmailTemplateVariableCatalog } from '@/lib/email/email-template-catalog';
+import { getEmailTemplateRequiredVariables } from '@/lib/email/email-template-catalog';
+import { DEFAULT_EMAIL_CONTACT, type EmailContactSettings } from '@/lib/email/email-types';
+import { contactPhoneHref, validateEmailContact } from '@/lib/email/email-contact';
 
 const PLACEHOLDER = /{{\s*([^{}]+?)\s*}}/g;
 const SUBJECT_MAX_LENGTH = 500;
@@ -72,16 +74,32 @@ function renderText(template: string, context: EmailRenderContext): string {
 }
 
 function renderHtmlText(template: string, context: EmailRenderContext): string {
-  let cursor = 0;
-  let html = '';
-  for (const match of template.matchAll(PLACEHOLDER)) {
-    const index = match.index ?? 0;
-    html += escapeHtml(template.slice(cursor, index));
-    html += escapeHtml(requireContextValue(context, match[1].trim() as EmailTemplateVariable));
-    cursor = index + match[0].length;
+  function valueHtml(variable: EmailTemplateVariable): string {
+    const value = escapeHtml(requireContextValue(context, variable));
+    if (variable === 'amount' || variable === 'orderBalance') {
+      return `<strong style="font-size:20px;font-weight:700;color:#172033;">${value}</strong>`;
+    }
+    if (variable === 'orderNos' || variable === 'invoiceNo' || variable === 'receiptNo') {
+      return `<strong style="font-size:16px;font-weight:700;color:#172033;">${value}</strong>`;
+    }
+    return `<span style="font-size:16px;color:#172033;">${value}</span>`;
   }
-  html += escapeHtml(template.slice(cursor));
-  return html.replace(/\r\n|\r|\n/g, '<br>');
+  function lineHtml(line: string): string {
+    const field = line.match(/^([^{}:]+[:：])\s*{{\s*(\w+)\s*}}\s*$/);
+    if (field) {
+      return `<span style="display:block;padding:5px 0;"><span style="display:block;font-size:13px;line-height:1.5;color:#5d6b82;">${escapeHtml(field[1])}</span>${valueHtml(field[2] as EmailTemplateVariable)}</span>`;
+    }
+    let cursor = 0;
+    let html = '';
+    for (const match of line.matchAll(PLACEHOLDER)) {
+      const index = match.index ?? 0;
+      html += escapeHtml(line.slice(cursor, index));
+      html += valueHtml(match[1].trim() as EmailTemplateVariable);
+      cursor = index + match[0].length;
+    }
+    return html + escapeHtml(line.slice(cursor)) + '<br>';
+  }
+  return template.split(/\r\n|\r|\n/).map(lineHtml).join('\n');
 }
 
 function validateLogoUrl(value: string): string {
@@ -129,7 +147,7 @@ export function validateEmailTemplate(input: EmailTemplateValidationInput): {
     ...extractVariables(subject),
     ...extractVariables(body),
   ]));
-  const requiredVariables = getEmailTemplateVariableCatalog(input.type);
+  const requiredVariables = getEmailTemplateRequiredVariables(input.type);
   for (const variable of requiredVariables) {
     if (!variables.includes(variable)) {
       throw new Error(`Missing required email template variable: ${variable}`);
@@ -141,8 +159,11 @@ export function validateEmailTemplate(input: EmailTemplateValidationInput): {
 export function renderEmailTemplate(
   template: RenderableEmailTemplate,
   context: EmailRenderContext,
-  options: { logoUrl: string },
+  options: { logoUrl: string } & Partial<EmailContactSettings>,
 ) {
+  if (template.type === 'PAYMENT_RECEIVED') {
+    context = { invoiceNo: '—', orderBalance: '—', shipmentDate: '—', releaseDate: '—', ...context };
+  }
   const validation = validateEmailTemplate(template);
   for (const variable of validation.variables) requireContextValue(context, variable);
   const logoUrl = validateLogoUrl(options.logoUrl);
@@ -152,20 +173,48 @@ export function renderEmailTemplate(
   const renderedBodyText = renderText(template.bodyTemplate, context).trim();
   const renderedBodyHtml = renderHtmlText(template.bodyTemplate, context);
   const heading = eventHeading(template.type, template.language);
+  const contact = { ...DEFAULT_EMAIL_CONTACT, ...options };
+  validateEmailContact(contact);
+  const french = template.language === 'FRENCH';
+  const notice = french
+    ? 'Cette adresse d’expédition ne reçoit pas de messages. Pour toute assistance, veuillez utiliser les coordonnées ci-dessus.'
+    : 'This sending address does not accept incoming emails. For assistance, please use the contact details above.';
+  const linkStyle = 'color:#0b4ea2;text-decoration:underline;overflow-wrap:anywhere;word-break:break-word;';
+  const addressHtml = escapeHtml(contact.companyAddress).replace(/\r\n|\r|\n/g, '<br>');
+  const contactHtml = `<strong style="font-size:17px;color:#0b4ea2;">${escapeHtml(contact.contactName)}</strong><br>
+${french ? 'Téléphone' : 'Phone'}: <a href="${escapeHtml(contactPhoneHref(contact.contactPhone))}" style="${linkStyle}">${escapeHtml(contact.contactPhone)}</a><br>
+WhatsApp: <a href="${escapeHtml(contact.whatsappUrl)}" style="${linkStyle}">${escapeHtml(contact.contactPhone)}</a><br>
+${french ? 'E-mail' : 'Email'}: <a href="${escapeHtml(`mailto:${contact.contactEmail}`)}" style="${linkStyle}">${escapeHtml(contact.contactEmail)}</a>`;
   const html = `<!doctype html>
 <html lang="${template.language === 'FRENCH' ? 'fr' : 'en'}">
+<head><meta name="viewport" content="width=device-width, initial-scale=1"><meta charset="utf-8"><title>${escapeHtml(heading)}</title>
+<style>
+  @media only screen and (max-width:480px) {
+    .email-outer { padding: 8px 4px !important; }
+    .email-shell { border-radius: 8px !important; }
+    .email-header { padding: 14px 16px !important; }
+    .email-logo { width: 170px !important; }
+    .email-title { padding: 20px 16px 8px !important; font-size: 22px !important; }
+    .email-body-wrap { padding: 8px 12px 18px !important; }
+    .email-body { padding: 14px !important; font-size: 16px !important; line-height: 1.6 !important; }
+    .email-contact { padding: 16px !important; font-size: 14px !important; line-height: 1.7 !important; }
+    .email-footer { padding: 16px !important; font-size: 13px !important; line-height: 1.55 !important; }
+  }
+</style>
+</head>
 <body style="margin:0;padding:0;background:#f2f6fb;font-family:Arial,sans-serif;color:#172033;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f2f6fb;">
-<tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #dce5f0;border-radius:12px;overflow:hidden;">
-<tr><td style="padding:24px 28px;background:#0b4ea2;"><img src="${escapeHtml(logoUrl)}" width="120" alt="MU LEDGER" style="display:block;width:120px;max-width:100%;height:auto;border:0;"></td></tr>
-<tr><td style="padding:28px 28px 12px;font-size:24px;line-height:1.25;font-weight:700;color:#0b4ea2;">${escapeHtml(heading)}</td></tr>
-<tr><td style="padding:12px 28px 28px;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f7faff;border:1px solid #dce8f6;border-radius:8px;">
-<tr><td style="padding:20px;font-size:15px;line-height:1.65;color:#172033;">${renderedBodyHtml}</td></tr>
+<tr><td class="email-outer" align="center" style="padding:24px 12px;">
+<table class="email-shell" role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;table-layout:fixed;background:#ffffff;border:1px solid #dce5f0;border-radius:12px;overflow:hidden;">
+<tr><td class="email-header" style="padding:24px 28px;background:#ffffff;border-top:6px solid #0b4ea2;border-bottom:1px solid #dce5f0;"><img class="email-logo" src="${escapeHtml(logoUrl)}" width="220" alt="MU Group" style="display:block;width:220px;max-width:100%;height:auto;border:0;"></td></tr>
+<tr><td class="email-title" style="padding:28px 28px 12px;font-size:22px;line-height:1.25;font-weight:700;color:#0b4ea2;">${escapeHtml(heading)}</td></tr>
+<tr><td class="email-body-wrap" style="padding:12px 28px 28px;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;table-layout:fixed;background:#f7faff;border:1px solid #dce8f6;border-radius:8px;">
+<tr><td class="email-body" style="padding:20px;font-size:16px;line-height:1.65;color:#172033;overflow-wrap:anywhere;word-break:break-word;">${renderedBodyHtml}</td></tr>
 </table>
 </td></tr>
-<tr><td style="padding:18px 28px;background:#eef4fb;font-size:12px;line-height:1.5;color:#5d6b82;">MU LEDGER · Customer Notification</td></tr>
+<tr><td class="email-contact" style="padding:20px 28px;border-top:1px solid #dce5f0;font-size:14px;line-height:1.8;overflow-wrap:anywhere;">${contactHtml}</td></tr>
+<tr><td class="email-footer" style="padding:20px 28px;background:#eef4fb;font-size:13px;line-height:1.6;color:#465570;overflow-wrap:anywhere;word-break:break-word;">${addressHtml}<br><br>${escapeHtml(notice)}<br><br>MU LEDGER · ${french ? 'Notification client' : 'Customer Notification'}</td></tr>
 </table>
 </td></tr>
 </table>
@@ -174,7 +223,7 @@ export function renderEmailTemplate(
   return {
     subject,
     html,
-    text: `${renderedBodyText}\n\nMU LEDGER · Customer Notification`,
+    text: `${renderedBodyText}\n\n${contact.contactName}\n${french ? 'Téléphone' : 'Phone'}: ${contact.contactPhone}\nWhatsApp: ${contact.whatsappUrl}\n${french ? 'E-mail' : 'Email'}: ${contact.contactEmail}\n\n${contact.companyAddress}\n\n${notice}\n\nMU LEDGER · ${french ? 'Notification client' : 'Customer Notification'}`,
     variables: validation.variables,
     templateVersion: template.version,
   };

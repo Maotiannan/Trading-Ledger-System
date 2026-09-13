@@ -327,7 +327,7 @@ describe('email-notification-service', () => {
     expect(result.preview.subject).toBe('FRENCH subject');
     expect(mockRenderEmailTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ language: CustomerEmailLanguage.FRENCH }),
-      expect.objectContaining({ receiptNo: '0010001' }),
+      expect.objectContaining({ receiptNo: '0010001', orderBalance: '—', shipmentDate: '—', releaseDate: '—' }),
       expect.any(Object),
     );
     expect((mockTransactionClient as { emailNotification: { update: jest.Mock } }).emailNotification.update).not.toHaveBeenCalled();

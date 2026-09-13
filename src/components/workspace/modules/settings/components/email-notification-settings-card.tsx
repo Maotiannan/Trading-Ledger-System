@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { apiCall, getApiErrorMessage } from '@/components/workspace/shared';
 import {
   DEFAULT_EMAIL_SETTINGS,
@@ -83,6 +84,11 @@ function settingsValue(value: unknown): EmailSettings {
     testModeEnabled: row.testModeEnabled !== false,
     testDestination: String(row.testDestination ?? ''),
     logoUrl: String(row.logoUrl ?? DEFAULT_EMAIL_SETTINGS.logoUrl),
+    contactName: String(row.contactName ?? DEFAULT_EMAIL_SETTINGS.contactName),
+    contactPhone: String(row.contactPhone ?? DEFAULT_EMAIL_SETTINGS.contactPhone),
+    whatsappUrl: String(row.whatsappUrl ?? DEFAULT_EMAIL_SETTINGS.whatsappUrl),
+    contactEmail: String(row.contactEmail ?? DEFAULT_EMAIL_SETTINGS.contactEmail),
+    companyAddress: String(row.companyAddress ?? DEFAULT_EMAIL_SETTINGS.companyAddress),
   };
 }
 
@@ -343,6 +349,26 @@ export function EmailNotificationSettingsCard({ tx }: EmailNotificationSettingsC
                 </div>
               </div>
 
+              <fieldset className="flex flex-col gap-4 rounded-md border p-4">
+                <legend className="px-1">{tx('邮件联系信息', 'Email contact information')}</legend>
+                <p className="text-sm text-muted-foreground">{tx('所有模板共用。请先保存设置，再预览模板；已批准的邮件保持原内容。', 'Shared by all templates. Save settings before previewing; approved emails keep their original content.')}</p>
+                {([
+                  ['contactName', tx('联系人', 'Contact name'), 'text'],
+                  ['contactPhone', tx('联系电话 / WhatsApp 号码', 'Phone / WhatsApp number'), 'tel'],
+                  ['whatsappUrl', tx('WhatsApp 链接', 'WhatsApp link'), 'url'],
+                  ['contactEmail', tx('联系邮箱', 'Contact email'), 'email'],
+                ] as const).map(([key, label, type]) => (
+                  <div key={key} className="flex flex-col gap-2">
+                    <Label htmlFor={`email-${key}`}>{label}</Label>
+                    <Input id={`email-${key}`} type={type} maxLength={320} value={settings[key]} onChange={(event) => updateSetting(key, event.target.value)} />
+                  </div>
+                ))}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="email-company-address">{tx('公司地址（允许换行）', 'Company address (multiple lines allowed)')}</Label>
+                  <Textarea id="email-company-address" rows={3} maxLength={1000} value={settings.companyAddress} onChange={(event) => updateSetting('companyAddress', event.target.value)} />
+                </div>
+              </fieldset>
+
               <div className="flex flex-col gap-2 rounded-md bg-muted p-3 text-sm sm:flex-row sm:justify-between">
                 <span>Resend API key: {apiKeyConfigured ? 'Configured' : 'Missing'}</span>
                 <span>Webhook secret: {webhookSecretConfigured ? 'Configured' : 'Missing'}</span>
@@ -394,7 +420,7 @@ export function EmailNotificationSettingsCard({ tx }: EmailNotificationSettingsC
 
               <div className="rounded-md border bg-muted/40 p-3">
                 <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {tx('可用且必填的变量', 'Available required variables')}
+                  {tx('可用变量（收款通知的发票、余额和日期允许缺省）', 'Available variables (payment invoice, balance and dates may be unavailable)')}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {(variableCatalog[selectedType] || []).map((variable) => (

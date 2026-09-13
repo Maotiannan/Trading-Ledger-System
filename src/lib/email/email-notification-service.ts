@@ -358,12 +358,13 @@ function renderContext(snapshotValue: Prisma.JsonValue): EmailRenderContext {
     customerName: text(snapshot.customerName),
     mark: text(snapshot.mark),
     orderNos,
-    invoiceNo: text(snapshot.invoiceNo),
+    invoiceNo: text(snapshot.invoiceNo) || '—',
     receiptNo: text(snapshot.receiptNo),
     amount: formatAmount(snapshot.amount),
+    orderBalance: snapshot.orderBalance == null ? '—' : formatAmount(snapshot.orderBalance) || '—',
     paymentDate: formatAppDate(text(snapshot.paymentDate), ''),
-    shipmentDate: formatAppDate(text(snapshot.shipmentDate), ''),
-    releaseDate: formatAppDate(text(snapshot.releaseDate), ''),
+    shipmentDate: formatAppDate(text(snapshot.shipmentDate), '—'),
+    releaseDate: formatAppDate(text(snapshot.releaseDate), '—'),
   };
 }
 
@@ -393,7 +394,7 @@ async function renderNotification(
       version: template.version,
       subjectTemplate: template.subjectTemplate,
       bodyTemplate: template.bodyTemplate,
-    }, renderContext(row.currentSnapshot), { logoUrl: settings.logoUrl });
+    }, renderContext(row.currentSnapshot), settings);
     return { template, rendered };
   } catch (error) {
     throw createApiError({

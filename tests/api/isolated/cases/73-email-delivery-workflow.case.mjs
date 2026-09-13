@@ -322,6 +322,11 @@ export default async function run(t) {
         testModeEnabled: true,
         testDestination: 'test-destination@example.com',
         logoUrl: 'https://127.0.0.1/isolated-test-logo.svg',
+        contactName: 'Isolated Contact Before Approval',
+        contactPhone: '+86 13819858718',
+        whatsappUrl: 'https://wa.me/+8613819858718',
+        contactEmail: 'contact@example.com',
+        companyAddress: 'MU Group\nIsolated address',
       },
     },
     expectedStatus: 200,
@@ -331,6 +336,9 @@ export default async function run(t) {
     expectedStatus: 200,
   });
   t.assertEqual(preview.data?.testModeRedirected, true, 'preview explicitly reports test-mode redirection');
+  t.assertOk(preview.data?.preview?.text?.includes(invoiceNo), 'payment preview uses linked invoice number');
+  t.assertOk(preview.data?.preview?.text?.includes('ORDER BALANCE AFTER PAYMENT:'), 'payment preview includes linked order live balance');
+  t.assertOk(preview.data?.preview?.text?.includes('20/08/2026') && preview.data?.preview?.text?.includes('30/08/2026'), 'payment preview refreshes current invoice shipment and release dates');
   t.assertEqual(preview.data?.intendedRecipients?.length, 2, 'separate mode preserves two intended customer recipients');
   t.assertOk(
     preview.data?.actualRecipients?.every((item) => item.to?.[0] === 'test-destination@example.com'),
@@ -342,6 +350,10 @@ export default async function run(t) {
     expectedStatus: 200,
   });
   t.assertEqual(approval.data?.deliveryCount, 2, 'ADMIN approval freezes one delivery per separate recipient');
+  await t.request('POST', '/api/email-settings', {
+    json: { action: 'save-settings', settings: { contactName: 'Isolated Contact After Approval' } },
+    expectedStatus: 200,
+  });
   const firstKey = `email-delivery:${directTask.id}:1`;
   const secondKey = `email-delivery:${directTask.id}:2`;
   await fakeResendControl('/__control/configure', {
@@ -361,6 +373,10 @@ export default async function run(t) {
 
   const firstRequests = (await fakeResendControl('/__control/requests')).requests;
   t.assertEqual(firstRequests.length, 2, 'fake provider receives exactly two separate delivery requests');
+  t.assertOk(firstRequests.every((item) => item.body?.html?.includes('Isolated Contact Before Approval')
+    && !item.body?.html?.includes('Isolated Contact After Approval')
+    && item.body?.html?.includes('href="https://wa.me/+8613819858718"')
+    && item.body?.text?.includes('Isolated address')), 'shared contact settings are frozen in approved HTML and plain text');
   t.assertOk(firstRequests.every((item) => item.authorizationPresent), 'provider authorization is present without exposing its value');
   t.assertOk(
     firstRequests.every((item) => item.body?.to?.[0] === 'test-destination@example.com'),

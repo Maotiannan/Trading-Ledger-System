@@ -1,12 +1,16 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.217
-> 最后更新：2026-09-05
+> 当前版本：v1.0.218
+> 最后更新：2026-09-13
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 邮件样张最终确认：收款通知加入已关联 ORDER 的实时余额、正式 INV NO、出运及放单日期，复用统一余额算法，缺省显示破折号，旧自定义模板不强制覆盖。手机留白缩小且加入语义字体层次，英法文及纯文本业务内容一致。用户确认初版六封真实样张收到，并确认最终排版不再重发。最终本地 209 suites / 1407 tests、TypeScript、ESLint 通过；正式发布仍保持外发关闭。Resend Delivered 只证明邮件送达，不代表尚未加载密钥的生产回调已通过。2026-09-13
+
+- [x] 邮件联系区与排版：共享 `EmailContactSettings` 保存到现有 `SystemSetting`，增加姓名、电话、WhatsApp URL、联系邮箱和多行地址；六套模板与纯文本复用，审批后的历史快照不变。默认发件人 Leo Mao，Logo 复用完整 MU Group PNG；600px 最大宽度、16px 正文、13px 页脚，手机长文本自然换行。本地 209 suites / 1398 tests、ESLint、TypeScript、Webpack build 通过；隔离邮件 API 验证审批后设置变化不改写投递内容；隔离浏览器 ADMIN/SALES 与 1280/390/320px 检查通过，最终 PNG 手机预览通过。无 schema 迁移、无业务写入、无新增 NAS 文件。接入上线仍受域名、密钥、真实投递及回调门禁控制，详见 `docs/superpowers/plans/2026-09-08-email-contact-rollout.md`。2026-09-10
 
 - [x] GitHub Actions 隔离测试随机端口修复：`main` run `33965717247` 的 208 suites / 1382 tests 已全部通过，但 isolated API 在邮件流程启动前失败；日志确认随机生成的 fake Resend 端口恰好为 `4190`，被 Node Fetch 作为禁止端口拒绝，属于测试基础设施偶发失败而非业务回归。后续同一 `main` run `33966562466` 因随机到其他端口而通过，进一步确认问题具有随机性。新增共享 `select-isolated-test-ports.mjs`，由操作系统分配互不重复的空闲端口并在交给测试服务前用 Node Fetch 实际验证；API 的 MU Contract/fake Resend 与 Playwright fake Resend 统一复用，不再维护可能包含禁止端口的随机范围。回归测试覆盖端口唯一性、合法范围、Fetch 许可和两套 harness 接入；完整 isolated API 24 cases、isolated Playwright 13/13、Shell/Node 语法及定向 Jest 通过。仅修改隔离测试基础设施，无业务代码、运行服务、数据库、迁移、Docker volume、NAS/COS 或备份范围变化。✅ 2026-09-05
 

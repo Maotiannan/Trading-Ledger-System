@@ -15,7 +15,8 @@ import {
   getEmailTemplatePreviewContext,
 } from '@/lib/email/email-template-catalog';
 import { renderEmailTemplate, validateEmailTemplate } from '@/lib/email/email-template-renderer';
-import { DEFAULT_EMAIL_SETTINGS } from '@/lib/email/email-types';
+import { DEFAULT_EMAIL_SETTINGS, EMAIL_CONTACT_FIELDS } from '@/lib/email/email-types';
+import { validateEmailContact } from '@/lib/email/email-contact';
 import type {
   CustomerEmailLanguageValue,
   EmailNotificationTypeValue,
@@ -43,6 +44,7 @@ const SETTING_FIELDS = [
   'testModeEnabled',
   'testDestination',
   'logoUrl',
+  ...EMAIL_CONTACT_FIELDS,
 ] as const satisfies readonly (keyof EmailSettings)[];
 
 function assertAdmin(currentUser: CurrentUser): void {
@@ -95,11 +97,17 @@ function settingsFromRows(rows: Array<{ key: string; value: string }>): EmailSet
     testModeEnabled: boolValue(values['email.testModeEnabled'], true),
     testDestination: values['email.testDestination'],
     logoUrl: values['email.logoUrl'],
+    contactName: values['email.contactName'],
+    contactPhone: values['email.contactPhone'],
+    whatsappUrl: values['email.whatsappUrl'],
+    contactEmail: values['email.contactEmail'],
+    companyAddress: values['email.companyAddress'],
   };
 }
 
 function settingRows(settings: EmailSettings): Array<{ key: string; value: string }> {
   return [
+    ...EMAIL_CONTACT_FIELDS.map((field) => ({ key: `email.${field}`, value: settings[field] })),
     { key: 'email.outboundEnabled', value: String(settings.outboundEnabled) },
     { key: 'email.recipientMode', value: settings.recipientMode },
     { key: 'email.senderName', value: settings.senderName },
@@ -150,6 +158,14 @@ function mergeAndValidateSettings(current: EmailSettings, input: unknown): Email
     });
   }
   const merged = { ...current };
+  for (const field of EMAIL_CONTACT_FIELDS) {
+    if (field in raw) merged[field] = textValue(raw[field], field === 'companyAddress' ? 1000 : 320, field);
+  }
+  try {
+    validateEmailContact(merged);
+  } catch {
+    throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: '联系信息无效：请填写姓名、地址、有效电话和邮箱，WhatsApp 链接必须为 https://wa.me/号码，且与联系电话一致' });
+  }
   if ('outboundEnabled' in raw) {
     if (typeof raw.outboundEnabled !== 'boolean') {
       throw createApiError({ code: apiErrorCodes.VALIDATION_ERROR, status: 400, message: '外发邮件开关必须是布尔值' });
@@ -414,7 +430,7 @@ export async function previewEmailTemplate(currentUser: CurrentUser, input: unkn
   const version = Number.isInteger(Number(raw.version)) && Number(raw.version) > 0 ? Number(raw.version) : 1;
   const settings = await getEmailSettings();
   const preview = renderEmailTemplate({ type, language, version, subjectTemplate, bodyTemplate }, getEmailTemplatePreviewContext(type), {
-    logoUrl: settings.logoUrl,
+    ...settings,
   });
   return { preview, message: '邮件模板预览已生成' };
 }

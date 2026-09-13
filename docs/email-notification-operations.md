@@ -81,6 +81,53 @@ In `Settings -> Email Notification Settings`, ADMIN configures:
 - test destination;
 - English and French payment, shipment, and release templates.
 
+### Shared Contact Footer
+
+Payment templates can use `orderBalance`, `invoiceNo`, `shipmentDate`, and
+`releaseDate`. The payment projector reads the receipt's linked financial order
+and invoice, checks customer identity, and computes balance with the global
+non-SIGNING_PENDING receipt rule. Pending preview/approval uses the current live
+balance including the payment, not an invoice-wide total or a historical cutoff.
+Missing values render as `—`; OCR invoice text is not an authoritative fallback.
+Existing customized templates are not overwritten; add these optional fields
+through the template editor after content review. Stored approved content remains
+immutable. Shipment container-number integration is deferred pending business rules.
+
+The five contact settings (`contactName`, `contactPhone`, `whatsappUrl`,
+`contactEmail`, `companyAddress`) are stored under `email.*` in `SystemSetting`.
+All six templates use this one footer in HTML and plain text. Save settings
+before previewing. Approval freezes the rendered footer with the rest of the
+delivery snapshot; subsequent edits never rewrite approved or sent mail.
+
+The September 2026 rollout uses Leo Mao, phone `+86 13819858718`, WhatsApp
+`https://wa.me/+8613819858718`, and contact/reply-to `maotiannan@gmail.com`.
+The address is stored with these display line breaks:
+
+```text
+MU Group
+No. 2506, Yongjiang Avenue, Yinzhou District,
+Ningbo City, Zhejiang Province
+```
+
+The intended sender is `Leo Mao <notifications@notice.dainty.vip>`. These
+operational sender, reply-to and test-destination values must be explicitly saved
+after domain verification; deployment does not turn outbound delivery on.
+The default logo reuses the existing full MU Group PNG at
+`/detail-export/payment-detail-logo.png`, preserving its aspect ratio. The shared
+600px shell uses Arial, 16px body text, a single-column contact section, and an
+English/French notice that the sending address does not accept incoming mail.
+
+The approved mobile refinement reduces outer horizontal padding to 4px, body
+wrapper to 12px and body padding to 14px at widths up to 480px. Semantic variable
+rendering emphasizes amounts/balances at 20px and identifiers at 16px bold,
+with 13px muted labels on separate lines; the plain-text message is unchanged.
+The user accepted this layout and waived another sample resend on September 13.
+Six earlier samples were confirmed received, but that alone is not evidence of
+production webhook processing. Keep outbound disabled until explicitly activated.
+
+Rollout progress and remaining gates are tracked in
+[the contact and activation plan](superpowers/plans/2026-09-08-email-contact-rollout.md).
+
 Customer notification addresses and language preference are maintained in Customer Management within the existing account visibility tree. They are optional. SALES may maintain visible customer contact data but cannot view Email Management, preview a task, approve sending, retry, cancel, or create a correction.
 
 Before enabling outbound delivery:

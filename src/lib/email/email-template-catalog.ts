@@ -33,6 +33,10 @@ We confirm receipt of your payment of {{amount}} on {{paymentDate}}.
 MARK: {{mark}}
 ORDER NO: {{orderNos}}
 RECEIPT NO: {{receiptNo}}
+INV NO: {{invoiceNo}}
+ORDER BALANCE AFTER PAYMENT: {{orderBalance}}
+SHIPMENT DATE: {{shipmentDate}}
+RELEASE DATE: {{releaseDate}}
 
 Thank you for your payment.`,
     },
@@ -71,6 +75,10 @@ Nous confirmons la réception de votre paiement de {{amount}} le {{paymentDate}}
 MARK : {{mark}}
 ORDER NO : {{orderNos}}
 REÇU NO : {{receiptNo}}
+INV NO : {{invoiceNo}}
+SOLDE DE LA COMMANDE APRÈS PAIEMENT : {{orderBalance}}
+DATE D’EXPÉDITION : {{shipmentDate}}
+DATE DE MAINLEVÉE : {{releaseDate}}
 
 Merci pour votre paiement.`,
     },
@@ -113,10 +121,15 @@ export const EMAIL_TEMPLATE_DEFINITIONS: readonly EmailTemplateDefinition[] = LA
   }))
 ));
 
-export function getEmailTemplateVariableCatalog(type: EmailNotificationTypeValue): EmailTemplateVariable[] {
+export function getEmailTemplateRequiredVariables(type: EmailNotificationTypeValue): EmailTemplateVariable[] {
   const variables = REQUIRED_VARIABLES[type];
   if (!variables) throw new Error(`Unsupported email notification type: ${type}`);
   return [...variables];
+}
+
+export function getEmailTemplateVariableCatalog(type: EmailNotificationTypeValue): EmailTemplateVariable[] {
+  return [...getEmailTemplateRequiredVariables(type), ...(type === 'PAYMENT_RECEIVED'
+    ? ['invoiceNo', 'orderBalance', 'shipmentDate', 'releaseDate'] as const : [])];
 }
 
 export function getDefaultEmailTemplate(
@@ -139,6 +152,7 @@ export function getEmailTemplatePreviewContext(type: EmailNotificationTypeValue)
     invoiceNo: 'L26MH000001',
     receiptNo: '0010000',
     amount: '$10,000',
+    orderBalance: '$3,674',
     paymentDate: '01/09/2026',
     shipmentDate: '01/09/2026',
     releaseDate: '15/09/2026',

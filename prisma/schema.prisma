@@ -832,6 +832,7 @@ model PaymentAgentFile {
 
 // ==================== 客户表 ====================
 model Customer {
+  whatsappContacts CustomerWhatsAppContact[]
   id             String   @id @default(cuid())
   mark           String
   normalizedMark String   @map("normalized_mark")
@@ -863,6 +864,91 @@ model Customer {
   @@index([normalizedMark])
   @@index([orderName])
   @@index([ownerId])
+}
+
+enum WhatsAppDeliveryStatus {
+  PENDING
+  QUEUED
+  SENDING
+  ACCEPTED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  UNCERTAIN
+  CANCELLED
+}
+
+enum WhatsAppNotificationType {
+  PAYMENT_RECEIVED
+  SHIPMENT
+  RELEASE
+}
+
+model CustomerWhatsAppContact {
+  id         String   @id @default(cuid())
+  customerId String
+  phone      String   @db.VarChar(16)
+  optedInAt  DateTime?
+  optedOutAt DateTime?
+  consentSource String? @db.VarChar(255)
+  updatedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  deliveries WhatsAppDelivery[]
+
+  @@unique([customerId, phone])
+}
+
+model WhatsAppDelivery {
+  id                String @id @default(cuid())
+  eventKey          String @unique @db.VarChar(191)
+  type              WhatsAppNotificationType
+  sourceId          String
+  contactId         String
+  testMode          Boolean
+  intendedTo        String @db.VarChar(16)
+  actualTo          String @db.VarChar(16)
+  senderPhone       String @db.VarChar(16)
+  templateName      String
+  languageCode      String @db.VarChar(20)
+  parameters        Json
+  businessSnapshot  Json
+  status            WhatsAppDeliveryStatus @default(PENDING)
+  approvedBy        String?
+  approvedAt        DateTime?
+  claimToken        String?
+  claimedAt         DateTime?
+  providerMessageId String? @unique
+  lastEventAt       DateTime?
+  failureCode       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  contact           CustomerWhatsAppContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  webhookEvents     WhatsAppWebhookEvent[]
+
+  @@index([status, createdAt])
+  @@index([contactId])
+  @@index([type, sourceId])
+}
+
+model WhatsAppWebhookEvent {
+  id                String @id @default(cuid())
+  providerEventId   String @unique
+  providerMessageId String
+  externalId        String?
+  eventType         String
+  payload           Json
+  occurredAt        DateTime
+  receivedAt        DateTime @default(now())
+  appliedAt         DateTime?
+  deliveryId        String?
+  delivery          WhatsAppDelivery? @relation(fields: [deliveryId], references: [id], onDelete: Restrict)
+
+  @@index([providerMessageId])
+  @@index([appliedAt, receivedAt])
+  @@index([deliveryId])
 }
 
 model CustomerOrderName {

@@ -66,6 +66,7 @@ export function Sidebar() {
     { id: 'details' as const, label: t('details'), icon: FileSpreadsheet },
     { id: 'swifts' as const, label: t('swifts'), icon: Building2 },
     { id: 'emails' as const, label: t('emails'), icon: Mail, adminOnly: true },
+    { id: 'whatsapp' as const, label: 'WhatsApp', icon: Mail, adminOnly: true },
     { id: 'deletions' as const, label: t('deletions'), icon: Trash2, managerOnly: true },
     { id: 'customers' as const, label: tx('客户管理', 'Customers'), icon: Users, managerOnly: true },
     { id: 'settings' as const, label: t('settings'), icon: Settings },

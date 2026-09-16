@@ -105,6 +105,9 @@ log 'refreshing email delivery trigger so its token/config matches app'
 docker compose up -d --no-deps --force-recreate email-delivery-trigger
 
 log 'waiting for app health endpoint'
+log 'refreshing WhatsApp trigger; external sending remains controlled by feature flags'
+docker compose up -d --no-deps --force-recreate whatsapp-delivery-trigger
+
 if ! wait_for_app; then
   log 'app health check failed; recent app logs follow'
   docker compose logs --no-color --tail=120 app || true

@@ -47,18 +47,20 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('workspace-sidebar-nav')).toHaveClass('overflow-y-auto');
   });
 
-  it('shows and opens Email Management for ADMIN', () => {
+  it('shows and opens Notification Management for ADMIN', () => {
     render(<Sidebar />);
 
-    fireEvent.click(screen.getByTestId('sidebar-nav-emails'));
+    fireEvent.click(screen.getByTestId('sidebar-nav-notifications'));
 
-    expect(mockPush).toHaveBeenCalledWith('/emails');
+    expect(mockPush).toHaveBeenCalledWith('/notifications');
   });
 
-  it.each(['SALES', 'USER'] as const)('does not show Email Management for %s', (role) => {
+  it.each(['SALES', 'USER'] as const)('does not show Notification Management for %s', (role) => {
     mockRole = role;
     render(<Sidebar />);
 
+    expect(screen.queryByTestId('sidebar-nav-notifications')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-nav-emails')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-nav-whatsapp')).not.toBeInTheDocument();
   });
 });

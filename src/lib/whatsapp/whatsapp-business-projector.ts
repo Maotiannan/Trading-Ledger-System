@@ -6,6 +6,7 @@ import { getWhatsAppSettings } from './whatsapp-settings';
 import { renderWhatsAppSnapshot } from './whatsapp-template';
 import { enqueueWhatsAppInTransaction } from './whatsapp-queue';
 import { logger } from '@/lib/logger';
+import { listWhatsAppTemplateVersions } from './whatsapp-template-service';
 
 // Reuse persisted business-event snapshots already produced transactionally by
 // receipt/invoice services. No second balance formula and no email approvals changed.
@@ -13,6 +14,7 @@ export async function projectWhatsAppBusinessEvents() {
   const settings = await getWhatsAppSettings();
   const senderPhone = process.env.YCLOUD_SENDER_PHONE;
   if (!settings.activatedAt || !senderPhone) return { projected: 0 };
+  const templates = await listWhatsAppTemplateVersions();
   let projected = 0;
   let cursor: string | undefined;
   do {
@@ -23,12 +25,13 @@ export async function projectWhatsAppBusinessEvents() {
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
     for (const event of events) {
+      if (settings.enabledTypes && !settings.enabledTypes.includes(event.type)) continue;
       const contacts = await db.customerWhatsAppContact.findMany({
         where: { customerId: event.customerId!, optedInAt: { lte: event.createdAt }, optedOutAt: null },
       });
       for (const contact of contacts) {
         let rendered: ReturnType<typeof renderWhatsAppSnapshot>;
-        try { rendered = renderWhatsAppSnapshot(event.type, event.currentSnapshot); }
+        try { rendered = renderWhatsAppSnapshot(event.type, event.currentSnapshot, templates); }
         catch { logger.warn('WhatsApp source needs correction', { sourceId: event.id }); continue; }
         const eventKey = createHash('sha256').update(event.id + ':' + contact.id).digest('hex');
         await runInTransaction(tx => enqueueWhatsAppInTransaction(tx, {

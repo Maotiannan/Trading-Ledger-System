@@ -23,7 +23,7 @@ export function getWorkspaceDataPrefetches(
   if (!options.isManager && (view === 'customers' || view === 'deletions')) {
     return [];
   }
-  if ((view === 'emails' || view === 'whatsapp') && !options.isAdmin) return [];
+  if (['emails', 'whatsapp', 'notifications'].includes(view) && !options.isAdmin) return [];
   return WORKSPACE_DATA_PREFETCHES[view] || [];
 }
 
@@ -32,7 +32,7 @@ export function prefetchWorkspaceView(
   view: WorkspaceView,
   options: { isManager?: boolean; isAdmin?: boolean } = {},
 ) {
-  if ((view === 'emails' || view === 'whatsapp') && !options.isAdmin) return;
+  if (['emails', 'whatsapp', 'notifications'].includes(view) && !options.isAdmin) return;
   try {
     router.prefetch(getWorkspacePath(view));
   } catch {

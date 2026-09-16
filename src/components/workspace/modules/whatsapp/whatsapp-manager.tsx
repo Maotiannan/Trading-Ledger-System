@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ListPagination } from '@/components/workspace/modules/shared/list-pagination';
+import { WhatsAppTemplateEditor } from './whatsapp-template-editor';
 import { formatAppDateTime } from '@/lib/app-time';
-type Settings = { outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null };
+type Settings = { outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null; enabledTypes?: string[] };
 type Row = { id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
 type Contact = { id: string; phone: string; optedInAt: string | null; optedOutAt: string | null };
 type Customer = { id: string; name: string; mark: string; orderName: string; whatsappContacts: Contact[] };
@@ -66,6 +67,7 @@ export function WhatsAppManager() {
         <label className="flex gap-2"><input type="checkbox" checked={settings.testMode} onChange={event => setSettings({ ...settings, testMode: event.target.checked })} />{tx('测试模式：管理员审核后发送', 'Test mode: ADMIN approval required')}</label>
         <label className="block">{tx('测试号码（含国家代码）', 'Test number (international format)')}<Input value={settings.testDestination} onChange={event => setSettings({ ...settings, testDestination: event.target.value })} /></label>
         <p className="text-sm text-muted-foreground">{tx('正式模式下，新通知将自动发送给已同意接收的客户；历史任务不会转为正式发送。', 'In production mode, new notifications are sent automatically to opted-in customers. Test tasks never become production deliveries.')}</p>
+        <fieldset className="flex flex-wrap gap-3"><legend>{tx('通知类型', 'Notification types')}</legend>{(['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE'] as const).map((type, index) => <label key={type} className="flex gap-2"><input type="checkbox" checked={(settings.enabledTypes || ['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE']).includes(type)} onChange={event => { const current = settings.enabledTypes || ['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE']; setSettings({ ...settings, enabledTypes: event.target.checked ? [...current, type] : current.filter(value => value !== type) }); }} />{[tx('收款', 'Payment'), tx('出运', 'Shipment'), tx('放单', 'Release')][index]}</label>)}</fieldset>
         <Button disabled={busy} onClick={() => { if (window.confirm(tx('确认保存发送设置？正式模式会自动通知客户。', 'Save sending settings? Production mode automatically notifies customers.'))) void action('whatsapp-settings', settings); }}>{tx('保存设置', 'Save settings')}</Button>
       </>}
     </CardContent></Card>
@@ -96,8 +98,6 @@ export function WhatsAppManager() {
         <Button variant="outline" onClick={() => setPreview(null)}>{tx('关闭', 'Close')}</Button>
       </section>}
     </CardContent></Card>
-    <Card><CardHeader><CardTitle>{tx('通知模板（需平台审核）', 'Templates (provider approval required)')}</CardTitle></CardHeader><CardContent className="grid gap-4 md:grid-cols-2">
-      {templates.map(template => <details className="border rounded-md p-3 min-w-0" key={template.name + template.language}><summary className="break-words cursor-pointer">{template.name} · {template.language}</summary><p className="whitespace-pre-wrap break-words mt-3">{template.components.find(component => component.type === 'BODY')?.text}</p></details>)}
-    </CardContent></Card>
+    <WhatsAppTemplateEditor />
   </div>;
 }

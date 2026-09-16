@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { withRole } from '@/lib/route-auth';
 import { getWhatsAppSettings, parseWhatsAppSettings, WHATSAPP_SETTINGS_KEY } from '@/lib/whatsapp/whatsapp-settings';
-import { whatsAppTemplates } from '@/lib/whatsapp/whatsapp-template';
+import { listWhatsAppTemplateVersions } from '@/lib/whatsapp/whatsapp-template-service';
+import { templatePayload } from '@/lib/whatsapp/whatsapp-template-definition';
 import { runWhatsAppTransaction as runInTransaction } from '@/lib/whatsapp/whatsapp-transaction';
 import { parseJsonRequest } from '@/lib/http-body';
 import { createApiErrorResponse } from '@/lib/api-error-response';
 import { apiErrorCodes } from '@/lib/api-error';
 export const GET = withRole('ADMIN', async request => {
   try { return NextResponse.json({ success: true, data: {
-    settings: await getWhatsAppSettings(), templates: whatsAppTemplates,
+    settings: await getWhatsAppSettings(), templates: (await listWhatsAppTemplateVersions()).map(templatePayload),
     deploymentEnabled: process.env.WHATSAPP_OUTBOUND_ENABLED === 'true' && Boolean(process.env.YCLOUD_API_KEY),
   } }); }
   catch { return createApiErrorResponse({ code: apiErrorCodes.INTERNAL_ERROR, status: 500, message: '' }, request); }

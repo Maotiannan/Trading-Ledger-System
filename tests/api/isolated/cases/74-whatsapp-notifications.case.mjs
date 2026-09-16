@@ -8,6 +8,15 @@ export default async function run(t) {
   const db = new PrismaClient();
   try {
     await t.initAdmin(); await t.loginAdmin();
+    const templates = await t.request('GET', '/api/whatsapp-templates', { expectedStatus: 200 });
+    assert.equal(templates.data.data.templates.length, 6);
+    const original = templates.data.data.templates.find(row => row.kind === 'payment' && row.language === 'en');
+    const saved = await t.request('POST', '/api/whatsapp-templates', { json: { action: 'save', draft: { ...original, body: original.body + '\nThank you.' } }, expectedStatus: 200 });
+    assert.equal(saved.data.data.status, 'DRAFT');
+    const afterSave = await t.request('GET', '/api/whatsapp-templates', { expectedStatus: 200 });
+    assert.equal(afterSave.data.data.templates.find(row => row.name === original.name && row.language === 'en').body, original.body);
+    assert.equal(afterSave.data.data.templates.find(row => row.name === saved.data.data.name).active, false);
+    await t.request('POST', '/api/whatsapp-templates', { json: { action: 'save', draft: { ...original, body: 'Missing variables' } }, expectedStatus: 400 });
     const suffix = t.unique('wa');
     const salesEmail = suffix + '@example.com';
     const sales = await t.createUser({ email: salesEmail, password: 'SalesA@2026!', role: 'SALES', name: 'WA Sales' });
@@ -36,6 +45,8 @@ export default async function run(t) {
     await t.login(salesEmail, 'SalesA@2026!');
     await t.request('GET', '/api/whatsapp-notifications', { expectedStatus: 403 });
     await t.request('GET', '/api/whatsapp-settings', { expectedStatus: 403 });
+    await t.request('GET', '/api/whatsapp-templates', { expectedStatus: 403 });
+    await t.request('POST', '/api/whatsapp-templates', { json: { action: 'save', draft: original }, expectedStatus: 403 });
     await t.request('GET', '/api/whatsapp-contacts', { expectedStatus: 200 });
     await t.loginAdmin();
     await t.request('POST', '/api/whatsapp-settings', { json: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, expectedStatus: 200 });

@@ -83,3 +83,32 @@ Real test recipient: the user-authorized number ending 7412, maintained in setti
 Do not create fake production financial records or consume customer notifications
 for testing. Do not turn on production customer sending before template approval,
 test delivery, callback verification and consent readiness.
+
+## Unified Notifications And Template Versions
+
+The sidebar uses /notifications with Email and WhatsApp tabs. Legacy /emails and
+/whatsapp URLs redirect to the corresponding tab. Email settings/templates moved
+from Settings to the Email tab; the old Settings section links to the new location.
+Email and WhatsApp histories, approval rules and sending gates remain independent.
+
+ADMIN can save a new WhatsApp draft, preview it, submit it, refresh provider review
+status and activate an approved Utility version. Each save gets a unique name;
+existing templates are never edited/deleted remotely. Submission claims the version
+before POST. A timeout becomes SUBMISSION_UNCERTAIN; refresh via GET instead of
+reposting. Activation rechecks provider approval/category and exact header/body/footer,
+then serializes per type/language. Historical versions are retained for preview.
+
+The existing six templates are imported as read-only built-ins; refresh their status
+without duplicate submission. Variables retain their positional meanings. Drafts
+must include all documented variables and respect title/body/footer limits.
+Platform review may still reject otherwise valid text; local validation cannot
+guarantee provider approval.
+
+Persistence uses existing SystemSetting rows:
+- whatsapp.template.<name>.<language>: version content/status/active flag.
+- whatsapp.template-lock.<kind>.<language>: transactional activation lock.
+- whatsapp.notifications.enabledTypes: independently enabled payment/shipment/release.
+- AuditLog: draft creation, submission and activation actor/time.
+
+No schema migration or new media path. Full database backup includes these rows.
+Historical delivery templateName/languageCode/parameters remain unchanged.

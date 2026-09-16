@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { WhatsAppManager } from './whatsapp-manager';
 import { apiCall } from '@/components/workspace/shared';
+jest.mock('./whatsapp-template-editor', () => ({ WhatsAppTemplateEditor: () => <div>Template editor</div> }));
 let role = 'ADMIN';
 jest.mock('@/lib/store', () => ({ useStore: (selector: (state: unknown) => unknown) => selector({ user: { role } }) }));
 const tx = (_zh: string, en: string) => en;

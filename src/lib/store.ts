@@ -10,6 +10,7 @@ export type WorkspaceView =
   | 'details'
   | 'swifts'
   | 'emails'
+  | 'notifications'
   | 'whatsapp'
   | 'deletions'
   | 'users'

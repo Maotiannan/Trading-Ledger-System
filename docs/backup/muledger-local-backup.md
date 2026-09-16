@@ -28,6 +28,34 @@ settings. This extension needs no schema migration or additional media archive.
 
 Do not back up Docker containers, images, `.next`, `node_modules`, logs, or test output as business data.
 
+### WhatsApp Data Foundation (Pending Deployment)
+
+The additive WhatsApp migration introduces `CustomerWhatsAppContact`,
+`WhatsAppDelivery` and `WhatsAppWebhookEvent`. Once deployed, the full
+`trading_ledger` dump includes consent timestamps/source, immutable recipient
+and business snapshots, approval/claim records and pending provider callbacks.
+There are no new media directories or independent business-data stores.
+
+Before deployment, perform an isolated migration and round-trip restore:
+
+1. Restore a verified snapshot into a disposable database, never the active database.
+2. Apply the migration there and confirm existing business table counts are unchanged.
+3. Insert synthetic opted-in/opted-out contacts, pending test and claimed deliveries,
+   and duplicate/unapplied callback fixtures. Verify uniqueness and referential constraints.
+4. Dump and restore that isolated database again; compare snapshots, consent,
+   approval, claim tokens and callback processing markers.
+5. Keep WhatsApp outbound and webhook processing disabled throughout recovery.
+   Do not reset SENDING/UNCERTAIN records to QUEUED; reconcile with YCloud first.
+6. Save drill evidence under `docs/backup/restore-drills/` before production migration.
+
+YCloud credentials are separate deployment configuration, not included in business
+snapshots. Restore them from the protected local credential source or issue a
+replacement through YCloud and validate it before enabling processing. This
+credential recovery step is required; database restoration alone cannot restore
+provider access. The current migration has not been applied and no drill is claimed.
+Rollback before adoption means reverting the app with WhatsApp disabled; preserve
+the additive tables. Never drop notification history as an application rollback.
+
 ### Accepted Limitation
 
 The upload source and snapshots are on the same NAS. This protects against accidental deletion, application mistakes, and failed database migrations, but it does not protect against loss of the entire NAS or all of its disks. This limitation was explicitly accepted when cloud backup was retired on 2026-07-19.

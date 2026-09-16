@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 版本：`1.0.218`
-- 最近更新：客户通知邮件统一显示 MU Group Logo、联系人、电话、WhatsApp、邮箱及公司地址，支持英法文和手机排版。正式发信须完成 Resend 接入验证，且仍需 ADMIN 审核。
+- 版本：`1.0.219`
+- 最近更新：新增 ADMIN 专用 WhatsApp 通知管理，支持客户授权、英法文模板、测试审核及独立投递记录。正式外发需通过平台模板审核和投递验收；默认关闭。详见 [运行说明](docs/whatsapp-notification-operations.md)。
 - 版本号位置：`设置` 页面顶部。
 
 ## 界面预览
@@ -84,7 +84,7 @@ NAS 本地备份与恢复手册见：[muledger-local-backup.md](docs/backup/mule
 
 每日后台备份通过专用 Docker 任务访问 NAS，不给系统 Bash 开放全盘权限；失败会重试并写入可供巡检读取的本地状态。
 
-最近一次完整业务恢复演练见：[2026-09-02 邮件通知迁移与恢复演练](docs/backup/restore-drills/2026-09-02-email-notifications-migration-drill.md)。
+最近一次迁移及恢复演练见：[2026-09-16 WhatsApp 数据恢复验证](docs/backup/restore-drills/2026-09-16-whatsapp-notifications.md)。
 
 MU Contract 同步迁移演练见：[2026-07-18 MU Contract Orders 迁移演练](docs/backup/restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md)。
 

@@ -21,6 +21,12 @@ services:
       SIGNING_PENDING_TTL_HOURS: ${SIGNING_PENDING_TTL_HOURS:-72}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      YCLOUD_API_KEY: ${YCLOUD_API_KEY:-}
+      YCLOUD_WABA_ID: ${YCLOUD_WABA_ID:-}
+      YCLOUD_SENDER_PHONE: ${YCLOUD_SENDER_PHONE:-}
+      YCLOUD_WEBHOOK_SECRET: ${YCLOUD_WEBHOOK_SECRET:-}
+      WHATSAPP_WEBHOOK_ENABLED: ${WHATSAPP_WEBHOOK_ENABLED:-false}
+      WHATSAPP_OUTBOUND_ENABLED: ${WHATSAPP_OUTBOUND_ENABLED:-false}
     volumes:
       - ${UPLOAD_HOST_DIR:-/Volumes/团队文件-DAINTY_SHIPMENT/docker/trading-ledger-system/upload}:/app/upload
 
@@ -78,6 +84,21 @@ services:
             -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" \
             -H "x-email-delivery-batch-size: $$EMAIL_DELIVERY_BATCH_SIZE" >/dev/null || true;
           sleep "$$EMAIL_DELIVERY_LOOP_SECONDS";
+        done
+      '
+
+  whatsapp-delivery-trigger:
+    image: curlimages/curl:8.12.1
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      MAINTENANCE_JOB_TOKEN: ${MAINTENANCE_JOB_TOKEN:?MAINTENANCE_JOB_TOKEN must be set}
+    command: >
+      sh -c '
+        while true; do
+          curl -fsS --max-time 120 -X POST "http://app:3000/api/internal/whatsapp/dispatch" -H "x-maintenance-token: $$MAINTENANCE_JOB_TOKEN" || echo "WhatsApp dispatch failed";
+          sleep 30;
         done
       '
 

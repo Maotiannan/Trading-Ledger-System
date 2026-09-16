@@ -15,6 +15,7 @@ export const WORKSPACE_ROUTES: WorkspaceRouteItem[] = [
   { id: 'details', path: '/details' },
   { id: 'swifts', path: '/swifts' },
   { id: 'emails', path: '/emails', adminOnly: true },
+  { id: 'whatsapp', path: '/whatsapp', adminOnly: true },
   { id: 'deletions', path: '/deletions', managerOnly: true },
   { id: 'customers', path: '/customers', managerOnly: true },
   { id: 'settings', path: '/settings' },

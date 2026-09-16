@@ -1,0 +1,196 @@
+[
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_payment_v1",
+    "language": "en",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Payment received"
+      },
+      {
+        "type": "BODY",
+        "text": "Hello {{1}}, we have recorded your payment.\nReceipt: {{2}}\nOrder: {{3}}\nInvoice: {{4}}\nPayment: USD {{5}}\nOrder balance after payment: USD {{6}}\nShipment date: {{7}}\nRelease date: {{8}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-001",
+              "TEST-01",
+              "TEST-INV",
+              "100",
+              "900",
+              "15/09/2026",
+              "Not recorded"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact: Leo Mao +86 13819858718"
+      }
+    ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_payment_v1",
+    "language": "fr",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Paiement reçu"
+      },
+      {
+        "type": "BODY",
+        "text": "Bonjour {{1}}, votre paiement a été enregistré.\nReçu : {{2}}\nCommande : {{3}}\nFacture : {{4}}\nPaiement : {{5}} USD\nSolde de la commande après paiement : {{6}} USD\nDate d’expédition : {{7}}\nDate de remise des documents : {{8}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-001",
+              "TEST-01",
+              "TEST-INV",
+              "100",
+              "900",
+              "15/09/2026",
+              "Not recorded"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact : Leo Mao +86 13819858718"
+      }
+    ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_shipment_v1",
+    "language": "en",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Shipment notification"
+      },
+      {
+        "type": "BODY",
+        "text": "Hello {{1}}, shipment has been recorded for your order.\nInvoice: {{2}}\nOrder: {{3}}\nShipment date: {{4}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-INV",
+              "TEST-01",
+              "15/09/2026"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact: Leo Mao +86 13819858718"
+      }
+    ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_shipment_v1",
+    "language": "fr",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Notification d’expédition"
+      },
+      {
+        "type": "BODY",
+        "text": "Bonjour {{1}}, l’expédition de votre commande a été enregistrée.\nFacture : {{2}}\nCommande : {{3}}\nDate d’expédition : {{4}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-INV",
+              "TEST-01",
+              "15/09/2026"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact : Leo Mao +86 13819858718"
+      }
+    ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_release_v1",
+    "language": "en",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Release notification"
+      },
+      {
+        "type": "BODY",
+        "text": "Hello {{1}}, release has been recorded for your order.\nInvoice: {{2}}\nOrder: {{3}}\nRelease date: {{4}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-INV",
+              "TEST-01",
+              "15/09/2026"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact: Leo Mao +86 13819858718"
+      }
+    ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_release_v1",
+    "language": "fr",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Remise des documents"
+      },
+      {
+        "type": "BODY",
+        "text": "Bonjour {{1}}, la remise des documents de votre commande a été enregistrée.\nFacture : {{2}}\nCommande : {{3}}\nDate de remise : {{4}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-INV",
+              "TEST-01",
+              "15/09/2026"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact : Leo Mao +86 13819858718"
+      }
+    ]
+  }
+]

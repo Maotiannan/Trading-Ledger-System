@@ -14,6 +14,7 @@ export async function dispatchWhatsAppDelivery(id: string) {
   if (process.env.WHATSAPP_OUTBOUND_ENABLED !== 'true') return { sent: false };
   if (!apiKey || !senderPhone || !settings.outboundEnabled) return { sent: false };
   const preview = await db.whatsAppDelivery.findUnique({ where: { id } });
+  if (preview && settings.enabledTypes && !settings.enabledTypes.includes(preview.type)) return { sent: false };
   if (!preview || preview.status !== 'QUEUED' || !await isYCloudTemplateApproved({
     apiKey, wabaId: process.env.YCLOUD_WABA_ID || '', name: preview.templateName, language: preview.languageCode,
   })) return { sent: false };

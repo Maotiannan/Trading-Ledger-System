@@ -1,12 +1,14 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.219
+> 当前版本：v1.0.220
 > 最后更新：2026-09-16
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
 ## P0（本周必须完成）
+
+- [x] 通知管理统一入口：/notifications 包含 Email / WhatsApp 标签，旧链接跳转；邮件设置迁入。WhatsApp 版本化草稿保存到 SystemSetting，独立提交/状态刷新/APPROVED Utility 激活，历史内容保留；三类通知开关独立。无新迁移或媒体路径，更新备份恢复检查。2026-09-16
 
 - [x] WhatsApp 通知接入代码：ADMIN 管理页、客户明确同意、英法文 Utility 模板、固定测试收件人/审核、正式自动队列、YCloud 验签/回调持久化及状态前进保护。复用现有业务事件快照，不更改邮件批准和财务公式。新增三张表纳入整库备份，2026-09-16 隔离迁移与二次恢复校验通过，生产外发仍关闭。平台六套模板 PENDING，真实发送及回调验收尚未完成；状态见 docs/whatsapp-notification-operations.md。
 

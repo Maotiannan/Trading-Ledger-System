@@ -188,8 +188,8 @@ describe('SettingsManager', () => {
     expect(screen.getByText('MuContractSyncSettingsBody')).toBeInTheDocument();
 
     expect(screen.queryByText('EmailNotificationSettingsBody')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Email Notification Settings/i }));
-    expect(screen.getByText('EmailNotificationSettingsBody')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Notification Management/i }));
+    expect(screen.getByRole('link', { name: /Open Notification Management/i })).toHaveAttribute('href', '/notifications');
   });
 
   it('omits MU Contract controls for non-admin accounts', () => {

@@ -10,7 +10,6 @@ import {
   CollapsibleSettingsSection,
   CustomerAnalyticsSettingsCard,
   DashboardSettingsCard,
-  EmailNotificationSettingsCard,
   ExcelTokenCard,
   MuContractSyncSettingsCard,
   PasswordSettingsCard,
@@ -322,10 +321,10 @@ export function SettingsManager() {
 
       {canManageEmailNotifications && (
         <CollapsibleSettingsSection
-          title={tx('邮件通知设置', 'Email Notification Settings')}
-          description={tx('配置客户邮件、英法模板和测试投递。', 'Configure customer email, English/French templates, and test delivery.')}
+          title={tx('通知管理', 'Notification Management')}
+          description={tx('邮件与 WhatsApp 设置已集中到通知管理。', 'Email and WhatsApp settings are now in Notification Management.')}
         >
-          <EmailNotificationSettingsCard tx={tx} />
+          <a className="text-primary underline" href="/notifications">{tx('打开通知管理', 'Open Notification Management')}</a>
         </CollapsibleSettingsSection>
       )}
 

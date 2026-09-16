@@ -5,6 +5,7 @@ const schema = z.object({
   testMode: z.boolean().default(true),
   testDestination: z.string().regex(/^\+[1-9]\d{1,14}$/).default('+8613619767412'),
   activatedAt: z.string().datetime().nullable().default(null),
+  enabledTypes: z.array(z.enum(['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE'])).default(['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE']),
 });
 export const WHATSAPP_SETTINGS_KEY = 'whatsapp.notifications';
 export async function getWhatsAppSettings() {

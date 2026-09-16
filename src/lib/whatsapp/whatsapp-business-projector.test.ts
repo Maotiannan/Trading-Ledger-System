@@ -1,6 +1,7 @@
 /** @jest-environment node */
 jest.mock('@/lib/db', () => ({ db: { emailNotification: { findMany: jest.fn() }, customerWhatsAppContact: { findMany: jest.fn() } } }));
 jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn(async fn => fn({})) }));
+jest.mock('./whatsapp-template-service', () => ({ listWhatsAppTemplateVersions: jest.fn(async () => []) }));
 jest.mock('./whatsapp-settings', () => ({ getWhatsAppSettings: jest.fn() }));
 jest.mock('./whatsapp-queue', () => ({ enqueueWhatsAppInTransaction: jest.fn() }));
 jest.mock('@/lib/logger', () => ({ logger: { warn: jest.fn() } }));

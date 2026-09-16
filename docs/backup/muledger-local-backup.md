@@ -306,3 +306,16 @@ The active rollout and historical drills remain valid records of what was tested
 | 2026-07-17 | Historical cloud database/media backup | `PASS_WITH_FINDINGS` | [Full drill](restore-drills/2026-07-17-muledger-cos-restore-drill.md) |
 
 The 2026-07-17 missing receipt-image finding was closed with user approval by clearing only the two unrecoverable current image associations while preserving receipt data and audit records. New NAS snapshots must reflect that corrected current database state.
+
+### Unified Notification Template Recovery
+
+WhatsApp versioned drafts and submitted content are stored in existing SystemSetting
+keys prefixed whatsapp.template.; activation locks use whatsapp.template-lock.
+The three type switches remain in whatsapp.notifications. All are covered by the
+complete trading_ledger snapshot, together with AuditLog and frozen delivery parameters.
+No schema migration or additional files are introduced.
+
+During isolated restore verification, check a draft, submitted version, active slot
+and an older delivery preview. Keep sending disabled and refresh provider statuses
+before re-enabling; never automatically resubmit restored SUBMITTING or
+SUBMISSION_UNCERTAIN versions. Restore preserves names and historical content.

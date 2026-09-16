@@ -94,8 +94,8 @@ test('ADMIN previews recipients and explicitly approves a test-mode email', asyn
   const resetResponse = await request.post(`${fakeBaseUrl}/__control/reset`, { headers: controlHeaders, data: {} });
   expect(resetResponse.ok()).toBeTruthy();
 
-  await page.getByTestId('sidebar-nav-emails').click();
-  await expect(page).toHaveURL(/\/emails$/);
+  await page.getByTestId('sidebar-nav-notifications').click();
+  await expect(page).toHaveURL(/\/notifications$/);
   await expect(page.getByTestId('email-manager')).toBeVisible();
   await page.getByLabel(/客户.*MARK.*ORDER|Customer.*MARK.*ORDER/i).fill(fixture.receiptNo);
   await page.getByRole('button', { name: /^查询$|^Search$/i }).click();
@@ -150,7 +150,7 @@ test('SALES cannot see or navigate to Email Management', async ({ page, request 
   await page.getByLabel(/密码|Password/i).fill(salesPassword);
   await page.getByRole('button', { name: /登录|log in|login/i }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByTestId('sidebar-nav-emails')).toHaveCount(0);
+  await expect(page.getByTestId('sidebar-nav-notifications')).toHaveCount(0);
 
   await page.goto('/emails');
   await expect(page).toHaveURL(/\/dashboard$/);

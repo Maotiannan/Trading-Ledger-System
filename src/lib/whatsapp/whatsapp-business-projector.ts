@@ -28,12 +28,13 @@ export async function projectWhatsAppBusinessEvents() {
       if (settings.enabledTypes && !settings.enabledTypes.includes(event.type)) continue;
       const contacts = await db.customerWhatsAppContact.findMany({
         where: { customerId: event.customerId!, optedInAt: { lte: event.createdAt }, optedOutAt: null },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], take: 1,
       });
       for (const contact of contacts) {
         let rendered: ReturnType<typeof renderWhatsAppSnapshot>;
         try { rendered = renderWhatsAppSnapshot(event.type, event.currentSnapshot, templates); }
         catch { logger.warn('WhatsApp source needs correction', { sourceId: event.id }); continue; }
-        const eventKey = createHash('sha256').update(event.id + ':' + contact.id).digest('hex');
+        const eventKey = createHash('sha256').update(event.id + ':' + event.customerId).digest('hex');
         await runInTransaction(tx => enqueueWhatsAppInTransaction(tx, {
           eventKey, type: event.type, sourceId: event.id, contactId: contact.id,
           testMode: settings.testMode, testDestination: settings.testDestination,

@@ -3,13 +3,14 @@ import { enqueueWhatsAppInTransaction, approveWhatsAppTestInTransaction, claimWh
 import type { DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 
-const contact = { id: 'contact', phone: '+224620123456', optedInAt: new Date('2026-01-01'), optedOutAt: null };
+const contact = { customerId: 'customer', id: 'contact', customer: {phone:'+224620123456'}, phone: '+224620123456', optedInAt: new Date('2026-01-01'), optedOutAt: null };
 const input = { eventKey: 'payment:receipt:contact', type: 'PAYMENT_RECEIVED' as const, sourceId: 'receipt', contactId: 'contact', testMode: true, testDestination: '+8613619767412', senderPhone: '+8613819858718', templateName: 'payment', languageCode: 'en', parameters: [], businessSnapshot: { balance: 123 } };
 const upsert = jest.fn();
+const findExisting = jest.fn();
 const updateMany = jest.fn();
 const findUnique = jest.fn();
 const findContact = jest.fn();
-const tx = { whatsAppDelivery: { upsert, updateMany, findUnique }, customerWhatsAppContact: { findUnique: findContact } } as unknown as DbTransactionClient;
+const tx = { whatsAppDelivery: { findFirst: findExisting, upsert, updateMany, findUnique }, customerWhatsAppContact: { findUnique: findContact } } as unknown as DbTransactionClient;
 beforeEach(() => { jest.resetAllMocks(); findContact.mockResolvedValue(contact); updateMany.mockResolvedValue({ count: 1 }); });
 it('test events freeze both intended and actual recipients and await approval', async () => {
   await enqueueWhatsAppInTransaction(tx, input);
@@ -55,4 +56,30 @@ it('atomically claims once and loses concurrent claims safely', async () => {
 it('outbound off never reads tasks', async () => {
   expect(await claimWhatsAppInTransaction(tx, 'delivery', { ...settings, outboundEnabled: false })).toBeNull();
   expect(findUnique).not.toHaveBeenCalled();
+});
+
+it('uses changed customer PHONE for a queued production delivery without changing consent', async () => {
+  findUnique.mockResolvedValue({...delivery,testMode:false,actualTo:'+224620123456',contact:{...contact,customer:{phone:'+224 622 49 12 86'}}});
+  expect(await claimWhatsAppInTransaction(tx,'delivery',{...settings,testMode:false})).toMatchObject({actualTo:'+224622491286',intendedTo:'+224622491286'});
+  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({actualTo:'+224622491286'})}));
+});
+it('test mode remains pinned to test destination after a customer PHONE change', async () => {
+  findUnique.mockResolvedValue({...delivery,contact:{...contact,customer:{phone:'+224622491286'}}});
+  expect(await claimWhatsAppInTransaction(tx,'delivery',settings)).toMatchObject({actualTo:input.testDestination,intendedTo:'+224622491286'});
+});
+it('invalid new PHONE blocks sending instead of falling back to old consent phone', async () => {
+  findUnique.mockResolvedValue({...delivery,contact:{...contact,customer:{phone:'622491286'}}});
+  expect(await claimWhatsAppInTransaction(tx,'delivery',settings)).toBeNull();
+  expect(updateMany).not.toHaveBeenCalled();
+});
+it.each(['SENT','DELIVERED','UNCERTAIN','SENDING'])('never rewrites a %s recipient or resends it after PHONE changes', async status => {
+  findUnique.mockResolvedValue({...delivery,status,contact:{...contact,customer:{phone:'+224622491286'}}});
+  expect(await claimWhatsAppInTransaction(tx,'delivery',settings)).toBeNull();
+  expect(updateMany).not.toHaveBeenCalled();
+});
+
+it('keeps a historical contact-keyed delivery instead of creating a duplicate customer-keyed task',async()=>{
+  findExisting.mockResolvedValue({id:'original',status:'SENT'});
+  expect(await enqueueWhatsAppInTransaction(tx,input)).toEqual({delivery:{id:'original',status:'SENT'}});
+  expect(upsert).not.toHaveBeenCalled();
 });

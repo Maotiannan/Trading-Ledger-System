@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, WhatsAppNotificationType } from '@prisma/client';
 import type { DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
+import { normalizeWhatsAppCustomerPhone } from './customer-phone';
 
 type QueueClient = Pick<DbTransactionClient, 'whatsAppDelivery' | 'customerWhatsAppContact'>;
 const PHONE = /^\+[1-9]\d{1,14}$/;
@@ -20,12 +21,21 @@ export async function enqueueWhatsAppInTransaction(tx: QueueClient, input: {
   parameters: string[];
   businessSnapshot: Prisma.InputJsonObject;
 }) {
-  const contact = await tx.customerWhatsAppContact.findUnique({ where: { id: input.contactId } });
+  const contact = await tx.customerWhatsAppContact.findUnique({
+    where: { id: input.contactId }, include: { customer: { select: { phone: true } } },
+  });
   if (!contact?.optedInAt || (contact.optedOutAt && contact.optedOutAt >= contact.optedInAt)) {
     return { created: false, reason: 'CONSENT_REQUIRED' as const };
   }
-  const actualTo = input.testMode ? input.testDestination : contact.phone;
-  if (!actualTo || !PHONE.test(actualTo) || !PHONE.test(contact.phone) || !PHONE.test(input.senderPhone)
+  // Preserve deliveries created with older contact-based event keys too.
+  const existing = await tx.whatsAppDelivery.findFirst({
+    where: { sourceId: input.sourceId, type: input.type, contact: { customerId: contact.customerId } },
+  });
+  if (existing) return { delivery: existing };
+  const intendedTo = normalizeWhatsAppCustomerPhone(contact.customer.phone);
+  if (!intendedTo) return { created: false, reason: 'INVALID_CUSTOMER_PHONE' as const };
+  const actualTo = input.testMode ? input.testDestination : intendedTo;
+  if (!actualTo || !PHONE.test(actualTo) || !PHONE.test(input.senderPhone)
     || !input.eventKey.trim() || !input.templateName.trim() || !input.languageCode.trim()) {
     throw new Error('Invalid WhatsApp delivery configuration.');
   }
@@ -34,7 +44,7 @@ export async function enqueueWhatsAppInTransaction(tx: QueueClient, input: {
     where: { eventKey: input.eventKey }, update: {},
     create: {
       eventKey: input.eventKey, type: input.type, sourceId: input.sourceId, contactId: contact.id,
-      testMode: input.testMode, intendedTo: contact.phone, actualTo, senderPhone: input.senderPhone,
+      testMode: input.testMode, intendedTo, actualTo, senderPhone: input.senderPhone,
       templateName: input.templateName, languageCode: input.languageCode,
       parameters: input.parameters, businessSnapshot: input.businessSnapshot,
       status: input.testMode ? 'PENDING' : 'QUEUED',
@@ -55,18 +65,22 @@ export async function claimWhatsAppInTransaction(
   tx: QueueClient, id: string, settings: { outboundEnabled: boolean; testMode: boolean; testDestination?: string },
 ) {
   if (!settings.outboundEnabled) return null;
-  const delivery = await tx.whatsAppDelivery.findUnique({ where: { id }, include: { contact: true } });
+  const delivery = await tx.whatsAppDelivery.findUnique({
+    where: { id }, include: { contact: { include: { customer: { select: { phone: true } } } } },
+  });
   if (!delivery || delivery.status !== 'QUEUED' || delivery.testMode !== settings.testMode) return null;
   if (delivery.testMode && (!delivery.approvedBy || !delivery.approvedAt
     || delivery.actualTo !== settings.testDestination)) return null;
   const contact = delivery.contact;
-  if (!contact.optedInAt || (contact.optedOutAt && contact.optedOutAt >= contact.optedInAt)
-    || delivery.intendedTo !== contact.phone) return null;
+  if (!contact.optedInAt || (contact.optedOutAt && contact.optedOutAt >= contact.optedInAt)) return null;
+  const intendedTo = normalizeWhatsAppCustomerPhone(contact.customer.phone);
+  if (!intendedTo) return null;
+  const actualTo = delivery.testMode ? delivery.actualTo : intendedTo;
   const claimToken = randomUUID();
   const result = await tx.whatsAppDelivery.updateMany({
     where: { id, status: 'QUEUED', claimToken: null },
-    data: { status: 'SENDING', claimToken, claimedAt: new Date() },
+    data: { status: 'SENDING', claimToken, claimedAt: new Date(), intendedTo, actualTo },
   });
   // Never release or retry an expired SENDING claim automatically: provider deduplication is unverified.
-  return result.count === 1 ? { ...delivery, status: 'SENDING' as const, claimToken } : null;
+  return result.count === 1 ? { ...delivery, intendedTo, actualTo, status: 'SENDING' as const, claimToken } : null;
 }

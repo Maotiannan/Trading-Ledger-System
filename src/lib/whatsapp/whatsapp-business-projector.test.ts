@@ -21,7 +21,7 @@ afterEach(() => { if (originalSender === undefined) delete process.env.YCLOUD_SE
 it('only projects post-activation events for contacts who already consented when the event occurred', async () => {
   await projectWhatsAppBusinessEvents();
   expect(db.emailNotification.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ createdAt: { gte: new Date('2026-09-15T00:00:00Z') } }) }));
-  expect(db.customerWhatsAppContact.findMany).toHaveBeenCalledWith({ where: { customerId: 'customer', optedInAt: { lte: source.createdAt }, optedOutAt: null } });
+  expect(db.customerWhatsAppContact.findMany).toHaveBeenCalledWith({ where: { customerId: 'customer', optedInAt: { lte: source.createdAt }, optedOutAt: null }, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], take: 1 });
   expect(enqueueWhatsAppInTransaction).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ sourceId: 'source', contactId: 'contact', testMode: true, parameters: expect.arrayContaining(['900']) }));
 });
 it('does not initialize historical backlogs implicitly', async () => {

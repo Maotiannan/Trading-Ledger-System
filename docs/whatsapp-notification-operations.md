@@ -112,3 +112,33 @@ Persistence uses existing SystemSetting rows:
 
 No schema migration or new media path. Full database backup includes these rows.
 Historical delivery templateName/languageCode/parameters remain unchanged.
+
+## Customer PHONE Routing
+
+Customer.PHONE is authoritative for pending and new deliveries. The contact row
+records customer consent and its original phone for audit; it is not the destination
+source. Customer consent continues across PHONE edits as explicitly requested.
+At claim time, update only the unsent delivery's intendedTo and (production)
+actualTo from the current customer phone. Test actualTo remains the test destination.
+Invalid/ambiguous phone formats block sending; never fall back to the old number.
+Sent/submitted/uncertain deliveries retain their original recipients and are never
+resent because PHONE changed. Messages already submitted cannot be recalled.
+
+One customer/event creates one delivery, even if legacy contact rows exist.
+Opt-out applies to the customer and cancels all pending/queued deliveries.
+PHONE edits do not grant consent to a previously unconsented new customer.
+
+## 2026-09-17 Acceptance
+
+Three French messages (payment, shipment, release) were projected from synthetic
+business records in an isolated tmpfs MariaDB. Unapproved sends were blocked;
+ADMIN approval allowed one send each; repeated projection/dispatch sent no duplicates.
+Provider IDs: 6aab562f75cff7424c4d3a4e, 6aab5630e2a7e0179e9f86c2,
+6aab563252a3685f0d191810. All returned sent and production webhook storage recorded
+sent. Cost: USD 0.0077 each. No real customer financial records were created.
+The user explicitly accepts sent as success, not proof of delivered/read.
+
+The user confirmed existing customers have consented and authorized routing future
+messages to updated Customer.PHONE automatically. On rollout, record consent for
+the current customer set only; do not infer consent for future new customers.
+Set production activation to rollout time, not original test activation.

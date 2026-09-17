@@ -319,3 +319,9 @@ During isolated restore verification, check a draft, submitted version, active s
 and an older delivery preview. Keep sending disabled and refresh provider statuses
 before re-enabling; never automatically resubmit restored SUBMITTING or
 SUBMISSION_UNCERTAIN versions. Restore preserves names and historical content.
+
+Customer PHONE routing uses existing Customer.phone, customer consent records and
+WhatsAppDelivery recipient snapshots. No new storage/table is introduced. A restore
+check must confirm queued production messages read the restored current PHONE,
+while submitted/sent records preserve their stored recipient. Consent is customer-
+level and remains valid after PHONE changes; opt-out still blocks the customer.

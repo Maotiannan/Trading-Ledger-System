@@ -11,7 +11,7 @@ import { formatAppDateTime } from '@/lib/app-time';
 type Settings = { outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null; enabledTypes?: string[] };
 type Row = { id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
 type Contact = { id: string; phone: string; optedInAt: string | null; optedOutAt: string | null };
-type Customer = { id: string; name: string; mark: string; orderName: string; whatsappContacts: Contact[] };
+type Customer = { id: string; name: string; mark: string; orderName: string; phone: string; whatsappContacts: Contact[] };
 type Template = { name: string; language: string; components: { type: string; text?: string }[] };
 export function WhatsAppManager() {
   const tx = useUiText();
@@ -75,11 +75,12 @@ export function WhatsAppManager() {
       <form className="flex gap-2" onSubmit={event => { event.preventDefault(); void findCustomers(); }}>
         <Input aria-label={tx('搜索客户', 'Search customers')} placeholder="MARK / ORDER_NAME / NAME" value={search} onChange={event => setSearch(event.target.value)} /><Button disabled={busy}>{tx('搜索', 'Search')}</Button>
       </form>
-      <select className="w-full min-w-0 border rounded-md p-2" value={customerId} onChange={event => { setCustomerId(event.target.value); setPhone(''); setOptIn(false); setConsentSource(''); }} aria-label={tx('选择客户', 'Select customer')}>
+      <select className="w-full min-w-0 border rounded-md p-2" value={customerId} onChange={event => { setCustomerId(event.target.value); setPhone(customers.find(customer => customer.id === event.target.value)?.phone || ''); setOptIn(false); setConsentSource(''); }} aria-label={tx('选择客户', 'Select customer')}>
         <option value="">{tx('选择客户', 'Select customer')}</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.mark} / {customer.orderName} / {customer.name}</option>)}
       </select>
-      {customers.find(customer => customer.id === customerId)?.whatsappContacts.map(contact => <Button key={contact.id} variant="outline" onClick={() => { setPhone(contact.phone); setOptIn(Boolean(contact.optedInAt && !contact.optedOutAt)); setConsentSource(''); }}>{contact.phone} · {contact.optedInAt && !contact.optedOutAt ? tx('已同意', 'Opted in') : tx('未同意', 'Not opted in')}</Button>)}
-      <Input type="tel" aria-label={tx('WhatsApp 号码', 'WhatsApp number')} placeholder="+224..." value={phone} onChange={event => setPhone(event.target.value)} />
+      {customers.find(customer => customer.id === customerId)?.whatsappContacts.map(contact => <Button key={contact.id} variant="outline" onClick={() => { setPhone(customers.find(customer => customer.id === customerId)?.phone || ''); setOptIn(Boolean(contact.optedInAt && !contact.optedOutAt)); setConsentSource(''); }}>{customers.find(customer => customer.id === customerId)?.phone || '-'} · {contact.optedInAt && !contact.optedOutAt ? tx('已同意', 'Opted in') : tx('未同意', 'Not opted in')}</Button>)}
+      <p className="text-sm text-muted-foreground">{tx('号码自动读取客户 PHONE；修改 PHONE 后，待发与后续通知使用新号码，已发记录不变。', 'Number comes from Customer PHONE. Pending and future messages use the updated number; sent history stays unchanged.')}</p>
+      <Input type="tel" aria-label={tx('WhatsApp 号码', 'WhatsApp number')} placeholder="Customer PHONE" value={phone} readOnly />
       <Input aria-label={tx('同意或退订依据', 'Consent or opt-out evidence')} placeholder={tx('客户何时、通过什么方式同意或退订', 'When and how the customer consented or opted out')} value={consentSource} onChange={event => setConsentSource(event.target.value)} />
       <label className="flex gap-2"><input type="checkbox" checked={optIn} onChange={event => setOptIn(event.target.checked)} />{tx('客户已明确同意接收 WhatsApp 通知', 'Customer explicitly agreed to WhatsApp notifications')}</label>
       <Button disabled={busy || !customerId || !consentSource.trim()} onClick={() => void action('whatsapp-contacts', { customerId, phone, optIn, consentSource })}>{tx('保存号码及授权', 'Save number and consent')}</Button>

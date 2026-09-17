@@ -24,6 +24,8 @@ export default async function run(t) {
     const customer = await t.request('POST', '/api/customer', { json: { action: 'create', mark: suffix, orderName: suffix.toUpperCase(), name: 'WhatsApp fixture', city: 'Conakry', phone: '+224620123456', ownerId: salesId }, expectedStatus: 200 });
     const customerId = customer.data.data.id;
     await t.request('POST', '/api/whatsapp-contacts', { json: { customerId, phone: '+224620123456', optIn: true, consentSource: 'Isolated test consent' }, expectedStatus: 200 });
+    await t.request('POST', '/api/whatsapp-contacts', { json: { customerId, phone: '+10000000001', optIn: true, consentSource: 'PHONE remains authoritative' }, expectedStatus: 200 });
+    assert.equal(await db.customerWhatsAppContact.count({where:{customerId,phone:'+10000000001'}}),0);
     const contact = await db.customerWhatsAppContact.findUniqueOrThrow({ where: { customerId_phone: { customerId, phone: '+224620123456' } } });
     const create = () => db.whatsAppDelivery.upsert({ where: { eventKey: suffix }, update: {}, create: {
       eventKey: suffix, type: 'PAYMENT_RECEIVED', sourceId: 'isolated-source', contactId: contact.id, testMode: true,
@@ -38,6 +40,10 @@ export default async function run(t) {
     assert.equal(approvals.reduce((sum, r) => sum + r.data.data.approved, 0), 1);
     const delivery = await db.whatsAppDelivery.findUniqueOrThrow({ where: { id } });
     assert.equal(delivery.status, 'QUEUED'); assert.ok(delivery.approvedAt);
+    await db.customer.update({where:{id:customerId},data:{phone:'+224622491286'}});
+    const listed = await t.request('GET','/api/whatsapp-contacts?search='+encodeURIComponent(suffix),{expectedStatus:200});
+    assert.equal(listed.data.data.find(row=>row.id===customerId).phone,'+224622491286');
+    assert.equal((await db.customerWhatsAppContact.findUniqueOrThrow({where:{id:contact.id}})).optedInAt.getTime(), contact.optedInAt.getTime());
     await t.request('POST', '/api/whatsapp-settings', { json: { outboundEnabled: false, testMode: false, testDestination: '+8613619767412' }, expectedStatus: 200 });
     assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id } })).testMode, true);
     await t.request('POST', '/api/whatsapp-contacts', { json: { customerId, phone: contact.phone, optIn: false, consentSource: 'Isolated opt out' }, expectedStatus: 200 });

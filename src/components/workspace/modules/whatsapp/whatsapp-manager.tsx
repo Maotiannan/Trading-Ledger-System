@@ -32,6 +32,8 @@ export function WhatsAppManager() {
   const [consentSource, setConsentSource] = useState('');
   const [optIn, setOptIn] = useState(false);
   const [preview, setPreview] = useState<Row | null>(null);
+  const selectedCustomer = customers.find(customer => customer.id === customerId);
+  const subscribed = Boolean(selectedCustomer?.whatsappContacts.some(contact => contact.optedInAt && !contact.optedOutAt));
   const load = useCallback(async () => {
     if (user?.role !== 'ADMIN') return;
     setBusy(true);
@@ -56,6 +58,20 @@ export function WhatsAppManager() {
     catch { setError(tx('搜索失败', 'Search failed.')); }
     finally { setBusy(false); }
   }
+  async function saveConsent(nextOptIn: boolean) {
+    if (!nextOptIn && !window.confirm(tx('确认取消该客户的 WhatsApp 订阅？待审核及排队中的通知将取消，已提交发送的消息无法撤回。', 'Unsubscribe this customer from WhatsApp? Pending and queued notifications will be cancelled. Messages already submitted cannot be recalled.'))) return;
+    setBusy(true); setError('');
+    try {
+      const result = await apiCall('whatsapp-contacts', { method: 'POST', body: JSON.stringify({
+        customerId, optIn: nextOptIn,
+        consentSource: consentSource.trim() || tx('管理员在通知管理中取消客户订阅', 'Administrator unsubscribed customer in notification management'),
+      }) });
+      setCustomers(current => current.map(customer => customer.id === customerId ? { ...customer, whatsappContacts: [result.data] } : customer));
+      setOptIn(nextOptIn); setConsentSource('');
+      await load();
+    } catch { setError(tx('订阅状态保存失败，请重试', 'Unable to save subscription status. Please retry.')); }
+    finally { setBusy(false); }
+  }
   if (user?.role !== 'ADMIN') return null;
   return <div className="space-y-4 min-w-0">
     <h1 className="text-2xl font-bold">{tx('WhatsApp 通知', 'WhatsApp Notifications')}</h1>
@@ -75,15 +91,18 @@ export function WhatsAppManager() {
       <form className="flex gap-2" onSubmit={event => { event.preventDefault(); void findCustomers(); }}>
         <Input aria-label={tx('搜索客户', 'Search customers')} placeholder="MARK / ORDER_NAME / NAME" value={search} onChange={event => setSearch(event.target.value)} /><Button disabled={busy}>{tx('搜索', 'Search')}</Button>
       </form>
-      <select className="w-full min-w-0 border rounded-md p-2" value={customerId} onChange={event => { setCustomerId(event.target.value); setPhone(customers.find(customer => customer.id === event.target.value)?.phone || ''); setOptIn(false); setConsentSource(''); }} aria-label={tx('选择客户', 'Select customer')}>
+      <select disabled={busy} className="w-full min-w-0 border rounded-md p-2" value={customerId} onChange={event => { const customer = customers.find(customer => customer.id === event.target.value); setCustomerId(event.target.value); setPhone(customer?.phone || ''); setOptIn(Boolean(customer?.whatsappContacts.some(contact => contact.optedInAt && !contact.optedOutAt))); setConsentSource(''); }} aria-label={tx('选择客户', 'Select customer')}>
         <option value="">{tx('选择客户', 'Select customer')}</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.mark} / {customer.orderName} / {customer.name}</option>)}
       </select>
-      {customers.find(customer => customer.id === customerId)?.whatsappContacts.map(contact => <Button key={contact.id} variant="outline" onClick={() => { setPhone(customers.find(customer => customer.id === customerId)?.phone || ''); setOptIn(Boolean(contact.optedInAt && !contact.optedOutAt)); setConsentSource(''); }}>{customers.find(customer => customer.id === customerId)?.phone || '-'} · {contact.optedInAt && !contact.optedOutAt ? tx('已同意', 'Opted in') : tx('未同意', 'Not opted in')}</Button>)}
+      {selectedCustomer && <p role="status">{subscribed ? tx('已订阅', 'Subscribed') : tx('未订阅', 'Not subscribed')}</p>}
       <p className="text-sm text-muted-foreground">{tx('号码自动读取客户 PHONE；修改 PHONE 后，待发与后续通知使用新号码，已发记录不变。', 'Number comes from Customer PHONE. Pending and future messages use the updated number; sent history stays unchanged.')}</p>
       <Input type="tel" aria-label={tx('WhatsApp 号码', 'WhatsApp number')} placeholder="Customer PHONE" value={phone} readOnly />
       <Input aria-label={tx('同意或退订依据', 'Consent or opt-out evidence')} placeholder={tx('客户何时、通过什么方式同意或退订', 'When and how the customer consented or opted out')} value={consentSource} onChange={event => setConsentSource(event.target.value)} />
       <label className="flex gap-2"><input type="checkbox" checked={optIn} onChange={event => setOptIn(event.target.checked)} />{tx('客户已明确同意接收 WhatsApp 通知', 'Customer explicitly agreed to WhatsApp notifications')}</label>
-      <Button disabled={busy || !customerId || !consentSource.trim()} onClick={() => void action('whatsapp-contacts', { customerId, phone, optIn, consentSource })}>{tx('保存号码及授权', 'Save number and consent')}</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button disabled={busy || !customerId || !consentSource.trim()} onClick={() => void saveConsent(optIn)}>{tx('保存订阅授权', 'Save subscription consent')}</Button>
+        {subscribed && <Button variant="destructive" disabled={busy} onClick={() => void saveConsent(false)}>{tx('取消订阅', 'Unsubscribe')}</Button>}
+      </div>
     </CardContent></Card>
     <Card><CardHeader><CardTitle>{tx('通知记录', 'Notifications')}</CardTitle><Button variant="outline" disabled={busy} onClick={() => void load()}>{tx('刷新', 'Refresh')}</Button></CardHeader><CardContent>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{[tx('时间', 'Date'), tx('类型', 'Type'), tx('收件人', 'To'), tx('状态', 'Status'), ''].map((label, index) => <th className="p-2 text-left" key={index}>{label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-t">

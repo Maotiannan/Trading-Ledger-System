@@ -28,6 +28,11 @@ this as completed production messaging.
 - Customer contact API: ADMIN/SALES with existing customer scope. The WhatsApp page
   offers ADMIN contact maintenance, including consent evidence and opt-out.
 - Opt-out cancels pending/queued deliveries. Already submitted messages cannot be recalled.
+- In Notifications > WhatsApp > Customer Numbers & Consent, search and select a
+  customer to see their current subscription. Use Unsubscribe and confirm to opt
+  out; optional evidence is saved, otherwise the audit records an administrator
+  opt-out. To subscribe again, check consent, enter evidence and save. Cancelled
+  deliveries are not reactivated by subscribing again.
 - Failed/uncertain submissions are visible. No automatic retry of unknown outcomes.
   Do not clear claimToken or move SENDING/UNCERTAIN back to QUEUED manually.
 

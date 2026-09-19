@@ -40,6 +40,7 @@ export function WhatsAppTemplateEditor() {
     <div className="grid gap-3 sm:grid-cols-2">
       <label>{tx('通知类型', 'Notification type')}<select className="block w-full border rounded-md p-2" value={draft.kind} onChange={event => selectSlot(event.target.value as TemplateDraft['kind'], draft.language)}>
         <option value="payment">{tx('收款', 'Payment received')}</option><option value="shipment">{tx('出运', 'Shipment')}</option><option value="release">{tx('放单', 'Release')}</option>
+        <option value="correction">{tx('付款记录更正', 'Payment correction')}</option>
       </select></label>
       <label>{tx('语言', 'Language')}<select className="block w-full border rounded-md p-2" value={draft.language} onChange={event => selectSlot(draft.kind, event.target.value as TemplateDraft['language'])}><option value="en">English</option><option value="fr">Français</option></select></label>
     </div>

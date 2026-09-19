@@ -192,5 +192,71 @@
         "text": "Contact : Leo Mao +86 13819858718"
       }
     ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_correction_v1",
+    "language": "en",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Payment record correction"
+      },
+      {
+        "type": "BODY",
+        "text": "Hello {{1}}, please note this correction to previous notifications.\nAffected receipts: {{2}}\nOrder: {{3}}\nInvoice: {{4}}\nCorrection: {{5}}\nCurrent order balance: USD {{6}}\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-001",
+              "TEST-01",
+              "TEST-INV",
+              "Receipt record cancelled; not a new payment.",
+              "700"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact: Leo Mao +86 13819858718"
+      }
+    ]
+  },
+  {
+    "category": "UTILITY",
+    "messageSendTtlSeconds": 43200,
+    "name": "muledger_correction_v1",
+    "language": "fr",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "TEXT",
+        "text": "Correction du paiement"
+      },
+      {
+        "type": "BODY",
+        "text": "Bonjour {{1}}, veuillez noter cette correction des notifications précédentes.\nReçus concernés : {{2}}\nCommande : {{3}}\nFacture : {{4}}\nCorrection : {{5}}\nSolde actuel de la commande : {{6}} USD\nMU Group",
+        "example": {
+          "body_text": [
+            [
+              "Example Customer",
+              "TEST-001",
+              "TEST-01",
+              "TEST-INV",
+              "Receipt record cancelled; not a new payment.",
+              "700"
+            ]
+          ]
+        }
+      },
+      {
+        "type": "FOOTER",
+        "text": "Contact: Leo Mao +86 13819858718"
+      }
+    ]
   }
 ]

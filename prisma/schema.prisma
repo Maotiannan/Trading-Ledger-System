@@ -868,6 +868,7 @@ model Customer {
 
 enum WhatsAppDeliveryStatus {
   PENDING
+  PAUSED
   QUEUED
   SENDING
   ACCEPTED
@@ -915,6 +916,9 @@ model WhatsAppDelivery {
   languageCode      String @db.VarChar(20)
   parameters        Json
   businessSnapshot  Json
+  nextSendAt        DateTime?
+  requiresApproval  Boolean @default(false)
+  correctionOf      Json?
   status            WhatsAppDeliveryStatus @default(PENDING)
   approvedBy        String?
   approvedAt        DateTime?
@@ -929,6 +933,7 @@ model WhatsAppDelivery {
   webhookEvents     WhatsAppWebhookEvent[]
 
   @@index([status, createdAt])
+  @@index([status, nextSendAt])
   @@index([contactId])
   @@index([type, sourceId])
 }

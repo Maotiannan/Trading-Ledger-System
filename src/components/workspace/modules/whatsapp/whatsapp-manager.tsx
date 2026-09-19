@@ -9,7 +9,7 @@ import { ListPagination } from '@/components/workspace/modules/shared/list-pagin
 import { WhatsAppTemplateEditor } from './whatsapp-template-editor';
 import { formatAppDateTime } from '@/lib/app-time';
 type Settings = { outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null; enabledTypes?: string[] };
-type Row = { id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
+type Row = { nextSendAt?: string | null; updatedAt?: string; requiresApproval?: boolean; correctionOf?: unknown; id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
 type Contact = { id: string; phone: string; optedInAt: string | null; optedOutAt: string | null };
 type Customer = { id: string; name: string; mark: string; orderName: string; phone: string; whatsappContacts: Contact[] };
 type Template = { name: string; language: string; components: { type: string; text?: string }[] };
@@ -46,10 +46,24 @@ export function WhatsAppManager() {
     finally { setBusy(false); }
   }, [page, pageSize, tx, user?.role]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (user?.role !== 'ADMIN') return;
+    let active = true;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== 'visible' || busy) return;
+      try {
+        const list = await apiCall('whatsapp-notifications?page=' + page + '&pageSize=' + pageSize);
+        if (active) { setRows(list.data.items); setTotal(list.data.total); }
+      } catch { /* Keep the existing list; explicit refresh reports errors. */ }
+    }, 15000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [page, pageSize, busy, user?.role]);
   async function action(endpoint: string, body: unknown) {
     setBusy(true); setError('');
     try { await apiCall(endpoint, { method: 'POST', body: JSON.stringify(body) }); await load(); }
-    catch { setError(tx('操作失败，请检查输入后重试', 'Action failed. Check the input and retry.')); }
+    catch { setError(endpoint === 'whatsapp-notifications'
+      ? tx('任务可能已更新、取消或提交发送，请刷新后重新查看。', 'The task may have changed, been cancelled or submitted. Refresh and review it again.')
+      : tx('操作失败，请检查输入后重试', 'Action failed. Check the input and retry.')); }
     finally { setBusy(false); }
   }
   async function findCustomers() {
@@ -104,17 +118,18 @@ export function WhatsAppManager() {
         {subscribed && <Button variant="destructive" disabled={busy} onClick={() => void saveConsent(false)}>{tx('取消订阅', 'Unsubscribe')}</Button>}
       </div>
     </CardContent></Card>
-    <Card><CardHeader><CardTitle>{tx('通知记录', 'Notifications')}</CardTitle><Button variant="outline" disabled={busy} onClick={() => void load()}>{tx('刷新', 'Refresh')}</Button></CardHeader><CardContent>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{[tx('时间', 'Date'), tx('类型', 'Type'), tx('收件人', 'To'), tx('状态', 'Status'), ''].map((label, index) => <th className="p-2 text-left" key={index}>{label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-t">
-        <td className="p-2 whitespace-nowrap">{formatAppDateTime(row.createdAt)}</td><td className="p-2">{row.type}{row.testMode && <span className="block text-muted-foreground">TEST</span>}</td><td className="p-2 whitespace-nowrap">{row.actualTo}</td><td className="p-2">{row.status}{row.failureCode && <span className="block">{row.failureCode}</span>}</td>
-        <td className="p-2"><Button variant="outline" onClick={() => setPreview(row)}>{tx('预览', 'Preview')}</Button>{row.testMode && row.status === 'PENDING' && <Button disabled={busy} onClick={() => { setPreview(row); }}>{tx('审核', 'Review')}</Button>}</td>
+    <Card><CardHeader><CardTitle>{tx('通知记录', 'Notifications')}</CardTitle><p className="text-sm text-muted-foreground">{tx('自动通知延时五分钟；内容修改后重新计时。删除申请期间暂停，获批后取消。', 'Automatic notifications wait five minutes; content changes restart the timer. Deletion requests pause sending until reviewed.')}</p><Button variant="outline" disabled={busy} onClick={() => void load()}>{tx('刷新', 'Refresh')}</Button></CardHeader><CardContent>
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{[tx('时间', 'Date'), tx('类型', 'Type'), tx('收件人', 'To'), tx('状态', 'Status'), tx('预计发送', 'Scheduled'), ''].map((label, index) => <th className="p-2 text-left" key={index}>{label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-t">
+        <td className="p-2 whitespace-nowrap">{formatAppDateTime(row.createdAt)}</td><td className="p-2">{row.type}{row.testMode && <span className="block text-muted-foreground">TEST</span>}</td><td className="p-2 whitespace-nowrap">{row.actualTo}</td><td className="p-2">{row.status === 'PAUSED' ? tx('暂停', 'Paused') : row.status}{row.correctionOf ? <span className="block">{tx('更正通知，需审核', 'Correction: approval required')}</span> : null}{row.failureCode && <span className="block">{row.failureCode}</span>}</td>
+        <td className="p-2 whitespace-nowrap">{row.status === 'QUEUED' && row.nextSendAt ? formatAppDateTime(row.nextSendAt) : '-'}</td>
+        <td className="p-2"><Button variant="outline" onClick={() => setPreview(row)}>{tx('预览', 'Preview')}</Button>{(row.testMode || row.requiresApproval) && row.status === 'PENDING' && <Button disabled={busy} onClick={() => { setPreview(row); }}>{tx('审核', 'Review')}</Button>}{['PENDING', 'QUEUED', 'PAUSED'].includes(row.status) && <Button variant="outline" disabled={busy} onClick={() => { if (window.confirm(tx('确认取消此通知？取消后不会自动恢复。已提交的消息不能撤回。', 'Cancel this notification permanently? Messages already submitted cannot be recalled.'))) void action('whatsapp-notifications', { action: 'cancel', ids: [row.id] }); }}>{tx('取消', 'Cancel')}</Button>}</td>
       </tr>)}</tbody></table></div>
       {rows.length === 0 && <p className="py-4 text-muted-foreground">{tx('暂无通知', 'No notifications yet.')}</p>}
       <ListPagination idPrefix="whatsapp" tx={tx} compact currentPage={page} totalPages={Math.max(1, Math.ceil(total / pageSize))} totalCount={total} pageSize={pageSize} pageSizeOptions={[5, 10, 20, 50]} disabled={busy} onPreviousPage={() => setPage(page - 1)} onNextPage={() => setPage(page + 1)} onPageSizeChange={size => { setPageSize(size); setPage(1); }} />
       {preview && <section className="mt-4 border rounded-md p-4 space-y-3">
         <h2 className="font-bold">{tx('发送内容预览', 'Message Preview')} · {preview.actualTo}</h2>
         <pre className="whitespace-pre-wrap break-words font-sans">{templates.find(template => template.name === preview.templateName && template.language === preview.languageCode)?.components.find(component => component.type === 'BODY')?.text?.replace(/{{(\d+)}}/g, (_, index) => preview.parameters[Number(index) - 1] || '-') || tx('模板不可用，请勿审核', 'Template unavailable; do not approve')}</pre>
-        {preview.testMode && preview.status === 'PENDING' && <Button disabled={busy} onClick={() => { void action('whatsapp-notifications', { action: 'approve', ids: [preview.id] }); setPreview(null); }}>{tx('确认审核，允许测试发送', 'Approve test delivery')}</Button>}
+        {(preview.testMode || preview.requiresApproval) && preview.status === 'PENDING' && <Button disabled={busy} onClick={() => { void action('whatsapp-notifications', { action: 'approve', ids: [preview.id], expectedUpdatedAt: preview.updatedAt }); setPreview(null); }}>{tx('确认审核，允许发送', 'Approve delivery')}</Button>}
         <Button variant="outline" onClick={() => setPreview(null)}>{tx('关闭', 'Close')}</Button>
       </section>}
     </CardContent></Card>

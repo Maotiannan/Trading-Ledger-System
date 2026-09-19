@@ -41,7 +41,7 @@ export const POST = withRole(['ADMIN', 'SALES'], async (request, user) => {
         where: { customerId: customer.id, id: { not: row.id } },
         data: { optedOutAt: new Date(), updatedBy: user.id },
       });
-      if (!optIn) await tx.whatsAppDelivery.updateMany({ where: { contact: { customerId: customer.id }, status: { in: ['PENDING', 'QUEUED'] } }, data: { status: 'CANCELLED', failureCode: 'CONSENT_REVOKED' } });
+      if (!optIn) await tx.whatsAppDelivery.updateMany({ where: { contact: { customerId: customer.id }, status: { in: ['PENDING', 'QUEUED', 'PAUSED'] } }, data: { status: 'CANCELLED', failureCode: 'CONSENT_REVOKED' } });
       await tx.auditLog.create({ data: { action: 'WHATSAPP_CONSENT_CHANGED', actorId: user.id, targetType: 'CUSTOMER', targetId: customer.id, metadata: { contactId: row.id, before: Boolean(existing?.optedInAt && !existing.optedOutAt), after: optIn, consentSource } } });
       return row;
     });

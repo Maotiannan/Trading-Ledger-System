@@ -1,6 +1,9 @@
 /** @jest-environment node */
-jest.mock('@/lib/db', () => ({ db: { emailNotification: { findMany: jest.fn() }, customerWhatsAppContact: { findMany: jest.fn() } } }));
-jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn(async fn => fn({})) }));
+jest.mock('./whatsapp-corrections', () => ({ projectWhatsAppCorrections: jest.fn() }));
+jest.mock('./whatsapp-refresh', () => ({ refreshWhatsAppInTransaction: jest.fn() }));
+jest.mock('./whatsapp-live-source', () => ({ resolveWhatsAppSource: jest.fn() }));
+jest.mock('@/lib/db', () => ({ db: { whatsAppDelivery: { findMany: jest.fn(async () => []) }, emailNotification: { findMany: jest.fn() }, customerWhatsAppContact: { findMany: jest.fn() } } }));
+jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn(async fn => fn({emailNotification:{findUnique:jest.fn(async()=>({id:'source'}))}})) }));
 jest.mock('./whatsapp-template-service', () => ({ listWhatsAppTemplateVersions: jest.fn(async () => []) }));
 jest.mock('./whatsapp-settings', () => ({ getWhatsAppSettings: jest.fn() }));
 jest.mock('./whatsapp-queue', () => ({ enqueueWhatsAppInTransaction: jest.fn() }));
@@ -9,10 +12,13 @@ import { db } from '@/lib/db';
 import { getWhatsAppSettings } from './whatsapp-settings';
 import { enqueueWhatsAppInTransaction } from './whatsapp-queue';
 import { projectWhatsAppBusinessEvents } from './whatsapp-business-projector';
+import { resolveWhatsAppSource } from './whatsapp-live-source';
 const source = { id: 'source', type: 'PAYMENT_RECEIVED', createdAt: new Date('2026-09-16T00:00:00Z'), customerId: 'customer', currentSnapshot: { customerName: 'Client', language: 'ENGLISH', orderNos: ['ORDER-1'], invoiceNo: 'INV-1', receiptNo: 'R-1', amount: 100, orderBalance: 900 } };
 const originalSender = process.env.YCLOUD_SENDER_PHONE;
 beforeEach(() => {
-  jest.clearAllMocks(); process.env.YCLOUD_SENDER_PHONE = '+123456789';
+  jest.clearAllMocks();
+  (resolveWhatsAppSource as jest.Mock).mockResolvedValue({ customer:{id:'customer'}, snapshot:source.currentSnapshot });
+  (enqueueWhatsAppInTransaction as jest.Mock).mockResolvedValue({ created:false }); process.env.YCLOUD_SENDER_PHONE = '+123456789';
   (getWhatsAppSettings as jest.Mock).mockResolvedValue({ activatedAt: '2026-09-15T00:00:00Z', testMode: true, testDestination: '+10000000002' });
   (db.emailNotification.findMany as jest.Mock).mockResolvedValue([source]);
   (db.customerWhatsAppContact.findMany as jest.Mock).mockResolvedValue([{ id: 'contact' }]);

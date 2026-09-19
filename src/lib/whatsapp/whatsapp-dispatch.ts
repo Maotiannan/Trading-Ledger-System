@@ -3,7 +3,8 @@ import { runWhatsAppTransaction as runInTransaction } from '@/lib/whatsapp/whats
 import { claimWhatsAppInTransaction } from './whatsapp-queue';
 import { sendYCloudTemplate, WhatsAppProviderError } from './ycloud-provider';
 import { getWhatsAppSettings } from './whatsapp-settings';
-import { isDeepStrictEqual } from 'node:util';
+import { refreshWhatsAppInTransaction } from './whatsapp-refresh';
+import { listWhatsAppTemplateVersions } from './whatsapp-template-service';
 import { isYCloudTemplateApproved } from './ycloud-template-status';
 
 // Not scheduled until business projection, consent UI and isolated rollout checks are complete.
@@ -13,38 +14,18 @@ export async function dispatchWhatsAppDelivery(id: string) {
   let settings = await getWhatsAppSettings();
   if (process.env.WHATSAPP_OUTBOUND_ENABLED !== 'true') return { sent: false };
   if (!apiKey || !senderPhone || !settings.outboundEnabled) return { sent: false };
-  const preview = await db.whatsAppDelivery.findUnique({ where: { id } });
+  const templates = await listWhatsAppTemplateVersions();
+  const preview = await runInTransaction(tx => refreshWhatsAppInTransaction(tx, id, templates));
   if (preview && settings.enabledTypes && !settings.enabledTypes.includes(preview.type)) return { sent: false };
-  if (!preview || preview.status !== 'QUEUED' || !await isYCloudTemplateApproved({
+  if (!preview || preview.status !== 'QUEUED' || !preview.nextSendAt || preview.nextSendAt > new Date() || !await isYCloudTemplateApproved({
     apiKey, wabaId: process.env.YCLOUD_WABA_ID || '', name: preview.templateName, language: preview.languageCode,
   })) return { sent: false };
   settings = await getWhatsAppSettings();
   if (!settings.outboundEnabled) return { sent: false };
   const delivery = await runInTransaction(async (tx) => {
-    const candidate = await tx.whatsAppDelivery.findUnique({ where: { id } });
-    if (!candidate || candidate.senderPhone !== senderPhone) return null;
-    const source = await tx.emailNotification.findUnique({ where: { id: candidate.sourceId } });
-    let sourceValid = Boolean(source?.receiptId || source?.invoiceId);
-    if (source?.receiptId) {
-      const receipt = await tx.receipt.findUnique({ where: { id: source.receiptId } });
-      const snapshot = candidate.businessSnapshot as Record<string, unknown>;
-      sourceValid = Boolean(receipt && receipt.customerId === source.customerId
-        && receipt.status !== 'SIGNING_PENDING' && !receipt.receiptNo?.startsWith('TRANSFER-')
-        && Number(receipt.usd) === snapshot.amount
-        && (receipt.orderNo || '').split('/').map(value => value.trim()).filter(Boolean).join('/')
-          === (Array.isArray(snapshot.orderNos) ? snapshot.orderNos.join('/') : ''));
-    } else if (source?.invoiceId) {
-      const invoice = await tx.invoice.findUnique({ where: { id: source.invoiceId }, include: { orders: { select: { customerId: true } } } });
-      const snapshot = candidate.businessSnapshot as Record<string, unknown>;
-      const date = source.type === 'SHIPMENT' ? invoice?.shipDate : invoice?.releaseDate;
-      sourceValid = Boolean(invoice && invoice.orders.some(order => order.customerId === source.customerId)
-        && date?.toISOString() === (source.type === 'SHIPMENT' ? snapshot.shipmentDate : snapshot.releaseDate));
-    }
-    if (!sourceValid || !source || (source.correctionReason && !['SOURCE_CHANGED', 'ADMIN_CANCELLED'].includes(source.correctionReason))
-      || !isDeepStrictEqual(source.currentSnapshot, candidate.businessSnapshot)) {
-      await tx.whatsAppDelivery.updateMany({ where: { id, status: 'QUEUED' }, data: { status: 'CANCELLED', failureCode: 'SOURCE_CHANGED' } });
-      return null;
-    }
+    const candidate = await refreshWhatsAppInTransaction(tx, id, templates);
+    if (!candidate || candidate.senderPhone !== senderPhone || candidate.templateName !== preview.templateName
+      || candidate.languageCode !== preview.languageCode) return null;
     if (!Array.isArray(candidate.parameters) || !candidate.parameters.every((value) => typeof value === 'string')) return null;
     return claimWhatsAppInTransaction(tx, id, settings);
   });

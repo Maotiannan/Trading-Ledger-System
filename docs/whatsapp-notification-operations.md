@@ -24,6 +24,34 @@ this as completed production messaging.
 
 ## Management
 
+### Five-minute buffer (new release; migration required)
+
+- Automatic tasks persist `nextSendAt`; the worker cannot claim before this time.
+- Before claim and when the list refreshes, live receipt/invoice/customer fields
+  replace unsent snapshots. Material changes reset five minutes and invalidate
+  prior test/correction approval. Unrelated edits do not reset the deadline.
+- Receipt balances use recording order (`createdAt`, then ID for ties), excluding
+  later receipts and SIGNING_PENDING, with the shared financial balance function.
+- Pending deletion requests pause notifications transactionally. A rejected
+  request resumes with a fresh buffer; an actually deleted source cancels on
+  reconciliation. Requested deletion does not itself change financial balances.
+  Later receipts whose balance includes the receipt under review are also held
+  on live reconciliation, and always checked before claim.
+- ADMIN may cancel a pending/queued/paused task. Cancellation is audited and
+  cannot win after a sending claim. Projection does not recreate cancelled tasks.
+- The list refreshes every 15 seconds while visible, without overwriting settings.
+  The worker reconciles every scheduled run (normally 30 seconds), and rechecks
+  inside a serializable transaction immediately before claim. Submission remains
+  irreversible; never promise recall after provider submission.
+- Buffered payment notifications already submitted can generate one grouped
+  correction per customer/order when their source changes or disappears. Such
+  tasks always need ADMIN approval, including production mode. Original messages
+  remain immutable. Old pre-buffer sent history is not retrospectively replayed.
+- `muledger_correction_v1` English/French are local draft texts only; copy/edit,
+  submit and activate an approved Utility version through the template editor
+  before using corrections. Never send corrections using a payment-received
+  template. Provider approval and a controlled test remain release prerequisites.
+
 - ADMIN: /whatsapp, settings, previews, paginated history and test approval.
 - Customer contact API: ADMIN/SALES with existing customer scope. The WhatsApp page
   offers ADMIN contact maintenance, including consent evidence and opt-out.

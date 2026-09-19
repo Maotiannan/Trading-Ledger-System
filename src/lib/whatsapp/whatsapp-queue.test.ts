@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { enqueueWhatsAppInTransaction, approveWhatsAppTestInTransaction, claimWhatsAppInTransaction } from './whatsapp-queue';
+import { enqueueWhatsAppInTransaction, approveWhatsAppTestInTransaction, claimWhatsAppInTransaction, cancelWhatsAppInTransaction } from './whatsapp-queue';
 import type { DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 
@@ -33,9 +33,9 @@ it('only ADMIN can approve', async () => {
   await expect(approveWhatsAppTestInTransaction(tx, 'delivery', { role: 'SALES' } as CurrentUser)).rejects.toThrow('Administrator');
   expect(updateMany).not.toHaveBeenCalled();
   await approveWhatsAppTestInTransaction(tx, 'delivery', { id: 'admin', role: 'ADMIN' } as CurrentUser);
-  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'delivery', testMode: true, status: 'PENDING' }, data: expect.objectContaining({ approvedBy: 'admin' }) }));
+  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'delivery', status: 'PENDING', OR: [{ testMode: true }, { requiresApproval: true }] }, data: expect.objectContaining({ approvedBy: 'admin' }) }));
 });
-const delivery = { id: 'delivery', contact, status: 'QUEUED', testMode: true, actualTo: input.testDestination, intendedTo: contact.phone, approvedBy: 'admin', approvedAt: new Date() };
+const delivery = { nextSendAt: new Date(0), updatedAt: new Date(0), id: 'delivery', contact, status: 'QUEUED', testMode: true, actualTo: input.testDestination, intendedTo: contact.phone, approvedBy: 'admin', approvedAt: new Date() };
 const settings = { outboundEnabled: true, testMode: true, testDestination: input.testDestination };
 it.each([
   { ...delivery, testMode: false }, { ...delivery, approvedBy: null },
@@ -49,7 +49,7 @@ it.each([
 it('atomically claims once and loses concurrent claims safely', async () => {
   findUnique.mockResolvedValue(delivery);
   expect(await claimWhatsAppInTransaction(tx, 'delivery', settings)).toMatchObject({ status: 'SENDING' });
-  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'delivery', status: 'QUEUED', claimToken: null } }));
+  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 'delivery', status: 'QUEUED', claimToken: null }) }));
   updateMany.mockResolvedValue({ count: 0 });
   expect(await claimWhatsAppInTransaction(tx, 'delivery', settings)).toBeNull();
 });
@@ -82,4 +82,19 @@ it('keeps a historical contact-keyed delivery instead of creating a duplicate cu
   findExisting.mockResolvedValue({id:'original',status:'SENT'});
   expect(await enqueueWhatsAppInTransaction(tx,input)).toEqual({delivery:{id:'original',status:'SENT'}});
   expect(upsert).not.toHaveBeenCalled();
+});
+
+it('never claims before the persisted five minute deadline', async () => {
+  findUnique.mockResolvedValue({ ...delivery, nextSendAt: new Date(Date.now() + 300000) });
+  expect(await claimWhatsAppInTransaction(tx, 'delivery', settings)).toBeNull();
+  expect(updateMany).not.toHaveBeenCalled();
+});
+it('cancellation wins only while unsent and creates an audit entry', async () => {
+  const auditLog = { create: jest.fn() };
+  await cancelWhatsAppInTransaction({ ...tx, auditLog } as unknown as DbTransactionClient, 'delivery', { id: 'admin', role: 'ADMIN' } as CurrentUser);
+  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'delivery', status: { in: ['PENDING', 'QUEUED', 'PAUSED'] }, claimToken: null }, data: { status: 'CANCELLED', failureCode: 'ADMIN_CANCELLED' } }));
+  expect(auditLog.create).toHaveBeenCalledTimes(1);
+  updateMany.mockResolvedValue({ count: 0 });
+  await expect(cancelWhatsAppInTransaction({ ...tx, auditLog } as unknown as DbTransactionClient, 'delivery', { id: 'admin', role: 'ADMIN' } as CurrentUser)).rejects.toMatchObject({ status: 409 });
+  expect(auditLog.create).toHaveBeenCalledTimes(1);
 });

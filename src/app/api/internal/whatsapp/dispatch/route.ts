@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       } catch { logger.warn('WhatsApp callback replay deferred', { eventId: event.id }); }
     }
     const settings = await import('@/lib/whatsapp/whatsapp-settings').then(module => module.getWhatsAppSettings());
-    const rows = await db.whatsAppDelivery.findMany({ where: { status: 'QUEUED', testMode: settings.testMode }, orderBy: { createdAt: 'asc' }, take: 10, select: { id: true } });
+    const rows = await db.whatsAppDelivery.findMany({ where: { status: 'QUEUED', testMode: settings.testMode, nextSendAt: { lte: new Date() } }, orderBy: { nextSendAt: 'asc' }, take: 10, select: { id: true } });
     let accepted = 0;
     for (const row of rows) {
       try { if ((await dispatchWhatsAppDelivery(row.id)).sent) accepted++; }

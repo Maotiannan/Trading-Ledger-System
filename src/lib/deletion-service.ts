@@ -15,6 +15,7 @@ import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 import { addMoney, moneyToNumber } from '@/lib/money';
 import { cancelSourceNotificationsInTransaction } from '@/lib/email/email-notification-projector';
+import { pauseWhatsAppForDeletion } from '@/lib/whatsapp/whatsapp-deletion';
 
 const AUTO_DETAIL_RECEIPT_NOTES = new Set(['由付款明细自动创建', '由付款明细直接创建']);
 
@@ -386,17 +387,21 @@ export async function createDeletionRequest({
 
   await assertDeletionRequestableTarget(currentUser, normalizedTargetType, targetId);
 
-  const deletionRequest = await db.deletionRequest.create({
-    data: {
-      targetType: normalizedTargetType,
-      targetId,
-      reason,
-      requestedBy: currentUser.id,
-      status: DeletionStatus.PENDING,
-    },
-    include: {
-      requester: { select: { id: true, name: true, email: true } },
-    },
+  const deletionRequest = await runInTransaction(async tx => {
+    const request = await tx.deletionRequest.create({
+      data: {
+        targetType: normalizedTargetType,
+        targetId,
+        reason,
+        requestedBy: currentUser.id,
+        status: DeletionStatus.PENDING,
+      },
+      include: {
+        requester: { select: { id: true, name: true, email: true } },
+      },
+    });
+    await pauseWhatsAppForDeletion(tx, normalizedTargetType, targetId);
+    return request;
   });
 
   await recordAuditEvent({

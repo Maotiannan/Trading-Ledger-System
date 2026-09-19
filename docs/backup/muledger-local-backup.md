@@ -58,6 +58,15 @@ the additive tables. Never drop notification history as an application rollback.
 
 ### Accepted Limitation
 
+WhatsApp buffer migration `20260919000100_whatsapp_send_buffer` adds `nextSendAt`,
+`requiresApproval`, `correctionOf` and the `PAUSED` state. All are covered by the
+full MySQL snapshot; no file storage is added. Recovery checks must preserve
+deadlines, deletion pauses, approval revocations, cancelled task tombstones and
+correction links. Keep external sending off in a restored environment; do not
+reset cancelled/submitted tasks or approve corrections during recovery. Rollback
+must keep outbound disabled if using an older app that does not understand the
+buffer; preserve the additive columns and historical messages.
+
 The upload source and snapshots are on the same NAS. This protects against accidental deletion, application mistakes, and failed database migrations, but it does not protect against loss of the entire NAS or all of its disks. This limitation was explicitly accepted when cloud backup was retired on 2026-07-19.
 
 ### NAS Upload Layout

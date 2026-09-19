@@ -5,11 +5,11 @@ it('renders the shared snapshot balance without recalculating financial values',
   expect(result.parameters).toEqual(['Customer', 'R1', 'AB-1', 'INV', '10,000', '3,674', '15/09/2026', 'Not recorded']);
   expect(result.preview).toContain('3,674');
 });
-it('has six Utility templates with exact variable counts', () => {
-  expect(whatsAppTemplates).toHaveLength(6);
+it('has eight Utility templates with exact variable counts', () => {
+  expect(whatsAppTemplates).toHaveLength(8);
   for (const template of whatsAppTemplates) {
     expect(template.category).toBe('UTILITY');
-    const type = template.name.includes('payment') ? 'PAYMENT_RECEIVED' : template.name.includes('shipment') ? 'SHIPMENT' : 'RELEASE';
+    const type = template.name.includes('correction') ? 'CORRECTION' : template.name.includes('payment') ? 'PAYMENT_RECEIVED' : template.name.includes('shipment') ? 'SHIPMENT' : 'RELEASE';
     const result = renderWhatsAppSnapshot(type, { ...source, language: template.language === 'fr' ? 'FRENCH' : 'ENGLISH' });
     expect(result.preview).not.toMatch(/{{\d+}}/);
   }

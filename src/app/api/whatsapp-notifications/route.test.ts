@@ -1,15 +1,17 @@
 /** @jest-environment node */
+jest.mock('@/lib/whatsapp/whatsapp-refresh', () => ({ refreshWhatsAppInTransaction: jest.fn(async () => ({updatedAt:new Date(0)})) }));
+jest.mock('@/lib/whatsapp/whatsapp-template-service', () => ({ listWhatsAppTemplateVersions: jest.fn(async () => []) }));
 jest.mock('@/lib/request-auth', () => ({ getCurrentUser: jest.fn() }));
 jest.mock('@/lib/db', () => ({ db: { $transaction: jest.fn(), whatsAppDelivery: { findMany: jest.fn(), count: jest.fn() } } }));
 jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn() }));
-jest.mock('@/lib/whatsapp/whatsapp-queue', () => ({ approveWhatsAppTestInTransaction: jest.fn() }));
+jest.mock('@/lib/whatsapp/whatsapp-queue', () => ({ approveWhatsAppTestInTransaction: jest.fn(), cancelWhatsAppInTransaction: jest.fn() }));
 import { NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/request-auth';
 import { GET, POST } from './route';
 import { db } from '@/lib/db';
 import { runInTransaction } from '@/lib/transaction';
 import { approveWhatsAppTestInTransaction } from '@/lib/whatsapp/whatsapp-queue';
-beforeEach(() => { jest.resetAllMocks(); (getCurrentUser as jest.Mock).mockResolvedValue({ id: 'admin', role: 'ADMIN' }); });
+beforeEach(() => { jest.clearAllMocks(); (getCurrentUser as jest.Mock).mockResolvedValue({ id: 'admin', role: 'ADMIN' }); });
 it.each(['SALES', 'USER'])('denies both read and approval for %s', async role => {
   (getCurrentUser as jest.Mock).mockResolvedValue({ role });
   expect((await GET(new NextRequest('http://localhost/api/whatsapp-notifications'))).status).toBe(403);
@@ -23,7 +25,7 @@ it('rejects non-numeric and oversized pagination', async () => {
 it('approves each ID once inside the transaction without sending', async () => {
   (runInTransaction as jest.Mock).mockImplementation(async fn => fn({}));
   (approveWhatsAppTestInTransaction as jest.Mock).mockResolvedValue({ count: 1 });
-  const result = await POST(new NextRequest('http://localhost/api/whatsapp-notifications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', ids: ['one', 'one'] }) }));
+  const result = await POST(new NextRequest('http://localhost/api/whatsapp-notifications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', ids: ['one'], expectedUpdatedAt:new Date(0).toISOString() }) }));
   expect(result.status).toBe(200);
   expect(approveWhatsAppTestInTransaction).toHaveBeenCalledTimes(1);
 });

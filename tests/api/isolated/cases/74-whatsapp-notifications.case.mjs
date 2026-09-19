@@ -9,7 +9,7 @@ export default async function run(t) {
   try {
     await t.initAdmin(); await t.loginAdmin();
     const templates = await t.request('GET', '/api/whatsapp-templates', { expectedStatus: 200 });
-    assert.equal(templates.data.data.templates.length, 6);
+    assert.equal(templates.data.data.templates.length, 8);
     const original = templates.data.data.templates.find(row => row.kind === 'payment' && row.language === 'en');
     const saved = await t.request('POST', '/api/whatsapp-templates', { json: { action: 'save', draft: { ...original, body: original.body + '\nThank you.' } }, expectedStatus: 200 });
     assert.equal(saved.data.data.status, 'DRAFT');
@@ -27,19 +27,48 @@ export default async function run(t) {
     await t.request('POST', '/api/whatsapp-contacts', { json: { customerId, phone: '+10000000001', optIn: true, consentSource: 'PHONE remains authoritative' }, expectedStatus: 200 });
     assert.equal(await db.customerWhatsAppContact.count({where:{customerId,phone:'+10000000001'}}),0);
     const contact = await db.customerWhatsAppContact.findUniqueOrThrow({ where: { customerId_phone: { customerId, phone: '+224620123456' } } });
+    const admin = await db.user.findUniqueOrThrow({where:{email:t.adminEmail}});
+    const invoice = await db.invoice.create({data:{invNo:suffix, createdBy:admin.id}});
+    const order = await db.order.create({data:{invoiceId:invoice.id, orderNo:suffix+'-1', amount:10000, customerId}});
+    const a = await db.receipt.create({data:{receiptNo:suffix+'-A', usd:2000, status:'SR_Received', createdBy:admin.id, customerId, orderId:order.id, orderNo:order.orderNo, createdAt:new Date(Date.now()-2000)}});
+    const b = await db.receipt.create({data:{receiptNo:suffix+'-B', usd:3000, status:'SR_Received', createdBy:admin.id, customerId, orderId:order.id, orderNo:order.orderNo}});
+    const source = await db.emailNotification.create({data:{eventKey:suffix, type:'PAYMENT_RECEIVED', customerId, receiptId:b.id, currentSnapshot:{}}});
     const create = () => db.whatsAppDelivery.upsert({ where: { eventKey: suffix }, update: {}, create: {
-      eventKey: suffix, type: 'PAYMENT_RECEIVED', sourceId: 'isolated-source', contactId: contact.id, testMode: true,
+      eventKey: suffix, type: 'PAYMENT_RECEIVED', sourceId: source.id, contactId: contact.id, testMode: true,
       intendedTo: contact.phone, actualTo: '+8613619767412', senderPhone: '+8613819858718', templateName: 'muledger_payment_v1',
-      languageCode: 'en', parameters: ['fixture'], businessSnapshot: { amount: 100 }, status: 'PENDING',
+      languageCode: 'en', parameters: ['fixture'], businessSnapshot: { amount: 100 }, status: 'PENDING', requiresApproval:true, nextSendAt:new Date(),
     } });
     const seed = () => create().catch(error => { if(error.code !== 'P2002') throw error; return db.whatsAppDelivery.findUniqueOrThrow({where:{eventKey:suffix}}); });
     const results = await Promise.all([seed(), seed()]);
     assert.equal(results[0].id, results[1].id);
     const id = results[0].id;
-    const approvals = await Promise.all([1, 2].map(() => t.request('POST', '/api/whatsapp-notifications', { json: { action: 'approve', ids: [id] }, expectedStatus: 200 })));
-    assert.equal(approvals.reduce((sum, r) => sum + r.data.data.approved, 0), 1);
+    const refresh = () => t.request('GET','/api/whatsapp-notifications',{expectedStatus:200});
+    await refresh();
+    let current = await db.whatsAppDelivery.findUniqueOrThrow({where:{id}});
+    assert.equal(current.businessSnapshot.orderBalance, 5000);
+    assert.ok(current.nextSendAt.getTime() > Date.now()+290000);
+    const approvals = await Promise.all([1, 2].map(() => t.request('POST', '/api/whatsapp-notifications', { json: { action: 'approve', ids: [id], expectedUpdatedAt:current.updatedAt.toISOString() } })));
+    assert.deepEqual(approvals.map(r=>r.status).sort(),[200,409]);
     const delivery = await db.whatsAppDelivery.findUniqueOrThrow({ where: { id } });
     assert.equal(delivery.status, 'QUEUED'); assert.ok(delivery.approvedAt);
+    const request = await t.request('POST','/api/deletion',{json:{action:'request',targetType:'RECEIPT',targetId:b.id},expectedStatus:200});
+    assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({where:{id}})).status,'PAUSED');
+    await t.request('POST','/api/deletion',{json:{action:'reject',requestId:request.data.data.id},expectedStatus:200});
+    await refresh();
+    current = await db.whatsAppDelivery.findUniqueOrThrow({where:{id}});
+    assert.equal(current.status,'PENDING'); assert.equal(current.approvedAt,null);
+    const deleteA = await t.request('POST','/api/deletion',{json:{action:'request',targetType:'RECEIPT',targetId:a.id},expectedStatus:200});
+    await refresh();
+    assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({where:{id}})).status,'PAUSED');
+    await t.request('POST','/api/deletion',{json:{action:'approve',requestId:deleteA.data.data.id},expectedStatus:200});
+    await refresh();
+    current = await db.whatsAppDelivery.findUniqueOrThrow({where:{id}});
+    assert.equal(current.businessSnapshot.orderBalance,7000);
+    assert.ok(current.nextSendAt.getTime()>Date.now()+290000);
+    await t.request('POST','/api/whatsapp-notifications',{json:{action:'cancel',ids:[id]},expectedStatus:200});
+    await db.receipt.update({where:{id:b.id},data:{usd:4000}});
+    await refresh();
+    assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({where:{id}})).failureCode,'ADMIN_CANCELLED');
     await db.customer.update({where:{id:customerId},data:{phone:'+224622491286'}});
     const listed = await t.request('GET','/api/whatsapp-contacts?search='+encodeURIComponent(suffix),{expectedStatus:200});
     assert.equal(listed.data.data.find(row=>row.id===customerId).phone,'+224622491286');
@@ -56,6 +85,6 @@ export default async function run(t) {
     await t.request('GET', '/api/whatsapp-contacts', { expectedStatus: 200 });
     await t.loginAdmin();
     await t.request('POST', '/api/whatsapp-settings', { json: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, expectedStatus: 200 });
-    t.step('WhatsApp uniqueness, concurrent approval, immutable test mode, opt-out and ADMIN permissions verified in isolated database');
+    t.step('WhatsApp buffer, deletion pause/rejection/approval, dependent balance correction, permanent cancellation, concurrent approval, opt-out and ADMIN permissions verified in isolated database');
   } finally { await db.$disconnect(); }
 }

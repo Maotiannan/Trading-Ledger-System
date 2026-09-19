@@ -1,3 +1,4 @@
+jest.mock('@/lib/whatsapp/whatsapp-deletion', () => ({ pauseWhatsAppForDeletion: jest.fn() }));
 import {
   DeletionStatus,
   DeletionTargetType,
@@ -144,6 +145,7 @@ const mockCancelSourceNotifications = cancelSourceNotificationsInTransaction as 
 describe('deletion-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb.$transaction.mockImplementation(async fn => fn(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockUpdateOrderBalance.mockResolvedValue(undefined);
     mockCancelSourceNotifications.mockResolvedValue({ cancelled: 1 });

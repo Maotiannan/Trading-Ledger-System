@@ -1,4 +1,6 @@
 /** @jest-environment node */
+jest.mock('./whatsapp-refresh', () => ({ refreshWhatsAppInTransaction: jest.fn() }));
+jest.mock('./whatsapp-template-service', () => ({ listWhatsAppTemplateVersions: jest.fn(async () => []) }));
 jest.mock('./ycloud-template-status', () => ({ isYCloudTemplateApproved: jest.fn(async () => true) }));
 jest.mock('./whatsapp-settings', () => ({ getWhatsAppSettings: jest.fn(async () => ({outboundEnabled:true,testMode:true,testDestination:'+8613619767412'})) }));
 
@@ -14,9 +16,11 @@ import { claimWhatsAppInTransaction } from './whatsapp-queue';
 import { sendYCloudTemplate, WhatsAppProviderError } from './ycloud-provider';
 import { dispatchWhatsAppDelivery } from './whatsapp-dispatch';
 const original = { ...process.env };
-const row = { status: 'QUEUED', sourceId: 'source', businessSnapshot: { amount: 100, orderNos: ['ORDER-1'] }, id: 'delivery', claimToken: 'claim', senderPhone: '+123456789', parameters: ['100'], actualTo: '+224620123456', templateName: 'payment', languageCode: 'en' };
+import { refreshWhatsAppInTransaction } from './whatsapp-refresh';
+const row = { nextSendAt: new Date(0), status: 'QUEUED', sourceId: 'source', businessSnapshot: { amount: 100, orderNos: ['ORDER-1'] }, id: 'delivery', claimToken: 'claim', senderPhone: '+123456789', parameters: ['100'], actualTo: '+224620123456', templateName: 'payment', languageCode: 'en' };
 beforeEach(() => {
   jest.clearAllMocks();
+  (refreshWhatsAppInTransaction as jest.Mock).mockResolvedValue(row);
   Object.assign(process.env, { YCLOUD_API_KEY: 'mock-key', YCLOUD_SENDER_PHONE: row.senderPhone, WHATSAPP_OUTBOUND_ENABLED: 'true' });
   (runInTransaction as jest.Mock).mockImplementation(async fn => fn({ receipt: { findUnique: jest.fn().mockResolvedValue({customerId:'customer',status:'SR_Received',receiptNo:'R-1',usd:100,orderNo:'ORDER-1'}) }, emailNotification: { findUnique: jest.fn().mockResolvedValue({status:'PENDING',receiptId:'receipt',customerId:'customer',currentSnapshot:row.businessSnapshot}) }, whatsAppDelivery: { findUnique: jest.fn().mockResolvedValue(row) } }));
   (db.whatsAppDelivery.findUnique as jest.Mock).mockResolvedValue(row);

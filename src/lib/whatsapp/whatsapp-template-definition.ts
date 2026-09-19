@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import defaults from './templates.json';
-export const templateKinds = ['payment', 'shipment', 'release'] as const;
+export const templateKinds = ['payment', 'shipment', 'release', 'correction'] as const;
 export const templateVariables = {
   payment: ['customerName', 'receiptNo', 'orderNos', 'invoiceNo', 'amount', 'orderBalance', 'shipmentDate', 'releaseDate'],
   shipment: ['customerName', 'invoiceNo', 'orderNos', 'shipmentDate'],
   release: ['customerName', 'invoiceNo', 'orderNos', 'releaseDate'],
+  correction: ['customerName', 'receiptNos', 'orderNos', 'invoiceNo', 'reason', 'currentBalance'],
 } as const;
 export const draftSchema = z.object({
   kind: z.enum(templateKinds), language: z.enum(['en', 'fr']),
@@ -49,7 +50,7 @@ export function templatePayload(template: TemplateVersion) {
   };
 }
 export function templateExampleValues(kind: TemplateDraft['kind']) {
-  return kind === 'payment'
+  return kind === 'correction' ? ['Example Customer', 'TEST-001', 'TEST-01', 'TEST-INV', 'Receipt record cancelled; this is not a new payment.', '700'] : kind === 'payment'
     ? ['Example Customer', 'TEST-001', 'TEST-01', 'TEST-INV', '100', '900', '15/09/2026', '15/09/2026']
     : ['Example Customer', 'TEST-INV', 'TEST-01', '15/09/2026'];
 }

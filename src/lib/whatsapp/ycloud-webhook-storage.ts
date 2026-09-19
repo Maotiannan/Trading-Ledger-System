@@ -58,7 +58,7 @@ export async function storeYCloudDeliveryEvent(event: ReturnType<typeof parseYCl
         },
         select: { id: true, status: true, lastEventAt: true },
       });
-      const rank: Record<WhatsAppDeliveryStatus, number> = {
+      const rank: Record<WhatsAppDeliveryStatus, number> = { PAUSED: -1,
         PENDING: -1, QUEUED: -1, CANCELLED: -1, SENDING: 0, UNCERTAIN: 0,
         ACCEPTED: 1, SENT: 2, FAILED: 3, DELIVERED: 4, READ: 5,
       };

@@ -31,7 +31,7 @@ export function CustomerOrderHistoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-6xl flex-col p-4 sm:p-6 md:w-fit md:max-w-[calc(100vw-32px)]">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-6xl flex-col p-4 sm:p-6 md:w-fit md:max-w-[calc(100vw-2rem)]">
         <DialogHeader>
           <DialogTitle>{tx('ORDER_NAME 历史', 'ORDER_NAME History')}: {title || '-'}</DialogTitle>
           <DialogDescription>

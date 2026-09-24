@@ -141,7 +141,7 @@ function CapacityEvidence({
 }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <SummaryItem label={tx('期间收款总额', 'Period total')} value={formatUsdAmount(detail.total)} />
         <SummaryItem label={tx('月均付款', 'Average per month')} value={formatUsdAmount(detail.averageMonthly)} />
         <SummaryItem label={tx('完整月份', 'Completed months')} value={tx(`${detail.months.length} 个月`, `${detail.months.length} completed months`)} />
@@ -195,7 +195,7 @@ function CycleEvidence({
 }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryItem label={tx('有效订单', 'Eligible orders')} value={String(detail.eligibleOrderCount)} />
         <SummaryItem label={tx('有效金额', 'Eligible amount')} value={formatUsdAmount(detail.eligibleAmount)} />
         <SummaryItem label={tx('已付款', 'Paid amount')} value={formatUsdAmount(detail.paidAmount)} />

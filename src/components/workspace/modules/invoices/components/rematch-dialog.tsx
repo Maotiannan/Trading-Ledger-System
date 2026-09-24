@@ -48,7 +48,7 @@ export function RematchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-5xl flex-col overflow-hidden p-0 sm:max-w-5xl sm:p-6">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden p-0 sm:max-w-5xl sm:p-6">
         <DialogHeader className="px-4 pt-4 sm:px-0 sm:pt-0">
           <DialogTitle>{tx('冲突匹配处理', 'Conflict Match Resolution')}</DialogTitle>
           <DialogDescription>{tx('逐组选择保留订单与处理方式，再执行刷新匹配。', 'Choose keeper and strategy for each group before applying rematch.')}</DialogDescription>

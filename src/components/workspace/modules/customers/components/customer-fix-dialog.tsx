@@ -43,7 +43,7 @@ export function CustomerFixDialog({
 }: CustomerFixDialogProps) {
   return (
     <Dialog open={!!fixingTarget} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{tx('修复客户信息并加入客户库', 'Fix Customer Info And Save')}</DialogTitle>
         </DialogHeader>

@@ -809,7 +809,7 @@ export function Dashboard() {
       <Dialog open={!!selectedReleasedInvoice} onOpenChange={(open) => {
         if (!open) setSelectedReleasedInvoice(null);
       }}>
-        <DialogContent className="flex max-h-[calc(100vh-24px)] max-w-3xl flex-col">
+        <DialogContent className="flex max-h-[calc(100dvh-1rem)] max-w-3xl flex-col">
           <DialogHeader>
             <DialogTitle>{selectedReleasedInvoice?.invNo}</DialogTitle>
             <DialogDescription>

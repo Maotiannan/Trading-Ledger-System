@@ -46,8 +46,8 @@ describe('CustomerOrderHistoryDialog', () => {
       />,
     );
 
-    expect(screen.getByRole('dialog')).toHaveClass('md:w-fit', 'md:max-w-[calc(100vw-32px)]');
-    expect(screen.getByTestId('customer-order-history-scroll')).toHaveClass('md:overflow-x-auto');
+    expect(screen.getByRole('dialog')).toHaveClass('md:w-fit', 'md:max-w-[calc(100vw-2rem)]');
+    expect(screen.getByTestId('customer-order-history-scroll')).toHaveClass('overflow-x-auto', 'min-w-0');
     expect(screen.getByTestId('customer-order-history-grid')).toHaveClass(
       'md:w-max',
       'md:grid-cols-[max-content_max-content]',

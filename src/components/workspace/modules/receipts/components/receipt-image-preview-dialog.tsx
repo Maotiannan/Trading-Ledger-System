@@ -21,7 +21,7 @@ export function ReceiptImagePreviewDialog({ image, onOpenChange, tx }: ReceiptIm
   const text = tx || ((zh: string) => zh);
   return (
     <Dialog open={!!image} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl">
         <DialogHeader>
           <DialogTitle>{text('收据图片', 'Receipt image')}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -30,13 +30,13 @@ export function ReceiptImagePreviewDialog({ image, onOpenChange, tx }: ReceiptIm
         </DialogHeader>
         {image && (
           <div className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
-            <div>{`${text('已绑定ORDER NO：', 'Bound ORDER NO: ')}${formatOrderNameDisplay(image.orderNo)}`}</div>
-            <div>{`${text('已绑定发票号：', 'Bound invoice: ')}${image.invNo}`}</div>
-            <div>{`${text('创建者：', 'Creator: ')}${image.creator}`}</div>
+            <div className="break-words">{`${text('已绑定ORDER NO：', 'Bound ORDER NO: ')}${formatOrderNameDisplay(image.orderNo)}`}</div>
+            <div className="break-words">{`${text('已绑定发票号：', 'Bound invoice: ')}${image.invNo}`}</div>
+            <div className="break-words">{`${text('创建者：', 'Creator: ')}${image.creator}`}</div>
           </div>
         )}
         <div className="flex justify-center">
-          {image && <img src={image.url} alt={image.alt} className="max-h-[70vh] object-contain rounded-lg" />}
+          {image && <img src={image.url} alt={image.alt} className="max-h-[calc(100dvh-10rem)] max-w-full object-contain rounded-lg" />}
         </div>
       </DialogContent>
     </Dialog>

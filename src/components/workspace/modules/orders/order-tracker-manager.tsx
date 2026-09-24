@@ -481,7 +481,7 @@ export function OrderTrackerManager() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92dvh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{dialogMode === 'create' ? tx('新增订单', 'New Order') : tx('修改订单', 'Edit Order')}</DialogTitle>
             <DialogDescription className={dialogMode === 'create' ? 'sr-only' : undefined}>

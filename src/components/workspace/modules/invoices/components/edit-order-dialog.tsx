@@ -40,7 +40,7 @@ export function EditOrderDialog({
 }: EditOrderDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{tx('编辑订单', 'Edit Order')}</DialogTitle>
           <DialogDescription>{tx('修改订单信息', 'Update order information')}</DialogDescription>

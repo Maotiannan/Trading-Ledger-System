@@ -103,9 +103,9 @@ function HistoricalOrdersSection({
   onPageSizeChange: (pageSize: number) => void;
 }) {
   return (
-    <section className="space-y-3 md:w-max">
+    <section className="min-w-0 max-w-full space-y-3 md:w-max">
       <h3 className="font-semibold">{tx('历史订单', 'Historical Orders')}</h3>
-      <div className="rounded-md border">
+      <div className="max-w-full overflow-x-auto rounded-md border">
         <Table data-testid="customer-order-history-orders-table" className="md:w-max md:table-auto">
           <TableHeader>
             <TableRow>
@@ -171,9 +171,9 @@ function RecentReceiptsSection({
   onOpenReceiptImage?: (receipt: CustomerOrderHistoryReceipt) => void;
 }) {
   return (
-    <section className="space-y-3 md:w-max">
+    <section className="min-w-0 max-w-full space-y-3 md:w-max">
       <h3 className="font-semibold">{tx('最近收据', 'Recent Receipts')}</h3>
-      <div className="rounded-md border">
+      <div className="max-w-full overflow-x-auto rounded-md border">
         <Table data-testid="customer-order-history-receipts-table" className="md:w-max md:table-auto">
           <TableHeader>
             <TableRow>
@@ -293,7 +293,7 @@ export function CustomerOrderHistoryContent({
       )}
 
       {history && (
-        <div data-testid="customer-order-history-scroll" className="md:min-w-0 md:max-w-full md:overflow-x-auto">
+        <div data-testid="customer-order-history-scroll" className="min-w-0 max-w-full overflow-x-auto">
           <div data-testid="customer-order-history-grid" className="grid gap-4 md:w-max md:min-w-full md:grid-cols-[max-content_max-content] md:items-start">
             {sectionOrder === 'receipts-first'
               ? [receiptSection, orderSection]

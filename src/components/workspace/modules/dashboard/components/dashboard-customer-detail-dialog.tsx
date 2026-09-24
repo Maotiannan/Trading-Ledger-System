@@ -105,10 +105,10 @@ export function DashboardCustomerDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-testid="dashboard-customer-detail-dialog"
-        className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-6xl flex-col p-4 sm:p-6 md:max-w-[calc(100vw-32px)]"
+        className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-6xl flex-col p-4 sm:p-6 md:max-w-[calc(100vw-2rem)]"
       >
         <DialogHeader>
-          <DialogTitle className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <DialogTitle className="flex flex-col gap-1 break-words sm:flex-row sm:items-center sm:justify-between">
             <span>{formatOrderNameDisplay(title) || '-'}</span>
             <span className="text-sm font-semibold text-red-600">
               {tx('未付总计', 'Total Unpaid')}: {formatUsdAmount(outstanding?.totalOutstanding ?? 0)}

@@ -55,13 +55,13 @@ export function ImportResultDialog<T extends ImportResultRowBase>({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!top-[5px] !left-[5px] !translate-x-0 !translate-y-0 !w-[calc(100vw-10px)] !max-w-none !h-[calc(100vh-10px)] flex flex-col p-4">
-        <DialogHeader>
+      <DialogContent className="!top-[5px] !left-[5px] !translate-x-0 !translate-y-0 !w-[calc(100vw-10px)] !max-w-none !h-[calc(100dvh-10px)] flex flex-col overflow-hidden p-3 sm:p-4">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="whitespace-pre-wrap break-words">{description}</DialogDescription>
         </DialogHeader>
-        <div className="flex items-center justify-between gap-2 text-sm">
-          <div className="text-gray-600">
+        <div className="flex shrink-0 flex-col items-stretch justify-between gap-2 text-sm sm:flex-row sm:items-center">
+          <div className="text-gray-600 break-words">
             {tx('默认仅看最新失败行，可切换查看全部。', 'Default view shows latest failed rows. Switch to view all rows.')}
           </div>
           <div className="flex items-center gap-2">
@@ -75,7 +75,7 @@ export function ImportResultDialog<T extends ImportResultRowBase>({
             </select>
           </div>
         </div>
-        <div className="flex-1 overflow-auto border rounded-md">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-md border">
           <Table className="min-w-max table-auto">
             <TableHeader>
               <TableRow>
@@ -125,11 +125,11 @@ export function ImportResultDialog<T extends ImportResultRowBase>({
             </TableBody>
           </Table>
         </div>
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex shrink-0 flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="text-gray-600">
             {tx('每页 50 行', '50 rows per page')} · {tx('第', 'Page')} {page} / {totalPages}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 sm:justify-end">
             <Button variant="outline" onClick={() => onPageChange((p) => Math.max(1, p - 1))} disabled={page <= 1}>
               {tx('上一页', 'Prev')}
             </Button>
@@ -138,7 +138,7 @@ export function ImportResultDialog<T extends ImportResultRowBase>({
             </Button>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>{tx('关闭', 'Close')}</Button>
           <Button onClick={onRetry} disabled={retrying || retryDisabled}>
             {retrying && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

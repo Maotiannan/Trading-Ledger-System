@@ -31,7 +31,7 @@ export function CreateUserDialog({
 }: CreateUserDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{tx('创建用户', 'Create User')}</DialogTitle>
         </DialogHeader>

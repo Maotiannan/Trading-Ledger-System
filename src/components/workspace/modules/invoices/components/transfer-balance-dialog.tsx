@@ -39,7 +39,7 @@ export function TransferBalanceDialog({
 }: TransferBalanceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{tx('转移多付余额', 'Transfer Overpayment')}</DialogTitle>
           <DialogDescription>

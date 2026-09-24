@@ -78,8 +78,8 @@ describe('RematchDialog system-pool repairs', () => {
     render(<StatefulDialog />);
 
     expect(screen.getByRole('dialog')).toHaveClass(
-      'max-h-[calc(100vh-24px)]',
-      'w-[calc(100vw-24px)]',
+      'max-h-[calc(100dvh-1rem)]',
+      'w-[calc(100vw-1rem)]',
       'flex-col',
     );
     expect(screen.getByTestId('rematch-scroll-body')).toHaveClass(

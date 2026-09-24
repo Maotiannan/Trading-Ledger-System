@@ -40,9 +40,9 @@ export function DetailEditDialog({
 }: DetailEditDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] p-0 overflow-hidden max-h-[90vh] sm:max-w-3xl">
-        <div className="flex max-h-[90vh] flex-col">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden p-0 max-h-[90dvh] sm:max-w-3xl">
+        <div className="flex max-h-[90dvh] min-w-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('修改付款明细', 'Edit Payment Detail')}</DialogTitle>
             <DialogDescription>
               {isAdmin
@@ -50,7 +50,7 @@ export function DetailEditDialog({
                 : tx('销售提交后需等待管理员审批', 'Sales changes require administrator approval.')}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="space-y-4">
               <Input
                 type="date"
@@ -77,7 +77,7 @@ export function DetailEditDialog({
               </select>
               <div className="space-y-3">
                 {form.items.map((item, index) => (
-                  <div key={index} className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-4">
+                  <div key={index} className="grid grid-cols-1 gap-3 rounded-md border p-3 lg:grid-cols-4">
                     <Input
                       placeholder={tx('客户MARK', 'Customer MARK')}
                       value={item.mark ?? ''}

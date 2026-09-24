@@ -41,7 +41,7 @@ export function isPdfPreviewSource(src: string | null | undefined, fileName?: st
     || /\.pdf(?:$|[?#&\s])/.test(decoded);
 }
 
-export function PdfPreview({ src, fileName, className = 'max-h-[70vh]', tx = defaultTx }: PdfPreviewProps) {
+export function PdfPreview({ src, fileName, className = 'max-h-[70dvh]', tx = defaultTx }: PdfPreviewProps) {
   const pagesRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<PdfStatus>('idle');
   const [pageCount, setPageCount] = useState(0);

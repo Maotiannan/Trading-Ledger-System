@@ -53,13 +53,13 @@ export function DetailUploadDialog({
 }: DetailUploadDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] p-0 overflow-hidden max-h-[90vh] sm:max-w-2xl">
-        <div className="flex max-h-[90vh] flex-col">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden p-0 max-h-[90dvh] sm:max-w-2xl">
+        <div className="flex max-h-[90dvh] min-w-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('上传付款明细', 'Upload Payment Detail')}</DialogTitle>
             <DialogDescription>{tx('上传付款明细图片，AI将自动识别内容', 'Upload payment detail image and let AI recognize content')}</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="space-y-4">
               {error && (
                 <Alert variant="destructive">
@@ -117,7 +117,7 @@ export function DetailUploadDialog({
                   <div className="space-y-2">
                     <Label className="text-sm text-gray-500">{tx('明细项目', 'Detail Items')}</Label>
                     {ocrResult.items.map((item, index) => (
-                      <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div key={index} className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
                         <Input
                           placeholder={tx('唛头', 'Mark')}
                           value={item.mark || ''}
@@ -153,7 +153,7 @@ export function DetailUploadDialog({
               )}
             </div>
           </div>
-          <DialogFooter className="shrink-0 border-t px-6 py-4 flex-col-reverse gap-2 sm:flex-row sm:gap-0">
+          <DialogFooter className="shrink-0 border-t px-4 py-4 flex-col-reverse gap-2 sm:flex-row sm:gap-0 sm:px-6">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={onConfirm} disabled={!ocrResult || !selectedAgentId || submitting || uploading || agentsLoading}>
               {submitting ? (

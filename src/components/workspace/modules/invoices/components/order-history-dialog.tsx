@@ -22,8 +22,8 @@ export function OrderHistoryDialog({ open, title, rows, tx, onOpenChange }: Orde
           <DialogTitle>{tx('ORDER 付款记录', 'ORDER Payment Records')}</DialogTitle>
           <DialogDescription>{title}</DialogDescription>
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-auto">
-          <Table>
+        <div className="max-h-[60dvh] overflow-auto">
+          <Table className="min-w-[36rem]">
             <TableHeader>
               <TableRow>
                 <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>

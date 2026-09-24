@@ -192,7 +192,7 @@ export function DetailDirectCreateDialog({
             {manualRowsOpen && (
               <div className="space-y-3 px-3 pb-3">
                 {directItems.map((item, index) => (
-                  <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div key={index} className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
                     <Input
                       placeholder={tx('唛头', 'Mark')}
                       value={item.mark}
@@ -228,7 +228,7 @@ export function DetailDirectCreateDialog({
               {formatUsdAmount(totalAmount, '$0')}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-row">
             <Button variant="outline" onClick={() => handleOpenChange(false)}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={handleSubmit}>
               <Check className="h-4 w-4 mr-2" />

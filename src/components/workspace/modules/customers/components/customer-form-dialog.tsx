@@ -64,7 +64,7 @@ function CustomerCompanyFileOverwritePanel({
               />
               <span className="min-w-0 flex-1 space-y-1">
                 <span className="block font-medium">{field.label}</span>
-                <span className="grid gap-1 sm:grid-cols-2">
+                <span className="grid gap-1 md:grid-cols-2">
                   <span className="rounded bg-muted px-2 py-1">
                     {tx('原值', 'Current')}: <span className="font-medium">{field.currentValue || '-'}</span>
                   </span>

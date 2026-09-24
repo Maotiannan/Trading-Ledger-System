@@ -51,12 +51,12 @@ export function CreateInvoiceDialog({
 }: CreateInvoiceDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-24px)] max-w-2xl flex-col overflow-hidden p-0">
-        <DialogHeader className="px-6 pt-6">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] max-w-2xl flex-col overflow-hidden p-0">
+        <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
           <DialogTitle>{tx('创建账单', 'Create Invoice')}</DialogTitle>
           <DialogDescription>{tx('创建新账单并添加订单', 'Create a new invoice and add orders')}</DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
           {formError && (
             <Alert variant="destructive">
               <AlertDescription>{formError}</AlertDescription>
@@ -66,7 +66,7 @@ export function CreateInvoiceDialog({
             <Label>{tx('账单号 (INV NO)', 'Invoice No. (INV NO)')}</Label>
             <Input value={invNo} onChange={(e) => onInvNoChange(e.target.value)} placeholder={tx('如: L25MH090125', 'e.g. L25MH090125')} />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <Label>{tx('发货日期 (SHIP_DATE)', 'SHIP_DATE')}</Label>
               <Input type="date" value={shipDate} onChange={(e) => onShipDateChange(e.target.value)} />
@@ -80,7 +80,7 @@ export function CreateInvoiceDialog({
             <Label>{tx('订单列表', 'Order List')}</Label>
             {orders.map((order, index) => (
               <div key={index} className="space-y-2 border rounded-md p-2">
-                <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex min-w-0 flex-col gap-2 lg:flex-row">
                   <Input
                     placeholder={tx('客户单号 (ORDER)', 'Order No. (ORDER)')}
                     value={order.orderNo}
@@ -91,16 +91,16 @@ export function CreateInvoiceDialog({
                     placeholder={tx('金额 (AMOUNT)', 'Amount (AMOUNT)')}
                     value={order.amount}
                     onValueChange={(value) => onOrderChange(index, 'amount', value)}
-                    className="sm:w-32"
+                    className="lg:w-32"
                   />
                   <Input
                     placeholder={tx('客户MARK(必填)', 'Customer MARK (required)')}
                     value={order.customerMark}
                     onChange={(e) => onOrderChange(index, 'customerMark', e.target.value)}
-                    className="sm:w-44"
+                    className="lg:w-44"
                   />
                   {orders.length > 1 && (
-                    <Button variant="ghost" size="icon" onClick={() => onRemoveOrder(index)}>
+                    <Button variant="ghost" size="icon" className="self-end lg:self-auto" onClick={() => onRemoveOrder(index)}>
                       <X className="h-4 w-4" />
                     </Button>
                   )}

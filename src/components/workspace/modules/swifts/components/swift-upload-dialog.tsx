@@ -62,13 +62,13 @@ export function SwiftUploadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] p-0 overflow-hidden max-h-[90vh] sm:max-w-2xl">
-        <div className="flex max-h-[90vh] flex-col">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden p-0 max-h-[90dvh] sm:max-w-2xl">
+        <div className="flex max-h-[90dvh] min-w-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('上传SWIFT水单', 'Upload SWIFT Record')}</DialogTitle>
             <DialogDescription>{tx('上传SWIFT水单图片或PDF，AI将自动识别内容', 'Upload SWIFT image or PDF and let AI recognize content')}</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="space-y-4">
               {error && (
                 <Alert variant="destructive">
@@ -118,7 +118,7 @@ export function SwiftUploadDialog({
               {ocrResult && (
                 <div className="space-y-3 border rounded-lg p-4">
                   <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
                       <Label className="text-sm text-gray-500">{tx('汇款金额', 'Amount')}</Label>
                       <MoneyInput
@@ -166,7 +166,7 @@ export function SwiftUploadDialog({
               )}
             </div>
           </div>
-          <DialogFooter className="shrink-0 border-t px-6 py-4 flex-col-reverse gap-2 sm:flex-row sm:gap-0">
+          <DialogFooter className="shrink-0 border-t px-4 py-4 flex-col-reverse gap-2 sm:flex-row sm:gap-0 sm:px-6">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={onConfirm} disabled={!ocrResult || !selectedDetailId || submitting || uploading || waitingDetailsLoading}>
               {submitting ? (

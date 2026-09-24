@@ -48,7 +48,7 @@ export function CustomerConsigneeDialog({
 }: CustomerConsigneeDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-2xl flex-col p-4 sm:p-6">
+      <DialogContent className="flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-2xl flex-col p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{tx('CONSIGNEE 管理', 'CONSIGNEE Management')}</DialogTitle>
           <DialogDescription>

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { formatOrderNameDisplay } from '@/lib/display-format';
 import { Check, Loader2 } from 'lucide-react';
@@ -61,13 +62,13 @@ export function ReceiptUploadDialog({
 }: ReceiptUploadDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0 overflow-hidden max-h-[90vh]">
-        <div className="flex max-h-[90vh] flex-col">
-          <DialogHeader className="shrink-0 border-b px-6 py-4">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-2xl overflow-hidden p-0 max-h-[90dvh]">
+        <div className="flex max-h-[90dvh] min-w-0 flex-col">
+          <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('上传收据', 'Upload Receipt')}</DialogTitle>
             <DialogDescription>{tx('上传收据图片，AI将自动识别内容', 'Upload a receipt image and let AI recognize fields automatically')}</DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="space-y-4">
           {error && (
             <Alert variant="destructive">
@@ -99,31 +100,32 @@ export function ReceiptUploadDialog({
           )}
 
           {ocrResult && (
-            <div className="space-y-3 border rounded-lg p-4">
+            <div className="min-w-0 space-y-3 rounded-lg border p-3 sm:p-4">
               <h4 className="font-medium">{tx('识别结果', 'Recognition Result')}</h4>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
+              <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="min-w-0 space-y-1">
                   <Label className="text-sm text-gray-500">{tx('收据号', 'Receipt No.')}</Label>
-                  <Input value={(ocrResult.receiptNo as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, receiptNo: e.target.value })} />
+                  <Textarea rows={1} value={(ocrResult.receiptNo as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, receiptNo: e.target.value })} className="min-h-9 resize-y break-all py-2" />
                 </div>
-                <div>
+                <div className="min-w-0 space-y-1">
                   <Label className="text-sm text-gray-500">{tx('日期', 'Date')}</Label>
                   <Input value={(ocrResult.date as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, date: e.target.value })} />
                 </div>
-                <div>
+                <div className="min-w-0 space-y-1">
                   <Label className="text-sm text-gray-500">{tx('付款金额 (USD)', 'Amount (USD)')}</Label>
                   <MoneyInput value={(ocrResult.usd as number) || ''} onValueChange={(value) => onOcrResultChange({ ...ocrResult, usd: parseFloat(value) })} />
                 </div>
-                <div>
+                <div className="min-w-0 space-y-1">
                   <Label className="text-sm text-gray-500">{tx('客户单号', 'Order No.')}</Label>
-                  <Input value={(ocrResult.orderNo as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, orderNo: e.target.value })} />
+                  <Textarea rows={1} value={(ocrResult.orderNo as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, orderNo: e.target.value })} className="min-h-9 resize-y break-all py-2" />
                 </div>
-                <div>
+                <div className="min-w-0 space-y-1">
                   <Label className="text-sm text-gray-500">{tx('账单号', 'Invoice No.')}</Label>
-                  <Input
+                  <Textarea
+                    rows={1}
                     value={(ocrResult.invNo as string) || ''}
                     onChange={(e) => onOcrResultChange({ ...ocrResult, invNo: e.target.value })}
-                    className={ocrInvConflict ? 'border-red-500 text-red-600 focus-visible:ring-red-500' : ''}
+                    className={`min-h-9 resize-y break-all py-2 ${ocrInvConflict ? 'border-red-500 text-red-600 focus-visible:ring-red-500' : ''}`}
                   />
                   {ocrInvConflict && (
                     <p className="mt-1 text-xs text-red-600">
@@ -131,18 +133,18 @@ export function ReceiptUploadDialog({
                     </p>
                   )}
                 </div>
-                <div>
+                <div className="min-w-0 space-y-1">
                   <Label className="text-sm text-gray-500">{tx('付款人', 'Payer')}</Label>
-                  <Input value={(ocrResult.payer as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, payer: e.target.value })} />
+                  <Textarea rows={1} value={(ocrResult.payer as string) || ''} onChange={(e) => onOcrResultChange({ ...ocrResult, payer: e.target.value })} className="min-h-9 resize-y break-all py-2" />
                 </div>
-                <div className="col-span-2">
+                <div className="min-w-0 space-y-1 md:col-span-2">
                   <Label className="text-sm text-gray-500">{tx('客户MARK（必填）', 'Customer MARK (required)')}</Label>
                   <Input value={ocrCustomerMark} onChange={(e) => onOcrCustomerMarkChange(e.target.value)} />
                 </div>
                 {ocrCustomerCandidates.length > 1 && (
-                  <div className="col-span-2">
+                  <div className="min-w-0 space-y-1 md:col-span-2">
                     <Label className="text-sm text-gray-500">{tx('选择准确客户(MARK+ORDER_NAME)', 'Select exact customer (MARK+ORDER_NAME)')}</Label>
-                    <select className="w-full border rounded-md px-3 py-2 text-sm" value={ocrCustomerId} onChange={(e) => onOcrCustomerSelect(e.target.value)}>
+                    <select className="w-full min-w-0 rounded-md border px-3 py-2 text-sm" value={ocrCustomerId} onChange={(e) => onOcrCustomerSelect(e.target.value)}>
                       <option value="">{tx('请选择', 'Please select')}</option>
                       {ocrCustomerCandidates.map((candidate) => (
                         <option key={candidate.id} value={candidate.id}>{candidate.mark} / {formatOrderNameDisplay(candidate.orderName)}</option>
@@ -150,7 +152,7 @@ export function ReceiptUploadDialog({
                     </select>
                   </div>
                 )}
-                <div className="col-span-2">
+                <div className="min-w-0 md:col-span-2">
                   <Label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -165,7 +167,7 @@ export function ReceiptUploadDialog({
           )}
             </div>
           </div>
-          <DialogFooter className="shrink-0 border-t px-6 py-4">
+          <DialogFooter className="shrink-0 border-t px-4 py-4 sm:px-6">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>{tx('取消', 'Cancel')}</Button>
             <Button onClick={onConfirm} disabled={!ocrResult || submitting || uploading}>
               {submitting ? (

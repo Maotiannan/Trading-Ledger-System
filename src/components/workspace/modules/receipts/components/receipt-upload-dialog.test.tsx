@@ -92,7 +92,7 @@ describe('ReceiptUploadDialog', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    expect(dialog.className).toContain('max-h-[90vh]');
+    expect(dialog.className).toContain('max-h-[90dvh]');
     expect(screen.getByRole('button', { name: '确认创建' })).toBeInTheDocument();
   });
 

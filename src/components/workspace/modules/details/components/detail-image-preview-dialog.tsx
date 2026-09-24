@@ -10,12 +10,12 @@ export type DetailImagePreviewDialogProps = {
 export function DetailImagePreviewDialog({ image, onOpenChange }: DetailImagePreviewDialogProps) {
   return (
     <Dialog open={!!image} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-4xl">
         <DialogHeader>
           <DialogTitle>{image?.name}</DialogTitle>
         </DialogHeader>
         <div className="flex justify-center">
-          {image && <img src={image.url} alt={image.name} className="max-h-[70vh] object-contain rounded-lg" />}
+          {image && <img src={image.url} alt={image.name} className="max-h-[calc(100dvh-10rem)] max-w-full object-contain rounded-lg" />}
         </div>
       </DialogContent>
     </Dialog>

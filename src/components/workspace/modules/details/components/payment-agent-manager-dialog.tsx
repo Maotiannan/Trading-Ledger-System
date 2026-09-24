@@ -216,9 +216,9 @@ export function PaymentAgentManagerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         data-testid="payment-agent-dialog-content"
-        className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-hidden p-0 sm:h-[min(760px,calc(100vh-2rem))] sm:max-h-[90vh] sm:w-[calc(100vw-2rem)] lg:max-w-[1180px] xl:max-w-[1280px]"
+        className="h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none overflow-hidden p-0 sm:h-[min(760px,calc(100dvh-2rem))] sm:max-h-[90dvh] sm:w-[calc(100vw-2rem)] lg:max-w-[1180px] xl:max-w-[1280px]"
       >
-        <div className="flex h-full max-h-[calc(100dvh-1rem)] min-w-0 flex-col sm:max-h-[90vh]">
+        <div className="flex h-full max-h-[calc(100dvh-1rem)] min-w-0 flex-col sm:max-h-[90dvh]">
           <DialogHeader className="shrink-0 border-b px-4 py-4 sm:px-6">
             <DialogTitle>{tx('付款代理管理', 'Payment Agent Management')}</DialogTitle>
             <DialogDescription>{tx('维护付款代理基础信息和附件', 'Maintain payment agent master data and attachments.')}</DialogDescription>

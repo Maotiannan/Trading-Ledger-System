@@ -53,7 +53,7 @@ export function CustomerNotificationEmailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85dvh] w-[calc(100vw-24px)] max-w-2xl flex-col overflow-hidden p-0">
+      <DialogContent className="flex max-h-[85dvh] w-[calc(100vw-1rem)] max-w-2xl flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 px-4 pt-4 sm:px-6 sm:pt-6">
           <DialogTitle>{tx('客户通知邮箱', 'Customer Notification Emails')}</DialogTitle>
           <DialogDescription>

@@ -75,6 +75,7 @@ describe('buildDashboardOutstandingSnapshot', () => {
         customerId: null,
         customerKey: 'order:order-unbound',
         customerLabel: 'UNKNOWN-01',
+        customerMark: 'UNKNOWN-01',
         totalOutstanding: 300,
       }),
     ]);

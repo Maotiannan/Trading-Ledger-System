@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { DashboardCustomerDetailDialog } from './dashboard-customer-detail-dialog';
 
 const tx = (_zh: string, en: string) => en;
@@ -93,5 +93,25 @@ describe('DashboardCustomerDetailDialog', () => {
     expect(screen.getByText('Total Unpaid: $1,250')).toBeInTheDocument();
     expect(screen.getByText('Customer history is unavailable because this order is not linked to a customer.')).toBeInTheDocument();
     expect(screen.queryByText('Historical Orders')).not.toBeInTheDocument();
+  });
+
+  it('asks for the statement language before exporting', async () => {
+    render(
+      <DashboardCustomerDetailDialog
+        open
+        customerId="customer-1"
+        title="AB"
+        outstanding={outstanding}
+        historyProps={historyProps}
+        unboundMessage="Customer history unavailable"
+        tx={tx}
+        onOpenChange={noop}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download outstanding statement' }));
+    await waitFor(() => expect(screen.getByText('Choose statement language')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'English' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Français' })).toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import {
   type CustomerOrderHistoryContentProps,
 } from '@/components/workspace/modules/customers/components/customer-order-history-content';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
+import { formatAppDate } from '@/lib/app-time';
 import type {
   DashboardCustomerOutstanding,
   DashboardCustomerOutstandingOrder,
@@ -15,6 +16,8 @@ import type {
 import { downloadCustomerOutstandingStatement } from '@/lib/customer-outstanding-export-image';
 import { Download, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+
+type StatementLanguage = 'en' | 'fr';
 
 export type DashboardCustomerDetailDialogProps = {
   open: boolean;
@@ -104,8 +107,40 @@ export function DashboardCustomerDetailDialog({
   onOpenChange,
 }: DashboardCustomerDetailDialogProps) {
   const [exporting, setExporting] = useState(false);
+  const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
   const releasedOrders = outstanding?.orders.filter((order) => order.statusGroup === 'RELEASED') ?? [];
   const inTransitOrders = outstanding?.orders.filter((order) => order.statusGroup === 'IN_TRANSIT') ?? [];
+
+  const exportStatement = async (language: StatementLanguage) => {
+    if (!outstanding) return;
+    setLanguageDialogOpen(false);
+    setExporting(true);
+    const french = language === 'fr';
+    try {
+      await downloadCustomerOutstandingStatement({
+        customerMark: customerMark || title,
+        statementDate: formatAppDate(new Date()),
+        outstanding,
+        labels: {
+          title: french ? 'État des encours client' : 'Customer Outstanding Statement',
+          customer: french ? 'Client' : 'Customer',
+          statementDate: french ? 'Date du relevé' : 'Statement Date',
+          totalUnpaid: french ? 'Total impayé' : 'Total Unpaid',
+          released: french ? 'Commandes libérées' : 'Released Orders',
+          inTransit: french ? 'Commandes en transit' : 'In-Transit Orders',
+          orderNo: french ? 'N° DE COMMANDE' : 'ORDER NO',
+          balance: french ? 'SOLDE' : 'BALANCE',
+          days: french ? 'JOURS' : 'DAYS',
+          subtotal: french ? 'Sous-total' : 'Subtotal',
+          contactNote: french ? 'Veuillez contacter MU Group si une information est incorrecte.' : 'Please contact MU Group if any information is incorrect.',
+        },
+      });
+    } catch {
+      window.alert(tx('图片导出失败，请稍后重试。', 'Image export failed. Please try again later.'));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,32 +159,7 @@ export function DashboardCustomerDetailDialog({
                 title={tx('下载客户欠款图片', 'Download outstanding statement')}
                 className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={exporting}
-                onClick={async () => {
-                  setExporting(true);
-                  try {
-                    await downloadCustomerOutstandingStatement({
-                      customerMark: customerMark || title,
-                      statementDate: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date()),
-                      outstanding,
-                      labels: {
-                        title: tx('客户欠款对账单', 'Customer Outstanding Statement'),
-                        customer: tx('客户', 'Customer'),
-                        statementDate: tx('对账日期', 'Statement Date'),
-                        totalUnpaid: tx('未付总计', 'Total Unpaid'),
-                        released: tx('已放单订单', 'Released Orders'),
-                        inTransit: tx('运输中订单', 'In-Transit Orders'),
-                        orderNo: 'ORDER NO',
-                        balance: tx('余额', 'Balance'),
-                        subtotal: tx('小计', 'Subtotal'),
-                        contactNote: tx('如有任何信息不正确，请联系 MU Group。', 'Please contact MU Group if any information is incorrect.'),
-                      },
-                    });
-                  } catch {
-                    window.alert(tx('图片导出失败，请稍后重试。', 'Image export failed. Please try again later.'));
-                  } finally {
-                    setExporting(false);
-                  }
-                }}
+                onClick={() => setLanguageDialogOpen(true)}
               >
                 {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               </button>
@@ -188,6 +198,32 @@ export function DashboardCustomerDetailDialog({
           )}
         </div>
       </DialogContent>
+      <Dialog open={languageDialogOpen} onOpenChange={setLanguageDialogOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{tx('选择图片语言', 'Choose statement language')}</DialogTitle>
+            <DialogDescription>{tx('请选择要生成的客户欠款图片语言。', 'Choose the language for the customer outstanding statement.')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              className="rounded-md border px-4 py-3 text-sm font-semibold hover:bg-muted"
+              onClick={() => void exportStatement('en')}
+              disabled={exporting}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              className="rounded-md border px-4 py-3 text-sm font-semibold hover:bg-muted"
+              onClick={() => void exportStatement('fr')}
+              disabled={exporting}
+            >
+              Français
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

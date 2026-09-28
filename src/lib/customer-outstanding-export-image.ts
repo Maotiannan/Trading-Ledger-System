@@ -9,6 +9,7 @@ export type CustomerOutstandingStatementLabels = {
   inTransit: string;
   orderNo: string;
   balance: string;
+  days: string;
   subtotal: string;
   contactNote: string;
 };
@@ -68,12 +69,14 @@ function sectionMarkup(
   subtotal: number,
   labels: CustomerOutstandingStatementLabels,
   y: number,
+  showDays: boolean,
 ) {
   const sectionHeight = 45 + (orders.length + 1) * 42 + 32;
   const rows = orders.map((order, index) => {
     const rowY = y + 86 + index * 42;
     return `<line x1="${SIDE_PADDING}" y1="${rowY + 25}" x2="${WIDTH - SIDE_PADDING}" y2="${rowY + 25}" stroke="${BORDER}" />
       <text x="${SIDE_PADDING + 8}" y="${rowY}" class="body">${text(order.orderNo)}</text>
+      ${showDays ? `<text x="${WIDTH - SIDE_PADDING - 92}" y="${rowY}" text-anchor="end" class="body">${order.daysSinceRelease ?? '-'}</text>` : ''}
       <text x="${WIDTH - SIDE_PADDING - 8}" y="${rowY}" text-anchor="end" class="body">${amount(order.outstanding)}</text>`;
   }).join('');
   const subtotalY = y + 86 + orders.length * 42;
@@ -82,6 +85,7 @@ function sectionMarkup(
     markup: `<text x="${SIDE_PADDING}" y="${y + 20}" class="section">${text(title).toUpperCase()}</text>
       <line x1="${SIDE_PADDING}" y1="${y + 30}" x2="${WIDTH - SIDE_PADDING}" y2="${y + 30}" stroke="#cfe0f4" stroke-width="2" />
       <text x="${SIDE_PADDING + 8}" y="${y + 65}" class="tableHead">${text(labels.orderNo)}</text>
+      ${showDays ? `<text x="${WIDTH - SIDE_PADDING - 92}" y="${y + 65}" text-anchor="end" class="tableHead">${text(labels.days)}</text>` : ''}
       <text x="${WIDTH - SIDE_PADDING - 8}" y="${y + 65}" text-anchor="end" class="tableHead">${text(labels.balance)}</text>
       ${rows}
       <text x="${SIDE_PADDING + 8}" y="${subtotalY}" class="subtotal">${text(labels.subtotal)}</text>
@@ -93,8 +97,8 @@ export async function buildCustomerOutstandingStatementSvg(input: CustomerOutsta
   const logoDataUrl = await loadLogoDataUrl(input.logoUrl || '/detail-export/payment-detail-logo.png');
   const released = input.outstanding.orders.filter((order) => order.statusGroup === 'RELEASED');
   const inTransit = input.outstanding.orders.filter((order) => order.statusGroup === 'IN_TRANSIT');
-  const releasedSection = sectionMarkup(input.labels.released, released, input.outstanding.statusSubtotals.released, input.labels, 315);
-  const inTransitSection = sectionMarkup(input.labels.inTransit, inTransit, input.outstanding.statusSubtotals.inTransit, input.labels, 315 + releasedSection.height + 18);
+  const releasedSection = sectionMarkup(input.labels.released, released, input.outstanding.statusSubtotals.released, input.labels, 315, true);
+  const inTransitSection = sectionMarkup(input.labels.inTransit, inTransit, input.outstanding.statusSubtotals.inTransit, input.labels, 315 + releasedSection.height + 18, false);
   const grandTotalY = 315 + releasedSection.height + 18 + inTransitSection.height + 32;
   const height = grandTotalY + 105;
   const safeMark = text(input.customerMark);
@@ -159,7 +163,7 @@ export async function downloadCustomerOutstandingStatement(input: CustomerOutsta
   const anchor = document.createElement('a');
   const fileMark = input.customerMark.trim().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'customer';
   anchor.href = url;
-  anchor.download = `${fileMark}-outstanding-statement-${new Date().toISOString().slice(0, 10)}.png`;
+  anchor.download = `${fileMark}-outstanding-statement-${new Date().toISOString().slice(0, 10)}${input.labels.days === 'JOURS' ? '-fr' : ''}.png`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

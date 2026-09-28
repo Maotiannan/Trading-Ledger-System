@@ -18,6 +18,7 @@ const outstanding = {
   customerId: 'customer-1',
   customerKey: 'customer:customer-1',
   customerLabel: 'AB',
+  customerMark: 'AB',
   totalOutstanding: 1250,
   statusSubtotals: { released: 750, inTransit: 500 },
   orders: [

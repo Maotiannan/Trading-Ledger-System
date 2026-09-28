@@ -12,11 +12,15 @@ import type {
   DashboardCustomerOutstanding,
   DashboardCustomerOutstandingOrder,
 } from '@/lib/dashboard-customer-outstanding';
+import { downloadCustomerOutstandingStatement } from '@/lib/customer-outstanding-export-image';
+import { Download, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 export type DashboardCustomerDetailDialogProps = {
   open: boolean;
   customerId: string | null;
   title: string;
+  customerMark?: string;
   outstanding: DashboardCustomerOutstanding | null;
   historyProps: CustomerOrderHistoryContentProps;
   unboundMessage: string;
@@ -92,12 +96,14 @@ export function DashboardCustomerDetailDialog({
   open,
   customerId,
   title,
+  customerMark,
   outstanding,
   historyProps,
   unboundMessage,
   tx,
   onOpenChange,
 }: DashboardCustomerDetailDialogProps) {
+  const [exporting, setExporting] = useState(false);
   const releasedOrders = outstanding?.orders.filter((order) => order.statusGroup === 'RELEASED') ?? [];
   const inTransitOrders = outstanding?.orders.filter((order) => order.statusGroup === 'IN_TRANSIT') ?? [];
 
@@ -109,7 +115,46 @@ export function DashboardCustomerDetailDialog({
       >
         <DialogHeader>
           <DialogTitle className="flex flex-col gap-1 break-words sm:flex-row sm:items-center sm:justify-between">
-            <span>{formatOrderNameDisplay(title) || '-'}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{formatOrderNameDisplay(title) || '-'}</span>
+            {outstanding ? (
+              <button
+                type="button"
+                aria-label={tx('下载客户欠款图片', 'Download outstanding statement')}
+                title={tx('下载客户欠款图片', 'Download outstanding statement')}
+                className="inline-flex shrink-0 items-center justify-center rounded-md p-1.5 text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={exporting}
+                onClick={async () => {
+                  setExporting(true);
+                  try {
+                    await downloadCustomerOutstandingStatement({
+                      customerMark: customerMark || title,
+                      statementDate: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date()),
+                      outstanding,
+                      labels: {
+                        title: tx('客户欠款对账单', 'Customer Outstanding Statement'),
+                        customer: tx('客户', 'Customer'),
+                        statementDate: tx('对账日期', 'Statement Date'),
+                        totalUnpaid: tx('未付总计', 'Total Unpaid'),
+                        released: tx('已放单订单', 'Released Orders'),
+                        inTransit: tx('运输中订单', 'In-Transit Orders'),
+                        orderNo: 'ORDER NO',
+                        balance: tx('余额', 'Balance'),
+                        subtotal: tx('小计', 'Subtotal'),
+                        contactNote: tx('如有任何信息不正确，请联系 MU Group。', 'Please contact MU Group if any information is incorrect.'),
+                      },
+                    });
+                  } catch {
+                    window.alert(tx('图片导出失败，请稍后重试。', 'Image export failed. Please try again later.'));
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+              >
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              </button>
+            ) : null}
+          </span>
             <span className="text-sm font-semibold text-red-600">
               {tx('未付总计', 'Total Unpaid')}: {formatUsdAmount(outstanding?.totalOutstanding ?? 0)}
             </span>

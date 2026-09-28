@@ -106,6 +106,7 @@ function makeSummary() {
         customerId: 'super-dt2',
         customerKey: 'customer:super-dt2',
         customerLabel: 'SUPER DT2',
+        customerMark: 'SUPER DT2',
         totalOutstanding: 1000,
         statusSubtotals: {
           inTransit: 250,
@@ -356,6 +357,7 @@ describe('Dashboard customer outstanding status dialog', () => {
             customerId: 'customer-mab',
             customerKey: 'customer:customer-mab',
             customerLabel: 'MAB-1 / MARY',
+            customerMark: 'MAB-1 / MARY',
             totalOutstanding: 350,
             statusSubtotals: { released: 250, inTransit: 100 },
             orders: [

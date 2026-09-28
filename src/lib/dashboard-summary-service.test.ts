@@ -192,6 +192,7 @@ describe('dashboard-summary-service', () => {
         customerId: 'customer-super-dt2',
         customerKey: 'customer:customer-super-dt2',
         customerLabel: 'SUPER DT2',
+        customerMark: 'SDT2',
         totalOutstanding: 1000,
         statusSubtotals: {
           inTransit: 250,

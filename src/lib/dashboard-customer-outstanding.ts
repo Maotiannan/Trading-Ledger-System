@@ -49,6 +49,7 @@ export type DashboardCustomerOutstanding = {
   customerId: string | null;
   customerKey: string;
   customerLabel: string;
+  customerMark: string;
   totalOutstanding: number;
   statusSubtotals: {
     inTransit: number;
@@ -129,6 +130,7 @@ export function buildDashboardOutstandingSnapshot(
         customerId: order.customerId,
         customerKey,
         customerLabel,
+        customerMark: order.customerMark || order.customerName || order.orderNo,
         totalOutstanding: 0,
         statusSubtotals: { inTransit: 0, released: 0 },
         orders: [],

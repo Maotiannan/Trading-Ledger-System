@@ -96,6 +96,7 @@ type DashboardCustomerSearchResult = {
 type DashboardCustomerDetailTarget = {
   customerId: string | null;
   title: string;
+  customerMark?: string;
   previewOutstanding: DashboardCustomerOutstanding | null;
 };
 
@@ -399,6 +400,7 @@ export function Dashboard() {
     openCustomerDetail({
       customerId: customer.customerId,
       title: customer.orderNames.join(' / ') || customer.mark || customer.name,
+      customerMark: customer.mark || customer.name,
       previewOutstanding: null,
     });
   }, [openCustomerDetail]);
@@ -560,6 +562,7 @@ export function Dashboard() {
                             openCustomerDetail({
                               customerId: customer.customerId,
                               title: customer.customerLabel,
+                              customerMark: customer.customerMark,
                               previewOutstanding: customer,
                             });
                           }}
@@ -852,6 +855,7 @@ export function Dashboard() {
         open={Boolean(customerDetailTarget)}
         customerId={customerDetailTarget?.customerId ?? null}
         title={customerDetailTarget?.title ?? ''}
+        customerMark={customerDetailTarget?.customerMark ?? customerDetailOutstanding?.customerMark}
         outstanding={customerDetailOutstanding}
         tx={tx}
         unboundMessage={tx(

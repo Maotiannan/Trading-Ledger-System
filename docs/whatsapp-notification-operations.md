@@ -24,6 +24,43 @@ this as completed production messaging.
 
 ## Management
 
+### Customer Outstanding Reminders (Gated Rollout)
+
+- Separate ADMIN settings `reminderEnabled` (default false) and `reminderTestMode`
+  (default true) do not change existing receipt/shipment/release notification mode.
+- Daily scan starts at 07:00 Africa/Conakry, catching up once after downtime without
+  replaying missed slots. One customer schedule uses the oldest released order
+  with live balance strictly greater than USD 20. All balance formulas are shared
+  with Dashboard, including exclusion of SIGNING_PENDING receipts.
+- Stages: once at 30 days; every 14 days from 60; every 7 days from 120; every 3
+  days from 180. Escalation replaces the previous cadence. An anchor change respects
+  the customer's previous-send interval rather than generating an immediate reminder.
+- Unique customer/mode/date event keys, serializable scheduling and sending claims
+  prevent duplicate tasks. Cancelled and failed attempts consume their slot and
+  cooldown; uncertain sends block further reminders pending reconciliation. A
+  recorded cleared-debt episode allows future debt to start a new schedule.
+- The full statement is generated in French with the same SVG renderer and labels
+  as Dashboard download. Text sums only released orders over USD 20 and at least
+  30 days old; in-transit amounts are not described as overdue. The PNG and text
+  derive from the same frozen, pre-claim live snapshot. Image preparation failure
+  sends nothing and records `REMINDER_IMAGE_FAILED`.
+- Five-minute buffering, current PHONE, consent, unsubscribe, pending deletion
+  holds and ADMIN cancellation apply. Material changes invalidate test approval.
+  A posted message cannot be recalled. No blind retry of ambiguous sends.
+- Four editable French image-template drafts are available in the existing editor.
+  Review copy and use `/detail-export/outstanding-reminder-sample.png` (fictional
+  data only) at the deployment's HTTPS origin as the provider sample. Save a new
+  draft before submitting. All four approved Utility versions must be active
+  before enabling production reminder mode. Provider approval is not assumed.
+- Tests remain directed to the configured test number, requiring ADMIN approval.
+  Test tasks never become production deliveries. After platform approval, verify
+  one controlled image+text delivery before enabling real-customer reminders.
+- Data/rollback coverage: [backup runbook](backup/muledger-local-backup.md).
+
+Provider contracts checked during implementation:
+[template creation](https://docs.ycloud.com/reference/whatsapp_template-create),
+[media upload](https://docs.ycloud.com/reference/whatsapp_media-upload).
+
 ### Five-minute buffer (new release; migration required)
 
 - Automatic tasks persist `nextSendAt`; the worker cannot claim before this time.

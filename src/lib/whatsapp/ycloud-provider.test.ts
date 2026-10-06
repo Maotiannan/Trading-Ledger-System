@@ -12,6 +12,14 @@ function sign(body = rawBody, t = timestamp) {
 }
 
 describe('YCloud protocol contract', () => {
+  it('sends the image as part of the same template message, not a second notification', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'image-delivery' })));
+    await sendYCloudTemplate({ ...input, imageId: 'media-1' }, { ...config, fetchImpl });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).template.components).toEqual([
+      { type: 'header', parameters: [{ type: 'image', image: { id: 'media-1' } }] },
+      { type: 'body', parameters: [{ type: 'text', text: 'INV-1' }] },
+    ]);
+  });
   it('uses API key auth, E.164 sender and correlation ID, not unverified provider idempotency', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'ycloud-1' })));
     await expect(sendYCloudTemplate(input, { ...config, fetchImpl })).resolves.toEqual({ providerMessageId: 'ycloud-1' });

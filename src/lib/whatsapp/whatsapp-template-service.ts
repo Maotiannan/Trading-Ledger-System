@@ -52,6 +52,7 @@ export async function submitWhatsAppTemplate(actor: CurrentUser, name: string, l
   assertAdmin(actor);
   const version = await getVersion(name, language);
   if (version.status !== 'DRAFT') throw conflict();
+  if (version.kind.startsWith('outstanding') && (!version.sampleImageUrl || version.language !== 'fr')) throw conflict();
   if (!process.env.YCLOUD_API_KEY || !process.env.YCLOUD_WABA_ID) throw createApiError({ code: 'BAD_REQUEST', status: 400, message: 'YCloud is not configured.' });
   const submitting = { ...version, status: 'SUBMITTING' };
   await runWhatsAppTransaction(async tx => {
@@ -83,7 +84,9 @@ export async function refreshWhatsAppTemplate(actor: CurrentUser, name: string, 
   const body = remote?.components?.find((item: { type: string }) => item.type === 'BODY')?.text;
   const header = remote?.components?.find((item: { type: string }) => item.type === 'HEADER')?.text;
   const footer = remote?.components?.find((item: { type: string }) => item.type === 'FOOTER')?.text || '';
-  const status = remote ? (body === version.body && header === version.title && footer === version.footer ? String(remote.status) : 'CONTENT_MISMATCH') : 'NOT_FOUND';
+  const status = remote ? (body === version.body && (version.kind.startsWith('outstanding')
+    ? remote?.components?.find((item: { type: string }) => item.type === 'HEADER')?.format === 'IMAGE'
+    : header === version.title) && footer === version.footer ? String(remote.status) : 'CONTENT_MISMATCH') : 'NOT_FOUND';
   const refreshed = { ...version, status, category: remote ? String(remote.category) : version.category };
   await runWhatsAppTransaction(async tx => {
     const key = templateKey(name, language);

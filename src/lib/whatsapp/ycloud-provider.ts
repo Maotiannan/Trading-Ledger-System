@@ -6,6 +6,7 @@ export type WhatsAppSendInput = {
   languageCode: string;
   parameters: string[];
   externalId: string;
+  imageId?: string;
 };
 
 export type WhatsAppSendResult = { providerMessageId: string };
@@ -52,9 +53,10 @@ export async function sendYCloudTemplate(
         template: {
           name: input.templateName,
           language: { code: input.languageCode },
-          components: input.parameters.length
-            ? [{ type: 'body', parameters: input.parameters.map((text) => ({ type: 'text', text })) }]
-            : undefined,
+          components: [
+            ...(input.imageId ? [{ type: 'header', parameters: [{ type: 'image', image: { id: input.imageId } }] }] : []),
+            ...(input.parameters.length ? [{ type: 'body', parameters: input.parameters.map((text) => ({ type: 'text', text })) }] : []),
+          ],
         },
       }),
     });

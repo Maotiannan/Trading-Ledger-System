@@ -1,4 +1,5 @@
 'use client';
+import { customerOutstandingStatementLabels } from '@/lib/customer-outstanding-statement-labels';
 
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -115,25 +116,12 @@ export function DashboardCustomerDetailDialog({
     if (!outstanding) return;
     setLanguageDialogOpen(false);
     setExporting(true);
-    const french = language === 'fr';
     try {
       await downloadCustomerOutstandingStatement({
         customerMark: customerMark || title,
         statementDate: formatAppDate(new Date()),
         outstanding,
-        labels: {
-          title: french ? 'État des encours client' : 'Customer Outstanding Statement',
-          customer: french ? 'Client' : 'Customer',
-          statementDate: french ? 'Date du relevé' : 'Statement Date',
-          totalUnpaid: french ? 'Total impayé' : 'Total Unpaid',
-          released: french ? 'Commandes libérées' : 'Released Orders',
-          inTransit: french ? 'Commandes en transit' : 'In-Transit Orders',
-          orderNo: french ? 'N° DE COMMANDE' : 'ORDER NO',
-          balance: french ? 'SOLDE' : 'BALANCE',
-          days: french ? 'JOURS' : 'DAYS',
-          subtotal: french ? 'Sous-total' : 'Subtotal',
-          contactNote: french ? 'Veuillez contacter MU Group si une information est incorrecte.' : 'Please contact MU Group if any information is incorrect.',
-        },
+        labels: customerOutstandingStatementLabels(language),
       });
     } catch {
       window.alert(tx('图片导出失败，请稍后重试。', 'Image export failed. Please try again later.'));

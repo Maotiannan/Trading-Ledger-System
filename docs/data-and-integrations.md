@@ -2,6 +2,12 @@
 
 本文件给维护人员和外部系统接入方使用。普通用户只需要阅读 `README.md`。
 
+## WhatsApp 欠款提醒图片
+
+客户级欠款提醒复用 Dashboard 对账图模板，每次发送前使用当前订单与收据数据重新生成法语图片。
+发送快照位于 `UPLOAD_DIR/whatsapp-statements`，由 `WhatsAppDelivery.statementImagePath` 引用；完整上传目录备份覆盖这些文件，不新增自动清理。
+任务、发送状态及调度标记由完整 MySQL 快照覆盖。操作规则见 [WhatsApp 运维说明](whatsapp-notification-operations.md)，恢复范围见 [备份手册](backup/muledger-local-backup.md)。
+
 ## 外部查询接口
 
 ### Excel ML 单值查询

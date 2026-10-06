@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { db } from '@/lib/db';
 const schema = z.object({
+  reminderEnabled: z.boolean().default(false),
+  reminderTestMode: z.boolean().default(true),
   outboundEnabled: z.boolean().default(false),
   testMode: z.boolean().default(true),
   testDestination: z.string().regex(/^\+[1-9]\d{1,14}$/).default('+8613619767412'),

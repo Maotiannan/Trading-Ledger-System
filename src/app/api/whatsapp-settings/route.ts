@@ -17,6 +17,13 @@ export const GET = withRole('ADMIN', async request => {
 export const POST = withRole('ADMIN', async (request, user) => {
   try {
     const input = parseWhatsAppSettings(await parseJsonRequest(request));
+    if (input.reminderEnabled && !input.reminderTestMode) {
+      const templates = await listWhatsAppTemplateVersions();
+      if (![30, 60, 120, 180].every(day => templates.some(template => template.kind === `outstanding${day}`
+        && template.language === 'fr' && template.active && template.status === 'APPROVED' && template.category === 'UTILITY'))) {
+        return createApiErrorResponse({ code: apiErrorCodes.BAD_REQUEST, status: 400, message: 'Activate all four approved French reminder templates before production sending.' }, request);
+      }
+    }
     const settings = await runInTransaction(async tx => {
       const old = await tx.systemSetting.findUnique({ where: { key: WHATSAPP_SETTINGS_KEY } });
       const previous = parseWhatsAppSettings(old ? JSON.parse(old.value) : {});

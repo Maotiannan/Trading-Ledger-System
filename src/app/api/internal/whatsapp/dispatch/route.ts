@@ -1,3 +1,4 @@
+import { projectOutstandingReminders } from '@/lib/whatsapp/outstanding-reminders';
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
@@ -15,6 +16,8 @@ export async function POST(request: Request) {
   if (process.env.WHATSAPP_OUTBOUND_ENABLED !== 'true') return NextResponse.json({ success: true, disabled: true });
   try {
     await projectWhatsAppBusinessEvents();
+    try { await projectOutstandingReminders(); }
+    catch { logger.error('Outstanding reminder scheduling deferred', { code: 'REMINDER_SCHEDULING_FAILED' }); }
     await db.whatsAppDelivery.updateMany({
       where: { status: 'SENDING', claimedAt: { lt: new Date(Date.now() - 120000) } },
       data: { status: 'UNCERTAIN', failureCode: 'CLAIM_EXPIRED' },
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
       } catch { logger.warn('WhatsApp callback replay deferred', { eventId: event.id }); }
     }
     const settings = await import('@/lib/whatsapp/whatsapp-settings').then(module => module.getWhatsAppSettings());
-    const rows = await db.whatsAppDelivery.findMany({ where: { status: 'QUEUED', testMode: settings.testMode, nextSendAt: { lte: new Date() } }, orderBy: { nextSendAt: 'asc' }, take: 10, select: { id: true } });
+    const rows = await db.whatsAppDelivery.findMany({ where: { status: 'QUEUED', OR: [{ type: { not: 'OUTSTANDING_REMINDER' }, testMode: settings.testMode }, { type: 'OUTSTANDING_REMINDER', testMode: settings.reminderTestMode }], nextSendAt: { lte: new Date() } }, orderBy: { nextSendAt: 'asc' }, take: 10, select: { id: true } });
     let accepted = 0;
     for (const row of rows) {
       try { if ((await dispatchWhatsAppDelivery(row.id)).sent) accepted++; }

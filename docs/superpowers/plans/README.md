@@ -8,10 +8,11 @@ This file is the authoritative status index for historical implementation plans 
 - `ARCHIVED_SUPERSEDED`: the original scope was replaced by a later user-approved approach; do not resume it without a new request.
 - `ACTIVE`: currently approved work that still has required implementation steps.
 
-No implementation plan is currently `ACTIVE`; historical plans remain archived below.
+Active implementation and historical plan states are listed below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
+| `2026-10-06-whatsapp-outstanding-reminders.md` | `ACTIVE` | Customer-level reminder implementation and isolated verification; copy approval, provider review and production activation remain gated. |
 | `2026-09-08-email-contact-rollout.md` | `ACTIVE` | Shared contact footer and settings implemented; Resend domain/credentials, real delivery verification, CI and production activation remain gated. |
 | `2026-09-05-dependency-security-maintenance.md` | `ARCHIVED_COMPLETED` | Compatible advisory fixes and production-image pruning shipped in v1.0.217 through PR #31; CI, merge, safe deployment, migration, health, log, and NAS mount verification completed. |
 | `2026-09-01-admin-approved-customer-email-notifications.md` | `ARCHIVED_COMPLETED` | ADMIN-approved notifications, isolated recovery, PR review fixes, additive migration, disabled/test-mode rollout, and post-deployment verification completed; production sending remains intentionally disabled until domain and template approval. |

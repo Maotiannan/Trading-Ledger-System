@@ -12,3 +12,9 @@ it('does not retry unknown/network errors', async () => {
   await expect(runWhatsAppTransaction(async () => null)).rejects.toThrow('unknown');
   expect(runInTransaction).toHaveBeenCalledTimes(1);
 });
+it('retries the MariaDB 1020 serialization conflict in a fresh transaction only', async () => {
+  const conflict = new Error('MysqlError { code: 1020, message: "Record has changed since last read in table WhatsAppDelivery" }');
+  (runInTransaction as jest.Mock).mockRejectedValueOnce(conflict).mockResolvedValueOnce('stored');
+  await expect(runWhatsAppTransaction(async () => 'stored')).resolves.toBe('stored');
+  expect(runInTransaction).toHaveBeenCalledTimes(2);
+});

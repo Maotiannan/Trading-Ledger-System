@@ -6,6 +6,12 @@
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
+## 2026-10-06 客户欠款提醒（待发布）
+
+- 客户级规则服务、共享浏览器/后台 SVG 模板、图片媒体发送、独立提醒测试模式、发送前余额/PHONE/订阅/删除审批复核已实现。
+- 增量迁移仅扩展 WhatsAppDelivery 类型及 statementImagePath；文件位于现有 UPLOAD_DIR/whatsapp-statements，备份范围已关联。
+- 当前状态和后续门禁以 docs/superpowers/plans/2026-10-06-whatsapp-outstanding-reminders.md 为准；未宣称平台审核或真实发送完成。
+
 ## P0（本周必须完成）
 
 - [x] WhatsApp PHONE 绑定：入队/领取读取 Customer.phone；生产待发收件号码自动更新，测试收件号码固定，已提交/已发送/不确定任务不重发。每客户事件唯一，兼容旧 contact-key 任务；授权不随号码变更失效。225 suites / 1498 tests、隔离 API、桌面/手机验证通过。三类法文隔离业务经审核各真实测试一条，均 sent 且生产回调已记录，无生产财务记录写入。2026-09-17

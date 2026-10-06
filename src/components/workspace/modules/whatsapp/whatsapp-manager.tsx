@@ -6,10 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ListPagination } from '@/components/workspace/modules/shared/list-pagination';
+import { OutstandingReminderPreview } from './outstanding-reminder-preview';
 import { WhatsAppTemplateEditor } from './whatsapp-template-editor';
 import { formatAppDateTime } from '@/lib/app-time';
-type Settings = { outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null; enabledTypes?: string[] };
-type Row = { nextSendAt?: string | null; updatedAt?: string; requiresApproval?: boolean; correctionOf?: unknown; id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
+type Settings = { reminderEnabled?: boolean; reminderTestMode?: boolean; outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null; enabledTypes?: string[] };
+type Row = { statementImagePath?: string | null; nextSendAt?: string | null; updatedAt?: string; requiresApproval?: boolean; correctionOf?: unknown; id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
 type Contact = { id: string; phone: string; optedInAt: string | null; optedOutAt: string | null };
 type Customer = { id: string; name: string; mark: string; orderName: string; phone: string; whatsappContacts: Contact[] };
 type Template = { name: string; language: string; components: { type: string; text?: string }[] };
@@ -98,6 +99,11 @@ export function WhatsAppManager() {
         <label className="block">{tx('测试号码（含国家代码）', 'Test number (international format)')}<Input value={settings.testDestination} onChange={event => setSettings({ ...settings, testDestination: event.target.value })} /></label>
         <p className="text-sm text-muted-foreground">{tx('正式模式下，新通知将自动发送给已同意接收的客户；历史任务不会转为正式发送。', 'In production mode, new notifications are sent automatically to opted-in customers. Test tasks never become production deliveries.')}</p>
         <fieldset className="flex flex-wrap gap-3"><legend>{tx('通知类型', 'Notification types')}</legend>{(['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE'] as const).map((type, index) => <label key={type} className="flex gap-2"><input type="checkbox" checked={(settings.enabledTypes || ['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE']).includes(type)} onChange={event => { const current = settings.enabledTypes || ['PAYMENT_RECEIVED', 'SHIPMENT', 'RELEASE']; setSettings({ ...settings, enabledTypes: event.target.checked ? [...current, type] : current.filter(value => value !== type) }); }} />{[tx('收款', 'Payment'), tx('出运', 'Shipment'), tx('放单', 'Release')][index]}</label>)}</fieldset>
+        <fieldset className="space-y-2 rounded-md border p-3"><legend>{tx('客户欠款提醒', 'Customer Outstanding Reminders')}</legend>
+          <label className="flex gap-2"><input type="checkbox" checked={settings.reminderEnabled || false} onChange={event => setSettings({ ...settings, reminderEnabled: event.target.checked })} />{tx('启用欠款提醒', 'Enable outstanding reminders')}</label>
+          <label className="flex gap-2"><input type="checkbox" checked={settings.reminderTestMode ?? true} onChange={event => setSettings({ ...settings, reminderTestMode: event.target.checked })} />{tx('欠款提醒独立测试模式：管理员审核，仅发送至测试号码', 'Reminder test mode: ADMIN approval, test number only')}</label>
+          <p className="text-sm text-muted-foreground">{tx('每天几内亚时间07:00检查，5分钟缓冲。按最早放单且余额大于US$20的订单决定频率：30天一次、60天每14天、120天每7天、180天每3天。完整对账图片和文字均为法语。', 'Daily at 07:00 Guinea time, with a five-minute buffer. The oldest released order above US$20 determines frequency: once at 30 days, every 14 days from 60, every 7 days from 120, every 3 days from 180. Complete statement image and text are French.')}</p>
+        </fieldset>
         <Button disabled={busy} onClick={() => { if (window.confirm(tx('确认保存发送设置？正式模式会自动通知客户。', 'Save sending settings? Production mode automatically notifies customers.'))) void action('whatsapp-settings', settings); }}>{tx('保存设置', 'Save settings')}</Button>
       </>}
     </CardContent></Card>
@@ -128,6 +134,8 @@ export function WhatsAppManager() {
       <ListPagination idPrefix="whatsapp" tx={tx} compact currentPage={page} totalPages={Math.max(1, Math.ceil(total / pageSize))} totalCount={total} pageSize={pageSize} pageSizeOptions={[5, 10, 20, 50]} disabled={busy} onPreviousPage={() => setPage(page - 1)} onNextPage={() => setPage(page + 1)} onPageSizeChange={size => { setPageSize(size); setPage(1); }} />
       {preview && <section className="mt-4 border rounded-md p-4 space-y-3">
         <h2 className="font-bold">{tx('发送内容预览', 'Message Preview')} · {preview.actualTo}</h2>
+        {preview.type === 'OUTSTANDING_REMINDER' && !preview.statementImagePath && <OutstandingReminderPreview snapshot={preview.businessSnapshot} />}
+        {preview.statementImagePath && <a className="text-blue-600 underline" href={preview.statementImagePath} target="_blank" rel="noreferrer">{tx('查看已发送对账图片', 'View statement image snapshot')}</a>}
         <pre className="whitespace-pre-wrap break-words font-sans">{templates.find(template => template.name === preview.templateName && template.language === preview.languageCode)?.components.find(component => component.type === 'BODY')?.text?.replace(/{{(\d+)}}/g, (_, index) => preview.parameters[Number(index) - 1] || '-') || tx('模板不可用，请勿审核', 'Template unavailable; do not approve')}</pre>
         {(preview.testMode || preview.requiresApproval) && preview.status === 'PENDING' && <Button disabled={busy} onClick={() => { void action('whatsapp-notifications', { action: 'approve', ids: [preview.id], expectedUpdatedAt: preview.updatedAt }); setPreview(null); }}>{tx('确认审核，允许发送', 'Approve delivery')}</Button>}
         <Button variant="outline" onClick={() => setPreview(null)}>{tx('关闭', 'Close')}</Button>

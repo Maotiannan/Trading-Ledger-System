@@ -7,6 +7,11 @@ it('validates all six defaults and keeps the payload Utility-only', () => {
     expect(templatePayload(version).category).toBe('UTILITY');
   }
 });
+it('includes the approved contact signature on every outstanding reminder default', () => {
+  for (const version of defaultTemplateVersions().filter(item => item.kind.startsWith('outstanding'))) {
+    expect(version.footer).toBe('MU Group | Leo Mao | +86 13819858718');
+  }
+});
 it.each(['No variables', '{{1}} {{9}}', '{{customer}}', '{{01}} {{2}} {{3}} {{4}} {{5}} {{6}} {{7}} {{8}}'])('rejects invalid variable mapping: %s', body => {
   expect(draftSchema.safeParse({ ...builtin, body }).success).toBe(false);
 });

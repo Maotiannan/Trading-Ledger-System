@@ -28,6 +28,27 @@ settings. This extension needs no schema migration or additional media archive.
 
 Do not back up Docker containers, images, `.next`, `node_modules`, logs, or test output as business data.
 
+### Outstanding Reminder Extension (Deployment Gated)
+
+Migration `20261006070000_whatsapp_outstanding_reminders` adds the notification
+type `OUTSTANDING_REMINDER` and nullable `WhatsAppDelivery.statementImagePath`.
+The complete database dump covers snapshots, stage/anchor metadata, cancellation
+and uncertain-send records, plus `SystemSetting` reminder switches, daily scan
+markers and cleared-debt episode timestamps.
+
+Each submitted statement PNG is stored under `UPLOAD_DIR/whatsapp-statements`,
+inside the existing `UPLOAD_HOST_DIR` archive. Files are immutable audit copies,
+not a source for future reminders. No automatic cleanup is added. YCloud media
+IDs are temporary delivery assets; restore relies on the local image and delivery
+record, not provider retention. The public template-review sample contains only
+fictional data and is a versioned application asset.
+
+Recovery checklist: verify the new enum/column, preserve test/live separation and
+cancelled/uncertain tasks, restore referenced PNG bytes and check their SHA-256,
+and leave reminder/outbound switches disabled in the restored environment. Never
+reset sending claims or rerun past daily slots. Roll back application code with
+reminders disabled, retaining the additive schema and notification history.
+
 ### WhatsApp Data Foundation (Pending Deployment)
 
 The additive WhatsApp migration introduces `CustomerWhatsAppContact`,

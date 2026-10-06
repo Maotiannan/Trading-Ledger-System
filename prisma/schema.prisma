@@ -881,6 +881,7 @@ enum WhatsAppDeliveryStatus {
 }
 
 enum WhatsAppNotificationType {
+  OUTSTANDING_REMINDER
   PAYMENT_RECEIVED
   SHIPMENT
   RELEASE
@@ -916,6 +917,7 @@ model WhatsAppDelivery {
   languageCode      String @db.VarChar(20)
   parameters        Json
   businessSnapshot  Json
+  statementImagePath String?
   nextSendAt        DateTime?
   requiresApproval  Boolean @default(false)
   correctionOf      Json?

@@ -31,7 +31,7 @@ export const GET = withRole(UserRole.ADMIN, async (request: NextRequest) => {
       db.whatsAppDelivery.findMany({ orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize, select: {
         id: true, type: true, status: true, testMode: true, intendedTo: true, actualTo: true,
         templateName: true, languageCode: true, parameters: true, businessSnapshot: true, createdAt: true,
-        approvedAt: true, providerMessageId: true, failureCode: true, nextSendAt: true, requiresApproval: true, correctionOf: true, updatedAt: true,
+        approvedAt: true, providerMessageId: true, failureCode: true, nextSendAt: true, requiresApproval: true, correctionOf: true, updatedAt: true, statementImagePath: true,
       } }),
       db.whatsAppDelivery.count(),
     ]);

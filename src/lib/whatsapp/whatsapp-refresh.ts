@@ -1,3 +1,4 @@
+import { refreshOutstandingReminder } from './outstanding-reminders';
 import { isDeepStrictEqual } from 'node:util';
 import type { Prisma } from '@prisma/client';
 import type { DbTransactionClient } from '@/lib/transaction';
@@ -11,6 +12,7 @@ import { refreshCorrectionInTransaction } from './whatsapp-corrections';
 export async function refreshWhatsAppInTransaction(tx: DbTransactionClient, id: string, templates: TemplateVersion[]) {
   const delivery = await tx.whatsAppDelivery.findUnique({ where: { id } });
   if (!delivery || !EDITABLE_WHATSAPP_STATUSES.some(status => status === delivery.status)) return delivery;
+  if (delivery.type === 'OUTSTANDING_REMINDER') return refreshOutstandingReminder(tx, delivery, templates);
   if (delivery.correctionOf) return refreshCorrectionInTransaction(tx, delivery, templates);
   const source = await tx.emailNotification.findUnique({ where: { id: delivery.sourceId } });
   const live = source ? await resolveWhatsAppSource(tx, source) : null;

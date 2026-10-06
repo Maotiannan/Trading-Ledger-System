@@ -1,3 +1,6 @@
+import { verifyReminderRestore } from '../helpers/verify-reminder-restore.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@prisma/client';
 export const name = 'whatsapp-notifications';
@@ -9,7 +12,12 @@ export default async function run(t) {
   try {
     await t.initAdmin(); await t.loginAdmin();
     const templates = await t.request('GET', '/api/whatsapp-templates', { expectedStatus: 200 });
-    assert.equal(templates.data.data.templates.length, 8);
+    assert.equal(templates.data.data.templates.filter(row => !row.kind.startsWith('outstanding')).length, 8);
+    assert.equal(templates.data.data.templates.filter(row => row.kind.startsWith('outstanding')).length, 4);
+    const reminderDefaults = await t.request('GET', '/api/whatsapp-settings', { expectedStatus: 200 });
+    assert.equal(reminderDefaults.data.data.settings.reminderEnabled, false);
+    assert.equal(reminderDefaults.data.data.settings.reminderTestMode, true);
+    await t.request('POST', '/api/whatsapp-settings', { json: { reminderEnabled: true, reminderTestMode: false }, expectedStatus: 400 });
     const original = templates.data.data.templates.find(row => row.kind === 'payment' && row.language === 'en');
     const saved = await t.request('POST', '/api/whatsapp-templates', { json: { action: 'save', draft: { ...original, body: original.body + '\nThank you.' } }, expectedStatus: 200 });
     assert.equal(saved.data.data.status, 'DRAFT');
@@ -75,6 +83,39 @@ export default async function run(t) {
     assert.equal((await db.customerWhatsAppContact.findUniqueOrThrow({where:{id:contact.id}})).optedInAt.getTime(), contact.optedInAt.getTime());
     await t.request('POST', '/api/whatsapp-settings', { json: { outboundEnabled: false, testMode: false, testDestination: '+8613619767412' }, expectedStatus: 200 });
     assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id } })).testMode, true);
+    // Reminder snapshots are refreshed through the real ADMIN API, on isolated data only.
+    await t.request('POST', '/api/whatsapp-settings', { json: { outboundEnabled: true, reminderEnabled: true, reminderTestMode: true }, expectedStatus: 200 });
+    await db.invoice.update({ where: { id: invoice.id }, data: { releaseDate: new Date(Date.now() - 80 * 86400000) } });
+    const reminderTemplate = { ...templates.data.data.templates.find(row => row.kind === 'outstanding60'), name: 'muledger_outstanding60_isolated', active: true, status: 'APPROVED', createdAt: new Date().toISOString() };
+    await db.systemSetting.create({ data: { key: 'whatsapp.template.' + reminderTemplate.name + '.fr', value: JSON.stringify(reminderTemplate) } });
+    // Two real scheduler processes share only the disposable test database.
+    await Promise.all([1, 2].map(() => promisify(execFile)(process.execPath, ['tests/api/isolated/helpers/project-outstanding-reminders.cjs'], { env: process.env })));
+    const reminders = await db.whatsAppDelivery.findMany({ where: { type: 'OUTSTANDING_REMINDER', contact: { customerId } } });
+    assert.equal(reminders.length, 1);
+    const reminder = reminders[0];
+    assert.ok(reminder.nextSendAt.getTime() > Date.now() + 280000);
+    await refresh();
+    let reminderRow = await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminder.id } });
+    assert.equal(reminderRow.businessSnapshot.outstanding.totalOutstanding, 6000);
+    assert.equal(reminderRow.parameters[1], '6,000');
+    assert.equal(reminderRow.languageCode, 'fr');
+    assert.equal(reminderRow.actualTo, '+8613619767412');
+    assert.equal(reminderRow.status, 'PENDING');
+    await t.request('POST', '/api/whatsapp-notifications', { json: { action: 'approve', ids: [reminder.id], expectedUpdatedAt: reminderRow.updatedAt.toISOString() }, expectedStatus: 200 });
+    await db.receipt.update({ where: { id: b.id }, data: { usd: 5000 } });
+    await refresh();
+    reminderRow = await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminder.id } });
+    assert.equal(reminderRow.status, 'PENDING');
+    assert.equal(reminderRow.approvedAt, null);
+    assert.equal(reminderRow.parameters[1], '5,000');
+    // Reuse this isolated fixture's request; the application correctly forbids duplicate requests.
+    await db.deletionRequest.update({ where: { id: request.data.data.id }, data: { status: 'PENDING' } });
+    await refresh();
+    assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminder.id } })).status, 'PAUSED');
+    await t.request('POST', '/api/deletion', { json: { action: 'reject', requestId: request.data.data.id }, expectedStatus: 200 });
+    await db.receipt.update({ where: { id: b.id }, data: { usd: 9980 } });
+    await refresh();
+    assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminder.id } })).status, 'CANCELLED');
     await t.request('POST', '/api/whatsapp-contacts', { json: { customerId, phone: contact.phone, optIn: false, consentSource: 'Isolated opt out' }, expectedStatus: 200 });
     assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id } })).status, 'CANCELLED');
     await t.login(salesEmail, 'SalesA@2026!');
@@ -85,6 +126,8 @@ export default async function run(t) {
     await t.request('GET', '/api/whatsapp-contacts', { expectedStatus: 200 });
     await t.loginAdmin();
     await t.request('POST', '/api/whatsapp-settings', { json: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, expectedStatus: 200 });
+    await verifyReminderRestore(db, reminder.id);
+    t.step('Customer reminder concurrent scheduling, live refresh, threshold, image reference and isolated database/media restore verified');
     t.step('WhatsApp buffer, deletion pause/rejection/approval, dependent balance correction, permanent cancellation, concurrent approval, opt-out and ADMIN permissions verified in isolated database');
   } finally { await db.$disconnect(); }
 }

@@ -22,7 +22,10 @@ export async function projectWhatsAppBusinessEvents() {
   do {
     const pending = await db.whatsAppDelivery.findMany({ where: { status: { in: ['PENDING', 'QUEUED', 'PAUSED'] } },
       orderBy: { id: 'asc' }, take: 100, ...(pendingCursor ? { cursor: { id: pendingCursor }, skip: 1 } : {}), select: { id: true } });
-    for (const row of pending) await runInTransaction(tx => refreshWhatsAppInTransaction(tx, row.id, templates));
+    for (const row of pending) {
+      try { await runInTransaction(tx => refreshWhatsAppInTransaction(tx, row.id, templates)); }
+      catch { logger.warn('WhatsApp pending refresh deferred', { deliveryId: row.id }); }
+    }
     pendingCursor = pending.length === 100 ? pending[pending.length - 1].id : undefined;
   } while (pendingCursor);
   let projected = 0;

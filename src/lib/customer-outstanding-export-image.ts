@@ -95,6 +95,11 @@ function sectionMarkup(
 
 export async function buildCustomerOutstandingStatementSvg(input: CustomerOutstandingStatementInput) {
   const logoDataUrl = await loadLogoDataUrl(input.logoUrl || '/detail-export/payment-detail-logo.png');
+  return renderCustomerOutstandingStatementSvg(input, logoDataUrl);
+}
+
+// Shared by browser downloads and background notification generation.
+export function renderCustomerOutstandingStatementSvg(input: CustomerOutstandingStatementInput, logoDataUrl: string) {
   const released = input.outstanding.orders.filter((order) => order.statusGroup === 'RELEASED');
   const inTransit = input.outstanding.orders.filter((order) => order.statusGroup === 'IN_TRANSIT');
   const releasedSection = sectionMarkup(input.labels.released, released, input.outstanding.statusSubtotals.released, input.labels, 315, true);

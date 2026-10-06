@@ -46,7 +46,7 @@ export function defaultTemplateVersions(): TemplateVersion[] {
     status: 'UNKNOWN', category: 'UTILITY', active: true, createdAt: '',
   })), ...reminderKinds.map(kind => ({
     name: 'muledger_' + kind + '_v1', kind, language: 'fr' as const, title: 'Relevé de compte', body: reminderBodies[kind],
-    footer: 'MU Group', status: 'DRAFT', category: 'UTILITY', active: false, createdAt: '',
+    footer: 'MU Group | Leo Mao | +86 13819858718', status: 'DRAFT', category: 'UTILITY', active: false, createdAt: '',
   }))];
 }
 export function templatePayload(template: TemplateVersion) {

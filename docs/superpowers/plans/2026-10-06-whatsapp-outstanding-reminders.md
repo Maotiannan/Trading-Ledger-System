@@ -24,3 +24,13 @@ Status: implementation in progress; outbound reminders disabled until review and
 ## Safety
 
 No financial writes. Additive persistence only; validate migrations in isolation before deployment. Notification state must be covered by the complete `trading_ledger` snapshot and archived media by `UPLOAD_HOST_DIR`, as described in `docs/backup/muledger-local-backup.md`. Rollback disables the reminder switch without deleting history.
+
+## Database change review
+
+- The pending migration changes only `WhatsAppDelivery`: append `OUTSTANDING_REMINDER` to the notification type and add nullable `statementImagePath`. It does not update orders, receipts, balances or existing media.
+- Keep a distinct notification type. Reusing `PAYMENT_RECEIVED` with a JSON discriminator would unnecessarily complicate history queries, scheduling, correction handling and reporting.
+- The image path could technically live in JSON, but the nullable column provides an explicit archive reference without rewriting the frozen business snapshot. Existing rows retain a null value.
+- Before production execution, obtain approval for these exact changes, verify the current database backup and media backup, and inspect the deployed database version and table size for ALTER TABLE locking impact. Additive does not mean lock-free.
+- Deployment can apply migrations during startup; do not run the rebuild script as a way to bypass migration approval. Keep reminders disabled and test mode enabled until template approval and controlled delivery verification.
+- Application rollback retains the additive schema and notification history. Do not remove the enum value or drop the column after reminder records exist. Full database restoration is a separate recovery decision because it could discard subsequent business writes.
+- Existing feature verification: 234 Jest suites / 1554 tests passed; isolated WhatsApp API case passed, including concurrent scheduling and database/media restore. Production migration, provider template review and real delivery remain outstanding.

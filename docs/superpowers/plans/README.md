@@ -12,6 +12,7 @@ Active implementation and historical plan states are listed below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
+| `2026-10-06-production-dependency-security.md` | `ACTIVE` | Six production audit entries addressed; scoped Prisma configuration compatibility tests, full CI and safe deployment required. |
 | `2026-10-06-whatsapp-outstanding-reminders.md` | `ACTIVE` | Customer-level reminder implementation and isolated verification; copy approval, provider review and production activation remain gated. |
 | `2026-09-08-email-contact-rollout.md` | `ACTIVE` | Shared contact footer and settings implemented; Resend domain/credentials, real delivery verification, CI and production activation remain gated. |
 | `2026-09-05-dependency-security-maintenance.md` | `ARCHIVED_COMPLETED` | Compatible advisory fixes and production-image pruning shipped in v1.0.217 through PR #31; CI, merge, safe deployment, migration, health, log, and NAS mount verification completed. |

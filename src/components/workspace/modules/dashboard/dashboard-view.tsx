@@ -29,9 +29,19 @@ import {
 } from '@/components/workspace/modules/customers/components/customer-order-history-dialog';
 import type { DashboardCustomerOutstanding } from '@/lib/dashboard-customer-outstanding';
 import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
+import { loadClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { CustomerAnalyticsCard } from './components/customer-analytics-card';
 import { DashboardCardPagination } from './components/dashboard-card-pagination';
 import { DashboardCustomerDetailDialog } from './components/dashboard-customer-detail-dialog';
+import {
+  readDashboardSummaryCache,
+  rememberDashboardSummary,
+} from './dashboard-summary-cache';
+import {
+  makeCustomerHistoryCacheKey,
+  readCustomerHistoryCache,
+  rememberCustomerHistory,
+} from './customer-history-cache';
 import {
   CustomerCandidate,
   IMPORT_RESULT_PAGE_SIZE,
@@ -107,10 +117,34 @@ type DashboardCustomerHistoryResponse = CustomerOrderHistory & {
 
 const DASHBOARD_LIST_PAGE_SIZE = 10;
 
+type DashboardSummary = {
+  invoiceCount: number;
+  unpaidTotal: number;
+  pendingReceipts: number;
+  pendingReceiptsAmount: number;
+  waitingSwift: number;
+  pendingDeletion: number;
+  recentReceipts: Array<{
+    id: string;
+    orderNo: string | null;
+    receiptNo: string | null;
+    usd: number;
+    status: string;
+  }>;
+  recentDetails: Array<{
+    id: string;
+    itemCount: number;
+    totalAmount: number;
+    status: string;
+  }>;
+  releasedInvoices: DashboardReleasedInvoice[];
+  customerOutstanding: DashboardCustomerOutstanding[];
+};
+
 export function Dashboard() {
   const t = useTranslations('dashboard');
   const tx = useUiText();
-  const { invoices, receipts, details, deletionRequests } = useStore();
+  const { invoices, receipts, details, deletionRequests, user } = useStore();
   const dashboardRequestGuard = useLatestRequestGuard();
   const customerSearchRequestGuard = useLatestRequestGuard();
   const customerHistoryRequestGuard = useLatestRequestGuard();
@@ -124,29 +158,7 @@ export function Dashboard() {
     pageSizeOptions: customerHistoryReceiptPageSizeOptions,
     savePageSize: saveCustomerHistoryReceiptPageSize,
   } = useListPageSizePreference('customerHistoryReceipts');
-  const [summary, setSummary] = useState<{
-    invoiceCount: number;
-    unpaidTotal: number;
-    pendingReceipts: number;
-    pendingReceiptsAmount: number;
-    waitingSwift: number;
-    pendingDeletion: number;
-    recentReceipts: Array<{
-      id: string;
-      orderNo: string | null;
-      receiptNo: string | null;
-      usd: number;
-      status: string;
-    }>;
-    recentDetails: Array<{
-      id: string;
-      itemCount: number;
-      totalAmount: number;
-      status: string;
-    }>;
-    releasedInvoices: DashboardReleasedInvoice[];
-    customerOutstanding: DashboardCustomerOutstanding[];
-  } | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [dashboardLayout, setDashboardLayout] = useState<DashboardLayoutPreference>(() => normalizeDashboardLayoutPreference(null));
   const [releasedInvoicePage, setReleasedInvoicePage] = useState(1);
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
@@ -164,12 +176,22 @@ export function Dashboard() {
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const loadSummary = useCallback(async () => {
     const requestToken = dashboardRequestGuard.nextToken();
+    const userId = user?.id;
+    if (userId) {
+      const cached = readDashboardSummaryCache<DashboardSummary>(userId);
+      if (cached) {
+        setSummary(cached.value);
+        if (cached.fresh) return;
+      }
+    }
     const result = await apiCall('dashboard?action=summary');
     if (!dashboardRequestGuard.isLatest(requestToken)) return;
     if (result.success && result.data) {
-      setSummary(result.data);
+      const next = result.data as DashboardSummary;
+      if (userId) rememberDashboardSummary(userId, next);
+      setSummary(next);
     }
-  }, [dashboardRequestGuard]);
+  }, [dashboardRequestGuard, user?.id]);
 
   useEffect(() => {
     void loadSummary();
@@ -177,10 +199,8 @@ export function Dashboard() {
 
   const loadDashboardPreferences = useCallback(async () => {
     try {
-      const result = await apiCall('settings?view=user-preferences');
-      if (result.success && result.data) {
-        setDashboardLayout(normalizeDashboardLayoutPreference((result.data as { dashboardLayout?: unknown }).dashboardLayout));
-      }
+      const preferences = await loadClientUserPreferences();
+      setDashboardLayout(normalizeDashboardLayoutPreference(preferences.dashboardLayout));
     } catch {
       setDashboardLayout(normalizeDashboardLayoutPreference(null));
     }
@@ -344,6 +364,22 @@ export function Dashboard() {
     },
   ) => {
     if (!target.customerId) return;
+    const userId = user?.id;
+    const cacheKey = userId
+      ? makeCustomerHistoryCacheKey({ userId, customerId: target.customerId, ...pagination })
+      : null;
+    const cached = cacheKey ? readCustomerHistoryCache(cacheKey) : null;
+    if (cached) {
+      setCustomerHistory(cached.value);
+      setCustomerDetailOutstanding(cached.value.outstanding ?? target.previewOutstanding);
+      if (cached.value.orderNames?.length) {
+        setCustomerDetailTarget((current) => current?.customerId === target.customerId
+          ? { ...current, title: cached.value.orderNames!.join(' / ') }
+          : current);
+      }
+      setCustomerHistoryLoading(false);
+      if (cached.fresh) return;
+    }
     const requestToken = customerHistoryRequestGuard.nextToken();
     const searchParams = new URLSearchParams({
       action: 'history',
@@ -354,13 +390,14 @@ export function Dashboard() {
       receiptPageSize: String(pagination.receiptPageSize),
     });
 
-    setCustomerHistoryLoading(true);
+    setCustomerHistoryLoading(!cached);
     setCustomerHistoryError('');
     try {
       const result = await apiCall(`dashboard/customer-history-search?${searchParams.toString()}`);
       if (!customerHistoryRequestGuard.isLatest(requestToken)) return;
       if (result.success && result.data) {
         const data = result.data as DashboardCustomerHistoryResponse;
+        if (cacheKey) rememberCustomerHistory(cacheKey, data);
         setCustomerHistory(data);
         setCustomerDetailOutstanding(data.outstanding ?? target.previewOutstanding);
         if (data.orderNames?.length) {
@@ -380,7 +417,7 @@ export function Dashboard() {
         setCustomerHistoryLoading(false);
       }
     }
-  }, [customerHistoryRequestGuard, tx]);
+  }, [customerHistoryRequestGuard, tx, user?.id]);
 
   const openCustomerDetail = useCallback((target: DashboardCustomerDetailTarget) => {
     setCustomerDetailTarget(target);

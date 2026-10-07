@@ -82,6 +82,8 @@ export function CustomerAnalyticsCard({
   const [selectedYear, setSelectedYear] = useState<number | null>(initialYear ?? null);
   const [metricState, setMetricState] = useState<MetricState>(emptyMetricState);
   const [selectedDetail, setSelectedDetail] = useState<SelectedCustomerAnalyticsDetail | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
   const requestSequence = useRef<Record<CustomerAnalyticsMetric, number>>({
     'annual-amount': 0,
     'payment-capacity': 0,
@@ -136,8 +138,24 @@ export function CustomerAnalyticsCard({
   }, [tx]);
 
   useEffect(() => {
+    const element = cardRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      setIsVisible(true);
+      observer.disconnect();
+    }, { rootMargin: '160px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible) return;
     void loadMetric('annual-amount', initialYear);
-  }, [initialYear, loadMetric]);
+  }, [initialYear, isVisible, loadMetric]);
 
   const handleMetricChange = (value: string) => {
     const metric = value as CustomerAnalyticsMetric;
@@ -261,7 +279,7 @@ export function CustomerAnalyticsCard({
 
   return (
     <>
-    <Card data-testid="customer-analytics-card" className="flex h-full flex-col">
+    <Card ref={cardRef} data-testid="customer-analytics-card" className="flex h-full flex-col">
       <CardHeader className="space-y-2">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">

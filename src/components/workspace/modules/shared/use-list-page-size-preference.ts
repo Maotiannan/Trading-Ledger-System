@@ -8,6 +8,10 @@ import {
   normalizeListPageSizePreference,
   type UserListPageSizePreference,
 } from '@/lib/list-page-size-preference';
+import {
+  loadClientUserPreferences,
+  rememberClientUserPreferences,
+} from './user-preferences-cache';
 
 type ListPageSizePreferenceKey = keyof UserListPageSizePreference;
 
@@ -18,14 +22,10 @@ export function useListPageSizePreference(key: ListPageSizePreferenceKey) {
 
   useEffect(() => {
     let cancelled = false;
-    void apiCall('settings?view=user-preferences')
-      .then((result) => {
-        if (cancelled || !result.success) return;
-        const next = normalizeListPageSizePreference(
-          result.data && typeof result.data === 'object'
-            ? (result.data as { listPageSizes?: unknown }).listPageSizes
-            : null,
-        );
+    void loadClientUserPreferences()
+      .then((preferences) => {
+        if (cancelled) return;
+        const next = normalizeListPageSizePreference(preferences.listPageSizes);
         setListPageSizes(next);
         setPageSize(next[key]);
       })
@@ -59,6 +59,7 @@ export function useListPageSizePreference(key: ListPageSizePreferenceKey) {
       const saved = normalizeListPageSizePreference((result.data as { listPageSizes?: unknown }).listPageSizes);
       setListPageSizes(saved);
       setPageSize(saved[key]);
+      rememberClientUserPreferences(result.data);
     }).catch(() => {
       setSaveError('Failed to save page size setting.');
     });

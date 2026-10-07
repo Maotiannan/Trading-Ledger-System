@@ -6,7 +6,13 @@ import { apiCall } from '@/components/workspace/shared';
 
 export function useWorkspaceAuth() {
   const { user, setUser } = useStore();
-  const [initialized, setInitialized] = useState(false);
+  // A persisted user lets the workspace render while the server revalidates the session.
+  // Every API route still performs its own authorization check.
+  const [initialized, setInitialized] = useState(() => Boolean(user));
+
+  useEffect(() => {
+    if (user) setInitialized(true);
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;

@@ -9,6 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { apiCall, useUiText } from '@/components/workspace/shared';
 import { getWorkspacePath, getWorkspaceViewFromPath } from '@/components/workspace/routes';
 import { prefetchWorkspaceView } from '@/components/workspace/navigation/prefetch';
+import { clearClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
+import { clearDashboardSummaryCache } from '@/components/workspace/modules/dashboard/dashboard-summary-cache';
+import { clearCustomerHistoryCache } from '@/components/workspace/modules/dashboard/customer-history-cache';
 import {
   LogOut, Users, FileText, Receipt, FileSpreadsheet,
   Building2, Trash2, LayoutDashboard, Settings, PanelLeftClose, PanelLeftOpen, Loader2, ClipboardList, Mail
@@ -54,6 +57,9 @@ export function Sidebar() {
       method: 'POST',
       body: JSON.stringify({ action: 'logout' }),
     });
+    clearClientUserPreferences();
+    clearDashboardSummaryCache();
+    clearCustomerHistoryCache();
     setUser(null);
     router.push('/');
   };
@@ -82,17 +88,6 @@ export function Sidebar() {
   const prefetchMenuItem = useCallback((view: ReturnType<typeof getWorkspaceViewFromPath>) => {
     prefetchWorkspaceView(router, view, { isManager, isAdmin });
   }, [isAdmin, isManager, router]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      visibleMenuItems.forEach((item) => {
-        if (item.id !== activeView) {
-          prefetchMenuItem(item.id);
-        }
-      });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [activeView, prefetchMenuItem, visibleMenuItems]);
 
   const switchLocale = async (nextLocale: 'zh' | 'en') => {
     if (nextLocale === locale) return;

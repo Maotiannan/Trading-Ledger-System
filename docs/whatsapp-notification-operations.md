@@ -2,10 +2,18 @@
 
 ## Release State
 
-Version 1.0.219 adds an ADMIN-only WhatsApp page. External sending remains disabled
-until provider approval and real delivery verification. The six Utility templates
-were submitted to YCloud; their latest observed status is PENDING. Do not describe
-this as completed production messaging.
+The existing receipt/shipment/release notifications are in production. On
+2026-10-08, all four French outstanding-reminder templates were confirmed APPROVED
+and UTILITY with exact content verification. Four synthetic image+text tests to
+the configured, user-authorized destination returned DELIVERED through the real
+webhook. The four templates are active. Production reminders were enabled and
+then paused after the first live batch returned BALANCE_INSUFFICIENT. Current
+state: reminderEnabled=false and reminderTestMode=false. Existing transactional
+notification settings were preserved, but share the same depleted provider balance.
+
+This was a configuration-only rollout of deployed version 1.0.226, not a new
+application build or database migration. The approved correction templates were
+also refreshed locally; no correction messages were sent during this rollout.
 
 ## Business Rules
 
@@ -24,7 +32,7 @@ this as completed production messaging.
 
 ## Management
 
-### Customer Outstanding Reminders (Gated Rollout)
+### Customer Outstanding Reminders
 
 - Separate ADMIN settings `reminderEnabled` (default false) and `reminderTestMode`
   (default true) do not change existing receipt/shipment/release notification mode.
@@ -149,7 +157,7 @@ Deploy only after required tests/CI, then use scripts/rebuild-local-app.sh.
 Its application startup applies the additive migration. Reverting the app does
 not require dropping the new tables. Disable outbound first on any incident.
 
-Real test recipient: the user-authorized number ending 7412, maintained in settings.
+Real test recipient: the current user-authorized number ending 1286, maintained in settings.
 Do not create fake production financial records or consume customer notifications
 for testing. Do not turn on production customer sending before template approval,
 test delivery, callback verification and consent readiness.
@@ -212,3 +220,40 @@ The user confirmed existing customers have consented and authorized routing futu
 messages to updated Customer.PHONE automatically. On rollout, record consent for
 the current customer set only; do not infer consent for future new customers.
 Set production activation to rollout time, not original test activation.
+
+## 2026-10-08 Outstanding Reminder Acceptance
+
+- All four stage templates and both correction languages are APPROVED/UTILITY.
+  Activation revalidated exact remote content through the existing template service.
+- 18 targeted suites / 123 tests passed. The isolated WhatsApp API case passed,
+  including concurrent scheduling, live refresh, threshold, cancellation, consent,
+  ADMIN permissions and database/media restore. No real financial records were
+  created or edited for testing.
+- Four fictional French statements were generated through the shared Dashboard
+  renderer, preserving small balances, in-transit orders and released-order days.
+  Real image uploads and the production provider sender returned these message IDs:
+  30d `6ac757dc871280044b86a1ac`, 60d `6ac757de59b22551cd3c8076`,
+  120d `6ac757e0871280044b86a1fb`, 180d `6ac757e259b22551cd3c809a`.
+  All four received DELIVERED callbacks; this is not a claim of being read.
+- Tests used the provider sender with synthetic snapshots, not the production
+  customer scheduler. Test messages are traced in AuditLog and WhatsAppWebhookEvent,
+  not represented as customer delivery tasks. No test task can later become live.
+- Test PNGs are archived at
+  `UPLOAD_HOST_DIR/images/whatsapp-statements/rollout-test-20261008-<stage>d.png`.
+  Audit/settings/webhook rows remain covered by the complete database backup;
+  images remain covered by the complete upload archive. No backup scope changed.
+- Enabling production caused one catch-up scan for 2026-10-08, with 22 live tasks
+  initially QUEUED behind the existing five-minute buffer. Later execution status
+  belongs to the notification history, not this static rollout record.
+- All 22 live tasks generated and archived their statement images. At the rollback
+  check, 14 had SENT/DELIVERED/READ status, five failed with BALANCE_INSUFFICIENT,
+  one with 131026 (Message Undeliverable), and two with PROVIDER_REJECTED without
+  a provider message ID. Do not infer the exact error behind the latter two.
+- The provider balance endpoint confirmed USD 0.0072 remaining. Reminder sending
+  was disabled with a before/after audit, without changing existing payment,
+  shipment or release switches. No blind retries or top-ups were performed.
+  Recharge is a user action. After recharge, reconcile failures before resuming;
+  completed messages must not be resent. Failed reminder slots consume cooldown,
+  so enabling alone does not immediately retry those failed messages.
+- Rollback: disable only reminderEnabled; leave other notifications, sent history,
+  templates, database schema and archived images intact.

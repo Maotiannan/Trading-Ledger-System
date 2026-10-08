@@ -47,7 +47,7 @@ Recovery checklist: verify the new enum/column, preserve test/live separation an
 cancelled/uncertain tasks, restore referenced PNG bytes and check their SHA-256,
 and leave reminder/outbound switches disabled in the restored environment. Never
 reset sending claims or rerun past daily slots. Roll back application code with
- reminders disabled, retaining the additive schema and notification history.
+reminders disabled, retaining the additive schema and notification history.
 
 Migration `20261008110000_whatsapp_failed_delivery_retry` adds only the nullable
 `WhatsAppDelivery.retryOf` self-reference and index. The complete MySQL snapshot
@@ -55,7 +55,7 @@ covers it and the retry audit records. Restore must preserve immutable failed
 parents and retry children; never convert a failed parent in place or retry a
 delivery that reached ACCEPTED, SENT, DELIVERED, READ or UNCERTAIN.
 
-### WhatsApp Data Foundation (Pending Deployment)
+### WhatsApp Data Foundation
 
 The additive WhatsApp migration introduces `CustomerWhatsAppContact`,
 `WhatsAppDelivery` and `WhatsAppWebhookEvent`. Once deployed, the full

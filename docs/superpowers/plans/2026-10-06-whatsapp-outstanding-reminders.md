@@ -1,8 +1,10 @@
 # Customer outstanding WhatsApp reminders
 
-Status: deployed and enabled on 2026-10-08 after approval of all four Utility
-templates, four delivered synthetic image tests and isolated verification. See
-`docs/whatsapp-notification-operations.md` for rollout evidence and rollback.
+Status: deployed and verified on 2026-10-08 after approval of all four Utility
+templates, four delivered synthetic image tests and isolated verification.
+Production reminders were enabled, then paused after provider balance exhaustion
+in the first live batch. User recharge and failure reconciliation are required
+before resuming. See `docs/whatsapp-notification-operations.md` for evidence.
 
 ## Confirmed rules
 

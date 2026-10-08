@@ -6,8 +6,10 @@ The existing receipt/shipment/release notifications are in production. On
 2026-10-08, all four French outstanding-reminder templates were confirmed APPROVED
 and UTILITY with exact content verification. Four synthetic image+text tests to
 the configured, user-authorized destination returned DELIVERED through the real
-webhook. The four templates are active; reminderEnabled=true and
-reminderTestMode=false. Existing notification settings were preserved.
+webhook. The four templates are active. Production reminders were enabled and
+then paused after the first live batch returned BALANCE_INSUFFICIENT. Current
+state: reminderEnabled=false and reminderTestMode=false. Existing transactional
+notification settings were preserved, but share the same depleted provider balance.
 
 This was a configuration-only rollout of deployed version 1.0.226, not a new
 application build or database migration. The approved correction templates were
@@ -243,5 +245,15 @@ Set production activation to rollout time, not original test activation.
 - Enabling production caused one catch-up scan for 2026-10-08, with 22 live tasks
   initially QUEUED behind the existing five-minute buffer. Later execution status
   belongs to the notification history, not this static rollout record.
+- All 22 live tasks generated and archived their statement images. At the rollback
+  check, 14 had SENT/DELIVERED/READ status, five failed with BALANCE_INSUFFICIENT,
+  one with 131026 (Message Undeliverable), and two with PROVIDER_REJECTED without
+  a provider message ID. Do not infer the exact error behind the latter two.
+- The provider balance endpoint confirmed USD 0.0072 remaining. Reminder sending
+  was disabled with a before/after audit, without changing existing payment,
+  shipment or release switches. No blind retries or top-ups were performed.
+  Recharge is a user action. After recharge, reconcile failures before resuming;
+  completed messages must not be resent. Failed reminder slots consume cooldown,
+  so enabling alone does not immediately retry those failed messages.
 - Rollback: disable only reminderEnabled; leave other notifications, sent history,
   templates, database schema and archived images intact.

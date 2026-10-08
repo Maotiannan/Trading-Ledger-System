@@ -7,6 +7,7 @@ import { refreshWhatsAppInTransaction } from './whatsapp-refresh';
 import { listWhatsAppTemplateVersions } from './whatsapp-template-service';
 import { isYCloudTemplateApproved } from './ycloud-template-status';
 import { logger } from '@/lib/logger';
+import { failedRetryAncestors, verifyFailedWhatsAppProvider } from './whatsapp-retry-policy';
 
 // Not scheduled until business projection, consent UI and isolated rollout checks are complete.
 export async function dispatchWhatsAppDelivery(id: string) {
@@ -22,6 +23,11 @@ export async function dispatchWhatsAppDelivery(id: string) {
   if (!preview || preview.status !== 'QUEUED' || !preview.nextSendAt || preview.nextSendAt > new Date() || !await isYCloudTemplateApproved({
     apiKey, wabaId: process.env.YCLOUD_WABA_ID || '', name: preview.templateName, language: preview.languageCode,
   })) return { sent: false };
+  if (preview.retryOf) {
+    const ancestors = await failedRetryAncestors(db, preview);
+    if (!ancestors) return { sent: false };
+    for (const parent of ancestors) if (!await verifyFailedWhatsAppProvider(parent)) return { sent: false };
+  }
   settings = await getWhatsAppSettings();
   if (!settings.outboundEnabled) return { sent: false };
   const delivery = await runInTransaction(async (tx) => {
@@ -45,6 +51,11 @@ export async function dispatchWhatsAppDelivery(id: string) {
         data: { status: 'FAILED', failureCode: 'REMINDER_IMAGE_FAILED', claimToken: null, claimedAt: null } });
       return { sent: false };
     }
+  }
+  if (delivery.retryOf && !await failedRetryAncestors(db, delivery)) {
+    await db.whatsAppDelivery.updateMany({ where: { id, claimToken: delivery.claimToken, status: 'SENDING' },
+      data: { status: 'CANCELLED', failureCode: 'RETRY_SOURCE_NO_LONGER_FAILED' } });
+    return { sent: false };
   }
   let providerMessageId: string;
   try {

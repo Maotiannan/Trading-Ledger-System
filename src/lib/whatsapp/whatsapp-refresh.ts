@@ -8,10 +8,16 @@ import { normalizeWhatsAppCustomerPhone } from './customer-phone';
 import { renderWhatsAppSnapshot } from './whatsapp-template';
 import type { TemplateVersion } from './whatsapp-template-definition';
 import { refreshCorrectionInTransaction } from './whatsapp-corrections';
+import { failedRetryAncestors } from './whatsapp-retry-policy';
 
 export async function refreshWhatsAppInTransaction(tx: DbTransactionClient, id: string, templates: TemplateVersion[]) {
   const delivery = await tx.whatsAppDelivery.findUnique({ where: { id } });
   if (!delivery || !EDITABLE_WHATSAPP_STATUSES.some(status => status === delivery.status)) return delivery;
+  if (delivery.retryOf && !await failedRetryAncestors(tx, delivery)) {
+    await tx.whatsAppDelivery.updateMany({ where: { id, status: delivery.status, claimToken: null },
+      data: { status: 'CANCELLED', failureCode: 'RETRY_SOURCE_NO_LONGER_FAILED' } });
+    return null;
+  }
   if (delivery.type === 'OUTSTANDING_REMINDER') return refreshOutstandingReminder(tx, delivery, templates);
   if (delivery.correctionOf) return refreshCorrectionInTransaction(tx, delivery, templates);
   const source = await tx.emailNotification.findUnique({ where: { id: delivery.sourceId } });

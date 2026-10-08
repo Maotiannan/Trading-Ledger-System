@@ -108,6 +108,43 @@ export default async function run(t) {
     assert.equal(reminderRow.status, 'PENDING');
     assert.equal(reminderRow.approvedAt, null);
     assert.equal(reminderRow.parameters[1], '5,000');
+    // Explicit FAILED retry: the failed row stays immutable while the child
+    // re-reads the current phone, receipt source and five-minute buffer.
+    const whatsappSetting = await db.systemSetting.findUniqueOrThrow({ where: { key: 'whatsapp.notifications' } });
+    await db.systemSetting.update({ where: { key: whatsappSetting.key }, data: { value: JSON.stringify({ ...JSON.parse(whatsappSetting.value), testMode: false }) } });
+    await db.customer.update({ where: { id: customerId }, data: { phone: '+224622491286' } });
+    const retryParent = await db.whatsAppDelivery.create({ data: {
+      eventKey: suffix + ':retry-parent', type: 'PAYMENT_RECEIVED', sourceId: source.id,
+      contactId: contact.id, testMode: false, intendedTo: '+224620123456', actualTo: '+224620123456',
+      senderPhone: '+8613819858718', templateName: original.name, languageCode: 'en',
+      parameters: ['stale'], businessSnapshot: { customerId, amount: 1, stale: true },
+      status: 'FAILED', failureCode: 'PROVIDER_REJECTED',
+      nextSendAt: new Date(Date.now() - 1000),
+    } });
+    const retryList = await t.request('GET', '/api/whatsapp-notifications', { expectedStatus: 200 });
+    const listedParent = retryList.data.data.items.find(row => row.id === retryParent.id);
+    assert.equal(listedParent.canRetry, true);
+    const parentBefore = await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: retryParent.id } });
+    const retryResponse = await t.request('POST', '/api/whatsapp-notifications', {
+      json: { action: 'retry', ids: [retryParent.id], expectedUpdatedAt: listedParent.updatedAt }, expectedStatus: 200,
+    });
+    const retryChild = await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: retryResponse.data.data.retryId } });
+    assert.equal(retryChild.retryOf, retryParent.id);
+    assert.equal(retryChild.intendedTo, '+224622491286');
+    assert.equal(retryChild.actualTo, '+224622491286');
+    assert.equal(retryChild.status, 'QUEUED');
+    assert.ok(retryChild.nextSendAt.getTime() > Date.now() + 280000);
+    assert.equal(retryChild.businessSnapshot.amount, 5000);
+    assert.notDeepEqual(retryChild.businessSnapshot, parentBefore.businessSnapshot);
+    assert.deepEqual(await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: retryParent.id } }), parentBefore);
+    await t.request('POST', '/api/whatsapp-notifications', {
+      json: { action: 'retry', ids: [retryParent.id], expectedUpdatedAt: parentBefore.updatedAt.toISOString() }, expectedStatus: 409,
+    });
+    assert.equal(await db.whatsAppDelivery.count({ where: { retryOf: retryParent.id } }), 1);
+    await db.whatsAppDelivery.update({ where: { id: retryChild.id }, data: { status: 'ACCEPTED', providerMessageId: 'provider-success-' + suffix } });
+    const successfulList = await t.request('GET', '/api/whatsapp-notifications', { expectedStatus: 200 });
+    assert.equal(successfulList.data.data.items.find(row => row.id === retryChild.id)?.canRetry, false);
+
     // Reuse this isolated fixture's request; the application correctly forbids duplicate requests.
     await db.deletionRequest.update({ where: { id: request.data.data.id }, data: { status: 'PENDING' } });
     await refresh();

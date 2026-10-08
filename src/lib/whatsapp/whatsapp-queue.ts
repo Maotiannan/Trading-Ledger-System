@@ -98,32 +98,3 @@ export async function cancelWhatsAppInTransaction(tx: Pick<DbTransactionClient, 
   await tx.auditLog.create({ data: { actorId: actor.id, action: 'WHATSAPP_DELIVERY_CANCELLED', targetType: 'WHATSAPP_DELIVERY', targetId: id } });
   return result;
 }
-
-export async function retryFailedWhatsAppInTransaction(
-  tx: Pick<DbTransactionClient, 'whatsAppDelivery' | 'auditLog'>,
-  id: string,
-  actor: CurrentUser,
-) {
-  if (actor.role !== 'ADMIN') throw createApiError({ code: 'FORBIDDEN', status: 403, message: '' });
-  const original = await tx.whatsAppDelivery.findUnique({ where: { id } });
-  if (!original || original.status !== 'FAILED' || original.claimToken) {
-    throw createApiError({ code: 'CONFLICT', status: 409, message: '' });
-  }
-  const existing = await tx.whatsAppDelivery.findFirst({ where: { retryOf: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
-  if (existing && ['PENDING', 'PAUSED', 'QUEUED', 'SENDING', 'ACCEPTED', 'SENT', 'DELIVERED', 'READ'].includes(existing.status)) {
-    throw createApiError({ code: 'CONFLICT', status: 409, message: '' });
-  }
-  const retry = await tx.whatsAppDelivery.create({ data: {
-    eventKey: `retry:${id}:${randomUUID()}`,
-    type: original.type, sourceId: original.sourceId, contactId: original.contactId,
-    testMode: original.testMode, intendedTo: original.intendedTo, actualTo: original.actualTo,
-    senderPhone: original.senderPhone, templateName: original.templateName, languageCode: original.languageCode,
-    parameters: original.parameters as Prisma.InputJsonValue, businessSnapshot: original.businessSnapshot as Prisma.InputJsonValue,
-    statementImagePath: null, nextSendAt: bufferDeadline(),
-    requiresApproval: original.testMode, correctionOf: original.correctionOf ?? Prisma.DbNull, retryOf: original.id,
-    status: original.testMode ? 'PENDING' : 'QUEUED',
-  } });
-  await tx.auditLog.create({ data: { actorId: actor.id, action: 'WHATSAPP_DELIVERY_RETRY_CREATED', targetType: 'WHATSAPP_DELIVERY', targetId: retry.id,
-    metadata: { retryOf: original.id, originalFailureCode: original.failureCode, originalStatus: original.status } } });
-  return retry;
-}

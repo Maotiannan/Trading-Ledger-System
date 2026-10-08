@@ -12,11 +12,12 @@ import type { TemplateVersion } from './whatsapp-template-definition';
 import { normalizeWhatsAppCustomerPhone } from './customer-phone';
 import { bufferDeadline, pendingDeliveryUpdate } from './whatsapp-buffer';
 import { enqueueWhatsAppInTransaction } from './whatsapp-queue';
+import { failedRetryAncestors } from './whatsapp-retry-policy';
 
 const TYPE = 'OUTSTANDING_REMINDER' as const;
 const editable = ['PENDING', 'QUEUED', 'PAUSED', 'SENDING', 'UNCERTAIN'] as const;
 
-async function resolveReminder(tx: DbTransactionClient, customerId: string, testMode: boolean, now: Date, excludeId?: string) {
+async function resolveReminder(tx: DbTransactionClient, customerId: string, testMode: boolean, now: Date, excludeId?: string, ancestors: WhatsAppDelivery[] = []) {
   const customer = await tx.customer.findUnique({ where: { id: customerId } });
   if (!customer) return null;
   const invoices = await tx.invoice.findMany({ where: { orders: { some: { customerId } } }, select: dashboardOutstandingInvoiceSelect({ customerId }) });
@@ -29,15 +30,17 @@ async function resolveReminder(tx: DbTransactionClient, customerId: string, test
   const episode = await tx.systemSetting.findUnique({ where: { key: episodeKey } });
   const clearedAt = episode && Number.isFinite(Date.parse(episode.value)) ? new Date(episode.value) : null;
   const previous = await tx.whatsAppDelivery.findFirst({
-    where: { type: TYPE, testMode, contact: { customerId }, ...(clearedAt ? { createdAt: { gt: clearedAt } } : {}), ...(excludeId ? { id: { not: excludeId } } : {}) },
+    where: { type: TYPE, testMode, contact: { customerId }, ...(clearedAt ? { createdAt: { gt: clearedAt } } : {}), ...(excludeId ? { id: { notIn: [excludeId, ...ancestors.map(row => row.id)] } } : {}) },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
   });
   if (previous && editable.some(status => status === previous.status)) return null;
+  // A newer independent reminder supersedes this failed chain, even if it failed.
+  const root = ancestors.at(-1);
+  if (root && previous && previous.createdAt >= root.createdAt) return null;
   const old = previous?.businessSnapshot as Record<string, unknown> | undefined;
   const history: ReminderHistory | null = previous && typeof old?.anchorId === 'string' && typeof old?.stage === 'number'
     ? { anchorId: old.anchorId, stage: old.stage, sentAt: previous.claimedAt || previous.createdAt } : null;
-  const retrying = Boolean(excludeId && (await tx.whatsAppDelivery.findUnique({ where: { id: excludeId }, select: { retryOf: true } }))?.retryOf);
-  const decision = evaluateOutstandingReminder({ orders: outstanding.orders, history: retrying ? null : history, now, checkSchedule: !excludeId });
+  const decision = evaluateOutstandingReminder({ orders: outstanding.orders, history, now, checkSchedule: !excludeId });
   if (!decision) return null;
   const receipts = await tx.receipt.findMany({ where: { order: { customerId } }, select: { id: true, detailItems: { select: { detailId: true } } } });
   const paused = Boolean(await tx.deletionRequest.findFirst({ where: { status: 'PENDING', OR: [
@@ -69,8 +72,9 @@ export async function refreshOutstandingReminder(tx: DbTransactionClient, delive
   const where = { id: delivery.id, status: delivery.status, updatedAt: delivery.updatedAt, claimToken: null };
   const snapshot = delivery.businessSnapshot as Record<string, unknown>;
   const customerId = typeof snapshot.customerId === 'string' ? snapshot.customerId : '';
-  const live = settings.reminderEnabled && delivery.testMode === settings.reminderTestMode
-    ? await resolveReminder(tx, customerId, delivery.testMode, new Date(), delivery.id) : null;
+  const ancestors = delivery.retryOf ? await failedRetryAncestors(tx, delivery) : [];
+  const live = ancestors && settings.reminderEnabled && delivery.testMode === settings.reminderTestMode
+    ? await resolveReminder(tx, customerId, delivery.testMode, new Date(), delivery.id, ancestors) : null;
   const contact = live ? await tx.customerWhatsAppContact.findFirst({
     where: { customerId, optedInAt: { not: null }, optedOutAt: null }, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
   }) : null;

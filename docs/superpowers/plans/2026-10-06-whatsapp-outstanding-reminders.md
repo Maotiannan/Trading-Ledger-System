@@ -1,6 +1,8 @@
 # Customer outstanding WhatsApp reminders
 
-Status: implementation in progress; outbound reminders disabled until review and delivery verification.
+Status: deployed and enabled on 2026-10-08 after approval of all four Utility
+templates, four delivered synthetic image tests and isolated verification. See
+`docs/whatsapp-notification-operations.md` for rollout evidence and rollback.
 
 ## Confirmed rules
 
@@ -33,4 +35,4 @@ No financial writes. Additive persistence only; validate migrations in isolation
 - Before production execution, obtain approval for these exact changes, verify the current database backup and media backup, and inspect the deployed database version and table size for ALTER TABLE locking impact. Additive does not mean lock-free.
 - Deployment can apply migrations during startup; do not run the rebuild script as a way to bypass migration approval. Keep reminders disabled and test mode enabled until template approval and controlled delivery verification.
 - Application rollback retains the additive schema and notification history. Do not remove the enum value or drop the column after reminder records exist. Full database restoration is a separate recovery decision because it could discard subsequent business writes.
-- Existing feature verification: 234 Jest suites / 1554 tests passed; isolated WhatsApp API case passed, including concurrent scheduling and database/media restore. Production migration, provider template review and real delivery remain outstanding.
+- Implementation verification: 234 Jest suites / 1554 tests passed; isolated WhatsApp API case passed, including concurrent scheduling and database/media restore. The production schema was current at rollout. Provider approval and controlled real delivery were verified on 2026-10-08; 18 targeted suites / 123 tests and the isolated WhatsApp API case passed again before enablement.

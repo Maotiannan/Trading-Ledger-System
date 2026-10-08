@@ -42,7 +42,7 @@ export async function dispatchWhatsAppDelivery(id: string) {
     } catch {
       logger.error('Outstanding reminder image preparation failed', { deliveryId: id, code: 'REMINDER_IMAGE_FAILED' });
       await db.whatsAppDelivery.updateMany({ where: { id, claimToken: delivery.claimToken, status: 'SENDING' },
-        data: { status: 'FAILED', failureCode: 'REMINDER_IMAGE_FAILED' } });
+        data: { status: 'FAILED', failureCode: 'REMINDER_IMAGE_FAILED', claimToken: null, claimedAt: null } });
       return { sent: false };
     }
   }
@@ -57,7 +57,8 @@ export async function dispatchWhatsAppDelivery(id: string) {
     const rejected = error instanceof WhatsAppProviderError && error.kind === 'REJECTED';
     await db.whatsAppDelivery.updateMany({
       where: { id, claimToken: delivery.claimToken, status: 'SENDING' },
-      data: { status: rejected ? 'FAILED' : 'UNCERTAIN', failureCode: rejected ? 'PROVIDER_REJECTED' : 'TRANSPORT_UNCERTAIN' },
+      data: { status: rejected ? 'FAILED' : 'UNCERTAIN', failureCode: rejected ? 'PROVIDER_REJECTED' : 'TRANSPORT_UNCERTAIN',
+        ...(rejected ? { claimToken: null, claimedAt: null } : {}) },
     });
     return { sent: false, uncertain: !rejected };
   }

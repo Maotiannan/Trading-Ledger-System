@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { enqueueWhatsAppInTransaction, approveWhatsAppTestInTransaction, claimWhatsAppInTransaction, cancelWhatsAppInTransaction } from './whatsapp-queue';
+import { enqueueWhatsAppInTransaction, approveWhatsAppTestInTransaction, claimWhatsAppInTransaction, cancelWhatsAppInTransaction, retryFailedWhatsAppInTransaction } from './whatsapp-queue';
 import type { DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 
@@ -9,8 +9,10 @@ const upsert = jest.fn();
 const findExisting = jest.fn();
 const updateMany = jest.fn();
 const findUnique = jest.fn();
+const findRetry = jest.fn();
+const create = jest.fn();
 const findContact = jest.fn();
-const tx = { whatsAppDelivery: { findFirst: findExisting, upsert, updateMany, findUnique }, customerWhatsAppContact: { findUnique: findContact } } as unknown as DbTransactionClient;
+const tx = { whatsAppDelivery: { findFirst: findExisting, upsert, updateMany, findUnique, create }, customerWhatsAppContact: { findUnique: findContact } } as unknown as DbTransactionClient;
 beforeEach(() => { jest.resetAllMocks(); findContact.mockResolvedValue(contact); updateMany.mockResolvedValue({ count: 1 }); });
 it('test events freeze both intended and actual recipients and await approval', async () => {
   await enqueueWhatsAppInTransaction(tx, input);
@@ -97,4 +99,21 @@ it('cancellation wins only while unsent and creates an audit entry', async () =>
   updateMany.mockResolvedValue({ count: 0 });
   await expect(cancelWhatsAppInTransaction({ ...tx, auditLog } as unknown as DbTransactionClient, 'delivery', { id: 'admin', role: 'ADMIN' } as CurrentUser)).rejects.toMatchObject({ status: 409 });
   expect(auditLog.create).toHaveBeenCalledTimes(1);
+});
+
+it('creates a five-minute retry child only for an explicit failed delivery', async () => {
+  const auditLog = { create: jest.fn() };
+  const failed = { ...delivery, testMode: false, status: 'FAILED', failureCode: 'BALANCE_INSUFFICIENT', retryOf: null };
+  (findUnique as jest.Mock).mockResolvedValue(failed);
+  findExisting.mockResolvedValue(null);
+  create.mockResolvedValue({ id: 'retry', status: 'QUEUED' });
+  const result = await retryFailedWhatsAppInTransaction({ ...tx, auditLog } as any, 'delivery', { id: 'admin', role: 'ADMIN' } as any);
+  expect(result).toMatchObject({ id: 'retry' });
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ retryOf: 'delivery', status: 'QUEUED', nextSendAt: expect.any(Date) }) }));
+  expect(auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'WHATSAPP_DELIVERY_RETRY_CREATED' }) }));
+});
+
+it.each(['ACCEPTED', 'SENT', 'DELIVERED', 'READ', 'UNCERTAIN'])('does not retry a %s delivery', async status => {
+  (findUnique as jest.Mock).mockResolvedValue({ ...delivery, status });
+  await expect(retryFailedWhatsAppInTransaction(tx as any, 'delivery', { id: 'admin', role: 'ADMIN' } as any)).rejects.toMatchObject({ status: 409 });
 });

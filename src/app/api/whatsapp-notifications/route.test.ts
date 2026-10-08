@@ -4,13 +4,14 @@ jest.mock('@/lib/whatsapp/whatsapp-template-service', () => ({ listWhatsAppTempl
 jest.mock('@/lib/request-auth', () => ({ getCurrentUser: jest.fn() }));
 jest.mock('@/lib/db', () => ({ db: { $transaction: jest.fn(), whatsAppDelivery: { findMany: jest.fn(), count: jest.fn() } } }));
 jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn() }));
-jest.mock('@/lib/whatsapp/whatsapp-queue', () => ({ approveWhatsAppTestInTransaction: jest.fn(), cancelWhatsAppInTransaction: jest.fn() }));
+jest.mock('@/lib/whatsapp/whatsapp-queue', () => ({ approveWhatsAppTestInTransaction: jest.fn(), cancelWhatsAppInTransaction: jest.fn(), retryFailedWhatsAppInTransaction: jest.fn() }));
 import { NextRequest } from 'next/server';
 import { getCurrentUser } from '@/lib/request-auth';
 import { GET, POST } from './route';
 import { db } from '@/lib/db';
 import { runInTransaction } from '@/lib/transaction';
 import { approveWhatsAppTestInTransaction } from '@/lib/whatsapp/whatsapp-queue';
+import { retryFailedWhatsAppInTransaction } from '@/lib/whatsapp/whatsapp-queue';
 beforeEach(() => { jest.clearAllMocks(); (getCurrentUser as jest.Mock).mockResolvedValue({ id: 'admin', role: 'ADMIN' }); });
 it.each(['SALES', 'USER'])('denies both read and approval for %s', async role => {
   (getCurrentUser as jest.Mock).mockResolvedValue({ role });
@@ -28,4 +29,11 @@ it('approves each ID once inside the transaction without sending', async () => {
   const result = await POST(new NextRequest('http://localhost/api/whatsapp-notifications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', ids: ['one'], expectedUpdatedAt:new Date(0).toISOString() }) }));
   expect(result.status).toBe(200);
   expect(approveWhatsAppTestInTransaction).toHaveBeenCalledTimes(1);
+});
+it('creates a retry only through the ADMIN action', async () => {
+  (runInTransaction as jest.Mock).mockImplementation(async fn => fn({}));
+  (retryFailedWhatsAppInTransaction as jest.Mock).mockResolvedValue({ id: 'retry' });
+  const result = await POST(new NextRequest('http://localhost/api/whatsapp-notifications', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'retry', ids: ['failed'] }) }));
+  expect(result.status).toBe(200);
+  expect(retryFailedWhatsAppInTransaction).toHaveBeenCalledWith({}, 'failed', { id: 'admin', role: 'ADMIN' });
 });

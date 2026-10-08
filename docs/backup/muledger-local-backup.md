@@ -47,7 +47,13 @@ Recovery checklist: verify the new enum/column, preserve test/live separation an
 cancelled/uncertain tasks, restore referenced PNG bytes and check their SHA-256,
 and leave reminder/outbound switches disabled in the restored environment. Never
 reset sending claims or rerun past daily slots. Roll back application code with
-reminders disabled, retaining the additive schema and notification history.
+ reminders disabled, retaining the additive schema and notification history.
+
+Migration `20261008110000_whatsapp_failed_delivery_retry` adds only the nullable
+`WhatsAppDelivery.retryOf` self-reference and index. The complete MySQL snapshot
+covers it and the retry audit records. Restore must preserve immutable failed
+parents and retry children; never convert a failed parent in place or retry a
+delivery that reached ACCEPTED, SENT, DELIVERED, READ or UNCERTAIN.
 
 ### WhatsApp Data Foundation (Pending Deployment)
 
@@ -343,7 +349,7 @@ WhatsApp versioned drafts and submitted content are stored in existing SystemSet
 keys prefixed whatsapp.template.; activation locks use whatsapp.template-lock.
 The three type switches remain in whatsapp.notifications. All are covered by the
 complete trading_ledger snapshot, together with AuditLog and frozen delivery parameters.
-No schema migration or additional files are introduced.
+The retryOf field is covered by the same snapshot and adds no independent store.
 
 During isolated restore verification, check a draft, submitted version, active slot
 and an older delivery preview. Keep sending disabled and refresh provider statuses

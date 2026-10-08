@@ -104,6 +104,8 @@ Provider contracts checked during implementation:
   regenerates reminder media when applicable, and waits five minutes again.
   ACCEPTED, SENT, DELIVERED, READ and UNCERTAIN deliveries are never retryable.
   A retry does not resurrect or rewrite the original event and is audited.
+  Explicit provider failures release the sending claim; transport-uncertain
+  outcomes keep their claim and remain blocked until reconciliation.
 - Customer contact API: ADMIN/SALES with existing customer scope. The WhatsApp page
   offers ADMIN contact maintenance, including consent evidence and opt-out.
 - Opt-out cancels pending/queued deliveries. Already submitted messages cannot be recalled.

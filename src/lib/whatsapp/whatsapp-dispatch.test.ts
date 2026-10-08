@@ -53,7 +53,7 @@ it('records timeout uncertainty without a retry', async () => {
 it('records explicit rejection', async () => {
   (sendYCloudTemplate as jest.Mock).mockRejectedValue(new WhatsAppProviderError('REJECTED', '400', 'bad'));
   await dispatchWhatsAppDelivery('delivery');
-  expect(db.whatsAppDelivery.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'FAILED', failureCode: 'PROVIDER_REJECTED' } }));
+  expect(db.whatsAppDelivery.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'FAILED', failureCode: 'PROVIDER_REJECTED', claimToken: null, claimedAt: null } }));
 });
 it('propagates persistence failure rather than resending or marking provider rejection', async () => {
   (db.whatsAppDelivery.updateMany as jest.Mock).mockRejectedValue(new Error('write failed'));

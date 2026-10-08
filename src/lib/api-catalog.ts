@@ -263,6 +263,7 @@ export const apiCatalog: ApiModule[] = [
       { action: 'preview', method: 'POST', description: 'Preview current recipients and rendered content without sending', bodyExample: { action: 'preview', notificationId: 'notification-id', language: 'ENGLISH' } },
       { action: 'approve', method: 'POST', description: 'Freeze and queue one or more reviewed notifications', bodyExample: { action: 'approve', notificationIds: ['notification-id'] } },
       { action: 'cancel', method: 'POST', description: 'Cancel one unsent notification task', bodyExample: { action: 'cancel', notificationId: 'notification-id' } },
+      { action: 'retry', method: 'POST', description: 'Create a five-minute retry child for one explicitly failed WhatsApp delivery; ADMIN only', bodyExample: { action: 'retry', ids: ['failed-delivery-id'] } },
       { action: 'retry', method: 'POST', description: 'Retry a failed delivery; uncertain outcomes require explicit confirmation', bodyExample: { action: 'retry', notificationId: 'notification-id', confirmUncertain: false } },
       { action: 'create-correction', method: 'POST', description: 'Create a reviewable correction from immutable sent history', bodyExample: { action: 'create-correction', notificationId: 'notification-id' } },
     ],

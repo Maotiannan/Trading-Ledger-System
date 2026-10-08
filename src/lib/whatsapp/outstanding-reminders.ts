@@ -36,7 +36,8 @@ async function resolveReminder(tx: DbTransactionClient, customerId: string, test
   const old = previous?.businessSnapshot as Record<string, unknown> | undefined;
   const history: ReminderHistory | null = previous && typeof old?.anchorId === 'string' && typeof old?.stage === 'number'
     ? { anchorId: old.anchorId, stage: old.stage, sentAt: previous.claimedAt || previous.createdAt } : null;
-  const decision = evaluateOutstandingReminder({ orders: outstanding.orders, history, now, checkSchedule: !excludeId });
+  const retrying = Boolean(excludeId && (await tx.whatsAppDelivery.findUnique({ where: { id: excludeId }, select: { retryOf: true } }))?.retryOf);
+  const decision = evaluateOutstandingReminder({ orders: outstanding.orders, history: retrying ? null : history, now, checkSchedule: !excludeId });
   if (!decision) return null;
   const receipts = await tx.receipt.findMany({ where: { order: { customerId } }, select: { id: true, detailItems: { select: { detailId: true } } } });
   const paused = Boolean(await tx.deletionRequest.findFirst({ where: { status: 'PENDING', OR: [

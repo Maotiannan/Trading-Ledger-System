@@ -921,6 +921,7 @@ model WhatsAppDelivery {
   nextSendAt        DateTime?
   requiresApproval  Boolean @default(false)
   correctionOf      Json?
+  retryOf           String?
   status            WhatsAppDeliveryStatus @default(PENDING)
   approvedBy        String?
   approvedAt        DateTime?
@@ -932,12 +933,15 @@ model WhatsAppDelivery {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   contact           CustomerWhatsAppContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  retrySource       WhatsAppDelivery? @relation("WhatsAppDeliveryRetry", fields: [retryOf], references: [id], onDelete: Restrict)
+  retries           WhatsAppDelivery[] @relation("WhatsAppDeliveryRetry")
   webhookEvents     WhatsAppWebhookEvent[]
 
   @@index([status, createdAt])
   @@index([status, nextSendAt])
   @@index([contactId])
   @@index([type, sourceId])
+  @@index([retryOf])
 }
 
 model WhatsAppWebhookEvent {

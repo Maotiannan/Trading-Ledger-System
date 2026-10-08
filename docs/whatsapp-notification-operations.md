@@ -98,6 +98,12 @@ Provider contracts checked during implementation:
   template. Provider approval and a controlled test remain release prerequisites.
 
 - ADMIN: /whatsapp, settings, previews, paginated history and test approval.
+- ADMIN can use Safe retry only on an explicitly FAILED delivery. Retry creates a
+  new child delivery with `retryOf`, keeps the failed parent immutable, rechecks
+  the current customer phone, consent, source/balance and approved template,
+  regenerates reminder media when applicable, and waits five minutes again.
+  ACCEPTED, SENT, DELIVERED, READ and UNCERTAIN deliveries are never retryable.
+  A retry does not resurrect or rewrite the original event and is audited.
 - Customer contact API: ADMIN/SALES with existing customer scope. The WhatsApp page
   offers ADMIN contact maintenance, including consent evidence and opt-out.
 - Opt-out cancels pending/queued deliveries. Already submitted messages cannot be recalled.
@@ -149,6 +155,8 @@ References:
 ## Data Safety And Rollout
 
 New tables: CustomerWhatsAppContact, WhatsAppDelivery, WhatsAppWebhookEvent.
+The failed-delivery retry release adds only the nullable `WhatsAppDelivery.retryOf`
+self-reference and index; it does not rewrite existing deliveries or financial data.
 All are covered by the full trading_ledger dump. Settings/audits use existing tables.
 No new media directory. See [backup runbook](backup/muledger-local-backup.md) and
 [isolated migration/restore evidence](backup/restore-drills/2026-09-16-whatsapp-notifications.md).

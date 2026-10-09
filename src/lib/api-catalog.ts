@@ -255,6 +255,13 @@ export const apiCatalog: ApiModule[] = [
     ],
   },
   {
+    endpoint: '/api/whatsapp-notifications',
+    description: 'ADMIN-only WhatsApp notification history and actions',
+    actions: [
+      { action: 'retry', method: 'POST', description: 'Create one refreshed five-minute retry; original must be explicitly FAILED', bodyExample: { action: 'retry', ids: ['failed-delivery-id'], expectedUpdatedAt: '2026-10-08T10:00:00.000Z' } },
+    ],
+  },
+  {
     endpoint: '/api/email-notifications',
     description: 'ADMIN-only review, approval, correction, and delivery history for customer email tasks',
     actions: [
@@ -263,7 +270,6 @@ export const apiCatalog: ApiModule[] = [
       { action: 'preview', method: 'POST', description: 'Preview current recipients and rendered content without sending', bodyExample: { action: 'preview', notificationId: 'notification-id', language: 'ENGLISH' } },
       { action: 'approve', method: 'POST', description: 'Freeze and queue one or more reviewed notifications', bodyExample: { action: 'approve', notificationIds: ['notification-id'] } },
       { action: 'cancel', method: 'POST', description: 'Cancel one unsent notification task', bodyExample: { action: 'cancel', notificationId: 'notification-id' } },
-      { action: 'retry', method: 'POST', description: 'Create a five-minute retry child for one explicitly failed WhatsApp delivery; ADMIN only', bodyExample: { action: 'retry', ids: ['failed-delivery-id'] } },
       { action: 'retry', method: 'POST', description: 'Retry a failed delivery; uncertain outcomes require explicit confirmation', bodyExample: { action: 'retry', notificationId: 'notification-id', confirmUncertain: false } },
       { action: 'create-correction', method: 'POST', description: 'Create a reviewable correction from immutable sent history', bodyExample: { action: 'create-correction', notificationId: 'notification-id' } },
     ],

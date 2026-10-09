@@ -5,7 +5,9 @@ import { db } from '@/lib/db';
 import { withRole } from '@/lib/route-auth';
 import { parseJsonRequest } from '@/lib/http-body';
 import { runWhatsAppTransaction as runInTransaction } from '@/lib/whatsapp/whatsapp-transaction';
-import { approveWhatsAppTestInTransaction, cancelWhatsAppInTransaction, retryFailedWhatsAppInTransaction } from '@/lib/whatsapp/whatsapp-queue';
+import { approveWhatsAppTestInTransaction, cancelWhatsAppInTransaction } from '@/lib/whatsapp/whatsapp-queue';
+import { retryFailedWhatsApp } from '@/lib/whatsapp/whatsapp-retry';
+import { isExplicitWhatsAppFailure } from '@/lib/whatsapp/whatsapp-retry-policy';
 import { refreshWhatsAppInTransaction } from '@/lib/whatsapp/whatsapp-refresh';
 import { listWhatsAppTemplateVersions } from '@/lib/whatsapp/whatsapp-template-service';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
@@ -32,10 +34,13 @@ export const GET = withRole(UserRole.ADMIN, async (request: NextRequest) => {
         id: true, type: true, status: true, testMode: true, intendedTo: true, actualTo: true,
         templateName: true, languageCode: true, parameters: true, businessSnapshot: true, createdAt: true,
         approvedAt: true, providerMessageId: true, failureCode: true, nextSendAt: true, requiresApproval: true, correctionOf: true, retryOf: true, updatedAt: true, statementImagePath: true,
+        retries: { select: { id: true }, take: 1 },
       } }),
       db.whatsAppDelivery.count(),
     ]);
-    return NextResponse.json({ success: true, data: { items, page, pageSize, total } });
+    return NextResponse.json({ success: true, data: { items: items.map(({ retries, ...row }) => ({ ...row,
+      retryId: retries[0]?.id || null, canRetry: isExplicitWhatsAppFailure(row) && retries.length === 0,
+    })), page, pageSize, total } });
   } catch {
     return createApiErrorResponse({ code: apiErrorCodes.INTERNAL_ERROR, status: 500, message: '' }, request);
   }
@@ -46,15 +51,17 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
     const parsed = approval.safeParse(await parseJsonRequest(request));
     if (!parsed.success) return invalid(request);
     if (parsed.data.action === 'approve' && (!parsed.data.expectedUpdatedAt || parsed.data.ids.length !== 1)) return invalid(request);
+    if (parsed.data.action === 'retry') {
+      if (!parsed.data.expectedUpdatedAt || parsed.data.ids.length !== 1) return invalid(request);
+      const retry = await retryFailedWhatsApp(currentUser, parsed.data.ids[0], parsed.data.expectedUpdatedAt);
+      return NextResponse.json({ success: true, data: { retried: 1, retryId: retry.id, status: retry.status, nextSendAt: retry.nextSendAt } });
+    }
     const templates = parsed.data.action === 'approve' ? await listWhatsAppTemplateVersions() : [];
     const approved = await runInTransaction(async (tx) => {
       let count = 0;
       for (const id of new Set(parsed.data.ids)) {
         if (parsed.data.action === 'cancel') {
           count += (await cancelWhatsAppInTransaction(tx, id, currentUser)).count;
-        } else if (parsed.data.action === 'retry') {
-          await retryFailedWhatsAppInTransaction(tx, id, currentUser);
-          count += 1;
         } else {
           const current = await refreshWhatsAppInTransaction(tx, id, templates);
           if (!current || current.updatedAt.toISOString() !== parsed.data.expectedUpdatedAt) continue;
@@ -64,8 +71,7 @@ export const POST = withRole(UserRole.ADMIN, async (request: NextRequest, curren
       return count;
     });
     if (!approved) return createApiErrorResponse({ code: apiErrorCodes.CONFLICT, status: 409, message: '' }, request);
-    return NextResponse.json({ success: true, data: parsed.data.action === 'cancel' ? { cancelled: approved }
-      : parsed.data.action === 'retry' ? { retried: approved } : { approved } });
+    return NextResponse.json({ success: true, data: parsed.data.action === 'cancel' ? { cancelled: approved } : { approved } });
   } catch (error) {
     return toApiErrorResponse(error, { code: apiErrorCodes.INTERNAL_ERROR, status: 500, message: '' }, request);
   }

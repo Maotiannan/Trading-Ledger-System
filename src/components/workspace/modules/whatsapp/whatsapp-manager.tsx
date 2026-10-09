@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ListPagination } from '@/components/workspace/modules/shared/list-pagination';
 import { OutstandingReminderPreview } from './outstanding-reminder-preview';
 import { WhatsAppTemplateEditor } from './whatsapp-template-editor';
+import { whatsappLabel, whatsappFailure } from './whatsapp-labels';
 import { formatAppDateTime } from '@/lib/app-time';
 type Settings = { reminderEnabled?: boolean; reminderTestMode?: boolean; outboundEnabled: boolean; testMode: boolean; testDestination: string; activatedAt: string | null; enabledTypes?: string[] };
 type Row = { statementImagePath?: string | null; nextSendAt?: string | null; updatedAt?: string; requiresApproval?: boolean; correctionOf?: unknown; retryOf?: string | null; retryId?: string | null; canRetry?: boolean; id: string; status: string; type: string; actualTo: string; testMode: boolean; createdAt: string; businessSnapshot: unknown; parameters: string[]; templateName: string; languageCode: string; failureCode: string | null };
@@ -84,7 +85,7 @@ export function WhatsAppManager() {
         TEMPLATE_REQUIRED: tx('缺少已审核且启用的模板，请检查模板设置。', 'An approved active template is required.'),
         REMINDER_TEMPLATE_REQUIRED: tx('欠款提醒模板未启用或未通过审核。', 'The reminder template is not active and approved.'),
         REMINDER_NO_LONGER_ELIGIBLE: tx('最新欠款或提醒记录已不满足重试条件。', 'The current balance or reminder history is no longer eligible.'),
-        INVALID_CUSTOMER_PHONE: tx('客户当前电话号码无效，请先修正客户 PHONE。', 'The current customer PHONE is invalid.'),
+        INVALID_CUSTOMER_PHONE: tx('客户当前电话号码无效，请先修正客户电话。', 'The current customer PHONE is invalid.'),
         CONSENT_REVOKED: tx('客户已取消订阅，不能重试。', 'The customer is no longer subscribed.'),
         SOURCE_REMOVED: tx('原业务记录已删除或不再符合发送条件。', 'The source record was removed or is no longer eligible.'),
       };
@@ -137,14 +138,14 @@ export function WhatsAppManager() {
     </CardContent></Card>
     <Card><CardHeader><CardTitle>{tx('客户号码与接收同意', 'Customer Numbers & Consent')}</CardTitle></CardHeader><CardContent className="space-y-3">
       <form className="flex gap-2" onSubmit={event => { event.preventDefault(); void findCustomers(); }}>
-        <Input aria-label={tx('搜索客户', 'Search customers')} placeholder="MARK / ORDER_NAME / NAME" value={search} onChange={event => setSearch(event.target.value)} /><Button disabled={busy}>{tx('搜索', 'Search')}</Button>
+        <Input aria-label={tx('搜索客户', 'Search customers')} placeholder={tx("唛头 / 订单名称 / 客户姓名", "MARK / ORDER_NAME / NAME")} value={search} onChange={event => setSearch(event.target.value)} /><Button disabled={busy}>{tx('搜索', 'Search')}</Button>
       </form>
       <select disabled={busy} className="w-full min-w-0 border rounded-md p-2" value={customerId} onChange={event => { const customer = customers.find(customer => customer.id === event.target.value); setCustomerId(event.target.value); setPhone(customer?.phone || ''); setOptIn(Boolean(customer?.whatsappContacts.some(contact => contact.optedInAt && !contact.optedOutAt))); setConsentSource(''); }} aria-label={tx('选择客户', 'Select customer')}>
         <option value="">{tx('选择客户', 'Select customer')}</option>{customers.map(customer => <option key={customer.id} value={customer.id}>{customer.mark} / {customer.orderName} / {customer.name}</option>)}
       </select>
       {selectedCustomer && <p role="status">{subscribed ? tx('已订阅', 'Subscribed') : tx('未订阅', 'Not subscribed')}</p>}
-      <p className="text-sm text-muted-foreground">{tx('号码自动读取客户 PHONE；修改 PHONE 后，待发与后续通知使用新号码，已发记录不变。', 'Number comes from Customer PHONE. Pending and future messages use the updated number; sent history stays unchanged.')}</p>
-      <Input type="tel" aria-label={tx('WhatsApp 号码', 'WhatsApp number')} placeholder="Customer PHONE" value={phone} readOnly />
+      <p className="text-sm text-muted-foreground">{tx('号码自动读取客户电话；修改电话后，待发与后续通知使用新号码，已发记录不变。', 'Number comes from Customer PHONE. Pending and future messages use the updated number; sent history stays unchanged.')}</p>
+      <Input type="tel" aria-label={tx('WhatsApp 号码', 'WhatsApp number')} placeholder={tx("客户电话", "Customer PHONE")} value={phone} readOnly />
       <Input aria-label={tx('同意或退订依据', 'Consent or opt-out evidence')} placeholder={tx('客户何时、通过什么方式同意或退订', 'When and how the customer consented or opted out')} value={consentSource} onChange={event => setConsentSource(event.target.value)} />
       <label className="flex gap-2"><input type="checkbox" checked={optIn} onChange={event => setOptIn(event.target.checked)} />{tx('客户已明确同意接收 WhatsApp 通知', 'Customer explicitly agreed to WhatsApp notifications')}</label>
       <div className="flex flex-wrap gap-2">
@@ -154,7 +155,7 @@ export function WhatsAppManager() {
     </CardContent></Card>
     <Card><CardHeader><CardTitle>{tx('通知记录', 'Notifications')}</CardTitle><p className="text-sm text-muted-foreground">{tx('自动通知延时五分钟；内容修改后重新计时。删除申请期间暂停，获批后取消。', 'Automatic notifications wait five minutes; content changes restart the timer. Deletion requests pause sending until reviewed.')}</p><Button variant="outline" disabled={busy} onClick={() => void load()}>{tx('刷新', 'Refresh')}</Button></CardHeader><CardContent>
       <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr>{[tx('时间', 'Date'), tx('类型', 'Type'), tx('收件人', 'To'), tx('状态', 'Status'), tx('预计发送', 'Scheduled'), ''].map((label, index) => <th className="p-2 text-left" key={index}>{label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.id} className="border-t">
-        <td className="p-2 whitespace-nowrap">{formatAppDateTime(row.createdAt)}</td><td className="p-2">{row.type}{row.testMode && <span className="block text-muted-foreground">TEST</span>}</td><td className="p-2 whitespace-nowrap">{row.actualTo}</td><td className="p-2">{row.status === 'PAUSED' ? tx('暂停', 'Paused') : row.status}{row.correctionOf ? <span className="block">{tx('更正通知，需审核', 'Correction: approval required')}</span> : null}{row.retryOf && <span className="block break-all text-muted-foreground">{tx('重试来源', 'Retry of')}: {row.retryOf}</span>}{row.retryId && <span className="block text-muted-foreground">{tx('已创建重试', 'Retry created')}</span>}{row.failureCode && <span className="block">{row.failureCode}</span>}</td>
+        <td className="p-2 whitespace-nowrap">{formatAppDateTime(row.createdAt)}</td><td className="p-2">{whatsappLabel(row.type, tx)}{row.testMode && <span className="block text-muted-foreground">{tx("测试", "TEST")}</span>}</td><td className="p-2 whitespace-nowrap">{row.actualTo}</td><td className="p-2">{whatsappLabel(row.status, tx)}{row.correctionOf ? <span className="block">{tx('更正通知，需审核', 'Correction: approval required')}</span> : null}{row.retryOf && <span className="block break-all text-muted-foreground">{tx('重试来源', 'Retry of')}: {row.retryOf}</span>}{row.retryId && <span className="block text-muted-foreground">{tx('已创建重试', 'Retry created')}</span>}{row.failureCode && <span className="block text-xs text-muted-foreground">{whatsappFailure(row.failureCode, tx)}</span>}</td>
         <td className="p-2 whitespace-nowrap">{row.status === 'PENDING' ? tx('待审核', 'Awaiting approval') : row.status === 'PAUSED' ? tx('已暂停', 'Paused') : row.status === 'QUEUED' && row.nextSendAt ? formatAppDateTime(row.nextSendAt) : '-'}</td>
         <td className="p-2"><Button variant="outline" onClick={() => setPreview(row)}>{tx('预览', 'Preview')}</Button>{(row.testMode || row.requiresApproval) && row.status === 'PENDING' && <Button disabled={busy} onClick={() => { setPreview(row); }}>{tx('审核', 'Review')}</Button>}{row.canRetry && <Button variant="outline" disabled={busy} onClick={() => { if (window.confirm(tx('确认安全重试？系统会重新核对客户、欠款和模板，并重新等待五分钟。原失败记录会保留。', 'Retry safely? The system will recheck the customer, balance and template, then wait five minutes. The failed record will be kept.'))) void action('whatsapp-notifications', { action: 'retry', ids: [row.id], expectedUpdatedAt: row.updatedAt }); }}>{tx('安全重试', 'Safe retry')}</Button>}{['PENDING', 'QUEUED', 'PAUSED'].includes(row.status) && <Button variant="outline" disabled={busy} onClick={() => { if (window.confirm(tx('确认取消此通知？取消后不会自动恢复。已提交的消息不能撤回。', 'Cancel this notification permanently? Messages already submitted cannot be recalled.'))) void action('whatsapp-notifications', { action: 'cancel', ids: [row.id] }); }}>{tx('取消', 'Cancel')}</Button>}</td>
       </tr>)}</tbody></table></div>

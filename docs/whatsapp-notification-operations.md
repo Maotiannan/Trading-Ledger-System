@@ -285,3 +285,23 @@ Retry conflicts include a machine-readable `detail.reason`; the UI explains the
 blocker instead of always requesting a refresh. Successful retries return to the
 first history page and show the new task's schedule or approval/pause requirement.
 The failed parent's schedule remains blank because the schedule belongs to its child.
+
+### Localized Template Management
+
+The management interface follows the account's Chinese/English UI language;
+customer-facing template text remains in its selected English/French language.
+Delivery states and common failure codes have readable labels, with the code
+retained for troubleshooting. Sent is not the same as delivered.
+
+Select a notification type and language to edit and see only matching versions.
+The editor initially loads the active saved template. Dynamic-field buttons show
+localized meanings and fictional examples and insert at the cursor. The adjacent
+preview substitutes fictional values, never live customer data. Reminder previews
+show an explicitly labeled image placeholder; the internal title is not sent as
+an image header. The review sample URL remains separate from generated customer
+statement images. Desktop uses two columns; mobile stacks editor and preview.
+
+Saving creates a draft only. Submit, refresh platform review status, and activate
+remain separate actions. Approval and Utility category are still required for
+activation. This UI change introduces no migrations, storage, outgoing messages,
+or changes to consent, five-minute buffering, retry rules or sending switches.

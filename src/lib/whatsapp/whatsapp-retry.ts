@@ -9,7 +9,7 @@ import { refreshWhatsAppInTransaction } from './whatsapp-refresh';
 import { parseWhatsAppSettings, WHATSAPP_SETTINGS_KEY } from './whatsapp-settings';
 import { runWhatsAppTransaction } from './whatsapp-transaction';
 
-const conflict = () => createApiError({ code: 'CONFLICT', status: 409, message: '' });
+const conflict = (reason = 'SOURCE_CHANGED') => createApiError({ code: 'CONFLICT', status: 409, message: '', detail: { reason } });
 export async function retryFailedWhatsApp(actor: CurrentUser, id: string, expectedUpdatedAt: string) {
   if (actor.role !== 'ADMIN') throw createApiError({ code: 'FORBIDDEN', status: 403, message: '' });
   const original = await db.whatsAppDelivery.findUnique({ where: { id } });
@@ -17,7 +17,7 @@ export async function retryFailedWhatsApp(actor: CurrentUser, id: string, expect
   const ancestors = await failedRetryAncestors(db, original);
   if (!ancestors) throw conflict();
   const verified = [original, ...ancestors];
-  for (const row of verified) if (!await verifyFailedWhatsAppProvider(row)) throw conflict();
+  for (const row of verified) if (!await verifyFailedWhatsAppProvider(row)) throw conflict('PROVIDER_FAILURE_UNCONFIRMED');
   const templates = await listWhatsAppTemplateVersions();
   return runWhatsAppTransaction(async tx => {
     const contact = await tx.customerWhatsAppContact.findUniqueOrThrow({ where: { id: original.contactId } });
@@ -28,13 +28,13 @@ export async function retryFailedWhatsApp(actor: CurrentUser, id: string, expect
       const current = await tx.whatsAppDelivery.findUnique({ where: { id: row.id } });
       if (!current || !isExplicitWhatsAppFailure(current) || current.updatedAt.getTime() !== row.updatedAt.getTime()) throw conflict();
     }
-    if (await tx.whatsAppDelivery.findFirst({ where: { retryOf: id } })) throw conflict();
+    if (await tx.whatsAppDelivery.findFirst({ where: { retryOf: id } })) throw conflict('RETRY_EXISTS');
     const settingsRow = await tx.systemSetting.findUnique({ where: { key: WHATSAPP_SETTINGS_KEY } });
     const settings = parseWhatsAppSettings(settingsRow ? JSON.parse(settingsRow.value) : {});
     const reminder = original.type === 'OUTSTANDING_REMINDER';
-    if (!settings.outboundEnabled || (reminder && !settings.reminderEnabled)
-      || original.testMode !== (reminder ? settings.reminderTestMode : settings.testMode)
-      || (!reminder && !settings.enabledTypes.includes(original.type as 'PAYMENT_RECEIVED' | 'SHIPMENT' | 'RELEASE'))) throw conflict();
+    if (!settings.outboundEnabled) throw conflict('OUTBOUND_DISABLED');
+    if (original.testMode !== (reminder ? settings.reminderTestMode : settings.testMode)) throw conflict('MODE_CHANGED');
+    if (!reminder && !settings.enabledTypes.includes(original.type as 'PAYMENT_RECEIVED' | 'SHIPMENT' | 'RELEASE')) throw conflict('TYPE_DISABLED');
     const retry = await tx.whatsAppDelivery.create({ data: {
       eventKey: `retry:${id}`, retryOf: id, type: original.type, sourceId: original.sourceId,
       contactId: original.contactId, testMode: original.testMode,
@@ -49,9 +49,9 @@ export async function retryFailedWhatsApp(actor: CurrentUser, id: string, expect
     await refreshWhatsAppInTransaction(tx, retry.id, templates);
     const refreshed = await tx.whatsAppDelivery.findUniqueOrThrow({ where: { id: retry.id } });
     if (!['PENDING', 'QUEUED', 'PAUSED'].includes(refreshed.status)
-      || (refreshed.failureCode && refreshed.failureCode !== 'DELETION_PENDING')
-      || !templates.some(t => t.name === refreshed.templateName && t.language === refreshed.languageCode
-        && t.active && t.status === 'APPROVED' && t.category === 'UTILITY')) throw conflict();
+      || (refreshed.failureCode && refreshed.failureCode !== 'DELETION_PENDING')) throw conflict(refreshed.failureCode || 'SOURCE_CHANGED');
+    if (!templates.some(t => t.name === refreshed.templateName && t.language === refreshed.languageCode
+      && t.active && t.status === 'APPROVED' && t.category === 'UTILITY')) throw conflict('TEMPLATE_REQUIRED');
     await tx.auditLog.create({ data: { actorId: actor.id, action: 'WHATSAPP_DELIVERY_RETRY_CREATED', targetType: 'WHATSAPP_DELIVERY', targetId: retry.id,
       metadata: { retryOf: id, originalFailureCode: original.failureCode, originalProviderMessageId: original.providerMessageId,
         intendedTo: refreshed.intendedTo, actualTo: refreshed.actualTo, status: refreshed.status, nextSendAt: refreshed.nextSendAt?.toISOString() } } });

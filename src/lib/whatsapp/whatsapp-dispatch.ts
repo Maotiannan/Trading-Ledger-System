@@ -18,7 +18,7 @@ export async function dispatchWhatsAppDelivery(id: string) {
   if (!apiKey || !senderPhone || !settings.outboundEnabled) return { sent: false };
   const templates = await listWhatsAppTemplateVersions();
   const preview = await runInTransaction(tx => refreshWhatsAppInTransaction(tx, id, templates));
-  if (preview?.type === 'OUTSTANDING_REMINDER' && !settings.reminderEnabled) return { sent: false };
+  if (preview?.type === 'OUTSTANDING_REMINDER' && !settings.reminderEnabled && !preview.retryOf) return { sent: false };
   if (preview && preview.type !== 'OUTSTANDING_REMINDER' && settings.enabledTypes && !settings.enabledTypes.includes(preview.type)) return { sent: false };
   if (!preview || preview.status !== 'QUEUED' || !preview.nextSendAt || preview.nextSendAt > new Date() || !await isYCloudTemplateApproved({
     apiKey, wabaId: process.env.YCLOUD_WABA_ID || '', name: preview.templateName, language: preview.languageCode,

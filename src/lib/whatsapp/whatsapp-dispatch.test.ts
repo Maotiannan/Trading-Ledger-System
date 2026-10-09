@@ -61,3 +61,20 @@ it('propagates persistence failure rather than resending or marking provider rej
   expect(sendYCloudTemplate).toHaveBeenCalledTimes(1);
   expect(db.whatsAppDelivery.updateMany).toHaveBeenCalledTimes(1);
 });
+
+jest.mock('./outstanding-reminder-media', () => ({ prepareReminderMedia: jest.fn(async () => 'fresh-media') }));
+import { getWhatsAppSettings } from './whatsapp-settings';
+it('dispatches an explicit reminder retry while automatic projection is disabled', async () => {
+  const retry = { ...row, type: 'OUTSTANDING_REMINDER', retryOf: 'parent', testMode: false };
+  (getWhatsAppSettings as jest.Mock).mockResolvedValue({ outboundEnabled: true, testMode: false, reminderTestMode: false, reminderEnabled: false });
+  (refreshWhatsAppInTransaction as jest.Mock).mockResolvedValue(retry);
+  (claimWhatsAppInTransaction as jest.Mock).mockResolvedValue(retry);
+  (db.whatsAppDelivery.findUnique as jest.Mock).mockResolvedValue({ ...retry, id: 'parent', retryOf: null,
+    status: 'FAILED', failureCode: 'PROVIDER_REJECTED', providerMessageId: null });
+  expect(await dispatchWhatsAppDelivery(retry.id)).toMatchObject({ sent: true });
+  expect(sendYCloudTemplate).toHaveBeenCalledWith(expect.objectContaining({ imageId: 'fresh-media' }), expect.anything());
+  (getWhatsAppSettings as jest.Mock).mockResolvedValue({ outboundEnabled: false, reminderEnabled: false });
+  (sendYCloudTemplate as jest.Mock).mockClear();
+  await dispatchWhatsAppDelivery(retry.id);
+  expect(sendYCloudTemplate).not.toHaveBeenCalled();
+});

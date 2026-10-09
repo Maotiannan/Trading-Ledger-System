@@ -274,3 +274,14 @@ Set production activation to rollout time, not original test activation.
   so enabling alone does not immediately retry those failed messages.
 - Rollback: disable only reminderEnabled; leave other notifications, sent history,
   templates, database schema and archived images intact.
+
+### Individual failed-message retry controls
+
+`reminderEnabled` controls automatic daily reminder projection. ADMIN may explicitly
+retry one failed reminder with this switch off; its child still revalidates live
+balances, consent, provider failure and the template, then waits five minutes.
+`outboundEnabled` and the deployment outbound gate still stop all sending.
+Retry conflicts include a machine-readable `detail.reason`; the UI explains the
+blocker instead of always requesting a refresh. Successful retries return to the
+first history page and show the new task's schedule or approval/pause requirement.
+The failed parent's schedule remains blank because the schedule belongs to its child.

@@ -73,7 +73,7 @@ export async function refreshOutstandingReminder(tx: DbTransactionClient, delive
   const snapshot = delivery.businessSnapshot as Record<string, unknown>;
   const customerId = typeof snapshot.customerId === 'string' ? snapshot.customerId : '';
   const ancestors = delivery.retryOf ? await failedRetryAncestors(tx, delivery) : [];
-  const live = ancestors && settings.reminderEnabled && delivery.testMode === settings.reminderTestMode
+  const live = ancestors && (settings.reminderEnabled || Boolean(delivery.retryOf)) && delivery.testMode === settings.reminderTestMode
     ? await resolveReminder(tx, customerId, delivery.testMode, new Date(), delivery.id, ancestors) : null;
   const contact = live ? await tx.customerWhatsAppContact.findFirst({
     where: { customerId, optedInAt: { not: null }, optedOutAt: null }, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],

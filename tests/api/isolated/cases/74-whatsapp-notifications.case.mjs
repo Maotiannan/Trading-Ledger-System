@@ -157,6 +157,7 @@ export default async function run(t) {
     await refresh();
     assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminder.id } })).status, 'CANCELLED');
     await db.receipt.update({ where: { id: b.id }, data: { usd: 5500 } });
+    await db.systemSetting.update({ where: { key: 'whatsapp.notifications' }, data: { value: JSON.stringify({ ...JSON.parse((await db.systemSetting.findUniqueOrThrow({ where: { key: 'whatsapp.notifications' } })).value), reminderEnabled: false }) } });
     const failedReminder = await db.whatsAppDelivery.update({ where: { id: reminder.id }, data: {
       status: 'FAILED', failureCode: 'REMINDER_IMAGE_FAILED', claimToken: 'historical-claim', claimedAt: new Date(),
     } });

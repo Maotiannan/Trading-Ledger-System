@@ -13,6 +13,16 @@ it('shows sending disabled and consent unchecked by default', async () => {
   expect(screen.getByLabelText('Customer explicitly agreed to WhatsApp notifications')).not.toBeChecked();
   expect(screen.getByText('No notifications yet.')).toBeInTheDocument();
 });
+it('explains that pending retries require approval', async () => {
+  (apiCall as jest.Mock).mockImplementation(async endpoint => endpoint.startsWith('whatsapp-notifications') ? { data: { items: [{
+    id: 'failed-retry', type: 'PAYMENT_RECEIVED', status: 'PENDING', actualTo: '+224622491286', testMode: true,
+    createdAt: '2026-10-09T01:00:00Z', updatedAt: '2026-10-09T01:00:00Z', nextSendAt: '2026-10-09T01:05:00Z',
+    businessSnapshot: {}, parameters: [], templateName: 'payment', languageCode: 'en', failureCode: null,
+    canRetry: false, retryId: null, retryOf: null, requiresApproval: true,
+  }], total: 1 } } : { data: { settings: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, templates: [] } });
+  render(<WhatsAppManager />);
+  await waitFor(() => expect(screen.getByText('Awaiting approval')).toBeInTheDocument());
+});
 it('never fetches or renders management data for SALES', () => {
   role = 'SALES';
   const { container } = render(<WhatsAppManager />);
@@ -64,5 +74,29 @@ it('keeps the subscription visible when saving fails', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Unable to save subscription status. Please retry.');
   expect(screen.getByLabelText('Customer explicitly agreed to WhatsApp notifications')).toBeChecked();
   expect(screen.getByRole('button', { name: 'Unsubscribe' })).toBeEnabled();
+  confirm.mockRestore();
+});
+
+it.each(['success', 'blocked'])('reports the actual result of a single retry: %s', async outcome => {
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  const original = (apiCall as jest.Mock).getMockImplementation()!;
+  const failed = { id: 'failed-1', type: 'PAYMENT_RECEIVED', status: 'FAILED', actualTo: '+224620123456',
+    testMode: false, createdAt: '2026-10-09T01:00:00Z', updatedAt: '2026-10-09T01:00:00.000Z',
+    businessSnapshot: {}, parameters: [], templateName: 'payment', languageCode: 'en', failureCode: 'PROVIDER_REJECTED', canRetry: true };
+  (apiCall as jest.Mock).mockImplementation(async (endpoint, options) => {
+    if (options?.method === 'POST') {
+      if (outcome === 'blocked') throw { detail: { reason: 'OUTBOUND_DISABLED' } };
+      return { data: { retryId: 'child', status: 'QUEUED', nextSendAt: '2026-10-09T01:05:00Z' } };
+    }
+    if (endpoint.startsWith('whatsapp-notifications')) return { data: { items: [failed], total: 1 } };
+    return original(endpoint, options);
+  });
+  render(<WhatsAppManager />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Safe retry' }));
+  await waitFor(() => expect(apiCall).toHaveBeenCalledWith('whatsapp-notifications', { method: 'POST', body: JSON.stringify({
+    action: 'retry', ids: ['failed-1'], expectedUpdatedAt: failed.updatedAt,
+  }) }));
+  if (outcome === 'success') expect(await screen.findByText('Retry created. Scheduled: 09/10/2026, 01:05')).toBeInTheDocument();
+  else expect(await screen.findByRole('alert')).toHaveTextContent('Sending is disabled. Enable sending first.');
   confirm.mockRestore();
 });

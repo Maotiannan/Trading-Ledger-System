@@ -104,6 +104,13 @@ Provider contracts checked during implementation:
   regenerates reminder media when applicable, and waits five minutes again.
   ACCEPTED, SENT, DELIVERED, READ and UNCERTAIN deliveries are never retryable.
   A retry does not resurrect or rewrite the original event and is audited.
+  Each failed record permits only one direct child, protected by the unique
+  `eventKey=retry:<failed-id>` and a transaction. If that child explicitly fails,
+  retry the child, not its parent. Stale requests return 409. Provider-backed
+  failures are rechecked with YCloud before queueing and before dispatch; an
+  unavailable provider or an uncertain result blocks sending. A later successful
+  callback for any ancestor cancels its unsent retry. Test and correction retries
+  retain approval requirements. Historical failed claims are retained unchanged.
   Explicit provider failures release the sending claim; transport-uncertain
   outcomes keep their claim and remain blocked until reconciliation.
 - Customer contact API: ADMIN/SALES with existing customer scope. The WhatsApp page

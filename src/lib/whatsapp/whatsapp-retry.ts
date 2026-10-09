@@ -49,7 +49,9 @@ export async function retryFailedWhatsApp(actor: CurrentUser, id: string, expect
     await refreshWhatsAppInTransaction(tx, retry.id, templates);
     const refreshed = await tx.whatsAppDelivery.findUniqueOrThrow({ where: { id: retry.id } });
     if (!['PENDING', 'QUEUED', 'PAUSED'].includes(refreshed.status)
-      || (refreshed.failureCode && refreshed.failureCode !== 'DELETION_PENDING')) throw conflict();
+      || (refreshed.failureCode && refreshed.failureCode !== 'DELETION_PENDING')
+      || !templates.some(t => t.name === refreshed.templateName && t.language === refreshed.languageCode
+        && t.active && t.status === 'APPROVED' && t.category === 'UTILITY')) throw conflict();
     await tx.auditLog.create({ data: { actorId: actor.id, action: 'WHATSAPP_DELIVERY_RETRY_CREATED', targetType: 'WHATSAPP_DELIVERY', targetId: retry.id,
       metadata: { retryOf: id, originalFailureCode: original.failureCode, originalProviderMessageId: original.providerMessageId,
         intendedTo: refreshed.intendedTo, actualTo: refreshed.actualTo, status: refreshed.status, nextSendAt: refreshed.nextSendAt?.toISOString() } } });

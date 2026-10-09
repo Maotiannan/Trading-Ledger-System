@@ -111,6 +111,9 @@ export default async function run(t) {
     // Explicit FAILED retry: the failed row stays immutable while the child
     // re-reads the current phone, receipt source and five-minute buffer.
     const whatsappSetting = await db.systemSetting.findUniqueOrThrow({ where: { key: 'whatsapp.notifications' } });
+    await db.systemSetting.upsert({ where: { key: 'whatsapp.template.' + original.name + '.en' },
+      create: { key: 'whatsapp.template.' + original.name + '.en', value: JSON.stringify({ ...original, active: true, status: 'APPROVED' }) },
+      update: { value: JSON.stringify({ ...original, active: true, status: 'APPROVED' }) } });
     await db.systemSetting.update({ where: { key: whatsappSetting.key }, data: { value: JSON.stringify({ ...JSON.parse(whatsappSetting.value), testMode: false }) } });
     await db.customer.update({ where: { id: customerId }, data: { phone: '+224622491286' } });
     const retryParent = await db.whatsAppDelivery.create({ data: {
@@ -153,6 +156,25 @@ export default async function run(t) {
     await db.receipt.update({ where: { id: b.id }, data: { usd: 9980 } });
     await refresh();
     assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminder.id } })).status, 'CANCELLED');
+    await db.receipt.update({ where: { id: b.id }, data: { usd: 5500 } });
+    const failedReminder = await db.whatsAppDelivery.update({ where: { id: reminder.id }, data: {
+      status: 'FAILED', failureCode: 'REMINDER_IMAGE_FAILED', claimToken: 'historical-claim', claimedAt: new Date(),
+    } });
+    const retryRequests = await Promise.all([1, 2].map(() => t.request('POST', '/api/whatsapp-notifications', {
+      json: { action: 'retry', ids: [failedReminder.id], expectedUpdatedAt: failedReminder.updatedAt.toISOString() },
+    })));
+    assert.deepEqual(retryRequests.map(r => r.status).sort(), [200, 409]);
+    const reminderRetry = await db.whatsAppDelivery.findFirstOrThrow({ where: { retryOf: failedReminder.id } });
+    assert.equal(reminderRetry.businessSnapshot.outstanding.totalOutstanding, 4500);
+    assert.equal(reminderRetry.parameters[1], '4,500');
+    assert.equal(reminderRetry.status, 'PENDING');
+    assert.equal(reminderRetry.claimToken, null);
+    assert.equal(reminderRetry.statementImagePath, null);
+    assert.ok(reminderRetry.nextSendAt.getTime() > Date.now() + 280000);
+    assert.deepEqual(await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: failedReminder.id } }), failedReminder);
+    await db.whatsAppDelivery.update({ where: { id: failedReminder.id }, data: { status: 'DELIVERED' } });
+    await refresh();
+    assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: reminderRetry.id } })).failureCode, 'RETRY_SOURCE_NO_LONGER_FAILED');
     await t.request('POST', '/api/whatsapp-contacts', { json: { customerId, phone: contact.phone, optIn: false, consentSource: 'Isolated opt out' }, expectedStatus: 200 });
     assert.equal((await db.whatsAppDelivery.findUniqueOrThrow({ where: { id } })).status, 'CANCELLED');
     await t.login(salesEmail, 'SalesA@2026!');

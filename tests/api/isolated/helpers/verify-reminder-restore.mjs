@@ -31,6 +31,12 @@ export async function verifyReminderRestore(db, deliveryId) {
     url.pathname = '/' + target;
     restored = new PrismaClient({ datasources: { db: { url: url.toString() } } });
     assert.deepEqual(await restored.whatsAppDelivery.findUniqueOrThrow({ where: { id: deliveryId } }), expected);
+    const retries = await db.whatsAppDelivery.findMany({ where: { retryOf: { not: null } }, orderBy: { id: 'asc' } });
+    assert.deepEqual(await restored.whatsAppDelivery.findMany({ where: { retryOf: { not: null } }, orderBy: { id: 'asc' } }), retries);
+    for (const child of retries) {
+      assert.deepEqual(await restored.whatsAppDelivery.findUniqueOrThrow({ where: { id: child.retryOf } }),
+        await db.whatsAppDelivery.findUniqueOrThrow({ where: { id: child.retryOf } }));
+    }
     execFileSync('tar', ['-czf', path.join(temporary, 'media.tgz'), '-C', process.env.UPLOAD_DIR, 'whatsapp-statements']);
     await mkdir(path.join(temporary, 'restored'));
     execFileSync('tar', ['-xzf', path.join(temporary, 'media.tgz'), '-C', path.join(temporary, 'restored')]);

@@ -4,9 +4,10 @@ import { apiCall } from '@/components/workspace/shared';
 jest.mock('./whatsapp-template-editor', () => ({ WhatsAppTemplateEditor: () => <div>Template editor</div> }));
 let role = 'ADMIN';
 jest.mock('@/lib/store', () => ({ useStore: (selector: (state: unknown) => unknown) => selector({ user: { role } }) }));
-const tx = (_zh: string, en: string) => en;
+let chinese = false;
+const tx = (zh: string, en: string) => chinese ? zh : en;
 jest.mock('@/components/workspace/shared', () => ({ useUiText: () => tx, apiCall: jest.fn() }));
-beforeEach(() => { role = 'ADMIN'; jest.clearAllMocks(); (apiCall as jest.Mock).mockImplementation(async endpoint => endpoint.startsWith('whatsapp-notifications') ? { data: { items: [], total: 0 } } : { data: { settings: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, templates: [] } }); });
+beforeEach(() => { chinese = false; role = 'ADMIN'; jest.clearAllMocks(); (apiCall as jest.Mock).mockImplementation(async endpoint => endpoint.startsWith('whatsapp-notifications') ? { data: { items: [], total: 0 } } : { data: { settings: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, templates: [] } }); });
 it('shows sending disabled and consent unchecked by default', async () => {
   render(<WhatsAppManager />);
   await waitFor(() => expect(screen.getByLabelText('Enable sending')).not.toBeChecked());
@@ -21,7 +22,7 @@ it('explains that pending retries require approval', async () => {
     canRetry: false, retryId: null, retryOf: null, requiresApproval: true,
   }], total: 1 } } : { data: { settings: { outboundEnabled: false, testMode: true, testDestination: '+8613619767412' }, templates: [] } });
   render(<WhatsAppManager />);
-  await waitFor(() => expect(screen.getByText('Awaiting approval')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getAllByText('Awaiting approval')).toHaveLength(2));
 });
 it('never fetches or renders management data for SALES', () => {
   role = 'SALES';
@@ -99,4 +100,19 @@ it.each(['success', 'blocked'])('reports the actual result of a single retry: %s
   if (outcome === 'success') expect(await screen.findByText('Retry created. Scheduled: 09/10/2026, 01:05')).toBeInTheDocument();
   else expect(await screen.findByRole('alert')).toHaveTextContent('Sending is disabled. Enable sending first.');
   confirm.mockRestore();
+});
+
+it('localizes notification rows and failure explanations in Chinese', async () => {
+  chinese = true;
+  const original = (apiCall as jest.Mock).getMockImplementation()!;
+  (apiCall as jest.Mock).mockImplementation(async (endpoint, options) => endpoint.startsWith('whatsapp-notifications') ? { data: { total: 1, items: [{
+    id: 'failed', type: 'OUTSTANDING_REMINDER', status: 'FAILED', actualTo: '+10000000001', testMode: true,
+    createdAt: '2026-10-09T01:00:00Z', parameters: [], businessSnapshot: {}, failureCode: '131026',
+  }] } } : original(endpoint, options));
+  render(<WhatsAppManager />);
+  expect(await screen.findByText('发送失败')).toBeInTheDocument();
+  expect(screen.getByText('欠款提醒')).toBeInTheDocument();
+  expect(screen.getByText('测试')).toBeInTheDocument();
+  expect(screen.getByText(/平台未能送达/)).toBeInTheDocument();
+  expect(screen.queryByText('OUTSTANDING_REMINDER')).not.toBeInTheDocument();
 });

@@ -6,6 +6,7 @@ import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildInvoiceVisibilityWhere, buildOrderVisibilityWhere, buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import { filterRowsBySearch } from '@/lib/text-search';
+import { canonicalizeOrderNo, normalizeOrderNo } from '@/lib/order-alias';
 import { deriveOrderGroupKey } from '@/lib/order-group';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
@@ -258,6 +259,10 @@ export async function lookupInvoiceOrderContext(currentUser: CurrentUser, orderN
     },
     orderBy: [{ createdAt: 'desc' }],
   });
+
+  const completeMatches = exactMatches.filter(row =>
+    normalizeOrderNo(canonicalizeOrderNo(row.orderNo)) === normalizeOrderNo(canonicalizeOrderNo(rawOrderNo)));
+  if (completeMatches.length) exactMatches = completeMatches;
 
   if (exactMatches.length === 0) {
     const matchedOrderId = await findOrderIdByNoOrAlias(rawOrderNo, visibilityWhere);

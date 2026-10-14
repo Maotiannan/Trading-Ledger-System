@@ -45,6 +45,25 @@ export async function findOrderIdByNoOrAliasWithExecutor(
   if (!raw) return null;
   const candidates = buildCompositeOrderLookupCandidates(raw);
 
+  // Match the complete identifier before aliases or individual composite segments.
+  const fullOrderNos = Array.from(new Set([raw, canonicalizeOrderNo(raw)]));
+  const orderMatch = fullOrderNos.length > 0
+    ? await findFirstOrderMatch(executor, {
+        where: {
+          AND: [
+            ...(orderWhere ? [orderWhere] : []),
+            {
+              orderNo: fullOrderNos.length === 1
+                ? { equals: fullOrderNos[0] }
+                : { in: fullOrderNos },
+            },
+          ],
+        },
+        select: { id: true },
+      })
+    : null;
+  if (orderMatch?.id) return orderMatch.id;
+
   const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findFirst?: typeof db.orderAlias.findFirst; findMany?: typeof db.orderAlias.findMany } }).orderAlias;
 
   const aliasMatch = candidates.normalizedOrderNos.length > 0 && aliasDelegate?.findFirst
@@ -59,23 +78,6 @@ export async function findOrderIdByNoOrAliasWithExecutor(
       })
     : null;
   if (aliasMatch) return aliasMatch.orderId;
-
-  const orderMatch = candidates.exactOrderNos.length > 0
-    ? await findFirstOrderMatch(executor, {
-        where: {
-          AND: [
-            ...(orderWhere ? [orderWhere] : []),
-            {
-              orderNo: candidates.exactOrderNos.length === 1
-                ? { equals: candidates.exactOrderNos[0] }
-                : { in: candidates.exactOrderNos },
-            },
-          ],
-        },
-        select: { id: true },
-      })
-    : null;
-  if (orderMatch?.id) return orderMatch.id;
 
   if (candidates.exactOrderNos.length === 0) return null;
 
@@ -117,37 +119,20 @@ export async function mapOrderIdsByOrderNosWithExecutor(
   const mapped = new Map<string, string>();
   if (normalizedOrderNos.length === 0) return mapped;
 
-  const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findMany?: typeof db.orderAlias.findMany } }).orderAlias;
-  if (aliasDelegate?.findMany) {
-    const aliasRows = await aliasDelegate.findMany({
-      where: {
-        aliasNo: { in: normalizedOrderNos },
-        ...(orderWhere ? { order: orderWhere } : {}),
-      },
-      select: { aliasNo: true, orderId: true },
-    });
-    for (const row of aliasRows) {
-      mapped.set(row.aliasNo, row.orderId);
-    }
-  }
-
-  const unresolved = normalizedOrderNos.filter((row) => !mapped.has(row));
-  if (unresolved.length === 0) return mapped;
-
   const orderRows = await executor.order.findMany({
-    where: {
-      AND: [
-        ...(orderWhere ? [orderWhere] : []),
-        {
-          orderNo: { in: unresolved },
-        },
-      ],
-    },
+    where: { AND: [...(orderWhere ? [orderWhere] : []), { orderNo: { in: normalizedOrderNos } }] },
     select: { id: true, orderNo: true },
   });
-  for (const row of orderRows) {
-    const key = normalizeOrderNo(row.orderNo);
-    if (!mapped.has(key)) mapped.set(key, row.id);
+  for (const row of orderRows) mapped.set(normalizeOrderNo(row.orderNo), row.id);
+
+  const unresolved = normalizedOrderNos.filter(value => !mapped.has(value));
+  const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findMany?: typeof db.orderAlias.findMany } }).orderAlias;
+  if (unresolved.length && aliasDelegate?.findMany) {
+    const aliasRows = await aliasDelegate.findMany({
+      where: { aliasNo: { in: unresolved }, ...(orderWhere ? { order: orderWhere } : {}) },
+      select: { aliasNo: true, orderId: true },
+    });
+    for (const row of aliasRows) if (!mapped.has(row.aliasNo)) mapped.set(row.aliasNo, row.orderId);
   }
 
   return mapped;

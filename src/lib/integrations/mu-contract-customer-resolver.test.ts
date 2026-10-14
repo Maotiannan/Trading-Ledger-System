@@ -20,7 +20,7 @@ function makeCustomer() {
 function createExecutor() {
   return {
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'admin-1' }, { id: 'sales-1' }]) },
-    order: { findMany: jest.fn() },
+    order: { findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn() },
     orderAlias: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
     customerOrderName: { findMany: jest.fn().mockResolvedValue([]) },
   };

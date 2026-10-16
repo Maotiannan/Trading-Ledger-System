@@ -9,11 +9,7 @@ import {
   type CustomerOrderHistoryContentProps,
 } from '@/components/workspace/modules/customers/components/customer-order-history-content';
 import { OrderHistoryDialog } from '@/components/workspace/modules/invoices/components/order-history-dialog';
-import {
-  ReceiptImagePreviewDialog,
-  type ReceiptImagePreviewInfo,
-} from '@/components/workspace/modules/receipts/components/receipt-image-preview-dialog';
-import { apiCall, getDisplayImageUrl } from '@/components/workspace/api/client';
+import { apiCall } from '@/components/workspace/api/client';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { formatAppDate } from '@/lib/app-time';
 import type {
@@ -129,7 +125,6 @@ export function DashboardCustomerDetailDialog({
   const [paymentRows, setPaymentRows] = useState<Array<Record<string, unknown>>>([]);
   const [paymentPagination, setPaymentPagination] = useState({ page: 1, pageSize: 10, totalItems: 0, totalPages: 1 });
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentImage, setPaymentImage] = useState<ReceiptImagePreviewInfo | null>(null);
   const releasedOrders = outstanding?.orders.filter((order) => order.statusGroup === 'RELEASED') ?? [];
   const inTransitOrders = outstanding?.orders.filter((order) => order.statusGroup === 'IN_TRANSIT') ?? [];
 
@@ -153,17 +148,6 @@ export function DashboardCustomerDetailDialog({
   const openPaymentRecords = (order: DashboardCustomerOutstandingOrder) => {
     setPaymentOrder(order);
     void loadPaymentRecords(order, 1, 10);
-  };
-
-  const openPaymentImage = (row: Record<string, unknown>) => {
-    if (!row.imageUrl) return;
-    setPaymentImage({
-      url: getDisplayImageUrl(String(row.imageUrl)),
-      alt: tx('收据图片', 'Receipt image'),
-      orderNo: String(row.orderNo || paymentOrder?.orderNo || '-'),
-      invNo: String(row.invNo || paymentOrder?.invNo || '-'),
-      creator: String(row.payer || '-'),
-    });
   };
 
   const exportStatement = async (language: StatementLanguage) => {
@@ -284,16 +268,8 @@ export function DashboardCustomerDetailDialog({
         onPageSizeChange={(pageSize) => {
           if (paymentOrder) void loadPaymentRecords(paymentOrder, 1, pageSize);
         }}
-        onOpenReceiptImage={openPaymentImage}
         onOpenChange={(nextOpen) => {
           if (!nextOpen) setPaymentOrder(null);
-        }}
-      />
-      <ReceiptImagePreviewDialog
-        image={paymentImage}
-        tx={tx}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setPaymentImage(null);
         }}
       />
     </Dialog>

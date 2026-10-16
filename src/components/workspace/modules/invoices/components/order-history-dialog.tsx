@@ -4,8 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ListPagination } from '@/components/workspace/modules/shared/list-pagination';
+import {
+  ReceiptImagePreviewDialog,
+  type ReceiptImagePreviewInfo,
+} from '@/components/workspace/modules/receipts/components/receipt-image-preview-dialog';
+import { getDisplayImageUrl } from '@/components/workspace/api/client';
 import { formatAppDateTime } from '@/lib/app-time';
 import { formatUsdAmount } from '@/lib/display-format';
+import { useState } from 'react';
 
 export type OrderHistoryDialogProps = {
   open: boolean;
@@ -36,15 +42,32 @@ export function OrderHistoryDialog({
   onPageSizeChange,
   onOpenReceiptImage,
 }: OrderHistoryDialogProps) {
+  const [receiptImage, setReceiptImage] = useState<ReceiptImagePreviewInfo | null>(null);
+
+  const openReceiptImage = (row: Record<string, unknown>) => {
+    if (onOpenReceiptImage) {
+      onOpenReceiptImage(row);
+      return;
+    }
+    if (!row.imageUrl) return;
+    setReceiptImage({
+      url: getDisplayImageUrl(String(row.imageUrl)),
+      alt: tx('收据图片', 'Receipt image'),
+      orderNo: String(row.orderNo || title || '-'),
+      invNo: String(row.invNo || '-'),
+      creator: String(row.payer || '-'),
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="grid max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overflow-hidden p-4 sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] sm:p-6 xl:max-w-7xl">
         <DialogHeader>
           <DialogTitle>{tx('ORDER 付款记录', 'ORDER Payment Records')}</DialogTitle>
           <DialogDescription>{title}</DialogDescription>
         </DialogHeader>
-        <div className="max-h-[60dvh] overflow-auto">
-          <Table className="min-w-[36rem]">
+        <div className="min-h-0 overflow-y-auto rounded-md border">
+          <Table className="min-w-[46rem] table-auto">
             <TableHeader>
               <TableRow>
                 <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>
@@ -59,11 +82,11 @@ export function OrderHistoryDialog({
               {rows.map((row) => (
                 <TableRow key={String(row.id)}>
                   <TableCell>
-                    {row.imageUrl && onOpenReceiptImage ? (
+                    {row.imageUrl ? (
                       <button
                         type="button"
                         className="text-blue-700 underline-offset-2 hover:underline"
-                        onClick={() => onOpenReceiptImage(row)}
+                        onClick={() => openReceiptImage(row)}
                       >
                         {(row.receiptNo as string) || '-'}
                       </button>
@@ -101,6 +124,13 @@ export function OrderHistoryDialog({
           />
         ) : null}
       </DialogContent>
+      <ReceiptImagePreviewDialog
+        image={receiptImage}
+        tx={tx}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setReceiptImage(null);
+        }}
+      />
     </Dialog>
   );
 }

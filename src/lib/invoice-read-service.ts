@@ -37,7 +37,11 @@ function computeReadOrderBalance(row: {
   });
 }
 
-export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId: string) {
+export async function listOrderReceiptRecords(
+  currentUser: CurrentUser,
+  orderId: string,
+  options: { page?: number; pageSize?: number } = {},
+) {
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
   const receiptWhere = buildReceiptVisibilityWhere(ownerIds);
@@ -59,14 +63,21 @@ export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId:
       targetId: orderId,
       metadata: { count: 0, accessible: false },
     });
-    return { data: [], message: '订单收据记录已加载，共 0 条' };
+    return {
+      data: [],
+      pagination: { page: 1, pageSize: options.pageSize || 30, totalItems: 0, totalPages: 1 },
+      message: '订单收据记录已加载，共 0 条',
+    };
   }
 
+  const pageSize = Math.min(50, Math.max(5, Number(options.pageSize) || 30));
+  const page = Math.max(1, Number(options.page) || 1);
+  const receiptWhereWithOrder = { orderId, ...receiptWhere };
+  const totalItems = await db.receipt.count({ where: receiptWhereWithOrder });
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(page, totalPages);
   const receipts = await db.receipt.findMany({
-    where: {
-      orderId,
-      ...receiptWhere,
-    },
+    where: receiptWhereWithOrder,
     select: {
       id: true,
       receiptNo: true,
@@ -77,9 +88,12 @@ export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId:
       payer: true,
       invNo: true,
       orderNo: true,
+      imageUrl: true,
+      imageName: true,
     },
     orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    take: 30,
+    skip: (currentPage - 1) * pageSize,
+    take: pageSize,
   });
 
   await recordAuditEvent({
@@ -87,10 +101,14 @@ export async function listOrderReceiptRecords(currentUser: CurrentUser, orderId:
     actorId: currentUser.id,
     targetType: auditTargetTypes.ORDER,
     targetId: orderId,
-    metadata: { count: receipts.length, accessible: true },
+    metadata: { count: receipts.length, totalItems, page: currentPage, pageSize, accessible: true },
   });
 
-  return { data: receipts, message: `订单收据记录已加载，共 ${receipts.length} 条` };
+  return {
+    data: receipts,
+    pagination: { page: currentPage, pageSize, totalItems, totalPages },
+    message: `订单收据记录已加载，共 ${totalItems} 条`,
+  };
 }
 
 export async function listOrderMatchCandidates(currentUser: CurrentUser, orderNo: string) {

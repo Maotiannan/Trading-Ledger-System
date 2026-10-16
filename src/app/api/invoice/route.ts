@@ -77,6 +77,9 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const search = (searchParams.get('search') || '').trim();
     const orderId = searchParams.get('orderId');
     const orderNo = (searchParams.get('orderNo') || '').trim();
+    const hasReceiptPagination = searchParams.has('page') || searchParams.has('pageSize');
+    const page = Number(searchParams.get('page') || 1);
+    const pageSize = Number(searchParams.get('pageSize') || 30);
 
     if (action === 'import-template') {
       const workbook = new ExcelJS.Workbook();
@@ -119,7 +122,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     if (orderId) {
-      const result = await listOrderReceiptRecords(currentUser, orderId);
+      const result = await listOrderReceiptRecords(
+        currentUser,
+        orderId,
+        hasReceiptPagination ? { page, pageSize } : {},
+      );
       return createApiSuccessResponse(result, request);
     }
 

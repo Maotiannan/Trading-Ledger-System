@@ -8,6 +8,12 @@ import {
   CustomerOrderHistoryContent,
   type CustomerOrderHistoryContentProps,
 } from '@/components/workspace/modules/customers/components/customer-order-history-content';
+import { OrderHistoryDialog } from '@/components/workspace/modules/invoices/components/order-history-dialog';
+import {
+  ReceiptImagePreviewDialog,
+  type ReceiptImagePreviewInfo,
+} from '@/components/workspace/modules/receipts/components/receipt-image-preview-dialog';
+import { apiCall, getDisplayImageUrl } from '@/components/workspace/api/client';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { formatAppDate } from '@/lib/app-time';
 import type {
@@ -16,7 +22,7 @@ import type {
 } from '@/lib/dashboard-customer-outstanding';
 import { downloadCustomerOutstandingStatement } from '@/lib/customer-outstanding-export-image';
 import { Download, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 type StatementLanguage = 'en' | 'fr';
 
@@ -37,11 +43,13 @@ function OutstandingSection({
   orders,
   subtotal,
   tx,
+  onOpenOrder,
 }: {
   kind: 'released' | 'in-transit';
   orders: DashboardCustomerOutstandingOrder[];
   subtotal: number;
   tx: DashboardCustomerDetailDialogProps['tx'];
+  onOpenOrder: (order: DashboardCustomerOutstandingOrder) => void;
 }) {
   const released = kind === 'released';
   const title = released ? tx('已放单', 'Released') : tx('运输中', 'In Transit');
@@ -74,7 +82,15 @@ function OutstandingSection({
           <TableBody>
             {orders.map((order) => (
               <TableRow key={order.orderId}>
-                <TableCell className="font-medium">{formatOrderNameDisplay(order.orderNo)}</TableCell>
+                <TableCell className="font-medium">
+                  <button
+                    type="button"
+                    className="text-left text-blue-700 underline-offset-2 hover:underline"
+                    onClick={() => onOpenOrder(order)}
+                  >
+                    {formatOrderNameDisplay(order.orderNo)}
+                  </button>
+                </TableCell>
                 <TableCell>{order.invNo}</TableCell>
                 {released ? <TableCell>{order.daysSinceRelease ?? '-'}</TableCell> : null}
                 <TableCell className="font-medium text-red-600">{formatUsdAmount(order.outstanding)}</TableCell>
@@ -109,8 +125,46 @@ export function DashboardCustomerDetailDialog({
 }: DashboardCustomerDetailDialogProps) {
   const [exporting, setExporting] = useState(false);
   const [languageDialogOpen, setLanguageDialogOpen] = useState(false);
+  const [paymentOrder, setPaymentOrder] = useState<DashboardCustomerOutstandingOrder | null>(null);
+  const [paymentRows, setPaymentRows] = useState<Array<Record<string, unknown>>>([]);
+  const [paymentPagination, setPaymentPagination] = useState({ page: 1, pageSize: 10, totalItems: 0, totalPages: 1 });
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentImage, setPaymentImage] = useState<ReceiptImagePreviewInfo | null>(null);
   const releasedOrders = outstanding?.orders.filter((order) => order.statusGroup === 'RELEASED') ?? [];
   const inTransitOrders = outstanding?.orders.filter((order) => order.statusGroup === 'IN_TRANSIT') ?? [];
+
+  const loadPaymentRecords = useCallback(async (order: DashboardCustomerOutstandingOrder, page = 1, pageSize = 10) => {
+    setPaymentLoading(true);
+    try {
+      const result = await apiCall(`invoice?orderId=${encodeURIComponent(order.orderId)}&page=${page}&pageSize=${pageSize}`);
+      if (result.success) {
+        setPaymentRows(Array.isArray(result.data) ? result.data as Array<Record<string, unknown>> : []);
+        const pagination = result.pagination as typeof paymentPagination | undefined;
+        setPaymentPagination(pagination || { page: 1, pageSize, totalItems: 0, totalPages: 1 });
+      }
+    } catch {
+      setPaymentRows([]);
+      setPaymentPagination({ page: 1, pageSize, totalItems: 0, totalPages: 1 });
+    } finally {
+      setPaymentLoading(false);
+    }
+  }, []);
+
+  const openPaymentRecords = (order: DashboardCustomerOutstandingOrder) => {
+    setPaymentOrder(order);
+    void loadPaymentRecords(order, 1, 10);
+  };
+
+  const openPaymentImage = (row: Record<string, unknown>) => {
+    if (!row.imageUrl) return;
+    setPaymentImage({
+      url: getDisplayImageUrl(String(row.imageUrl)),
+      alt: tx('收据图片', 'Receipt image'),
+      orderNo: String(row.orderNo || paymentOrder?.orderNo || '-'),
+      invNo: String(row.invNo || paymentOrder?.invNo || '-'),
+      creator: String(row.payer || '-'),
+    });
+  };
 
   const exportStatement = async (language: StatementLanguage) => {
     if (!outstanding) return;
@@ -168,12 +222,14 @@ export function DashboardCustomerDetailDialog({
             orders={releasedOrders}
             subtotal={outstanding?.statusSubtotals.released ?? 0}
             tx={tx}
+            onOpenOrder={openPaymentRecords}
           />
           <OutstandingSection
             kind="in-transit"
             orders={inTransitOrders}
             subtotal={outstanding?.statusSubtotals.inTransit ?? 0}
             tx={tx}
+            onOpenOrder={openPaymentRecords}
           />
           {customerId ? (
             <section data-customer-detail-section="history">
@@ -212,6 +268,34 @@ export function DashboardCustomerDetailDialog({
           </div>
         </DialogContent>
       </Dialog>
+      <OrderHistoryDialog
+        open={Boolean(paymentOrder)}
+        title={paymentOrder ? formatOrderNameDisplay(paymentOrder.orderNo) : ''}
+        rows={paymentRows}
+        tx={tx}
+        pagination={paymentPagination}
+        loading={paymentLoading}
+        onPreviousPage={() => {
+          if (paymentOrder) void loadPaymentRecords(paymentOrder, Math.max(1, paymentPagination.page - 1), paymentPagination.pageSize);
+        }}
+        onNextPage={() => {
+          if (paymentOrder) void loadPaymentRecords(paymentOrder, Math.min(paymentPagination.totalPages, paymentPagination.page + 1), paymentPagination.pageSize);
+        }}
+        onPageSizeChange={(pageSize) => {
+          if (paymentOrder) void loadPaymentRecords(paymentOrder, 1, pageSize);
+        }}
+        onOpenReceiptImage={openPaymentImage}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPaymentOrder(null);
+        }}
+      />
+      <ReceiptImagePreviewDialog
+        image={paymentImage}
+        tx={tx}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPaymentImage(null);
+        }}
+      />
     </Dialog>
   );
 }

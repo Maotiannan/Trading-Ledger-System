@@ -24,6 +24,7 @@ jest.mock('@/lib/db', () => ({
     },
     receipt: {
       findMany: jest.fn(),
+      count: jest.fn(),
     },
     invoice: {
       findMany: jest.fn(),
@@ -47,7 +48,7 @@ const mockDb = db as unknown as {
   customer: { findMany: jest.Mock };
   customerOrderName: { findMany: jest.Mock };
   order: { findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
-  receipt: { findMany: jest.Mock };
+  receipt: { findMany: jest.Mock; count: jest.Mock };
   invoice: { findMany: jest.Mock };
 };
 const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
@@ -508,6 +509,7 @@ describe('invoice-read-service', () => {
 
   it('returns accessible order receipts and records count', async () => {
     mockDb.order.findFirst.mockResolvedValueOnce({ id: 'order-1' });
+    mockDb.receipt.count.mockResolvedValueOnce(1);
     mockDb.receipt.findMany.mockResolvedValueOnce([
       {
         id: 'receipt-1',

@@ -51,7 +51,7 @@ describe('CustomerOrderHistoryDialog', () => {
     expect(screen.getByTestId('customer-order-history-grid')).toHaveClass(
       'md:w-max',
       'md:grid-cols-[max-content_max-content]',
-      'md:items-start',
+      'md:items-stretch',
     );
 
     const ordersTable = screen.getByTestId('customer-order-history-orders-table');

@@ -35,4 +35,28 @@ describe('OrderHistoryDialog', () => {
       payer: 'Alice',
     }));
   });
+
+  it('opens the shared receipt preview without a parent callback', () => {
+    render(
+      <OrderHistoryDialog
+        open
+        title="AB-01"
+        tx={tx}
+        rows={[{
+          id: 'receipt-2',
+          receiptNo: '0010002',
+          payer: 'Bob',
+          usd: 100,
+          status: 'RECEIVED',
+          date: '2026-08-03',
+          createdAt: '2026-08-03T08:00:00.000Z',
+          imageUrl: '/upload/receipt-2.png',
+        }]}
+        onOpenChange={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '0010002' }));
+    expect(screen.getByAltText('Receipt image')).toBeInTheDocument();
+  });
 });

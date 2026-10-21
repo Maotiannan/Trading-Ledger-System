@@ -399,7 +399,7 @@ export async function reviewDetailEdit(params: {
       return result.touchedOrderIds;
     }
     return [];
-  });
+  }, { isolationLevel: 'ReadCommitted' });
 
   await recordAuditEvent({
     action: decision === 'approve'

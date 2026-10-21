@@ -430,6 +430,7 @@ describe('deletion-service', () => {
     });
 
     const tx = {
+      $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'req-5',
@@ -448,10 +449,13 @@ describe('deletion-service', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'detail-5',
           status: DetailStatus.Bank_Transfer,
+          totalAmount: 100,
+          swifts: [],
           items: [{ receiptId: 'receipt-5' }],
         }),
       },
       receipt: {
+        updateMany: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
       },
     };
@@ -468,8 +472,8 @@ describe('deletion-service', () => {
       where: { id: 'detail-5' },
       data: { status: DetailStatus.Waiting_SWIFT },
     });
-    expect(tx.receipt.update).toHaveBeenCalledWith({
-      where: { id: 'receipt-5' },
+    expect(tx.receipt.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['receipt-5'] }, status: { not: 'SIGNING_PENDING' } },
       data: { status: ReceiptStatus.Waiting_SWIFT },
     });
     expect(tx.swift.delete).toHaveBeenCalledWith({ where: { id: 'swift-5' } });
@@ -495,6 +499,7 @@ describe('deletion-service', () => {
     });
 
     const tx = {
+      $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'req-7',
@@ -505,6 +510,7 @@ describe('deletion-service', () => {
         update: jest.fn().mockResolvedValue({}),
       },
       receipt: {
+        updateMany: jest.fn(),
         findUnique: jest.fn().mockResolvedValue({
           id: 'receipt-7',
           orderId: 'order-7',
@@ -532,6 +538,7 @@ describe('deletion-service', () => {
         create: jest.fn().mockResolvedValue({}),
       },
       detail: {
+        findUnique: jest.fn().mockResolvedValue({ totalAmount: 12, swifts: [], items: [] }),
         update: jest.fn().mockResolvedValue({}),
       },
     };
@@ -567,6 +574,7 @@ describe('deletion-service', () => {
       targetId: 'detail-1',
     });
     const tx = {
+      $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'req-detail',
@@ -585,6 +593,7 @@ describe('deletion-service', () => {
         delete: jest.fn().mockResolvedValue({}),
       },
       receipt: {
+        updateMany: jest.fn(),
         findMany: jest.fn().mockResolvedValue([{
           id: 'receipt-auto',
           note: '由付款明细自动创建',

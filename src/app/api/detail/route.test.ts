@@ -49,6 +49,8 @@ jest.mock('@/lib/route-auth', () => ({
   },
 }));
 
+jest.mock('@/lib/swift-transfer-service', () => ({ getSwiftFeePerCopy: jest.fn().mockResolvedValue(40) }));
+
 jest.mock('@/lib/db', () => ({
   db: {
     detail: {
@@ -348,7 +350,7 @@ describe('detail route edit-approval actions', () => {
 
   it('returns waiting detail options for swift creation', async () => {
     mockDb.detail.findMany.mockResolvedValueOnce([
-      { id: 'detail-1', date: '2026-05-05T00:00:00.000Z', totalAmount: 101326 },
+      { id: 'detail-1', date: '2026-05-05T00:00:00.000Z', totalAmount: 101326, swifts: [] },
     ]);
 
     const response = await GET(buildGetRequest('https://example.com/api/detail?action=waiting-options'));
@@ -356,12 +358,10 @@ describe('detail route edit-approval actions', () => {
 
     expect(response.status).toBe(200);
     expect(mockDb.detail.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ status: 'Waiting_SWIFT' }),
+      where: expect.objectContaining({ status: { in: ['Waiting_SWIFT', 'Bank_Transfer'] } }),
     }));
     expect(json.success).toBe(true);
-    expect(json.data).toEqual([
-      { id: 'detail-1', date: '2026-05-05T00:00:00.000Z', totalAmount: 101326 },
-    ]);
+    expect(json.data).toEqual([expect.objectContaining({ id: 'detail-1', transferSummary: expect.objectContaining({ transferredAmount: 0, remainingAmount: 101326 }) })]);
   });
 
   it('filters detail list by repeated status parameters', async () => {

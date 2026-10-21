@@ -361,3 +361,26 @@ WhatsAppDelivery recipient snapshots. No new storage/table is introduced. A rest
 check must confirm queued production messages read the restored current PHONE,
 while submitted/sent records preserve their stored recipient. Consent is customer-
 level and remains valid after PHONE changes; opt-out still blocks the customer.
+
+## Multiple SWIFT Copies (2026-10-21)
+
+Migration `20261021100000_multiple_swifts_per_detail` removes only the unique
+`Swift_detailId_key` index. The existing `Swift_detailId_idx` and foreign key are
+retained. Each copy, its approval history, and the shared per-copy fee setting
+`SWIFT_MAX_FEE_PER_COPY` are covered by the complete `trading_ledger` snapshot.
+No aggregate cache/table or new media directory is introduced. SWIFT images/PDFs
+remain under `images/swifts/ocr/` inside the full `UPLOAD_HOST_DIR` archive.
+
+Recovery verification must preserve multiple Swift rows sharing one detailId,
+their individual amount/date/status/image references and edit requests. Compare
+the cumulative Decimal amount and actual remaining amount before/after restore.
+An 80,000 detail with eight received 9,980 copies must retain 79,840 transferred
+and 160 remaining. Recompute completion with the restored fee setting, not the
+old single-SWIFT tolerance settings. Never batch-sign copies while restoring.
+
+Before live migration, verify the current full snapshot and test the migration
+and dump/restore round trip in isolation. Keep notification sending disabled in
+the isolated environment. The migration deletes no business or media data.
+Rollback before multi-copy adoption may recreate the unique index after proving
+no duplicate detailId exists. After adoption, keep the non-unique relation and
+use a forward application fix; an old one-to-one application/index is unsafe.

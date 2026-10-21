@@ -119,7 +119,7 @@ export function SwiftManager() {
       !appliedFilters.dateFrom &&
       !appliedFilters.dateTo &&
       !appliedFilters.amount;
-    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof swifts }>(endpoint) : null;
+    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: Swift[] }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && swiftRequestGuard.isLatest(requestToken)) {
       setSwifts(cachedResult.data);
     }
@@ -131,7 +131,7 @@ export function SwiftManager() {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [appliedFilters, setSwifts, swiftRequestGuard, swifts]);
+  }, [appliedFilters, setSwifts, swiftRequestGuard]);
 
   useEffect(() => {
     loadSwifts();
@@ -187,15 +187,7 @@ export function SwiftManager() {
     void loadWaitingDetailsOptions();
   }, [loadWaitingDetailsOptions, showDirectCreate, showUpload]);
 
-  const waitingDetails = waitingDetailsOptions.length > 0
-    ? waitingDetailsOptions
-    : details
-      .filter((detail) => detail.status === 'Waiting_SWIFT')
-      .map((detail) => ({
-        id: detail.id,
-        date: detail.date,
-        totalAmount: detail.totalAmount,
-      }));
+  const waitingDetails = waitingDetailsOptions;
 
   const isAdmin = user?.role === 'ADMIN';
   const canEditSwifts = user?.role === 'ADMIN' || user?.role === 'SALES';

@@ -25,6 +25,8 @@ import { listDetailEditRequests, requestDetailEdit, reviewDetailEdit } from '@/l
 import type { DetailEditablePatch } from '@/lib/detail-edit-types';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { logger } from '@/lib/logger';
+import { calculateSwiftTransferSummary } from '@/lib/swift-transfer-summary';
+import { getSwiftFeePerCopy } from '@/lib/swift-transfer-service';
 
 function parseDetailPayloadValue(value: unknown) {
   if (typeof value === 'string') {
@@ -83,20 +85,26 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       const ownerIds = Array.from(scope.ownerVisibleIds);
       const rows = await db.detail.findMany({
         where: {
-          status: DetailStatus.Waiting_SWIFT,
+          status: { in: [DetailStatus.Waiting_SWIFT, DetailStatus.Bank_Transfer] },
           ...buildDetailVisibilityWhere(ownerIds),
         },
         select: {
           id: true,
           date: true,
           totalAmount: true,
+          swifts: { select: { amount: true, status: true, hasError: true } },
         },
         orderBy: [
           { date: 'desc' },
           { createdAt: 'desc' },
         ],
       });
-      return NextResponse.json({ success: true, data: rows });
+      const maxFeePerCopy = await getSwiftFeePerCopy();
+      const options = rows.map(({ swifts, ...detail }) => ({
+        ...detail,
+        transferSummary: calculateSwiftTransferSummary(detail.totalAmount, swifts, maxFeePerCopy),
+      })).filter((detail) => detail.transferSummary.remainingAmount > 0);
+      return NextResponse.json({ success: true, data: options });
     }
 
     if (action === 'order-preview') {
@@ -269,7 +277,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
             receipt: true,
           },
         },
-        swift: true,
+        swifts: { select: { amount: true, status: true, hasError: true } },
         histories: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -278,7 +286,12 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ success: true, data: filterRowsBySearch(details, search) });
+    const maxFeePerCopy = await getSwiftFeePerCopy();
+    const rows = details.map(({ swifts, ...detail }) => ({
+      ...detail,
+      transferSummary: calculateSwiftTransferSummary(detail.totalAmount, swifts, maxFeePerCopy),
+    }));
+    return NextResponse.json({ success: true, data: filterRowsBySearch(rows, search) });
   } catch (error) {
     logger.error('Get details error', error);
     return toApiErrorResponse(error, {

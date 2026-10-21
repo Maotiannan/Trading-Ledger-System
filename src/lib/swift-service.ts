@@ -1,155 +1,69 @@
-import {
-  DetailStatus,
-  ReceiptStatus,
-  SwiftStatus,
-  UploadedAssetAttachmentType,
-  UserRole,
-} from '@prisma/client';
+import { Prisma, SwiftStatus, UploadedAssetAttachmentType, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
-import { getNumericSystemSetting } from '@/lib/system-settings';
-import { validateAmountTolerance } from '@/lib/matching';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { SwiftPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
+import { calculateSwiftTransferSummary } from '@/lib/swift-transfer-summary';
+import { getSwiftFeePerCopy, lockSwiftDetail, syncSwiftTransferState } from '@/lib/swift-transfer-service';
+import { addMoney, toDecimal } from '@/lib/money';
 
-function createForbiddenError(message: string, detail?: unknown) {
-  return createApiError({
-    code: 'FORBIDDEN',
-    status: 403,
-    message,
-    detail,
-  });
+function badRequest(message: string) {
+  return createApiError({ code: 'BAD_REQUEST', status: 400, message });
 }
 
-function createBadRequestError(message: string, detail?: unknown) {
-  return createApiError({
-    code: 'BAD_REQUEST',
-    status: 400,
-    message,
-    detail,
-  });
-}
-
-function createSwiftAmountRejectedError(validationMessage: string) {
-  throw createApiError({
-    code: 'VALIDATION_ERROR',
-    status: 400,
-    message: validationMessage,
-  });
-}
-
-function assertEditableSwiftStatus(status: SwiftStatus, detail?: unknown) {
-  if (status === SwiftStatus.RECEIVED) {
-    throw createBadRequestError('RECEIVED状态下禁止修改SWIFT', detail);
+async function assertAccess(createdBy: string, currentUser: CurrentUser, message: string) {
+  if (!(await canAccessOwnedResourceAsync(createdBy, currentUser))) {
+    throw createApiError({ code: 'FORBIDDEN', status: 403, message });
   }
+}
+
+function assertAmount(totalAmount: Prisma.Decimal, amounts: Prisma.Decimal[], amount: number) {
+  if (toDecimal(amount).lte(0) || addMoney([...amounts, amount]).gt(totalAmount)) {
+    throw createApiError({
+      code: 'VALIDATION_ERROR', status: 400,
+      message: 'SWIFT累计金额不能超过付款明细总额',
+    });
+  }
+  return { valid: true, hasWarning: false, message: '' };
+}
+
+async function loadSwiftForMutation(tx: DbTransactionClient, swiftId: string) {
+  const swift = await tx.swift.findUnique({ where: { id: swiftId } });
+  if (!swift) throw badRequest('SWIFT不存在');
+  await lockSwiftDetail(tx, swift.detailId);
+  const current = await tx.swift.findUnique({ where: { id: swiftId }, include: { detail: { include: { swifts: true } } } });
+  if (!current) throw badRequest('SWIFT不存在');
+  return current;
 }
 
 async function applySwiftUpdate(params: {
-  tx: DbTransactionClient | typeof db;
+  tx: DbTransactionClient;
   currentUser: CurrentUser;
   swiftId: string;
   payload: SwiftPayload;
+  maxFeePerCopy: number;
 }) {
-  const { tx, currentUser, swiftId, payload } = params;
-
-  const existingSwift = await tx.swift.findUnique({
-    where: { id: swiftId },
-    include: {
-      detail: {
-        include: {
-          items: true,
-        },
-      },
-    },
-  });
-  if (!existingSwift) {
-    throw createApiError({
-      code: 'RESOURCE_NOT_FOUND',
-      status: 400,
-      message: 'SWIFT不存在',
-      detail: { swiftId },
-    });
-  }
-  if (!(await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser))) {
-    throw createForbiddenError('无权修改该SWIFT记录', {
-      swiftId,
-      swiftCreatedBy: existingSwift.createdBy,
-    });
-  }
-
-  assertEditableSwiftStatus(existingSwift.status, { swiftId, status: existingSwift.status });
-
-  const [warningTolerance, rejectTolerance] = await Promise.all([
-    getNumericSystemSetting('SWIFT_WARNING_TOLERANCE', 5, { min: 0 }),
-    getNumericSystemSetting('SWIFT_REJECT_TOLERANCE', 50, { min: 0 }),
-  ]);
-
-  const validation = validateAmountTolerance(Number(existingSwift.detail.totalAmount), payload.amount, {
-    warningTolerance,
-    rejectTolerance,
-  });
-  if (!validation.valid) {
-    createSwiftAmountRejectedError(validation.message);
-  }
-
-  const nextSwift = await tx.swift.update({
+  const { tx, currentUser, swiftId, payload, maxFeePerCopy } = params;
+  const existing = await loadSwiftForMutation(tx, swiftId);
+  await assertAccess(existing.createdBy, currentUser, '无权修改该SWIFT记录');
+  if (existing.status === SwiftStatus.RECEIVED) throw badRequest('RECEIVED状态下禁止修改SWIFT');
+  if (existing.detail.status === 'RECEIVED') throw badRequest('RECEIVED状态下禁止修改SWIFT');
+  const others = existing.detail.swifts.filter((swift) => swift.id !== swiftId && !swift.hasError && swift.status !== 'ERROR');
+  const validation = assertAmount(existing.detail.totalAmount, others.map((swift) => swift.amount), payload.amount);
+  const swift = await tx.swift.update({
     where: { id: swiftId },
     data: {
-      amount: payload.amount,
-      date: payload.date ? new Date(payload.date) : null,
-      senderName: payload.senderName,
-      senderAddress: payload.senderAddress,
-      receiverName: payload.receiverName,
-      receiverAccount: payload.receiverAccount,
-      status: validation.valid ? SwiftStatus.Bank_Transfer : SwiftStatus.ERROR,
-      hasError: validation.hasWarning || !validation.valid,
-      errorMessage: validation.valid ? null : validation.message,
-    },
-    include: {
-      detail: {
-        include: {
-          items: true,
-        },
-      },
+      ...payload, date: payload.date ? new Date(payload.date) : null,
+      status: SwiftStatus.Bank_Transfer, hasError: false, errorMessage: null,
     },
   });
-
-  const receiptIds = existingSwift.detail.items
-    .map((item) => item.receiptId)
-    .filter((receiptId): receiptId is string => Boolean(receiptId));
-
-  if (validation.valid) {
-    await tx.detail.update({
-      where: { id: existingSwift.detailId },
-      data: { status: DetailStatus.Bank_Transfer },
-    });
-
-    if (receiptIds.length > 0) {
-      await tx.receipt.updateMany({
-        where: { id: { in: receiptIds } },
-        data: { status: ReceiptStatus.Bank_Transfer },
-      });
-    }
-  } else {
-    await tx.detail.update({
-      where: { id: existingSwift.detailId },
-      data: { status: DetailStatus.Waiting_SWIFT },
-    });
-
-    if (receiptIds.length > 0) {
-      await tx.receipt.updateMany({
-        where: { id: { in: receiptIds } },
-        data: { status: ReceiptStatus.Waiting_SWIFT },
-      });
-    }
-  }
-
-  return { swift: nextSwift, validation };
+  const summary = await syncSwiftTransferState(tx, existing.detailId, maxFeePerCopy);
+  return { swift, validation, summary };
 }
 
 export async function createSwiftRecord(params: {
@@ -159,162 +73,40 @@ export async function createSwiftRecord(params: {
   imagePath?: string | null;
   imageName?: string | null;
   mode: 'confirm' | 'direct-create';
-}): Promise<{
-  swift: Awaited<ReturnType<typeof db.swift.create>>;
-  validation: ReturnType<typeof validateAmountTolerance>;
-  message?: string;
-}> {
+}) {
   const { currentUser, detailId, payload, imagePath, imageName, mode } = params;
-  if (!detailId) {
-    throw createApiError({
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: '缺少必要数据',
-    });
-  }
-
-  const detail = await db.detail.findUnique({
-    where: { id: detailId },
-    include: {
-      items: { include: { receipt: true } },
-    },
-  });
-  if (!detail) {
-    throw createApiError({
-      code: 'RESOURCE_NOT_FOUND',
-      status: 400,
-      message: '关联的付款明细不存在',
-      detail: { detailId },
-    });
-  }
-  if (!(await canAccessOwnedResourceAsync(detail.createdBy, currentUser))) {
-    throw createForbiddenError('无权关联该付款明细', {
-      detailId,
-      detailCreatedBy: detail.createdBy,
-    });
-  }
-
-  const existingSwift = await db.swift.findUnique({
-    where: { detailId },
-    select: { id: true, hasError: true, createdBy: true },
-  });
-  if (existingSwift && !existingSwift.hasError) {
-    throw createApiError({
-      code: 'CONFLICT',
-      status: 400,
-      message: '该付款明细已创建SWIFT，请勿重复提交',
-      detail: { detailId, swiftId: existingSwift.id },
-    });
-  }
-  if (existingSwift && existingSwift.hasError) {
-    const canOverride = await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser);
-    if (!canOverride) {
-      throw createForbiddenError('无权覆盖该错误SWIFT记录', {
-        detailId,
-        swiftId: existingSwift.id,
-        swiftCreatedBy: existingSwift.createdBy,
-      });
+  if (!detailId) throw badRequest('缺少必要数据');
+  const maxFeePerCopy = await getSwiftFeePerCopy();
+  const result = await runInTransaction(async (tx) => {
+    await lockSwiftDetail(tx, detailId);
+    const detail = await tx.detail.findUnique({ where: { id: detailId }, include: { swifts: true } });
+    if (!detail) throw badRequest('关联的付款明细不存在');
+    await assertAccess(detail.createdBy, currentUser, '无权关联该付款明细');
+    const before = calculateSwiftTransferSummary(detail.totalAmount, detail.swifts, maxFeePerCopy);
+    if (detail.status === 'RECEIVED' || before.remainingAmount <= 0) {
+      throw badRequest('该付款明细的SWIFT已足额或已完成签收');
     }
-  }
-
-  const [warningTolerance, rejectTolerance] = await Promise.all([
-    getNumericSystemSetting('SWIFT_WARNING_TOLERANCE', 5, { min: 0 }),
-    getNumericSystemSetting('SWIFT_REJECT_TOLERANCE', 50, { min: 0 }),
-  ]);
-
-  const validation = validateAmountTolerance(Number(detail.totalAmount), payload.amount, {
-    warningTolerance,
-    rejectTolerance,
-  });
-  if (!validation.valid) {
-    createSwiftAmountRejectedError(validation.message);
-  }
-
-  try {
-    const swift = await runInTransaction(async (tx) => {
-      if (existingSwift?.hasError) {
-        await tx.swift.delete({ where: { id: existingSwift.id } });
-      }
-
-      const created = await tx.swift.create({
-        data: {
-          detailId,
-          amount: payload.amount,
-          date: payload.date ? new Date(payload.date) : null,
-          senderName: payload.senderName,
-          senderAddress: payload.senderAddress,
-          receiverName: payload.receiverName,
-          receiverAccount: payload.receiverAccount,
-          imageUrl: imagePath || null,
-          imageName: imageName || null,
-          status: validation.valid ? SwiftStatus.Bank_Transfer : SwiftStatus.ERROR,
-          hasError: validation.hasWarning || !validation.valid,
-          errorMessage: validation.valid ? null : validation.message,
-          createdBy: currentUser.id,
-        },
-        include: {
-          detail: true,
-        },
-      });
-
-      if (validation.valid) {
-        await tx.detail.update({
-          where: { id: detailId },
-          data: { status: DetailStatus.Bank_Transfer },
-        });
-
-        const receiptIds = detail.items
-          .map((item) => item.receiptId)
-          .filter((receiptId): receiptId is string => Boolean(receiptId));
-        if (receiptIds.length > 0) {
-          await tx.receipt.updateMany({
-            where: { id: { in: receiptIds } },
-            data: { status: ReceiptStatus.Bank_Transfer },
-          });
-        }
-      }
-      if (created.imageUrl) {
-        await attachUploadedAssetByPath({
-          client: tx,
-          path: created.imageUrl,
-          attachedType: UploadedAssetAttachmentType.SWIFT,
-          attachedId: created.id,
-        });
-      }
-
-      return created;
-    });
-
-    await recordAuditEvent({
-      action: auditActions.SWIFT_CREATE,
-      actorId: currentUser.id,
-      targetType: auditTargetTypes.SWIFT,
-      targetId: swift.id,
-      metadata: {
-        mode,
-        warningTolerance,
-        rejectTolerance,
-        validation,
+    const valid = detail.swifts.filter((swift) => !swift.hasError && swift.status !== 'ERROR');
+    const validation = assertAmount(detail.totalAmount, valid.map((swift) => swift.amount), payload.amount);
+    const swift = await tx.swift.create({
+      data: {
+        detailId, ...payload, date: payload.date ? new Date(payload.date) : null,
+        imageUrl: imagePath || null, imageName: imageName || null,
+        status: SwiftStatus.Bank_Transfer, hasError: false, errorMessage: null, createdBy: currentUser.id,
       },
+      include: { detail: true },
     });
-
-    return {
-      swift,
-      validation,
-      message: mode === 'direct-create' ? 'SWIFT已直接创建' : undefined,
-    };
-  } catch (error) {
-    const prismaError = error as { code?: string };
-    if (prismaError?.code === 'P2002') {
-      throw createApiError({
-        code: 'CONFLICT',
-        status: 400,
-        message: '该付款明细已创建SWIFT，请刷新后查看',
-        detail: { detailId },
-      });
+    if (swift.imageUrl) {
+      await attachUploadedAssetByPath({ client: tx, path: swift.imageUrl, attachedType: UploadedAssetAttachmentType.SWIFT, attachedId: swift.id });
     }
-    throw error;
-  }
+    const summary = await syncSwiftTransferState(tx, detailId, maxFeePerCopy);
+    return { swift, validation, summary };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  await recordAuditEvent({
+    action: auditActions.SWIFT_CREATE, actorId: currentUser.id, targetType: auditTargetTypes.SWIFT, targetId: result.swift.id,
+    metadata: { mode, detailId, maxFeePerCopy, summary: result.summary },
+  });
+  return { ...result, message: mode === 'direct-create' ? 'SWIFT已直接创建' : undefined };
 }
 
 export async function updateSwiftRecord(params: {
@@ -325,217 +117,55 @@ export async function updateSwiftRecord(params: {
   skipAudit?: boolean;
 }) {
   const { currentUser, swiftId, payload, txClient, skipAudit = false } = params;
-  if (!swiftId) {
-    throw createBadRequestError('缺少SWIFT ID');
-  }
-
+  if (!swiftId) throw badRequest('缺少SWIFT ID');
+  const maxFeePerCopy = await getSwiftFeePerCopy();
   const updated = txClient
-    ? await applySwiftUpdate({
-        tx: txClient,
-        currentUser,
-        swiftId,
-        payload,
-      })
-    : await runInTransaction(async (tx) => applySwiftUpdate({
-        tx,
-        currentUser,
-        swiftId,
-        payload,
-      }));
-
-  if (!skipAudit) {
-    await recordAuditEvent({
-      action: auditActions.SWIFT_UPDATE,
-      actorId: currentUser.id,
-      targetType: auditTargetTypes.SWIFT,
-      targetId: swiftId,
-      metadata: {
-        validation: updated.validation,
-      },
-    });
-  }
-
+    ? await applySwiftUpdate({ tx: txClient, currentUser, swiftId, payload, maxFeePerCopy })
+    : await runInTransaction((tx) => applySwiftUpdate({ tx, currentUser, swiftId, payload, maxFeePerCopy }), { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  if (!skipAudit) await recordAuditEvent({
+    action: auditActions.SWIFT_UPDATE, actorId: currentUser.id, targetType: auditTargetTypes.SWIFT, targetId: swiftId,
+    metadata: { validation: updated.validation, summary: updated.summary },
+  });
   return { data: updated.swift, validation: updated.validation };
 }
 
-export async function markSwiftReceived(params: {
-  currentUser: CurrentUser;
-  swiftId: string;
-}) {
+export async function markSwiftReceived(params: { currentUser: CurrentUser; swiftId: string }) {
   const { currentUser, swiftId } = params;
-  if (currentUser.role !== UserRole.ADMIN) {
-    throw createForbiddenError('只有管理员可以签收SWIFT', {
-      role: currentUser.role,
-    });
-  }
-  if (!swiftId) {
-    throw createBadRequestError('缺少SWIFT ID');
-  }
-
-  const existingSwift = await db.swift.findUnique({
-    where: { id: swiftId },
-    include: {
-      detail: {
-        include: {
-          items: {
-            include: {
-              receipt: true,
-            },
-          },
-        },
-      },
-    },
-  });
-  if (!existingSwift) {
-    throw createApiError({
-      code: 'RESOURCE_NOT_FOUND',
-      status: 400,
-      message: 'SWIFT不存在',
-      detail: { swiftId },
-    });
-  }
-  if (!(await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser))) {
-    throw createForbiddenError('无权签收该SWIFT记录', {
-      swiftId,
-      swiftCreatedBy: existingSwift.createdBy,
-    });
-  }
-  if (existingSwift.status === SwiftStatus.RECEIVED) {
-    throw createBadRequestError('SWIFT已签收，无需重复确认', {
-      swiftId,
-      status: existingSwift.status,
-    });
-  }
-  if (existingSwift.status === SwiftStatus.ERROR || existingSwift.hasError) {
-    throw createBadRequestError('异常SWIFT不能签收，请先修复', {
-      swiftId,
-      status: existingSwift.status,
-      hasError: existingSwift.hasError,
-    });
-  }
-  if (!existingSwift.detail) {
-    throw createBadRequestError('SWIFT未关联付款明细，无法签收', {
-      swiftId,
-      detailId: existingSwift.detailId,
-    });
-  }
-
-  const receiptIds = existingSwift.detail.items
-    .map((item) => item.receiptId)
-    .filter((receiptId): receiptId is string => Boolean(receiptId));
-
-  const updated = await runInTransaction(async (tx) => {
-    const swift = await tx.swift.update({
-      where: { id: swiftId },
-      data: { status: SwiftStatus.RECEIVED },
-    });
-
-    if (receiptIds.length > 0) {
-      await tx.receipt.updateMany({
-        where: { id: { in: receiptIds } },
-        data: { status: ReceiptStatus.RECEIVED },
-      });
-    }
-
-    await tx.detail.update({
-      where: { id: existingSwift.detail.id },
-      data: { status: DetailStatus.RECEIVED },
-    });
-    await tx.swift.updateMany({
-      where: { detailId: existingSwift.detail.id },
-      data: { status: SwiftStatus.RECEIVED },
-    });
-
-    return swift;
-  });
-
+  if (currentUser.role !== UserRole.ADMIN) throw createApiError({ code: 'FORBIDDEN', status: 403, message: '只有管理员可以签收SWIFT' });
+  if (!swiftId) throw badRequest('缺少SWIFT ID');
+  const maxFeePerCopy = await getSwiftFeePerCopy();
+  const result = await runInTransaction(async (tx) => {
+    const existing = await loadSwiftForMutation(tx, swiftId);
+    await assertAccess(existing.createdBy, currentUser, '无权签收该SWIFT记录');
+    if (existing.status === SwiftStatus.RECEIVED) throw badRequest('SWIFT已签收，无需重复确认');
+    if (existing.status === SwiftStatus.ERROR || existing.hasError) throw badRequest('异常SWIFT不能签收，请先修复');
+    const swift = await tx.swift.update({ where: { id: swiftId }, data: { status: SwiftStatus.RECEIVED } });
+    const summary = await syncSwiftTransferState(tx, existing.detailId, maxFeePerCopy);
+    return { swift, summary, detailId: existing.detailId };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   await recordAuditEvent({
-    action: auditActions.SWIFT_MARK_RECEIVED,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.SWIFT,
-    targetId: swiftId,
-    metadata: {
-      detailId: existingSwift.detail.id,
-      receiptIds,
-    },
+    action: auditActions.SWIFT_MARK_RECEIVED, actorId: currentUser.id, targetType: auditTargetTypes.SWIFT, targetId: swiftId,
+    metadata: { detailId: result.detailId, summary: result.summary },
   });
-
-  return { data: updated };
+  return { data: result.swift };
 }
 
-export async function deleteSwiftRecord(params: {
-  currentUser: CurrentUser;
-  swiftId: string;
-}): Promise<{ message: string }> {
+export async function deleteSwiftRecord(params: { currentUser: CurrentUser; swiftId: string }): Promise<{ message: string }> {
   const { currentUser, swiftId } = params;
-  if (!swiftId) {
-    throw createApiError({
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: '缺少SWIFT ID',
-    });
-  }
-
-  const existingSwift = await db.swift.findUnique({
-    where: { id: swiftId },
-  });
-  if (!existingSwift) {
-    throw createApiError({
-      code: 'RESOURCE_NOT_FOUND',
-      status: 400,
-      message: 'SWIFT不存在',
-      detail: { swiftId },
-    });
-  }
-
-  const canDeleteErrorSwiftDirectly =
-    existingSwift.hasError && (await canAccessOwnedResourceAsync(existingSwift.createdBy, currentUser));
-  if (currentUser.role !== UserRole.ADMIN && !canDeleteErrorSwiftDirectly) {
-    throw createForbiddenError('只有管理员可以删除该SWIFT记录', {
-      swiftId,
-      role: currentUser.role,
-      hasError: existingSwift.hasError,
-    });
-  }
-
-  await runInTransaction(async (tx) => {
+  if (!swiftId) throw badRequest('缺少SWIFT ID');
+  const maxFeePerCopy = await getSwiftFeePerCopy();
+  const result = await runInTransaction(async (tx) => {
+    const existing = await loadSwiftForMutation(tx, swiftId);
+    const canDeleteError = existing.hasError && await canAccessOwnedResourceAsync(existing.createdBy, currentUser);
+    if (currentUser.role !== UserRole.ADMIN && !canDeleteError) throw createApiError({ code: 'FORBIDDEN', status: 403, message: '只有管理员可以删除该SWIFT记录' });
+    await assertAccess(existing.createdBy, currentUser, '无权删除该SWIFT记录');
     await tx.swift.delete({ where: { id: swiftId } });
-
-    if (existingSwift.hasError) {
-      return;
-    }
-
-    await tx.detail.update({
-      where: { id: existingSwift.detailId },
-      data: { status: DetailStatus.Waiting_SWIFT },
-    });
-
-    const detail = await tx.detail.findUnique({
-      where: { id: existingSwift.detailId },
-      include: { items: true },
-    });
-    const receiptIds = detail?.items
-      .map((item) => item.receiptId)
-      .filter((receiptId): receiptId is string => Boolean(receiptId)) ?? [];
-    if (receiptIds.length > 0) {
-      await tx.receipt.updateMany({
-        where: { id: { in: receiptIds } },
-        data: { status: ReceiptStatus.Waiting_SWIFT },
-      });
-    }
-  });
-
+    const summary = await syncSwiftTransferState(tx, existing.detailId, maxFeePerCopy);
+    return { hadError: existing.hasError, summary };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
   await recordAuditEvent({
-    action: auditActions.SWIFT_DELETE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.SWIFT,
-    targetId: swiftId,
-    metadata: {
-      hadError: existingSwift.hasError,
-    },
+    action: auditActions.SWIFT_DELETE, actorId: currentUser.id, targetType: auditTargetTypes.SWIFT, targetId: swiftId,
+    metadata: result,
   });
-
-  return {
-    message: existingSwift.hasError ? '错误SWIFT记录已删除' : 'SWIFT已删除，状态已回退',
-  };
+  return { message: result.hadError ? '错误SWIFT记录已删除' : 'SWIFT已删除，状态已重新计算' };
 }

@@ -1,499 +1,146 @@
-import { DetailStatus, ReceiptStatus, SwiftStatus, UserRole } from '@prisma/client';
+import { Prisma, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import { recordAuditEvent } from '@/lib/audit';
 import { getNumericSystemSetting } from '@/lib/system-settings';
-import { createSwiftRecord, deleteSwiftRecord, markSwiftReceived, updateSwiftRecord } from '@/lib/swift-service';
+import { createSwiftRecord, deleteSwiftRecord, markSwiftReceived, updateSwiftRecord } from './swift-service';
 
-jest.mock('@/lib/db', () => ({
-  db: {
-    uploadedAsset: {
-      updateMany: jest.fn(),
-    },
-    detail: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
-    },
-    swift: {
-      findUnique: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-      delete: jest.fn(),
-    },
-    receipt: {
-      updateMany: jest.fn(),
-    },
-    $transaction: jest.fn(),
-  },
-}));
+jest.mock('@/lib/db', () => ({ db: {
+  detail: { findUnique: jest.fn(), update: jest.fn() },
+  swift: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn(), updateMany: jest.fn() },
+  receipt: { updateMany: jest.fn() }, uploadedAsset: { updateMany: jest.fn() },
+  $queryRaw: jest.fn(), $transaction: jest.fn(),
+} }));
+jest.mock('@/lib/ownership', () => ({ canAccessOwnedResourceAsync: jest.fn() }));
+jest.mock('@/lib/audit', () => ({ recordAuditEvent: jest.fn() }));
+jest.mock('@/lib/system-settings', () => ({ getNumericSystemSetting: jest.fn() }));
 
-jest.mock('@/lib/ownership', () => ({
-  canAccessOwnedResourceAsync: jest.fn(),
-}));
-
-jest.mock('@/lib/audit', () => ({
-  recordAuditEvent: jest.fn(),
-}));
-
-jest.mock('@/lib/system-settings', () => ({
-  getNumericSystemSetting: jest.fn(),
-}));
-
-function makeUser(overrides: Partial<{
-  id: string;
-  role: UserRole;
-}> = {}) {
-  return {
-    id: 'sales-1',
-    email: 'sales@example.com',
-    name: 'Sales',
-    role: UserRole.SALES,
-    level: 3,
-    parentId: 'admin-1',
-    createdById: 'admin-1',
-    ...overrides,
-  };
+const user = { id: 'admin', email: 'admin@example.com', name: 'Admin', role: UserRole.ADMIN, level: 1, parentId: null, createdById: null };
+const payload = (amount: number) => ({ amount, date: '2026-10-21', senderName: 'Mitty', senderAddress: null, receiverName: null, receiverAccount: null });
+type Row = { id: string; detailId: string; amount: Prisma.Decimal; status: 'Bank_Transfer' | 'RECEIVED' | 'ERROR'; hasError: boolean; createdBy: string; imageUrl?: string };
+const mocks = db as unknown as {
+  detail: { findUnique: jest.Mock; update: jest.Mock };
+  swift: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; delete: jest.Mock; updateMany: jest.Mock };
+  receipt: { updateMany: jest.Mock }; uploadedAsset: { updateMany: jest.Mock };
+  $queryRaw: jest.Mock; $transaction: jest.Mock;
+};
+let rows: Row[];
+let detail: { id: string; createdBy: string; totalAmount: Prisma.Decimal; status: string; items: { receiptId: string }[] };
+function add(amount: number, status: Row['status'] = 'Bank_Transfer', hasError = false) {
+  const row: Row = { id: `swift-${rows.length + 1}`, detailId: 'detail', amount: new Prisma.Decimal(amount), status, hasError, createdBy: 'admin' };
+  rows.push(row);
+  return row;
 }
 
-const mockDb = db as unknown as {
-  uploadedAsset: { updateMany: jest.Mock };
-  detail: { findUnique: jest.Mock; update: jest.Mock };
-  swift: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; updateMany: jest.Mock; delete: jest.Mock };
-  receipt: { updateMany: jest.Mock };
-  $transaction: jest.Mock;
-};
-const mockCanAccessOwnedResourceAsync = canAccessOwnedResourceAsync as jest.Mock;
-const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
-const mockGetNumericSystemSetting = getNumericSystemSetting as jest.Mock;
-
-describe('swift-service', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
-    mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
-    mockGetNumericSystemSetting
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(50);
+beforeEach(() => {
+  jest.resetAllMocks();
+  rows = [];
+  detail = { id: 'detail', createdBy: 'admin', totalAmount: new Prisma.Decimal(75093), status: 'Waiting_SWIFT', items: [{ receiptId: 'receipt' }] };
+  (canAccessOwnedResourceAsync as jest.Mock).mockResolvedValue(true);
+  (getNumericSystemSetting as jest.Mock).mockResolvedValue(40);
+  mocks.$transaction.mockImplementation((callback) => callback(mocks));
+  mocks.detail.findUnique.mockImplementation(async () => ({ ...detail, swifts: rows.map((row) => ({ ...row })) }));
+  mocks.detail.update.mockImplementation(async ({ data }) => Object.assign(detail, data));
+  mocks.swift.findUnique.mockImplementation(async ({ where, include }) => {
+    const row = rows.find((row) => row.id === where.id);
+    return row ? { ...row, ...(include ? { detail: { ...detail, swifts: rows.map((row) => ({ ...row })) } } : {}) } : null;
   });
-
-  it('uses configured thresholds when creating swift records', async () => {
-    mockGetNumericSystemSetting.mockReset();
-    mockGetNumericSystemSetting
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(2);
-    mockDb.detail.findUnique.mockResolvedValueOnce({
-      id: 'detail-1',
-      createdBy: 'sales-1',
-      totalAmount: 100,
-      items: [{ receiptId: 'receipt-1' }],
-    });
-    mockDb.swift.findUnique.mockResolvedValueOnce(null);
-
-    await expect(createSwiftRecord({
-      currentUser: makeUser(),
-      detailId: 'detail-1',
-      payload: {
-        amount: 103,
-        date: null,
-        senderName: 'sender',
-        senderAddress: null,
-        receiverName: 'receiver',
-        receiverAccount: null,
-      },
-      mode: 'direct-create',
-    })).rejects.toMatchObject({
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('±2'),
-    });
-
-    expect(mockDb.detail.update).not.toHaveBeenCalled();
-    expect(mockDb.receipt.updateMany).not.toHaveBeenCalled();
+  mocks.swift.create.mockImplementation(async ({ data }) => {
+    const row = add(data.amount);
+    Object.assign(row, data, { amount: new Prisma.Decimal(data.amount) });
+    return { ...row };
   });
-
-  it('advances detail and receipt statuses when swift is valid', async () => {
-    mockDb.detail.findUnique.mockResolvedValueOnce({
-      id: 'detail-2',
-      createdBy: 'sales-1',
-      totalAmount: 100,
-      items: [{ receiptId: 'receipt-2' }, { receiptId: null }],
-    });
-    mockDb.swift.findUnique.mockResolvedValueOnce(null);
-    mockDb.swift.create.mockResolvedValueOnce({
-      id: 'swift-2',
-      detailId: 'detail-2',
-      status: SwiftStatus.Bank_Transfer,
-      hasError: true,
-    });
-
-    const result = await createSwiftRecord({
-      currentUser: makeUser(),
-      detailId: 'detail-2',
-      payload: {
-        amount: 106,
-        date: null,
-        senderName: 'sender',
-        senderAddress: null,
-        receiverName: 'receiver',
-        receiverAccount: null,
-      },
-      mode: 'confirm',
-    });
-
-    expect(result.validation.valid).toBe(true);
-    expect(result.validation.hasWarning).toBe(true);
-    expect(mockDb.detail.update).toHaveBeenCalledWith({
-      where: { id: 'detail-2' },
-      data: { status: DetailStatus.Bank_Transfer },
-    });
-    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['receipt-2'] } },
-      data: { status: ReceiptStatus.Bank_Transfer },
-    });
-    expect(mockRecordAuditEvent).toHaveBeenCalled();
+  mocks.swift.update.mockImplementation(async ({ where, data }) => {
+    const row = rows.find((row) => row.id === where.id)!;
+    Object.assign(row, data, data.amount ? { amount: new Prisma.Decimal(data.amount) } : {});
+    return { ...row };
   });
+  mocks.swift.delete.mockImplementation(async ({ where }) => { rows = rows.filter((row) => row.id !== where.id); });
+  mocks.uploadedAsset.updateMany.mockResolvedValue({ count: 1 });
+});
 
-  it('attaches uploaded asset inside the swift create transaction', async () => {
-    mockDb.detail.findUnique.mockResolvedValueOnce({
-      id: 'detail-asset',
-      createdBy: 'sales-1',
-      totalAmount: 100,
-      items: [{ receiptId: 'receipt-2' }],
-    });
-    mockDb.swift.findUnique.mockResolvedValueOnce(null);
-    mockDb.swift.create.mockResolvedValueOnce({
-      id: 'swift-asset',
-      detailId: 'detail-asset',
-      imageUrl: '/upload/images/swifts/ocr/test.png',
-      status: SwiftStatus.Bank_Transfer,
-      hasError: false,
-    });
-    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 1 });
+it('allows multiple copies after the first was signed and completes only after the last is signed', async () => {
+  const first = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(50000), mode: 'confirm' });
+  await markSwiftReceived({ currentUser: user, swiftId: first.swift.id });
+  expect(detail.status).toBe('Bank_Transfer');
+  expect(mocks.receipt.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'RECEIVED' } }));
+  const second = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(25093), mode: 'direct-create' });
+  expect(rows[0].status).toBe('RECEIVED');
+  expect(rows[1].status).toBe('Bank_Transfer');
+  expect(second.summary.remainingAmount).toBe(0);
+  expect(detail.status).toBe('Bank_Transfer');
+  await markSwiftReceived({ currentUser: user, swiftId: second.swift.id });
+  expect(detail.status).toBe('RECEIVED');
+  expect(mocks.swift.updateMany).not.toHaveBeenCalled();
+});
 
-    await createSwiftRecord({
-      currentUser: makeUser(),
-      detailId: 'detail-asset',
-      payload: {
-        amount: 100,
-        date: null,
-        senderName: 'sender',
-        senderAddress: null,
-        receiverName: 'receiver',
-        receiverAccount: null,
-      },
-      imagePath: '/upload/images/swifts/ocr/test.png',
-      imageName: 'test.png',
-      mode: 'confirm',
-    });
+it('handles eight independent transfers with bank fees', async () => {
+  detail.totalAmount = new Prisma.Decimal(80000);
+  for (let n = 0; n < 8; n++) {
+    const created = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(9980), mode: 'direct-create' });
+    await markSwiftReceived({ currentUser: user, swiftId: created.swift.id });
+    expect(detail.status).toBe(n === 7 ? 'RECEIVED' : 'Bank_Transfer');
+  }
+  await expect(createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(160), mode: 'direct-create' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+});
 
-    expect(mockDb.uploadedAsset.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ path: '/upload/images/swifts/ocr/test.png' }),
-      data: expect.objectContaining({
-        attachedType: 'SWIFT',
-        attachedId: 'swift-asset',
-      }),
-    }));
-  });
+it('rejects aggregate overpayment without creating another copy', async () => {
+  add(50000, 'RECEIVED');
+  await expect(createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(25093.01), mode: 'confirm' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  expect(mocks.swift.create).not.toHaveBeenCalled();
+});
 
-  it('aborts swift create before audit when attach fails', async () => {
-    mockDb.detail.findUnique.mockResolvedValueOnce({
-      id: 'detail-asset',
-      createdBy: 'sales-1',
-      totalAmount: 100,
-      items: [{ receiptId: 'receipt-2' }],
-    });
-    mockDb.swift.findUnique.mockResolvedValueOnce(null);
-    mockDb.swift.create.mockResolvedValueOnce({
-      id: 'swift-asset-fail',
-      detailId: 'detail-asset',
-      imageUrl: '/upload/images/swifts/ocr/test.png',
-      status: SwiftStatus.Bank_Transfer,
-      hasError: false,
-    });
-    mockDb.uploadedAsset.updateMany.mockResolvedValueOnce({ count: 0 });
+it('does not reopen an already received payment detail through a new upload', async () => {
+  detail.status = 'RECEIVED';
+  await expect(createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(100), mode: 'confirm' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  expect(mocks.swift.create).not.toHaveBeenCalled();
+});
 
-    await expect(createSwiftRecord({
-      currentUser: makeUser(),
-      detailId: 'detail-asset',
-      payload: {
-        amount: 100,
-        date: null,
-        senderName: 'sender',
-        senderAddress: null,
-        receiverName: 'receiver',
-        receiverAccount: null,
-      },
-      imagePath: '/upload/images/swifts/ocr/test.png',
-      imageName: 'test.png',
-      mode: 'confirm',
-    })).rejects.toThrow('Expected to attach exactly one staged uploaded asset');
+it('recalculates remaining copies on deletion', async () => {
+  const first = add(50000, 'RECEIVED');
+  add(25093, 'RECEIVED');
+  detail.status = 'RECEIVED';
+  await deleteSwiftRecord({ currentUser: user, swiftId: first.id });
+  expect(detail.status).toBe('Bank_Transfer');
+  expect(rows[0].status).toBe('RECEIVED');
+  await deleteSwiftRecord({ currentUser: user, swiftId: rows[0].id });
+  expect(detail.status).toBe('Waiting_SWIFT');
+});
 
-    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
-  });
+it('checks edits against other received copies and preserves their state', async () => {
+  add(50000, 'RECEIVED');
+  const second = add(20000);
+  await updateSwiftRecord({ currentUser: user, swiftId: second.id, payload: payload(25093) });
+  expect(rows[0].status).toBe('RECEIVED');
+  await expect(updateSwiftRecord({ currentUser: user, swiftId: second.id, payload: payload(25094) })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+});
 
-  it('allows creator to directly delete error swift records', async () => {
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-error',
-      detailId: 'detail-3',
-      hasError: true,
-      createdBy: 'sales-1',
-    });
+it('does not allow edits to received copies', async () => {
+  const row = add(50000, 'RECEIVED');
+  await expect(updateSwiftRecord({ currentUser: user, swiftId: row.id, payload: payload(50001) })).rejects.toThrow('RECEIVED状态下禁止修改SWIFT');
+});
 
-    const result = await deleteSwiftRecord({
-      currentUser: makeUser(),
-      swiftId: 'swift-error',
-    });
+it('retains error copies without counting them and attaches new uploaded assets', async () => {
+  add(100000, 'ERROR', true);
+  const result = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(50000), mode: 'confirm', imagePath: '/upload/images/swifts/ocr/new.pdf' });
+  expect(result.summary.transferredAmount).toBe(50000);
+  expect(rows).toHaveLength(2);
+  expect(mocks.uploadedAsset.updateMany).toHaveBeenCalled();
+});
 
-    expect(result.message).toBe('错误SWIFT记录已删除');
-    expect(mockDb.swift.delete).toHaveBeenCalledWith({ where: { id: 'swift-error' } });
-    expect(mockDb.detail.update).not.toHaveBeenCalled();
-  });
+it('aborts when the staged asset cannot be attached', async () => {
+  mocks.uploadedAsset.updateMany.mockResolvedValue({ count: 0 });
+  await expect(createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(50000), mode: 'confirm', imagePath: '/upload/images/swifts/ocr/missing.pdf' })).rejects.toThrow('Expected to attach exactly one staged uploaded asset');
+});
 
-  it('rolls statuses back when deleting a normal swift record', async () => {
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-ok',
-      detailId: 'detail-4',
-      hasError: false,
-      createdBy: 'sales-1',
-    });
-    mockDb.detail.findUnique.mockResolvedValueOnce({
-      id: 'detail-4',
-      items: [{ receiptId: 'receipt-4a' }, { receiptId: 'receipt-4b' }],
-    });
+it('enforces ownership and admin-only signing', async () => {
+  (canAccessOwnedResourceAsync as jest.Mock).mockResolvedValue(false);
+  await expect(createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(50000), mode: 'confirm' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  const row = add(50000);
+  await expect(markSwiftReceived({ currentUser: { ...user, role: UserRole.SALES }, swiftId: row.id })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+});
 
-    const result = await deleteSwiftRecord({
-      currentUser: makeUser({ role: UserRole.ADMIN, id: 'admin-1' }),
-      swiftId: 'swift-ok',
-    });
-
-    expect(result.message).toBe('SWIFT已删除，状态已回退');
-    expect(mockDb.detail.update).toHaveBeenCalledWith({
-      where: { id: 'detail-4' },
-      data: { status: DetailStatus.Waiting_SWIFT },
-    });
-    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['receipt-4a', 'receipt-4b'] } },
-      data: { status: ReceiptStatus.Waiting_SWIFT },
-    });
-  });
-
-  it('updates swift records and advances linked statuses when validation passes', async () => {
-    mockGetNumericSystemSetting.mockReset();
-    mockGetNumericSystemSetting
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(50);
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-update-ok',
-      detailId: 'detail-update-ok',
-      createdBy: 'sales-1',
-      status: SwiftStatus.ERROR,
-      detail: {
-        id: 'detail-update-ok',
-        totalAmount: 100,
-        items: [{ receiptId: 'receipt-1' }, { receiptId: null }],
-      },
-    });
-    mockDb.swift.update.mockResolvedValueOnce({
-      id: 'swift-update-ok',
-      detailId: 'detail-update-ok',
-      status: SwiftStatus.Bank_Transfer,
-      detail: {
-        id: 'detail-update-ok',
-        items: [{ receiptId: 'receipt-1' }, { receiptId: null }],
-      },
-    });
-
-    const result = await updateSwiftRecord({
-      currentUser: makeUser({ role: UserRole.ADMIN }),
-      swiftId: 'swift-update-ok',
-      payload: {
-        amount: 110,
-        date: '2026-05-05',
-        senderName: 'Sender',
-        senderAddress: 'Conakry',
-        receiverName: 'Receiver',
-        receiverAccount: 'ACC-1',
-      },
-    });
-
-    expect(result.validation.valid).toBe(true);
-    expect(mockDb.swift.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'swift-update-ok' },
-      data: expect.objectContaining({
-        amount: 110,
-        status: SwiftStatus.Bank_Transfer,
-        hasError: true,
-        errorMessage: null,
-      }),
-    }));
-    expect(mockDb.detail.update).toHaveBeenCalledWith({
-      where: { id: 'detail-update-ok' },
-      data: { status: DetailStatus.Bank_Transfer },
-    });
-    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['receipt-1'] } },
-      data: { status: ReceiptStatus.Bank_Transfer },
-    });
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'SWIFT_UPDATE',
-      targetId: 'swift-update-ok',
-    }));
-  });
-
-  it('updates swift records and rolls linked statuses back when validation fails', async () => {
-    mockGetNumericSystemSetting.mockReset();
-    mockGetNumericSystemSetting
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(50);
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-update-bad',
-      detailId: 'detail-update-bad',
-      createdBy: 'sales-1',
-      status: SwiftStatus.Bank_Transfer,
-      detail: {
-        id: 'detail-update-bad',
-        totalAmount: 100,
-        items: [{ receiptId: 'receipt-2' }],
-      },
-    });
-    await expect(updateSwiftRecord({
-      currentUser: makeUser({ role: UserRole.ADMIN }),
-      swiftId: 'swift-update-bad',
-      payload: {
-        amount: 200,
-        date: '2026-05-05',
-        senderName: 'Sender',
-        senderAddress: 'Conakry',
-        receiverName: 'Receiver',
-        receiverAccount: 'ACC-1',
-      },
-      skipAudit: true,
-    })).rejects.toMatchObject({
-      code: 'VALIDATION_ERROR',
-      message: expect.stringContaining('±50'),
-    });
-
-    expect(mockDb.detail.update).not.toHaveBeenCalledWith({
-      where: { id: 'detail-update-bad' },
-      data: { status: DetailStatus.Waiting_SWIFT },
-    });
-    expect(mockDb.receipt.updateMany).not.toHaveBeenCalledWith({
-      where: { id: { in: ['receipt-2'] } },
-      data: { status: ReceiptStatus.Waiting_SWIFT },
-    });
-    expect(mockRecordAuditEvent).not.toHaveBeenCalledWith(expect.objectContaining({
-      action: 'SWIFT_UPDATE',
-      targetId: 'swift-update-bad',
-    }));
-  });
-
-  it('rejects swift updates for inaccessible records', async () => {
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-no-access',
-      detailId: 'detail-5',
-      createdBy: 'other-sales',
-      status: SwiftStatus.ERROR,
-      detail: {
-        id: 'detail-5',
-        totalAmount: 100,
-        items: [],
-      },
-    });
-    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(false);
-
-    await expect(updateSwiftRecord({
-      currentUser: makeUser({ role: UserRole.ADMIN }),
-      swiftId: 'swift-no-access',
-      payload: {
-        amount: 100,
-        date: '2026-05-05',
-        senderName: 'Sender',
-        senderAddress: null,
-        receiverName: 'Receiver',
-        receiverAccount: null,
-      },
-    })).rejects.toThrow('无权修改该SWIFT记录');
-  });
-
-  it('rejects swift updates for finalized records', async () => {
-    mockCanAccessOwnedResourceAsync.mockResolvedValueOnce(true);
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-final',
-      detailId: 'detail-6',
-      createdBy: 'sales-1',
-      status: SwiftStatus.RECEIVED,
-      detail: {
-        id: 'detail-6',
-        totalAmount: 100,
-        items: [],
-      },
-    });
-
-    await expect(updateSwiftRecord({
-      currentUser: makeUser({ role: UserRole.ADMIN }),
-      swiftId: 'swift-final',
-      payload: {
-        amount: 100,
-        date: '2026-05-05',
-        senderName: 'Sender',
-        senderAddress: null,
-        receiverName: 'Receiver',
-        receiverAccount: null,
-      },
-    })).rejects.toThrow('RECEIVED状态下禁止修改SWIFT');
-  });
-
-  it('lets admin mark a bank-transfer swift received and completes linked detail and receipts', async () => {
-    mockDb.swift.findUnique.mockResolvedValueOnce({
-      id: 'swift-receive',
-      detailId: 'detail-receive',
-      createdBy: 'sales-1',
-      status: SwiftStatus.Bank_Transfer,
-      hasError: false,
-      detail: {
-        id: 'detail-receive',
-        items: [
-          { receiptId: 'receipt-a', receipt: { status: ReceiptStatus.Bank_Transfer } },
-          { receiptId: 'receipt-b', receipt: { status: ReceiptStatus.Waiting_SWIFT } },
-          { receiptId: null, receipt: null },
-        ],
-      },
-    });
-    mockDb.swift.update.mockResolvedValueOnce({
-      id: 'swift-receive',
-      status: SwiftStatus.RECEIVED,
-    });
-
-    const result = await markSwiftReceived({
-      currentUser: makeUser({ id: 'admin-1', role: UserRole.ADMIN }),
-      swiftId: 'swift-receive',
-    });
-
-    expect(result.data.status).toBe(SwiftStatus.RECEIVED);
-    expect(mockDb.receipt.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['receipt-a', 'receipt-b'] } },
-      data: { status: ReceiptStatus.RECEIVED },
-    });
-    expect(mockDb.detail.update).toHaveBeenCalledWith({
-      where: { id: 'detail-receive' },
-      data: { status: DetailStatus.RECEIVED },
-    });
-    expect(mockDb.swift.updateMany).toHaveBeenCalledWith({
-      where: { detailId: 'detail-receive' },
-      data: { status: SwiftStatus.RECEIVED },
-    });
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'SWIFT_MARK_RECEIVED',
-      targetId: 'swift-receive',
-    }));
-  });
-
-  it('rejects swift received confirmation for sales users', async () => {
-    await expect(markSwiftReceived({
-      currentUser: makeUser({ role: UserRole.SALES }),
-      swiftId: 'swift-receive',
-    })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
-    });
-  });
+it('uses parent row locking and read-committed transactions for aggregate writes', async () => {
+  await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(50000), mode: 'confirm' });
+  expect(mocks.$queryRaw).toHaveBeenCalled();
+  expect(mocks.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'ReadCommitted' });
 });

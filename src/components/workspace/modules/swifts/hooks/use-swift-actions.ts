@@ -340,7 +340,7 @@ export function useSwiftActions({
   };
 
   const handleMarkSwiftReceived = async (swiftId: string) => {
-    if (!confirm(tx('确定要签收这条SWIFT并完成对应付款明细和收据吗？', 'Confirm this SWIFT and complete linked payment details and receipts?'))) return;
+    if (!confirm(tx('确定签收这张SWIFT？付款明细和收据将在累计金额达标且所有有效SWIFT签收后完成。', 'Confirm receipt of this SWIFT? Linked payment details and receipts complete once the total is covered and all valid SWIFT copies are received.'))) return;
 
     try {
       const result = await apiCall('swift', {

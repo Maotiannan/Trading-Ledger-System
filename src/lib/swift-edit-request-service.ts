@@ -370,7 +370,7 @@ export async function reviewSwiftEdit(params: {
         skipAudit: true,
       });
     }
-  });
+  }, { isolationLevel: 'ReadCommitted' });
 
   await recordAuditEvent({
     action: decision === 'approve'

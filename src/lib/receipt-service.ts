@@ -1,4 +1,4 @@
-import { DetailStatus, ReceiptStatus, SwiftStatus, UploadedAssetAttachmentType, UserRole } from '@prisma/client';
+import { DetailStatus, Prisma, ReceiptStatus, UploadedAssetAttachmentType, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
@@ -17,6 +17,7 @@ import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { ReceiptPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
+import { getSwiftFeePerCopy, lockSwiftDetail, syncSwiftTransferState } from '@/lib/swift-transfer-service';
 
 function badRequest(message: string, detail?: unknown) {
   return createApiError({ code: 'BAD_REQUEST', status: 400, message, detail });
@@ -399,6 +400,11 @@ export async function markReceiptReceived(params: {
   }
 
   const updated = await runInTransaction(async (tx) => {
+    const linkedItems = await tx.detailItem.findMany({ where: { receiptId }, select: { detailId: true } });
+    // Match SWIFT mutation lock order: parent detail first, then its receipts.
+    for (const detailId of Array.from(new Set(linkedItems.map((item) => item.detailId))).sort()) {
+      await lockSwiftDetail(tx, detailId);
+    }
     const receipt = await tx.receipt.update({
       where: { id: receiptId },
       data: { status: ReceiptStatus.RECEIVED },
@@ -406,11 +412,16 @@ export async function markReceiptReceived(params: {
 
     const detailItems = await tx.detailItem.findMany({
       where: { receiptId },
-      include: { detail: { include: { items: { include: { receipt: true } } } } },
+      include: { detail: { include: { swifts: true, items: { include: { receipt: true } } } } },
     });
 
     for (const item of detailItems) {
       if (!item.detail) continue;
+      if (item.detail.swifts.length > 0) {
+        const summary = await syncSwiftTransferState(tx, item.detail.id, await getSwiftFeePerCopy());
+        if (!summary.isComplete) throw badRequest('请先签收该付款明细的全部SWIFT并确认累计金额达标');
+        continue;
+      }
       const allReceived = item.detail.items.every(
         (detailItem) => !detailItem.receipt || detailItem.receipt.status === ReceiptStatus.RECEIVED
       );
@@ -419,15 +430,11 @@ export async function markReceiptReceived(params: {
           where: { id: item.detail.id },
           data: { status: DetailStatus.RECEIVED },
         });
-        await tx.swift.updateMany({
-          where: { detailId: item.detail.id },
-          data: { status: SwiftStatus.RECEIVED },
-        });
       }
     }
 
     return receipt;
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
 
   await recordAuditEvent({
     action: auditActions.RECEIPT_MARK_RECEIVED,

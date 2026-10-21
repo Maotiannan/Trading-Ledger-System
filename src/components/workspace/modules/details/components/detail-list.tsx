@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { ChevronDown, ChevronRight, Download, Eye, Pencil, Trash2 } from 'lucide-react';
 import { ListPagination } from '../../shared/list-pagination';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export type DetailListProps = {
   details: Detail[];
@@ -79,8 +80,21 @@ export function DetailList({
                   <CardTitle className="text-lg">
                     {tx('付款明细', 'Payment Detail')} - {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')}
                   </CardTitle>
-                  <CardDescription>
-                    {tx(`${detail.items.length} 笔 | 总计: ${formatUsdAmount(detail.totalAmount)}`, `${detail.items.length} items | Total: ${formatUsdAmount(detail.totalAmount)}`)}
+                  <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>{tx(`${detail.items.length} 笔 | 总计: ${formatUsdAmount(detail.totalAmount)}`, `${detail.items.length} items | Total: ${formatUsdAmount(detail.totalAmount)}`)}</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={0} className={detail.transferSummary?.allReceived ? 'text-green-600' : 'text-red-400'}>
+                          SWIFT: {formatUsdAmount(detail.transferSummary?.transferredAmount ?? 0)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {detail.transferSummary?.swiftStatuses.length
+                          ? detail.transferSummary.swiftStatuses.map((status, index) => <div key={index}>SWIFT {index + 1}: {status}</div>)
+                          : tx('尚无有效SWIFT', 'No valid SWIFT')}
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className="text-red-400">{tx('余额', 'Balance')}: {formatUsdAmount(detail.transferSummary?.remainingAmount ?? detail.totalAmount)}</span>
                   </CardDescription>
                 </div>
               </div>

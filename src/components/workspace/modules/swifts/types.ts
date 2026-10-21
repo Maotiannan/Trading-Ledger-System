@@ -15,6 +15,11 @@ export type SwiftDetailOption = {
   id: string;
   date: string | null;
   totalAmount: number;
+  transferSummary?: {
+    transferredAmount: number;
+    remainingAmount: number;
+    validSwiftCount: number;
+  };
 };
 
 export type SwiftDirectForm = {

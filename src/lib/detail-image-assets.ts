@@ -296,11 +296,6 @@ async function loadDetailForPreview(detailId: string): Promise<DetailImageSource
           },
         },
       },
-      swift: {
-        select: {
-          status: true,
-        },
-      },
     },
   });
 

@@ -282,3 +282,31 @@ npm run test:api:isolated -- --case 90-excel-ml-token
 ```
 
 This verifies token generation, fields `1/2/3`, JSON diagnostics, batch row errors, and revoke rejection.
+
+## Multiple SWIFT copies per Payment Detail
+
+`POST /api/swift` actions `confirm` and `direct-create` accept the same `detailId`
+multiple times. Every copy retains its own amount, date, image/PDF and approval
+history. `GET /api/detail` returns `transferSummary` with numeric
+`transferredAmount`, `remainingAmount`, `validSwiftCount`, `allReceived` and
+`swiftStatuses`. The `waiting-options` action includes `Waiting_SWIFT` and
+`Bank_Transfer` details with a positive actual remaining amount.
+
+Only non-error `Bank_Transfer` and `RECEIVED` copies count. All amounts are summed
+with Decimal arithmetic. Aggregate overpayment is rejected. Administrators sign
+one copy at a time. The detail and its receipts become `RECEIVED` only after all
+valid copies are received and the remaining amount is at most
+`validSwiftCount × SWIFT_MAX_FEE_PER_COPY` (default USD 40). The displayed balance
+always retains the actual shortfall, including accepted bank fees. Former
+`SWIFT_WARNING_TOLERANCE` / `SWIFT_REJECT_TOLERANCE` settings are retained for
+historical configuration compatibility and no longer govern SWIFT creation.
+
+Creation, edits, signing and deletion serialize on the parent Detail row.
+Deletion approvals recalculate the remaining copies; received copies are never
+batch-signed. Editing a detail cannot reduce its total below valid SWIFT amounts.
+A direct receipt confirmation cannot bypass incomplete linked SWIFT copies.
+
+Regression coverage: `src/lib/swift-transfer-summary.test.ts`,
+`src/lib/swift-service.test.ts`, isolated API case
+`70-swift-tolerance-boundaries.case.mjs` and Playwright
+`multiple-swifts.spec.ts`. All real API/browser tests run against disposable data.

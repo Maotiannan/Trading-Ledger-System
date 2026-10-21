@@ -110,7 +110,13 @@ export interface Detail {
   createdAt: string;
   creator: { id: string; name: string | null; email: string };
   items: DetailItem[];
-  swift?: Swift | null;
+  transferSummary?: {
+    transferredAmount: number;
+    remainingAmount: number;
+    validSwiftCount: number;
+    allReceived: boolean;
+    swiftStatuses: string[];
+  };
 }
 
 export interface Swift {

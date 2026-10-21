@@ -34,6 +34,7 @@ jest.mock('@/lib/db', () => ({
     detailHistory: {
       create: jest.fn(),
     },
+    $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   },
 }));
@@ -248,6 +249,7 @@ describe('detail-service', () => {
 
   it('rejects detail update when status is RECEIVED', async () => {
     mockDb.detail.findUnique.mockResolvedValueOnce({
+      swifts: [],
       id: 'detail-received',
       createdBy: 'sales-1',
       status: DetailStatus.RECEIVED,
@@ -274,6 +276,7 @@ describe('detail-service', () => {
 
   it('allows detail update while status is Bank_Transfer and keeps linked receipts in Bank_Transfer', async () => {
     mockDb.detail.findUnique.mockResolvedValueOnce({
+      swifts: [],
       id: 'detail-bank',
       createdBy: 'sales-1',
       status: DetailStatus.Bank_Transfer,
@@ -315,6 +318,7 @@ describe('detail-service', () => {
 
   it('writes history and relinks items on detail update', async () => {
     mockDb.detail.findUnique.mockResolvedValueOnce({
+      swifts: [],
       id: 'detail-edit',
       createdBy: 'sales-1',
       status: DetailStatus.Waiting_SWIFT,
@@ -363,6 +367,7 @@ describe('detail-service', () => {
 
   it('falls back to matching by order and amount when an edit snapshot contains a stale receipt id', async () => {
     mockDb.detail.findUnique.mockResolvedValueOnce({
+      swifts: [],
       id: 'detail-edit-stale',
       createdBy: 'sales-1',
       status: DetailStatus.Waiting_SWIFT,

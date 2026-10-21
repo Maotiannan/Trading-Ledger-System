@@ -43,6 +43,7 @@ jest.mock('@/lib/db', () => ({
       findFirst: jest.fn(),
       create: jest.fn(),
     },
+    $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   },
 }));
@@ -803,10 +804,11 @@ describe('receipt-service', () => {
       id: 'receipt-bank',
       status: ReceiptStatus.RECEIVED,
     });
-    mockDb.detailItem.findMany.mockResolvedValueOnce([
+    mockDb.detailItem.findMany.mockResolvedValueOnce([{ detailId: 'detail-1' }]).mockResolvedValueOnce([
       {
         detail: {
           id: 'detail-1',
+          swifts: [],
           items: [
             { receipt: { status: ReceiptStatus.RECEIVED } },
             { receipt: { status: ReceiptStatus.RECEIVED } },
@@ -825,10 +827,7 @@ describe('receipt-service', () => {
       where: { id: 'detail-1' },
       data: { status: DetailStatus.RECEIVED },
     });
-    expect(mockDb.swift.updateMany).toHaveBeenCalledWith({
-      where: { detailId: 'detail-1' },
-      data: { status: SwiftStatus.RECEIVED },
-    });
+    expect(mockDb.swift.updateMany).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
@@ -859,10 +858,11 @@ describe('receipt-service', () => {
       id: 'receipt-waiting',
       status: ReceiptStatus.RECEIVED,
     });
-    mockDb.detailItem.findMany.mockResolvedValueOnce([
+    mockDb.detailItem.findMany.mockResolvedValueOnce([{ detailId: 'detail-1' }]).mockResolvedValueOnce([
       {
         detail: {
           id: 'detail-1',
+          swifts: [],
           items: [
             { receipt: { status: ReceiptStatus.RECEIVED } },
             { receipt: { status: ReceiptStatus.Waiting_SWIFT } },

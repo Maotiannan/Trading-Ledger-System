@@ -126,6 +126,10 @@ export function SystemConfigCard({
                 <Input value={config.SWIFT_REJECT_TOLERANCE || '50'} onChange={(e) => onConfigFieldChange('SWIFT_REJECT_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
               </div>
               <div>
+                <Label>SWIFT_MAX_FEE_PER_COPY</Label>
+                <Input value={config.SWIFT_MAX_FEE_PER_COPY ?? '40'} onChange={(e) => onConfigFieldChange('SWIFT_MAX_FEE_PER_COPY', e.target.value)} disabled={!canEditConfig} />
+              </div>
+              <div>
                 <Label>AUTH_LOGIN_RATE_LIMIT_WINDOW_MS</Label>
                 <Input value={config.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS || '60000'} onChange={(e) => onConfigFieldChange('AUTH_LOGIN_RATE_LIMIT_WINDOW_MS', e.target.value)} disabled={!canEditConfig} />
               </div>

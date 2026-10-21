@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { PdfPreview } from '@/components/workspace/modules/shared/pdf-preview';
-import { formatUsdAmount } from '@/lib/display-format';
+import { SwiftDetailSummary, swiftDetailOptionLabel } from './swift-detail-summary';
 import { Check, Loader2 } from 'lucide-react';
 import type { SwiftDetailOption, SwiftOcrResult, SwiftOcrUploadStatus } from '../types';
 import { normalizeSwiftAmount, normalizeSwiftReceiverAccount } from '@/lib/swift-normalization';
@@ -81,10 +81,11 @@ export function SwiftUploadDialog({
                   <option value="">{waitingDetailsLoading ? tx('加载中...', 'Loading...') : tx('请选择...', 'Please select...')}</option>
                   {waitingDetails.map((detail) => (
                     <option key={detail.id} value={detail.id}>
-                      {detail.date ? new Date(detail.date).toLocaleDateString() : tx('日期未知', 'Unknown date')} - {formatUsdAmount(detail.totalAmount)}
+                      {swiftDetailOptionLabel(detail, tx)}
                     </option>
                   ))}
                 </select>
+                <SwiftDetailSummary detail={waitingDetails.find((detail) => detail.id === selectedDetailId)} tx={tx} />
               </div>
 
               <div className="border-2 border-dashed rounded-lg p-4">

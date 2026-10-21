@@ -177,7 +177,7 @@ export function DetailManager() {
       !appliedFilters.dateFrom &&
       !appliedFilters.dateTo &&
       !appliedFilters.amount;
-    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: typeof details }>(endpoint) : null;
+    const cachedResult = canUsePrefetch ? peekPrefetchedApiResult<{ success?: boolean; data?: Detail[] }>(endpoint) : null;
     if (cachedResult?.success && Array.isArray(cachedResult.data) && detailRequestGuard.isLatest(requestToken)) {
       setDetails(cachedResult.data);
     }
@@ -189,7 +189,7 @@ export function DetailManager() {
         rememberPrefetchedApiResult(endpoint, result);
       }
     }
-  }, [appliedFilters, detailRequestGuard, details, setDetails]);
+  }, [appliedFilters, detailRequestGuard, setDetails]);
 
   useEffect(() => {
     loadDetails();

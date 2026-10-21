@@ -75,7 +75,7 @@ export function SwiftList({
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <Badge variant={status === 'RECEIVED' ? 'default' : status === 'ERROR' ? 'destructive' : 'outline'}>
+                  <Badge title={tx(`状态：${status}`, `Status: ${status}`)} className={status === 'RECEIVED' ? 'bg-green-600 text-white' : undefined} variant={status === 'RECEIVED' ? 'default' : status === 'ERROR' ? 'destructive' : 'outline'}>
                     {status}
                   </Badge>
                   {swift.hasError && <AlertTriangle className="h-5 w-5 text-red-500" />}

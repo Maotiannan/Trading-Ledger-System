@@ -14,6 +14,9 @@ import { resolveAccessiblePaymentAgentId } from '@/lib/payment-agent-service';
 import { ensureDetailPreviewImage } from '@/lib/detail-image-assets';
 import { logger } from '@/lib/logger';
 import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
+import { getSwiftFeePerCopy, lockSwiftDetail, syncSwiftTransferState } from '@/lib/swift-transfer-service';
+import { calculateSwiftTransferSummary } from '@/lib/swift-transfer-summary';
+import { addMoney } from '@/lib/money';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -250,9 +253,11 @@ async function applyDetailUpdate(params: {
 }) {
   const { tx, currentUser, detailId, payload, imagePath, imageName, historyNote } = params;
 
+  await lockSwiftDetail(tx, detailId);
+
   const existingDetail = await tx.detail.findUnique({
     where: { id: detailId },
-    include: { items: true },
+    include: { items: true, swifts: true },
   });
   if (!existingDetail) {
     throw createApiError({
@@ -270,6 +275,12 @@ async function applyDetailUpdate(params: {
   }
   if (existingDetail.status === DetailStatus.RECEIVED) {
     throw badRequest('RECEIVED状态下禁止修改', { detailId, status: existingDetail.status });
+  }
+
+  const nextTotal = addMoney(normalizeItems(payload).map((item) => item.amount));
+  const transferSummary = calculateSwiftTransferSummary(nextTotal, existingDetail.swifts);
+  if (transferSummary.isOverpaid) {
+    throw badRequest('付款明细总额不能小于已关联的SWIFT累计金额');
   }
 
   const processedItems = await processDetailItems({
@@ -307,7 +318,7 @@ async function applyDetailUpdate(params: {
       agentId,
       imageUrl: imagePath || existingDetail.imageUrl,
       imageName: imageName || existingDetail.imageName,
-      totalAmount: processedItems.items.reduce((sum, item) => sum + item.amount, 0),
+      totalAmount: nextTotal,
       items: {
         create: processedItems.items,
       },
@@ -321,6 +332,11 @@ async function applyDetailUpdate(params: {
     .map((item) => item.receiptId)
     .filter((receiptId): receiptId is string => Boolean(receiptId));
   await setReceiptsStatus(tx as DbTransactionClient, receiptIds, getReceiptStatusAfterDetailUpdate(existingDetail.status));
+
+  if (existingDetail.swifts.length > 0) {
+    const summary = await syncSwiftTransferState(tx, detailId, await getSwiftFeePerCopy());
+    nextDetail.status = summary.status;
+  }
 
   return { detail: nextDetail, touchedOrderIds: processedItems.touchedOrderIds };
 }
@@ -458,7 +474,7 @@ export async function updateDetailRecord(params: {
         imagePath,
         imageName,
         historyNote,
-      }));
+      }), { isolationLevel: 'ReadCommitted' });
 
   if (txClient) {
     for (const orderId of result.touchedOrderIds) {

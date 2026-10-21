@@ -16,6 +16,7 @@ import type { CurrentUser } from '@/lib/request-auth';
 import { addMoney, moneyToNumber } from '@/lib/money';
 import { cancelSourceNotificationsInTransaction } from '@/lib/email/email-notification-projector';
 import { pauseWhatsAppForDeletion } from '@/lib/whatsapp/whatsapp-deletion';
+import { getSwiftFeePerCopy, lockSwiftDetail, syncSwiftTransferState } from '@/lib/swift-transfer-service';
 
 const AUTO_DETAIL_RECEIPT_NOTES = new Set(['由付款明细自动创建', '由付款明细直接创建']);
 
@@ -165,6 +166,9 @@ async function approveReceiptDeletion(
     select: { detailId: true },
   });
   const affectedDetailIds = Array.from(new Set(affectedDetailItems.map((row) => row.detailId)));
+  for (const detailId of affectedDetailIds.sort()) {
+    await lockSwiftDetail(tx, detailId);
+  }
 
   await tx.receiptHistory.create({
     data: {
@@ -202,6 +206,13 @@ async function approveReceiptDeletion(
       where: { id: detailId },
       data: { totalAmount },
     });
+    const summary = await syncSwiftTransferState(tx, detailId, await getSwiftFeePerCopy());
+    if (summary.isOverpaid) {
+      throw createApiError({
+        code: 'BAD_REQUEST', status: 400,
+        message: '删除收据后付款明细金额将小于已关联SWIFT累计金额，请先调整SWIFT',
+      });
+    }
   }
 
   return { affectedOrderId: receipt.orderId };
@@ -311,28 +322,9 @@ async function approveSwiftDeletion(
     return;
   }
 
-  await tx.detail.update({
-    where: { id: swift.detailId },
-    data: { status: DetailStatus.Waiting_SWIFT },
-  });
-
-  const detail = await tx.detail.findUnique({
-    where: { id: swift.detailId },
-    include: { items: true },
-  });
-
-  if (detail) {
-    for (const item of detail.items) {
-      if (item.receiptId) {
-        await tx.receipt.update({
-          where: { id: item.receiptId },
-          data: { status: ReceiptStatus.Waiting_SWIFT },
-        });
-      }
-    }
-  }
-
+  await lockSwiftDetail(tx, swift.detailId);
   await tx.swift.delete({ where: { id: targetId } });
+  await syncSwiftTransferState(tx, swift.detailId, await getSwiftFeePerCopy());
 }
 
 export async function listDeletionRequests(currentUser: DeletionActor) {
@@ -506,7 +498,7 @@ export async function reviewDeletionRequest({
         approvedAt: new Date(),
       },
     });
-  });
+  }, { isolationLevel: 'ReadCommitted' });
 
   if (affectedReceiptOrderId) {
     await updateOrderBalance(affectedReceiptOrderId);

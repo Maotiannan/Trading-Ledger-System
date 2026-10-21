@@ -671,7 +671,7 @@ model Detail {
   agent      PaymentAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
   items      DetailItem[]
   histories  DetailHistory[]
-  swift      Swift?
+  swifts     Swift[]
   editRequests DetailEditRequest[]
 
   @@index([status])
@@ -722,7 +722,7 @@ model DetailHistory {
 // ==================== SWIFT水单表 ====================
 model Swift {
   id             String   @id @default(cuid())
-  detailId       String   @unique // 一张SWIFT对应一张DETAIL
+  detailId       String   // 多张SWIFT可对应同一张DETAIL
   status         SwiftStatus @default(Bank_Transfer)
   amount         Decimal  @db.Decimal(18, 2) // 汇款金额
   date           DateTime? // 汇款日期

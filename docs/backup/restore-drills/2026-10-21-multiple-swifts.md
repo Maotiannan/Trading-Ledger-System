@@ -24,3 +24,12 @@ The full production database and existing upload archive remain the recovery
 scope. Before deployment verify a current full NAS snapshot. Once multiple copies
 exist, do not recreate the unique index or roll back to a one-copy application;
 preserve records and apply a forward fix.
+
+## Deployment Evidence
+
+PR #55 merged on 2026-10-21. Fresh full snapshot `muledger-20261021-113902`
+passed verification and included 671 media files. The safe rebuild completed with
+exit code 0; migration applied successfully and Prisma reported no pending
+migrations. Running version is 1.0.227. Before/after Detail and Swift counts were
+36 and 33, respectively; the non-unique index remains and no test business records
+were created in production.

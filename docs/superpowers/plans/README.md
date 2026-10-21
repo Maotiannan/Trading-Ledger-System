@@ -12,7 +12,7 @@ Active implementation and historical plan states are listed below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
-| `2026-10-21-multiple-swifts-per-payment-detail.md` | `ACTIVE` | Multiple copies, independent signoff, shared totals and per-copy fees implemented; isolated unit/API/browser and migration/restore verified. CI, merge and deployment pending. |
+| `2026-10-21-multiple-swifts-per-payment-detail.md` | `ARCHIVED_COMPLETED` | PR #55 merged; v1.0.227 safely deployed with verified backup/migration. 1,585 unit tests, 26 API cases and 16 browser tests passed. |
 | `2026-10-06-production-dependency-security.md` | `ARCHIVED_COMPLETED` | PR #44 / v1.0.226 deployed; six production audit entries reduced to zero, compatibility and full CI passed. Development-only findings remain separate backlog. |
 | `2026-10-06-whatsapp-outstanding-reminders.md` | `ACTIVE` | Customer-level reminder implementation and isolated verification; copy approval, provider review and production activation remain gated. |
 | `2026-09-08-email-contact-rollout.md` | `ACTIVE` | Shared contact footer and settings implemented; Resend domain/credentials, real delivery verification, CI and production activation remain gated. |

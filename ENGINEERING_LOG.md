@@ -6,12 +6,14 @@
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
-## 2026-10-21 多张 SWIFT 对应付款明细（待发布）
+## 2026-10-21 多张 SWIFT 对应付款明细（v1.0.227）
 
 - Detail.swifts 一对多，迁移仅删除 Swift_detailId_key，保留历史数据、普通索引和外键。
 - Decimal 统一累计与状态计算；逐张签收、每张默认 USD 40 手续费容差；关联写入锁定 Detail，审批/删除同步重算，阻止超额和通过收据提前完成。
 - Payment Detail 紧凑显示 SWIFT/实际 Balance，已签收绿色、逐张状态浮层；继续上传和手机布局复用已有组件。修复两处列表回填触发重复请求的依赖循环。
-- 全库 Jest 242 suites / 1584 tests 通过，后续边界回归通过；隔离 API、桌面/390px 手机 Playwright 和旧数据迁移/备份恢复演练通过。CI 与部署结果尚待发布流程验证。
+- PR #55 的完整 CI 通过：Jest 242 suites / 1585 tests、26 项隔离 API、16 项 Playwright、TypeScript 和 ESLint。旧数据迁移/备份恢复演练通过。
+- PR #55 已合并；新 NAS 整库及 671 个媒体文件备份 muledger-20261021-113902 验证通过。安全脚本退出 0，生产迁移完成、schema 最新、运行 v1.0.227，Detail/Swift 行数仍为 36/33；未创建正式测试记录或删除媒体。主分支持续检查结果见 GitHub Actions。
+- 构建提示既有 sharp 0.35.4 高危公告 GHSA-wq5f-xc86-pv6w，上游修复版 0.35.5；未混入本次功能的依赖升级，需单独维护。
 - 备份保持整库与现有 UPLOAD_HOST_DIR，恢复证据见 docs/backup/restore-drills/2026-10-21-multiple-swifts.md。
 
 ## 2026-10-06 客户欠款提醒（待发布）

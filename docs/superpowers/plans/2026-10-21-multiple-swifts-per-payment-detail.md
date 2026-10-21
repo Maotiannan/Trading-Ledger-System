@@ -1,6 +1,7 @@
 # Multiple SWIFT copies per Payment Detail
 
-Status: implementation and isolated verification complete; CI, merge and deployment pending.
+Status: ARCHIVED_COMPLETED. PR #55 merged; v1.0.227 deployed on 2026-10-21.
+Release CI evidence is linked from the PR and ENGINEERING_LOG.md.
 
 ## Approved scope
 
@@ -45,3 +46,16 @@ Validate pre/post-migration row preservation and a synthetic dump/restore in an
 isolated database. Before live migration verify a fresh full snapshot. After
 multi-copy adoption, preserve the schema and use a forward fix; do not recreate
 the unique index or deploy an app assuming one SWIFT per Detail.
+
+## Actual Delivery
+
+- PR CI: 242 suites / 1,585 unit tests, 26 isolated API cases and 16 isolated
+  Playwright tests passed, plus TypeScript and ESLint.
+- Fresh full NAS snapshot `muledger-20261021-113902` verified before rollout;
+  671 media files included. Safe rebuild completed successfully, migration applied,
+  schema up to date and app version verified as 1.0.227.
+- Detail/Swift counts remained 36/33; the ordinary index remains. No production
+  test records, financial edits or media deletions were performed by this feature.
+- Build also identified an existing `sharp 0.35.4` high-severity advisory
+  GHSA-wq5f-xc86-pv6w, fixed upstream in 0.35.5. Dependency updates remain a separate
+  task; this feature changes no dependency versions.

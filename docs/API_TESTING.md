@@ -1,5 +1,11 @@
 # API Testing Guide
 
+SWIFT lifecycle contract: partial copies keep Detail and linked receipts in
+Waiting_SWIFT; sufficient cumulative copies (within per-copy fee allowance) enter
+Bank_Transfer while awaiting signatures; all valid copies signed enter RECEIVED.
+Each SWIFT retains its own status. Covered totals and actual Balance use the
+shared calculation; case 70 and the multiple-swifts browser test cover this flow.
+
 This project is fully API-driven. UI features map to API endpoints under `/api/*`.
 
 ## 1. System endpoints (for testing bootstrap)

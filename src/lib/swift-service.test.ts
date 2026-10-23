@@ -61,7 +61,7 @@ beforeEach(() => {
 it('allows multiple copies after the first was signed and completes only after the last is signed', async () => {
   const first = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(50000), mode: 'confirm' });
   await markSwiftReceived({ currentUser: user, swiftId: first.swift.id });
-  expect(detail.status).toBe('Bank_Transfer');
+  expect(detail.status).toBe('Waiting_SWIFT');
   expect(mocks.receipt.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'RECEIVED' } }));
   const second = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(25093), mode: 'direct-create' });
   expect(rows[0].status).toBe('RECEIVED');
@@ -78,7 +78,7 @@ it('handles eight independent transfers with bank fees', async () => {
   for (let n = 0; n < 8; n++) {
     const created = await createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(9980), mode: 'direct-create' });
     await markSwiftReceived({ currentUser: user, swiftId: created.swift.id });
-    expect(detail.status).toBe(n === 7 ? 'RECEIVED' : 'Bank_Transfer');
+    expect(detail.status).toBe(n === 7 ? 'RECEIVED' : 'Waiting_SWIFT');
   }
   await expect(createSwiftRecord({ currentUser: user, detailId: 'detail', payload: payload(160), mode: 'direct-create' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 });
@@ -100,7 +100,7 @@ it('recalculates remaining copies on deletion', async () => {
   add(25093, 'RECEIVED');
   detail.status = 'RECEIVED';
   await deleteSwiftRecord({ currentUser: user, swiftId: first.id });
-  expect(detail.status).toBe('Bank_Transfer');
+  expect(detail.status).toBe('Waiting_SWIFT');
   expect(rows[0].status).toBe('RECEIVED');
   await deleteSwiftRecord({ currentUser: user, swiftId: rows[0].id });
   expect(detail.status).toBe('Waiting_SWIFT');

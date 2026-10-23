@@ -23,7 +23,7 @@ export async function syncSwiftTransferState(tx: DbTransactionClient, detailId: 
   await tx.detail.update({ where: { id: detailId }, data: { status: summary.status } });
   const receiptIds = detail.items.map((item) => item.receiptId).filter((id): id is string => Boolean(id));
   const receiptStatus = summary.status === DetailStatus.RECEIVED ? ReceiptStatus.RECEIVED
-    : summary.validSwiftCount > 0 ? ReceiptStatus.Bank_Transfer : ReceiptStatus.Waiting_SWIFT;
+    : summary.status === DetailStatus.Bank_Transfer ? ReceiptStatus.Bank_Transfer : ReceiptStatus.Waiting_SWIFT;
   if (receiptIds.length) {
     await tx.receipt.updateMany({
       where: { id: { in: receiptIds }, status: { not: ReceiptStatus.SIGNING_PENDING } },

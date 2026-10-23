@@ -61,10 +61,13 @@ export default async function run(t) {
   });
   const first = await createSwift(t, pair.detailId, 50000);
   const firstId = first.data.data.swift.id;
+  t.assertEqual((await getDetail(t, pair.detailId)).status, 'Waiting_SWIFT', 'partial upload keeps payment detail waiting for more copies');
   await receive(t, firstId);
   let detail = await getDetail(t, pair.detailId);
-  t.assertEqual(detail.status, 'Bank_Transfer', 'one received partial SWIFT cannot complete the payment detail');
+  t.assertEqual(detail.status, 'Waiting_SWIFT', 'one received partial SWIFT cannot complete the payment detail');
   t.assertEqual(detail.transferSummary.remainingAmount, 25093, 'actual outstanding transfer balance');
+  const partialReceipts = await t.request('GET', `/api/receipt?search=${encodeURIComponent(pair.orderNo)}`, { expectedStatus: 200 });
+  t.assertEqual(partialReceipts.data.data.find((row) => row.id === pair.receiptId).status, 'Waiting_SWIFT', 'linked receipt remains waiting after partial signoff');
   await t.request('POST', '/api/deletion', {
     json: { action: 'approve', requestId: receiptDeletion.data.data.id }, expectedStatus: 400,
   });
@@ -98,7 +101,7 @@ export default async function run(t) {
   const request = await t.request('POST', '/api/deletion', { json: { action: 'request', targetType: 'SWIFT', targetId: secondId }, expectedStatus: 200 });
   await t.request('POST', '/api/deletion', { json: { action: 'approve', requestId: request.data.data.id }, expectedStatus: 200 });
   detail = await getDetail(t, pair.detailId);
-  t.assertEqual(detail.status, 'Bank_Transfer', 'deleting one of several copies recalculates remaining payment');
+  t.assertEqual(detail.status, 'Waiting_SWIFT', 'deleting one of several copies recalculates remaining payment');
   t.assertEqual(detail.transferSummary.transferredAmount, 50000, 'received first copy is retained after approved deletion');
   t.assertEqual(detail.transferSummary.remainingAmount, 25093, 'deletion restores actual remaining balance');
 
@@ -107,13 +110,13 @@ export default async function run(t) {
     const swift = await createSwift(t, eight.detailId, 9980);
     await receive(t, swift.data.data.swift.id);
     detail = await getDetail(t, eight.detailId);
-    t.assertEqual(detail.status, index === 7 ? 'RECEIVED' : 'Bank_Transfer', `copy ${index + 1} signed independently`);
+    t.assertEqual(detail.status, index === 7 ? 'RECEIVED' : 'Waiting_SWIFT', `copy ${index + 1} signed independently`);
   }
   t.assertEqual(detail.transferSummary.remainingAmount, 160, 'accepted fees remain visible as actual unpaid amount');
   t.assertEqual(detail.transferSummary.transferredAmount, 79840, 'eight transfer total is accurate');
   await createSwift(t, eight.detailId, 160, {}, 400);
 
-  for (const [label, amount, status] of [['BOUNDARY', 960, 'RECEIVED'], ['OUTSIDE', 959.99, 'Bank_Transfer']]) {
+  for (const [label, amount, status] of [['BOUNDARY', 960, 'RECEIVED'], ['OUTSIDE', 959.99, 'Waiting_SWIFT']]) {
     const boundary = await createPair(t, suffix, label, 1000);
     const swift = await createSwift(t, boundary.detailId, amount);
     await receive(t, swift.data.data.swift.id);

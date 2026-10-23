@@ -384,3 +384,19 @@ the isolated environment. The migration deletes no business or media data.
 Rollback before multi-copy adoption may recreate the unique index after proving
 no duplicate detailId exists. After adoption, keep the non-unique relation and
 use a forward application fix; an old one-to-one application/index is unsafe.
+
+### Partial SWIFT Status Correction (2026-10-23)
+
+No schema migration or new storage is needed. Existing Detail/Receipt status and
+`SWIFT_PARTIAL_STATUS_RECONCILE` AuditLog records are covered by the full dump.
+Correction changes only old Bank_Transfer rows whose shared calculation returns
+Waiting_SWIFT, excluding completed/error/manual flows. It never alters SWIFT
+rows, amounts, dates or media. Every correction stores before/after Detail state
+and receipt states in the same transaction; audit failure rolls back the change.
+
+Before applying, verify a fresh full snapshot and review the default dry-run.
+Use the operator script described in the [plan](../superpowers/plans/2026-10-23-partial-swift-waiting-status.md).
+Recovery checks must retain each copy's received state, corrected Detail/Receipt
+states and audit metadata. Do not restore the whole live database to undo a
+status-only change; use audit evidence and current shared calculation for a
+scoped forward correction. No file recovery or index rollback is required.

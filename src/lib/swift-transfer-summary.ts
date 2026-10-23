@@ -19,7 +19,8 @@ export function calculateSwiftTransferSummary(
   const feeTolerance = toDecimal(maxFeePerCopy).times(valid.length);
   const allReceived = valid.length > 0 && valid.every((swift) => swift.status === 'RECEIVED');
   const isOverpaid = difference.lt(0);
-  const isComplete = total.gt(0) && allReceived && !isOverpaid && difference.lte(feeTolerance);
+  const isCovered = total.gt(0) && valid.length > 0 && !isOverpaid && difference.lte(feeTolerance);
+  const isComplete = isCovered && allReceived;
   return {
     transferredAmount: moneyToNumber(transferred),
     remainingAmount: moneyToNumber(difference.gt(0) ? difference : 0),
@@ -29,7 +30,7 @@ export function calculateSwiftTransferSummary(
     isOverpaid,
     isComplete,
     status: isOverpaid ? 'ERROR' as const : isComplete ? 'RECEIVED' as const
-      : valid.length > 0 ? 'Bank_Transfer' as const : 'Waiting_SWIFT' as const,
+      : isCovered ? 'Bank_Transfer' as const : 'Waiting_SWIFT' as const,
     swiftStatuses: valid.map((swift) => swift.status!),
   };
 }

@@ -22,6 +22,7 @@ test('partial SWIFT totals and upload selection fit desktop and mobile', async (
   await search.fill(`${suffix}-01`);
   await search.press('Enter');
   await expect(page.getByText('SWIFT: $50,000', { exact: true })).toBeVisible();
+  await expect(page.getByText('Waiting_SWIFT', { exact: true })).toBeVisible();
   await expect(page.getByText(/(?:余额|Balance): \$25,093/)).toBeVisible();
   const swiftTotal = page.getByText('SWIFT: $50,000', { exact: true });
   await expect(swiftTotal).toHaveClass(/text-green-600/);

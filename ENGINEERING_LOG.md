@@ -6,6 +6,13 @@
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
+## 2026-10-23 部分 SWIFT 状态修正（待发布 v1.0.228）
+
+- 固定三阶段规则：累计不足 Waiting_SWIFT，金额达标待签收 Bank_Transfer，全签收 RECEIVED；关联收据同步采用相同计算，各张 SWIFT 和实际 Balance 保留。
+- 操作脚本默认 dry-run；ADMIN apply 逐张锁定、重检、统一重算及事务审计，只校正旧 Bank_Transfer 部分汇款，不增加公开接口。
+- 全库 243 suites / 1591 tests、定向隔离 API 和桌面/手机浏览器验证通过；历史数据校正、重复执行、审计失败回滚及整库 dump/restore 演练通过，证据见 docs/backup/restore-drills/2026-10-23-partial-swift-status.md。
+- 无新 schema 迁移、依赖或媒体路径；正式备份、PR/CI、部署及历史记录校正待发布流程完成。
+
 ## 2026-10-21 多张 SWIFT 对应付款明细（v1.0.227）
 
 - Detail.swifts 一对多，迁移仅删除 Swift_detailId_key，保留历史数据、普通索引和外键。

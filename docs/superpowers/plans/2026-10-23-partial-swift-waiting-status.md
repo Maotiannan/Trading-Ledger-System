@@ -1,6 +1,6 @@
 # Partial SWIFT Waiting Status
 
-Status: ACTIVE. Approved implementation, verification and rollout in progress.
+Status: ARCHIVED_COMPLETED. PR #56 merged; v1.0.228 deployed.
 
 ## Approved State Contract
 
@@ -46,3 +46,20 @@ Backup/recovery: [runbook](../../backup/muledger-local-backup.md). No schema
 migration, new dependency, file directory or notification behavior is added.
 
 Isolated evidence: [correction/rollback/restore drill](../../backup/restore-drills/2026-10-23-partial-swift-status.md).
+
+## Release Evidence
+
+- PR [#56](https://github.com/Maotiannan/Trading-Ledger-System/pull/56), merge
+  `0eee28d`; pre-merge [full CI](https://github.com/Maotiannan/Trading-Ledger-System/actions/runs/39892621204)
+  passed: 243 suites / 1,591 unit tests, 26 isolated API cases and 16 browser tests.
+- Full snapshot `muledger-20261023-110017` includes database and 676 media files;
+  backup and independent verification both exited 0.
+- Safe rebuild exited 0. Running version 1.0.228; 33 existing migrations with
+  none pending. Internal/public homepage and static asset checks passed.
+- ADMIN correction changed one Detail (USD 75,093; USD 50,000 already signed)
+  and its 20 linked receipts from Bank_Transfer to Waiting_SWIFT. Exactly one
+  transactional correction audit exists. The full SWIFT row, all amounts and
+  file references were verified unchanged; follow-up dry-run found zero candidates.
+- Post-merge checks are recorded in [main CI](https://github.com/Maotiannan/Trading-Ledger-System/actions/runs/39893361983)
+  and the release-record commit's GitHub Actions check. No test financial records
+  or notifications were created in production.

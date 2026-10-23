@@ -1,6 +1,6 @@
 # Implementation Plan Status Index
 
-> Last reviewed: 2026-09-05
+> Last reviewed: 2026-10-23
 
 This file is the authoritative status index for historical implementation plans in this directory.
 
@@ -12,7 +12,7 @@ Active implementation and historical plan states are listed below.
 
 | Plan | Status | Outcome |
 | --- | --- | --- |
-| `2026-10-23-partial-swift-waiting-status.md` | `ACTIVE` | Correct partial-transfer state to Waiting_SWIFT; unify receipt synchronization and audited historical correction. Verification and release in progress. |
+| `2026-10-23-partial-swift-waiting-status.md` | `ARCHIVED_COMPLETED` | PR #56 merged; v1.0.228 deployed after verified backup. Corrected 1 Detail / 20 receipts; original SWIFT and amounts unchanged, zero remaining candidates. |
 | `2026-10-21-multiple-swifts-per-payment-detail.md` | `ARCHIVED_COMPLETED` | PR #55 merged; v1.0.227 safely deployed with verified backup/migration. 1,585 unit tests, 26 API cases and 16 browser tests passed. |
 | `2026-10-06-production-dependency-security.md` | `ARCHIVED_COMPLETED` | PR #44 / v1.0.226 deployed; six production audit entries reduced to zero, compatibility and full CI passed. Development-only findings remain separate backlog. |
 | `2026-10-06-whatsapp-outstanding-reminders.md` | `ACTIVE` | Customer-level reminder implementation and isolated verification; copy approval, provider review and production activation remain gated. |

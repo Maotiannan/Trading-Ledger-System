@@ -1,17 +1,19 @@
 # Trading-Ledger-System Engineering Log
 
 > 纯工程内部流水与技术变更记录  
-> 当前版本：v1.0.221
-> 最后更新：2026-09-17
+> 当前版本：v1.0.228
+> 最后更新：2026-10-23
 
 > 说明：本文件保留详细技术流水、测试门禁、模块拆分、服务分层、CI 与基础设施调整。用户可读的里程碑与后续计划请看 `todolist.md`。
 
-## 2026-10-23 部分 SWIFT 状态修正（待发布 v1.0.228）
+## 2026-10-23 部分 SWIFT 状态修正（v1.0.228）
 
 - 固定三阶段规则：累计不足 Waiting_SWIFT，金额达标待签收 Bank_Transfer，全签收 RECEIVED；关联收据同步采用相同计算，各张 SWIFT 和实际 Balance 保留。
 - 操作脚本默认 dry-run；ADMIN apply 逐张锁定、重检、统一重算及事务审计，只校正旧 Bank_Transfer 部分汇款，不增加公开接口。
 - 全库 243 suites / 1591 tests、定向隔离 API 和桌面/手机浏览器验证通过；历史数据校正、重复执行、审计失败回滚及整库 dump/restore 演练通过，证据见 docs/backup/restore-drills/2026-10-23-partial-swift-status.md。
-- 无新 schema 迁移、依赖或媒体路径；正式备份、PR/CI、部署及历史记录校正待发布流程完成。
+- PR #56 完整 CI 通过（243 suites / 1591 tests、26 项隔离 API、16 项浏览器测试），已合并为 0eee28d。新备份 muledger-20261023-110017 包含整库和 676 个媒体文件，独立校验通过。
+- 安全重建脚本退出 0；运行 v1.0.228，33 条既有迁移无待执行，内外网首页与静态资源正常。正式校正 1 张 Detail 和 20 条收据为 Waiting_SWIFT；原 USD 50,000 SWIFT 保持 RECEIVED，金额、SWIFT 完整行及文件字段核验不变，审计 1 条，复扫零候选。主线持续检查见 GitHub Actions。
+- 无新 schema 迁移、依赖或媒体路径。构建只读审计提示既有 Next.js critical / sharp high 风险，分别建议兼容修复版 16.4.2 / 0.35.5；未混入本次状态修复，需单独维护。
 
 ## 2026-10-21 多张 SWIFT 对应付款明细（v1.0.227）
 

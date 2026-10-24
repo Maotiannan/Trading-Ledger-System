@@ -2,18 +2,19 @@
 
 ## Release State
 
-The existing receipt/shipment/release notifications are in production. On
-2026-10-08, all four French outstanding-reminder templates were confirmed APPROVED
-and UTILITY with exact content verification. Four synthetic image+text tests to
-the configured, user-authorized destination returned DELIVERED through the real
-webhook. The four templates are active. Production reminders were enabled and
-then paused after the first live batch returned BALANCE_INSUFFICIENT. Current
-state: reminderEnabled=false and reminderTestMode=false. Existing transactional
-notification settings were preserved, but share the same depleted provider balance.
+Receipt/shipment/release notifications and automatic outstanding reminders are
+enabled in production. On 2026-10-24 at 06:52:57 UTC (Africa/Conakry), the user
+authorized restoring reminders after recharge. All four active French reminder
+templates were checked against YCloud: APPROVED, UTILITY, and exact content match.
+Only `reminderEnabled` changed from false to true; production mode, transactional
+notification settings and original activation time were preserved. The change
+and before/after settings are recorded in AuditLog.
 
-This was a configuration-only rollout of deployed version 1.0.226, not a new
-application build or database migration. The approved correction templates were
-also refreshed locally; no correction messages were sent during this rollout.
+The previous pause on 2026-10-08 followed BALANCE_INSUFFICIENT during rollout.
+That historical error does not establish the current wallet balance. Recharge
+and individual failed-message retries do not restore the daily reminder switch.
+This recovery is configuration-only on deployed version 1.0.228: no application
+rebuild, restart, database migration or financial-data edits are needed.
 
 ## Business Rules
 
@@ -274,6 +275,21 @@ Set production activation to rollout time, not original test activation.
   so enabling alone does not immediately retry those failed messages.
 - Rollback: disable only reminderEnabled; leave other notifications, sent history,
   templates, database schema and archived images intact.
+
+### Recovery After Recharge
+
+1. Check the current provider account and all four active French reminder templates;
+   do not treat a historical balance failure as evidence of the current balance.
+2. Explicitly restore `reminderEnabled` through ADMIN settings and verify the saved
+   value. Preserve the other switches and record the before/after audit. Recharge
+   alone and individual retry actions do not enable daily scheduling.
+3. Observe the next scan at or after 07:00 Africa/Conakry and the five-minute queue.
+   Preserve customer consent, current PHONE, cancellation/deletion holds, cooldowns
+   and existing daily scan markers. Never reset historical slots to force a send.
+4. Verify newly due tasks and provider results before declaring recovery complete.
+   Reconcile failed messages individually; never resend ACCEPTED, SENT, DELIVERED,
+   READ or UNCERTAIN deliveries. If another blocker exists, report its current
+   evidence rather than silently leaving reminders disabled.
 
 ### Individual failed-message retry controls
 

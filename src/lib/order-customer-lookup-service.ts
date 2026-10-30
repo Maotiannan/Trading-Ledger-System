@@ -12,6 +12,7 @@ import { extractOrderNameFromOrderNo } from '@/lib/customer-matching';
 import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
+import { canonicalizeOrderNo } from '@/lib/order-alias';
 import { findOrderIdByNoOrAliasWithExecutor } from '@/lib/order-alias-db';
 
 export type OrderCustomerLookupMatchedBy = 'linked-order' | 'derived-order-name';
@@ -180,6 +181,22 @@ async function findExactOrders(
   visibilityWhere: ReturnType<typeof buildOrderVisibilityWhere>,
 ): Promise<LookupOrder[]> {
   const candidates = buildCompositeOrderLookupCandidates(rawOrderNo);
+  const select = {
+    id: true,
+    orderNo: true,
+    createdAt: true,
+    customer: { select: customerSelect },
+    invoice: { select: { id: true, invNo: true, createdAt: true } },
+  } satisfies Prisma.OrderSelect;
+  // A complete order must win over segments/aliases linked to different customers.
+  const fullOrderNos = Array.from(new Set([rawOrderNo, canonicalizeOrderNo(rawOrderNo)]));
+  const fullOrders = await executor.order.findMany({
+    where: { AND: [visibilityWhere, { orderNo: { in: fullOrderNos } }] },
+    select,
+    orderBy: [{ createdAt: 'desc' }],
+  }) as unknown as LookupOrder[];
+  if (fullOrders.length > 0) return fullOrders;
+
   let exactOrders = await executor.order.findMany({
     where: {
       AND: [
@@ -208,13 +225,7 @@ async function findExactOrders(
         },
       ],
     },
-    select: {
-      id: true,
-      orderNo: true,
-      createdAt: true,
-      customer: { select: customerSelect },
-      invoice: { select: { id: true, invNo: true, createdAt: true } },
-    },
+    select,
     orderBy: [{ createdAt: 'desc' }],
   }) as unknown as LookupOrder[];
 
@@ -229,13 +240,7 @@ async function findExactOrders(
         where: {
           AND: [visibilityWhere, { id: matchedOrderId }],
         },
-        select: {
-          id: true,
-          orderNo: true,
-          createdAt: true,
-          customer: { select: customerSelect },
-          invoice: { select: { id: true, invNo: true, createdAt: true } },
-        },
+        select,
         orderBy: [{ createdAt: 'desc' }],
       }) as unknown as LookupOrder[];
     }

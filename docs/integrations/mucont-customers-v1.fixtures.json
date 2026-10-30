@@ -1,0 +1,17 @@
+{
+  "description": "Synthetic data only. Cursor strings illustrate opacity; obtain real cursors from options responses, never construct them.",
+  "cases": [
+    { "name": "options-first-page-duplicate-display-values", "status": 200, "response": { "items": [{ "customerId": "fixture-customer-001", "mark": "DEMO", "name": "Example Customer", "companyName": "Example Trading" }, { "customerId": "fixture-customer-002", "mark": "DEMO", "name": "Example Customer", "companyName": null }], "nextCursor": "opaque-signed-cursor", "hasMore": true } },
+    { "name": "options-last-page", "status": 200, "response": { "items": [{ "customerId": "fixture-customer-003", "mark": null, "name": "Another Example", "companyName": null }], "nextCursor": null, "hasMore": false } },
+    { "name": "options-no-match", "status": 200, "response": { "items": [], "nextCursor": null, "hasMore": false } },
+    { "name": "detail-full", "status": 200, "response": { "customerId": "fixture-customer-001", "capturedAt": "2026-10-30T07:00:00.000Z", "completeness": "MASTER_FULL", "profile": { "name": "Example Customer", "companyName": "Example Trading", "companyAddress": "Example Street", "phone": "+224000000000", "city": "Conakry", "mark": "DEMO", "orderNames": ["DEMO", "DEMO OLD"], "consignee": "Example Receiver", "consignees": ["Example Receiver", "Second Example Receiver"] } } },
+    { "name": "detail-missing-fields", "status": 200, "response": { "customerId": "fixture-customer-003", "capturedAt": "2026-10-30T07:00:00.000Z", "completeness": "MASTER_FULL", "profile": { "name": null, "companyName": null, "companyAddress": null, "phone": null, "city": null, "mark": null, "orderNames": [], "consignee": null, "consignees": [] } } },
+    { "name": "missing-credential", "status": 401, "response": { "error": { "code": "AUTH_REQUIRED", "message": "A service bearer token is required." } } },
+    { "name": "invalid-credential", "status": 401, "response": { "error": { "code": "AUTH_INVALID", "message": "Invalid service credential." } } },
+    { "name": "deleted-customer", "status": 404, "response": { "error": { "code": "CUSTOMER_NOT_FOUND", "message": "Customer has been deleted or does not exist.", "customerId": "fixture-deleted" } } },
+    { "name": "query-changed-cursor", "status": 400, "response": { "error": { "code": "INVALID_CURSOR", "message": "Cursor is invalid or belongs to a different query." } } },
+    { "name": "invalid-query", "status": 400, "response": { "error": { "code": "INVALID_QUERY", "message": "limit must be a positive integer." } } },
+    { "name": "rate-limited", "status": 429, "response": { "error": { "code": "RATE_LIMITED", "message": "Too many customer reads. Please retry later.", "retryAfterMs": 1000 } } },
+    { "name": "source-unavailable", "status": 503, "response": { "error": { "code": "SERVICE_UNAVAILABLE", "message": "Customer service is temporarily unavailable." } } }
+  ]
+}

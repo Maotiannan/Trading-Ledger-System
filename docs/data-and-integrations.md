@@ -10,6 +10,10 @@
 
 ## 外部查询接口
 
+### mucont 客户身份 V1
+
+新集成按“轻量候选 → 稳定 Customer.id 最新主档”读取，覆盖全部客户，使用独立后端只读凭证。接口、分页、错误码和正式 schema/fixtures 见 [mucont 客户身份读取 V1](integrations/mucont-customers-v1.md)。旧按订单查询和显式 CONSIGNEE 写回继续兼容。
+
 ### Excel ML 单值查询
 
 Excel 查询使用 `设置 -> Excel ML 令牌` 生成的账号 token。token 只显示一次，后端只保存哈希；权限沿用生成 token 的账号。

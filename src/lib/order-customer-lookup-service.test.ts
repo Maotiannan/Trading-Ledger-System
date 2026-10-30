@@ -110,6 +110,26 @@ describe('order-customer-lookup-service', () => {
     ]);
   });
 
+  it('prefers the complete order over an alias belonging to another customer', async () => {
+    const exact = makeLinkedOrder({ orderNo: 'GANDO-10/OTHER-20' });
+    const alias = makeLinkedOrder({
+      id: 'order-other', orderNo: 'GANDO-10/OTHER-21',
+      customer: makeCustomer({ id: 'customer-other' }),
+    });
+    // Model the actual SQL union: adding aliases to the first OR introduces the other customer.
+    mockDb.order.findMany.mockImplementation(async ({ where }) => (
+      JSON.stringify(where).includes('aliases') ? [exact, alias] : [exact]
+    ));
+
+    const result = await resolveOrderCustomerBatch(salesUser, ['GANDO-10/OTHER-20']);
+
+    expect(result.results[0]).toEqual(expect.objectContaining({
+      success: true, customerId: 'customer-1', matchedOrderNo: 'GANDO-10/OTHER-20',
+    }));
+    expect(mockDb.order.findMany.mock.calls[0][0].where).not.toHaveProperty('OR');
+    expect(JSON.stringify(mockDb.order.findMany.mock.calls[0][0].where)).not.toContain('aliases');
+  });
+
   it('falls back to derived ORDER_NAME matching with ignore-space rules', async () => {
     mockDb.order.findMany.mockResolvedValueOnce([]);
     mockDb.customerOrderName.findMany.mockResolvedValueOnce([

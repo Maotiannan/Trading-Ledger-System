@@ -13,6 +13,16 @@ export type ApiModule = {
 
 export const apiCatalog: ApiModule[] = [
   {
+    endpoint: '/api/integrations/mucont/v1/customers/options',
+    description: 'Server-only mucont credential; lightweight all-customer candidates with stable ID pagination',
+    actions: [{ action: 'options', method: 'GET', description: 'Search all customer names, companies, MARK and ORDER NAME aliases; query-bound cursor, default 20 max 50' }],
+  },
+  {
+    endpoint: '/api/integrations/mucont/v1/customers/{customerId}',
+    description: 'Server-only all-customer read by immutable Customer.id; no owner filtering',
+    actions: [{ action: 'profile', method: 'GET', description: 'Read current MASTER_FULL profile in one committed snapshot; no-store, explicit 404 for deleted identity' }],
+  },
+  {
     endpoint: '/api/auth',
     description: 'Authentication and user administration',
     actions: [

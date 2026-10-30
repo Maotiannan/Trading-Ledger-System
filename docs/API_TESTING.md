@@ -45,6 +45,16 @@ curl -b cookie.txt \
 
 `MARK / ORDER_NAME / ORDER NO` use exact normalized matching. `NAME` supports case-insensitive contains matching. The history action returns all visible ORDER_NAME groups for the selected customer while keeping Historical Orders and Recent Receipts independently paginated.
 
+## 2.1.1 mucont Customer Identity V1
+
+The dedicated server-side bearer credential reads all customer candidates and current master profiles, independent of owner changes. This response uses the V1 contract directly without the legacy success/data wrapper. See [contract and behavior](integrations/mucont-customers-v1.md).
+
+```sh
+npm run test:api:isolated -- --case 92-mucont-customers-v1
+```
+
+Tests use only the isolated local MariaDB and synthetic customer profiles/credentials. Coverage includes pagination across 53 duplicate-display candidates, alias deduplication, cursor/query validation, latest by-ID reads after owner changes, deleted IDs, credential isolation, and the legacy complete-order/alias collision regression.
+
 ## 2.2 Orders confirmed date
 
 `confirmedAt` is read-only API output. Clients submit only `status`; the server maintains the timestamp atomically:

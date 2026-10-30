@@ -28,6 +28,17 @@ settings. This extension needs no schema migration or additional media archive.
 
 Do not back up Docker containers, images, `.next`, `node_modules`, logs, or test output as business data.
 
+### mucont Customer Identity V1
+
+The read-only customer integration adds no tables, migrations or media files.
+Customer, CustomerOrderName and CustomerConsignee remain covered by the complete
+MySQL snapshot. Recovery verification should confirm stable Customer.id values,
+aliases and primary/multiple consignees, including customers whose owners changed.
+The server-only MUCONT_CUSTOMERS_READ_TOKEN is protected deployment configuration;
+recover it from the credential source or rotate it on both services. Never restore
+an owner-scoped Excel token as this all-customer reader. Existing UPLOAD_HOST_DIR
+coverage is unchanged. See ../integrations/mucont-customers-v1.md for the contract.
+
 ### Outstanding Reminder Extension (Deployment Gated)
 
 Migration `20261006070000_whatsapp_outstanding_reminders` adds the notification

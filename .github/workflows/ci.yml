@@ -8,7 +8,8 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # Playwright 1.58 supports 24.04; do not inherit an unsupported runner OS upgrade.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:

@@ -25,11 +25,15 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { apiCall, lookupOrderContextByOrderNo, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
-import { CheckSquare, Loader2, Pencil, Plus, Search } from 'lucide-react';
+import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import type { OrderTrackerCustomerOption, OrderTrackerRow } from './types';
 
 const MAX_REMARK_LENGTH = 300;
@@ -92,6 +96,65 @@ export function OrderTrackerManager() {
   const [customerLookupHint, setCustomerLookupHint] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const pendingRowsRef = useRef(new Set<string>());
+  const [pendingRows, setPendingRows] = useState<ReadonlySet<string>>(new Set());
+  const [deletingOrder, setDeletingOrder] = useState<OrderTrackerRow | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+
+  const setRowPending = (id: string, pending: boolean) => {
+    if (pending) pendingRowsRef.current.add(id);
+    else pendingRowsRef.current.delete(id);
+    setPendingRows(new Set(pendingRowsRef.current));
+  };
+
+  const handlePiStatusChange = async (row: OrderTrackerRow, piStatus: boolean) => {
+    if (!row.canEditAdminFields || pendingRowsRef.current.has(row.id)) return;
+    setRowPending(row.id, true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await apiCall('orders', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'update', orderId: row.id, piStatus }),
+      });
+      if (!result.success) throw new Error(result.message || tx('保存失败', 'Save failed'));
+      // Discard older list responses so they cannot undo a successful row mutation.
+      requestGuard.nextToken();
+      setLoading(false);
+      setOrders((previous) => previous.map((item) => item.id === row.id
+        ? { ...item, piStatus: result.data.piStatus } : item));
+      setMessage(tx('PI状态已保存', 'PI status saved'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : tx('保存失败', 'Save failed'));
+    } finally {
+      setRowPending(row.id, false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const row = deletingOrder;
+    if (!row?.canDelete || pendingRowsRef.current.has(row.id)) return;
+    setRowPending(row.id, true);
+    setDeleteError('');
+    setError('');
+    setMessage('');
+    try {
+      const result = await apiCall('orders', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete', orderId: row.id }),
+      });
+      if (!result.success) throw new Error(result.message || tx('删除失败', 'Delete failed'));
+      requestGuard.nextToken();
+      setLoading(false);
+      setOrders((previous) => previous.filter((item) => item.id !== row.id));
+      setDeletingOrder(null);
+      setMessage(tx('订单记录已删除', 'Order record deleted'));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : tx('删除失败', 'Delete failed'));
+    } finally {
+      setRowPending(row.id, false);
+    }
+  };
 
   const loadOrders = useCallback(async (searchOverride?: string) => {
     const token = requestGuard.nextToken();
@@ -443,9 +506,17 @@ export function OrderTrackerManager() {
                     </TableCell>
                     <TableCell><Badge variant={statusBadgeVariant(row.status)}>{statusLabel(row.status)}</Badge></TableCell>
                     <TableCell>
-                      {row.piStatus ? (
-                        <Badge variant="default" className="gap-1"><CheckSquare className="h-3 w-3" />PI</Badge>
-                      ) : '-'}
+                      <div className="flex min-h-9 items-center gap-2">
+                        <label className="flex min-h-9 min-w-9 items-center justify-center">
+                          <Checkbox
+                            aria-label={`${tx('PI状态', 'PI STATUS')} ${row.orderNo}`}
+                            checked={row.piStatus}
+                            disabled={!row.canEditAdminFields || pendingRows.has(row.id)}
+                            onCheckedChange={(checked) => void handlePiStatusChange(row, checked === true)}
+                          />
+                        </label>
+                        {pendingRows.has(row.id) && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                      </div>
                     </TableCell>
                     <TableCell className="min-w-[220px] whitespace-pre-wrap">{row.remark || '-'}</TableCell>
                     <TableCell className="min-w-[220px] whitespace-pre-wrap">{row.systemNote || '-'}</TableCell>
@@ -456,14 +527,28 @@ export function OrderTrackerManager() {
                       <div className="max-w-[180px] truncate text-xs text-muted-foreground" title={row.customerName || row.customerPhone || '-'}>{row.customerName || row.customerPhone || '-'}</div>
                     </TableCell>
                     <TableCell>
-                      {(row.canEdit || row.canEditAdminFields || row.canResolveSourceCustomer) ? (
-                        <Button size="sm" variant="outline" onClick={() => openEditDialog(row)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          {tx('修改', 'Edit')}
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{tx('只读', 'Read only')}</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {(row.canEdit || row.canEditAdminFields || row.canResolveSourceCustomer) && (
+                          <Button size="sm" variant="outline" disabled={pendingRows.has(row.id)} onClick={() => openEditDialog(row)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            {tx('修改', 'Edit')}
+                          </Button>
+                        )}
+                        {row.canDelete && (
+                          <Button
+                            size="icon" variant="ghost"
+                            aria-label={`${tx('删除订单', 'Delete order')} ${row.orderNo}`}
+                            title={tx('删除订单', 'Delete order')}
+                            disabled={pendingRows.has(row.id)}
+                            onClick={() => { setDeleteError(''); setDeletingOrder(row); }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                        {!row.canEdit && !row.canEditAdminFields && !row.canResolveSourceCustomer && !row.canDelete && (
+                          <span className="text-xs text-muted-foreground">{tx('只读', 'Read only')}</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -479,6 +564,37 @@ export function OrderTrackerManager() {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={Boolean(deletingOrder)} onOpenChange={(open) => {
+        if (!open && deletingOrder && !pendingRows.has(deletingOrder.id)) setDeletingOrder(null);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tx('删除订单记录？', 'Delete order record?')}</AlertDialogTitle>
+            <AlertDialogDescription className="break-words">
+              {deletingOrder?.orderNo}
+              <br />
+              {tx(
+                '仅从 Orders 页面删除此记录，不会删除关联的财务订单、发票、收据或 MU Contract PI。同一来源 PI 后续同步不会恢复此记录。',
+                'This removes the record from Orders only. Linked finance orders, invoices, receipts and the MU Contract PI are not deleted. Syncing the same source PI will not restore this record.',
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && <Alert variant="destructive"><AlertDescription>{deleteError}</AlertDescription></Alert>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingOrder && pendingRows.has(deletingOrder.id))}>
+              {tx('取消', 'Cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(deletingOrder && pendingRows.has(deletingOrder.id))}
+              onClick={(event) => { event.preventDefault(); void handleDelete(); }}
+            >
+              {deletingOrder && pendingRows.has(deletingOrder.id) && <Loader2 className="h-4 w-4 animate-spin" />}
+              {tx('删除', 'Delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="max-h-[92dvh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-2xl">

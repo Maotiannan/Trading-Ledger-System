@@ -69,6 +69,81 @@ describe('OrderTrackerManager', () => {
     jest.useRealTimers();
   });
 
+  function mockActionRow(admin = true) {
+    const row = {
+      id: 'tracker-actions', orderNo: 'AB-12', status: 'In progress', piStatus: false,
+      depositAmount: 0, canEdit: true, canEditAdminFields: admin, canDelete: admin,
+    };
+    mockApiCall.mockImplementation(async (endpoint: string, options?: RequestInit) => {
+      if (options?.method === 'POST') return { success: true, data: { ...row, piStatus: true } };
+      return { success: true, data: endpoint.includes('customer-options') ? [] : [row] };
+    });
+    return row;
+  }
+
+  it('saves PI directly from the list without refetching the list', async () => {
+    mockActionRow();
+    await renderManager();
+    const checkbox = screen.getByRole('checkbox', { name: 'PI状态 AB-12' });
+    await act(async () => { fireEvent.click(checkbox); });
+    expect(mockApiCall).toHaveBeenCalledWith('orders', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ action: 'update', orderId: 'tracker-actions', piStatus: true }),
+    }));
+    expect(checkbox).toBeChecked();
+    expect(mockApiCall.mock.calls.filter(([endpoint, options]) => endpoint === 'orders' && !options)).toHaveLength(1);
+  });
+
+  it('locks the row while saving PI, then preserves the previous value on failure', async () => {
+    mockActionRow();
+    await renderManager();
+    let rejectSave!: (error: Error) => void;
+    mockApiCall.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+    const checkbox = screen.getByRole('checkbox', { name: 'PI状态 AB-12' });
+    await act(async () => { fireEvent.click(checkbox); });
+    expect(checkbox).toBeDisabled();
+    expect(screen.getByRole('button', { name: '删除订单 AB-12' })).toBeDisabled();
+    await act(async () => { rejectSave(new Error('network unavailable')); });
+    expect(checkbox).not.toBeChecked();
+    expect(checkbox).toBeEnabled();
+    expect(screen.getByText('network unavailable')).toBeInTheDocument();
+  });
+
+  it('shows readonly PI and no trash button for a non-admin account', async () => {
+    mockActionRow(false);
+    await renderManager();
+    expect(screen.getByRole('checkbox', { name: 'PI状态 AB-12' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '删除订单 AB-12' })).not.toBeInTheDocument();
+  });
+
+  it('requires confirmation before deleting and removes only the selected row', async () => {
+    mockActionRow();
+    await renderManager();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除订单 AB-12' })); });
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveTextContent('不会删除关联的财务订单、发票、收据或 MU Contract PI');
+    expect(mockApiCall.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: '取消' })); });
+    expect(screen.getByText('AB-12')).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '删除订单 AB-12' })); });
+    await act(async () => { fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '删除' })); });
+    expect(mockApiCall).toHaveBeenCalledWith('orders', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ action: 'delete', orderId: 'tracker-actions' }),
+    }));
+    expect(screen.queryByText('AB-12')).not.toBeInTheDocument();
+  });
+
+  it('keeps the confirmation and row visible on delete failure in English', async () => {
+    mockUseUiText.mockReturnValue((_zh: string, en: string) => en);
+    mockActionRow();
+    await renderManager();
+    mockApiCall.mockRejectedValueOnce(new Error('Delete failed'));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete order AB-12' })); });
+    await act(async () => { fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' })); });
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Delete failed');
+    await act(async () => { fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Cancel' })); });
+    expect(screen.getByRole('checkbox', { name: 'PI STATUS AB-12' })).toBeInTheDocument();
+  });
+
   it('auto-fills customer from the global ORDER context when creating a new Orders record', async () => {
     mockLookupOrderContextByOrderNo.mockResolvedValueOnce({
       matchedCustomer: { mark: 'PIKIN', name: 'PIKIN', customerId: 'customer-pikin' },

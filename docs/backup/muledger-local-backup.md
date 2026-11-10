@@ -411,3 +411,19 @@ Recovery checks must retain each copy's received state, corrected Detail/Receipt
 states and audit metadata. Do not restore the whole live database to undo a
 status-only change; use audit evidence and current shared calculation for a
 scoped forward correction. No file recovery or index rollback is required.
+### Orders Admin Deletion (2026-11-09)
+
+Orders-page deletion archives `OrderTracker` using the existing `archivedAt` and
+`archiveReason=ADMIN_DELETED` fields and frees its normalized order number. The
+row, external PI link and transactional `ORDER_TRACKER_DELETE` audit snapshot
+remain in the full `trading_ledger` backup. No schema migration, file deletion,
+upload directory or backup scope change is required. Finance Orders, Invoices,
+Receipts and the MU Contract source PI are unchanged.
+
+Recovery checks: an archived row must remain absent from Orders after restart,
+incremental sync and full reconcile; its source link and delete audit must remain
+available. To recover a mistaken deletion, review the audit in an isolated restore
+first and check for a newer active row using the same order number before restoring
+the normalized key and clearing the archive fields. Do not detach the source link
+or bulk clear archive fields: that can recreate a deliberately removed PI row or
+collide with a replacement row. The normal UI has no restore action in this change.

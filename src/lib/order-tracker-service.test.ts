@@ -6,6 +6,7 @@ import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import {
   createOrderTracker,
+  deleteOrderTracker,
   listOrderTrackers,
   resolveSynchronizedOrderCustomer,
   updateOrderTracker,
@@ -27,6 +28,7 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     receipt: {
       findMany: jest.fn(),
@@ -51,6 +53,7 @@ jest.mock('@/lib/db', () => ({
 }));
 
 jest.mock('@/lib/audit', () => ({
+  ...jest.requireActual('@/lib/audit'),
   recordAuditEvent: jest.fn(),
 }));
 
@@ -96,6 +99,7 @@ const mockDb = db as unknown as {
     findUnique: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   receipt: { findMany: jest.Mock };
   externalOrderSourceLink: { update: jest.Mock; updateMany: jest.Mock };
@@ -126,6 +130,71 @@ describe('order-tracker-service', () => {
     mockRecordAuditEvent.mockResolvedValue(undefined);
     mockFindOrderIdByNoOrAlias.mockResolvedValue(null);
     mockDb.integrationSyncConflict.findMany.mockResolvedValue([]);
+    mockDb.orderTracker.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it.each([UserRole.SALES, UserRole.USER])('rejects deletion by %s before reading the target', async (role) => {
+    await expect(deleteOrderTracker(makeUser({ role }), 'tracker-1')).rejects.toMatchObject({ status: 403 });
+    expect(mockDb.orderTracker.findFirst).not.toHaveBeenCalled();
+    expect(mockDb.orderTracker.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('limits ADMIN deletion to the same visibility scope as the Orders list', async () => {
+    mockDb.orderTracker.findFirst.mockResolvedValue(null);
+    await expect(deleteOrderTracker(makeUser({ role: UserRole.ADMIN }), 'outside-scope')).rejects.toMatchObject({ status: 404 });
+    expect(mockDb.orderTracker.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { AND: [{ id: 'outside-scope' }, expect.objectContaining({ OR: expect.arrayContaining([
+        { customer: { ownerId: { in: ['sales-1', 'user-1'] } } },
+      ]) })] },
+    }));
+    expect(mockDb.orderTracker.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('archives only the tracker and records the snapshot in the same transaction', async () => {
+    mockDb.orderTracker.findFirst.mockResolvedValue({
+      id: 'tracker-1', orderNo: 'AB-12', normalizedOrderNo: 'ab-12', archivedAt: null,
+      financeOrderId: 'finance-1', customerId: 'customer-1', piStatus: true, status: 'Confirmed',
+    });
+    const result = await deleteOrderTracker(makeUser({ role: UserRole.ADMIN }), 'tracker-1');
+    expect(result.data.id).toBe('tracker-1');
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.orderTracker.updateMany).toHaveBeenCalledWith({
+      where: { id: 'tracker-1', archivedAt: null },
+      data: { archivedAt: expect.any(Date), archiveReason: 'ADMIN_DELETED',
+        normalizedOrderNo: '__archived__:admin:tracker-1', updatedBy: 'sales-1' },
+    });
+    expect(mockDb.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      action: 'ORDER_TRACKER_DELETE', actorId: 'sales-1', targetId: 'tracker-1',
+      metadata: expect.objectContaining({
+        before: expect.objectContaining({ orderNo: 'AB-12', financeOrderId: 'finance-1' }),
+        after: expect.objectContaining({ archiveReason: 'ADMIN_DELETED' }),
+      }),
+    }) }));
+    expect(mockDb.order.findUnique).not.toHaveBeenCalled();
+    expect(mockDb.receipt.findMany).not.toHaveBeenCalled();
+  });
+
+  it('does not write a second audit for a repeated deletion', async () => {
+    mockDb.orderTracker.findFirst.mockResolvedValue({ id: 'tracker-1', archivedAt: new Date() });
+    await deleteOrderTracker(makeUser({ role: UserRole.ADMIN }), 'tracker-1');
+    expect(mockDb.orderTracker.updateMany).not.toHaveBeenCalled();
+    expect(mockDb.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('propagates audit failure to roll back the deletion transaction', async () => {
+    mockDb.orderTracker.findFirst.mockResolvedValue({ id: 'tracker-1', archivedAt: null });
+    mockDb.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+    await expect(deleteOrderTracker(makeUser({ role: UserRole.ADMIN }), 'tracker-1')).rejects.toThrow('audit unavailable');
+  });
+
+  it('rejects editing archived trackers and non-boolean PI status values', async () => {
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({ id: 'tracker-1', archivedAt: new Date() });
+    await expect(updateOrderTracker(makeUser({ role: UserRole.ADMIN }), 'tracker-1', { piStatus: true }))
+      .rejects.toMatchObject({ status: 404 });
+    mockDb.orderTracker.findUnique.mockResolvedValueOnce({ id: 'tracker-1', createdBy: 'sales-1', archivedAt: null });
+    await expect(updateOrderTracker(makeUser({ role: UserRole.ADMIN }), 'tracker-1', { piStatus: 'false' }))
+      .rejects.toMatchObject({ status: 400 });
+    expect(mockDb.orderTracker.update).not.toHaveBeenCalled();
   });
 
   it('allows creating an Orders-page record even when the order already exists in finance orders or aliases', async () => {
@@ -489,7 +558,7 @@ describe('order-tracker-service', () => {
     });
 
     expect(mockDb.orderTracker.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'tracker-1' },
+      where: { id: 'tracker-1', archivedAt: null },
       data: expect.objectContaining({
         status: 'Confirmed',
         remark: 'Customer confirmed',

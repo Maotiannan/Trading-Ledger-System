@@ -14,6 +14,7 @@ import {
 } from '@/lib/integrations/mu-contract-customer-resolver';
 import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { serializeOrderTokens } from '@/lib/tokenizer';
+import { ORDER_TRACKER_ADMIN_DELETE_REASON } from '@/lib/order-tracker-lifecycle';
 
 export type MuContractConflictType =
   | 'INVALID_SOURCE_DATA'
@@ -376,7 +377,7 @@ async function applyExistingLinkedOrder(
     };
   }
 
-  if (!state.order.active) {
+  if (!state.order.active || (current.archivedAt && current.archiveReason === ORDER_TRACKER_ADMIN_DELETE_REASON)) {
     return {
       target: {
         orderTrackerId: current.id,

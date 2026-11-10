@@ -6,7 +6,7 @@ import {
   UserRole,
 } from '@prisma/client';
 import { db } from '@/lib/db';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -22,6 +22,7 @@ import { serializeOrderTokens } from '@/lib/tokenizer';
 import { runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { MU_CONTRACT_PROVIDER } from '@/lib/integrations/mu-contract-constants';
+import { ORDER_TRACKER_ADMIN_DELETE_REASON } from '@/lib/order-tracker-lifecycle';
 
 const DEFAULT_ORDER_TRACKER_STATUS = 'In progress';
 const DEFAULT_STATUS_OPTIONS = [DEFAULT_ORDER_TRACKER_STATUS, 'Confirmed', 'Canceled'];
@@ -168,6 +169,9 @@ function serializeTracker(
   const financeInvoice = financeOrder?.invoice && typeof financeOrder.invoice === 'object'
     ? financeOrder.invoice as Record<string, unknown>
     : null;
+  const canResolveSourceCustomer = currentUser.role === UserRole.ADMIN
+    && (source?.customerMatchStatus === ExternalCustomerMatchStatus.UNMATCHED
+      || source?.customerMatchStatus === ExternalCustomerMatchStatus.CONFLICT);
   return {
     ...publicRow,
     amount: asNumber(row.amount),
@@ -188,9 +192,8 @@ function serializeTracker(
     sourceConflict: typeof source?.externalId === 'string'
       ? conflictingSourcePiIds.has(source.externalId)
       : false,
-    canResolveSourceCustomer: currentUser.role === UserRole.ADMIN
-      && (source?.customerMatchStatus === ExternalCustomerMatchStatus.UNMATCHED
-        || source?.customerMatchStatus === ExternalCustomerMatchStatus.CONFLICT),
+    canResolveSourceCustomer,
+    canDelete: adminEditable || canResolveSourceCustomer,
     canEdit: baseEditable,
     canEditAdminFields: adminEditable,
     isMine: row.createdBy === currentUser.id,
@@ -616,7 +619,7 @@ export async function resolveSynchronizedOrderCustomer(
         },
       },
     });
-    if (!target) notFound('Order不存在');
+    if (!target || target.archivedAt) notFound('Order不存在');
     const sourceLink = target.externalSourceLinks[0];
     if (!sourceLink || sourceLink.customerMatchStatus === ExternalCustomerMatchStatus.MATCHED) {
       conflict('只有待匹配或匹配冲突的同步Order可直接选择客户');
@@ -719,7 +722,7 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
     where: { id },
     include: { customer: { select: { ownerId: true } } },
   });
-  if (!target) notFound('Order不存在');
+  if (!target || target.archivedAt) notFound('Order不存在');
 
   const scope = await loadHierarchy(currentUser);
   const baseEditable = canEditBaseFields(currentUser, scope, target);
@@ -764,7 +767,8 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
   if (payload.piStatus !== undefined || payload.systemNote !== undefined) {
     if (!adminEditable) forbidden('只有上级ADMIN可修改PI STATUS和SYSTEM NOTED');
     if (payload.piStatus !== undefined) {
-      data.piStatus = Boolean(payload.piStatus);
+      if (typeof payload.piStatus !== 'boolean') badRequest('PI STATUS must be a boolean');
+      data.piStatus = payload.piStatus;
     }
     if (payload.systemNote !== undefined) {
       data.systemNote = trimStr(payload.systemNote) || null;
@@ -779,7 +783,7 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
   const humanEditedAt = new Date();
   const updated = await runInTransaction(async (tx) => {
     const row = await tx.orderTracker.update({
-      where: { id },
+      where: { id, archivedAt: null },
       data,
     });
     await tx.externalOrderSourceLink.updateMany({
@@ -804,4 +808,51 @@ export async function updateOrderTracker(currentUser: CurrentUser, idInput: unkn
   });
 
   return { data: updated, message: 'Order已更新' };
+}
+
+export async function deleteOrderTracker(currentUser: CurrentUser, idInput: unknown) {
+  if (currentUser.role !== UserRole.ADMIN) forbidden();
+  const id = trimStr(idInput);
+  if (!id) badRequest('ORDER ID不能为空');
+  const scope = await loadHierarchy(currentUser);
+
+  return runInTransaction(async (tx) => {
+    const target = await tx.orderTracker.findFirst({
+      where: { AND: [
+        { id },
+        buildTrackerVisibilityWhere(Array.from(scope.ownerVisibleIds), currentUser.role),
+      ] },
+    });
+    if (!target) notFound('Order不存在');
+    if (target.archivedAt) return { data: { id }, message: 'Order deleted' };
+
+    const archivedAt = new Date();
+    const archiveData = {
+      archivedAt,
+      archiveReason: ORDER_TRACKER_ADMIN_DELETE_REASON,
+      normalizedOrderNo: `__archived__:admin:${id}`,
+      updatedBy: currentUser.id,
+    };
+    const changed = await tx.orderTracker.updateMany({
+      where: { id, archivedAt: null },
+      data: archiveData,
+    });
+    if (changed.count === 0) return { data: { id }, message: 'Order deleted' };
+
+    await tx.externalOrderSourceLink.updateMany({
+      where: { orderTrackerId: id },
+      data: { humanEditedAt: archivedAt, humanEditedBy: currentUser.id },
+    });
+    await recordAuditEventInTransaction(tx, {
+      action: auditActions.ORDER_TRACKER_DELETE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.ORDER_TRACKER,
+      targetId: id,
+      metadata: {
+        before: JSON.parse(JSON.stringify(target)),
+        after: { ...archiveData, archivedAt: archivedAt.toISOString() },
+      },
+    });
+    return { data: { id }, message: 'Order deleted' };
+  });
 }

@@ -154,6 +154,23 @@ function expectNoFinancialWrites(tx: ReturnType<typeof makeTx>): void {
   }
 }
 
+it('does not recreate or rename an ADMIN-deleted tracker when its source PI changes', async () => {
+  const tx = makeTx();
+  tx.externalOrderSourceLink.findUnique.mockResolvedValue(sourceLink({ orderTracker: manualRow({
+    id: 'sync-old', archivedAt: new Date(), archiveReason: 'ADMIN_DELETED',
+    normalizedOrderNo: '__archived__:admin:sync-old',
+  }) }));
+  const result = await apply(tx, makeEvent({ orderNo: 'AB-99' }));
+  expect(result.result).toBe('APPLIED');
+  expect(result.orderTrackerId).toBe('sync-old');
+  expect(tx.orderTracker.create).not.toHaveBeenCalled();
+  expect(tx.orderTracker.update).not.toHaveBeenCalled();
+  expect(tx.externalOrderSourceLink.update).toHaveBeenCalledWith(expect.objectContaining({
+    data: expect.objectContaining({ sourceOrderNo: 'AB-99', orderTrackerId: 'sync-old' }),
+  }));
+  expectNoFinancialWrites(tx);
+});
+
 describe('MU Contract transactional order applier', () => {
   beforeEach(() => {
     jest.resetAllMocks();

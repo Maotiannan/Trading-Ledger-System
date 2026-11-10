@@ -1,3 +1,5 @@
+import { PrismaClient } from '@prisma/client';
+
 export const name = 'order-tracker';
 
 function findOrder(rows, orderNo) {
@@ -157,6 +159,73 @@ export default async function run(t) {
   t.assertOk(Boolean(financeTrackerResponse.data?.data?.id), 'orders page allows finance order numbers as independent tracking rows');
   t.assertEqual(financeTrackerResponse.data?.data?.customerId, customerId, 'orders page infers customer from finance order when customer is omitted');
   t.assertOk(Boolean(financeTrackerResponse.data?.data?.financeOrderId), 'orders page links the visible finance order when creating from finance order number');
+
+  const password = 'OrdersTest@2026!';
+  const childAdmin = await t.createUser({ email: `${suffix}-admin@example.com`, password, role: 'ADMIN', name: 'Orders child admin' });
+  const sales = await t.createUser({ email: `${suffix}-sales@example.com`, password, role: 'SALES', name: 'Orders sales', parentId: childAdmin.data.data.id });
+  await t.createUser({ email: `${suffix}-user@example.com`, password, role: 'USER', name: 'Orders user', parentId: sales.data.data.id });
+  for (const role of ['sales', 'user']) {
+    await t.logout();
+    await t.login(`${suffix}-${role}@example.com`, password);
+    const ownTracker = await t.request('POST', '/api/orders', {
+      json: { action: 'create', orderNo: `${mark}-${role}`, customerId }, expectedStatus: 200,
+    });
+    const ownList = await t.request('GET', `/api/orders?search=${mark}-${role}`, { expectedStatus: 200 });
+    const ownRow = findOrder(ownList.data.data, `${mark}-${role}`);
+    t.assertEqual(ownRow.canDelete, false, `${role} has no delete capability`);
+    t.assertEqual(ownRow.canEditAdminFields, false, `${role} has no inline PI capability`);
+    await t.request('POST', '/api/orders', {
+      json: { action: 'delete', orderId: ownTracker.data.data.id }, expectedStatus: 403,
+    });
+    await t.request('POST', '/api/orders', {
+      json: { action: 'update', orderId: ownTracker.data.data.id, piStatus: true }, expectedStatus: 403,
+    });
+  }
+  await t.logout();
+  await t.login(`${suffix}-admin@example.com`, password);
+  await t.request('POST', '/api/orders', {
+    json: { action: 'delete', orderId: trackerRow.id }, expectedStatus: 404,
+  });
+  t.step('backend enforces role and management-tree deletion boundaries');
+  await t.logout();
+  await t.loginAdmin();
+
+  const prisma = new PrismaClient();
+  try {
+    const beforeFinance = await prisma.order.findMany({ orderBy: { id: 'asc' } });
+    const beforeReceipts = await prisma.receipt.findMany({ orderBy: { id: 'asc' } });
+    const adminList = await t.request('GET', `/api/orders?search=${trackerOrderNo}`, { expectedStatus: 200 });
+    t.assertEqual(findOrder(adminList.data.data, trackerOrderNo).canDelete, true, 'ADMIN receives delete capability');
+    await t.request('POST', '/api/orders', {
+      json: { action: 'update', orderId: trackerRow.id, piStatus: false }, expectedStatus: 200,
+    });
+    const unchecked = await prisma.orderTracker.findUniqueOrThrow({ where: { id: trackerRow.id } });
+    t.assertEqual(unchecked.piStatus, false, 'inline PI update persists false without changing other fields');
+    t.assertEqual(unchecked.status, 'Confirmed', 'inline PI update preserves order status');
+    await t.request('POST', '/api/orders', {
+      json: { action: 'update', orderId: trackerRow.id, piStatus: 'false' }, expectedStatus: 400,
+    });
+
+    for (const id of [trackerRow.id, financeTrackerResponse.data.data.id]) {
+      await t.request('POST', '/api/orders', { json: { action: 'delete', orderId: id }, expectedStatus: 200 });
+      await t.request('POST', '/api/orders', { json: { action: 'delete', orderId: id }, expectedStatus: 200 });
+      const archived = await prisma.orderTracker.findUniqueOrThrow({ where: { id } });
+      t.assertOk(Boolean(archived.archivedAt), 'deleted tracker retained for recovery');
+      t.assertEqual(archived.archiveReason, 'ADMIN_DELETED', 'admin deletion distinguishable from source rename');
+      t.assertEqual(await prisma.auditLog.count({ where: { action: 'ORDER_TRACKER_DELETE', targetId: id } }), 1, 'deletion audit is idempotent');
+      await t.request('POST', '/api/orders', { json: { action: 'update', orderId: id, piStatus: true }, expectedStatus: 404 });
+    }
+    const deletedList = await t.request('GET', `/api/orders?search=${trackerOrderNo}`, { expectedStatus: 200 });
+    t.assertOk(!findOrder(deletedList.data.data, trackerOrderNo), 'deleted record no longer appears in Orders');
+    t.assertEqual(JSON.stringify(await prisma.order.findMany({ orderBy: { id: 'asc' } })), JSON.stringify(beforeFinance), 'finance rows unchanged');
+    t.assertEqual(JSON.stringify(await prisma.receipt.findMany({ orderBy: { id: 'asc' } })), JSON.stringify(beforeReceipts), 'receipt rows unchanged');
+    await t.request('POST', '/api/orders', {
+      json: { action: 'create', orderNo: trackerOrderNo, customerId }, expectedStatus: 200,
+    });
+    t.step('archive, audit, repeat deletion, PI update, financial isolation and order-number reuse verified');
+  } finally {
+    await prisma.$disconnect();
+  }
 
   await t.logout();
 }

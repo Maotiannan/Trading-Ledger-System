@@ -4,6 +4,7 @@ import { toApiErrorResponse } from '@/lib/api-error-response';
 import { parseJsonRequest } from '@/lib/http-body';
 import {
   createOrderTracker,
+  deleteOrderTracker,
   listOrderTrackerCustomerOptions,
   listOrderTrackers,
   resolveSynchronizedOrderCustomer,
@@ -43,6 +44,11 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
   try {
     const body = await parseJsonRequest<Record<string, unknown>>(request);
     const action = trimStr(body.action);
+
+    if (action === 'delete') {
+      const result = await deleteOrderTracker(currentUser, body.orderId);
+      return createApiSuccessResponse(result, request);
+    }
 
     if (action === 'create') {
       const result = await createOrderTracker(currentUser, {

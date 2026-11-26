@@ -98,6 +98,6 @@ JS
 docker exec -i -e MYSQL_PWD="$PASSWORD" "$MYSQL_CONTAINER" mysql -uroot muledger_reliability_test < "$WORK/mysql-schema.sql" >> "$WORK/mysql-schema.log" 2>&1
 STAGE="real MySQL financial concurrency"
 npx jest --config jest.reliability.config.mjs --runInBand --runTestsByPath \
-  tests/reliability/financial.integration.ts > "$WORK/financial.log" 2>&1
+  tests/reliability/financial.integration.ts tests/reliability/approval.integration.ts > "$WORK/financial.log" 2>&1
 tail -7 "$WORK/financial.log"
 echo '[PASS] isolated MySQL financial concurrency; no production databases, volumes or NAS mounts used'

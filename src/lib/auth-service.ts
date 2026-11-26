@@ -1,6 +1,6 @@
 import { UserRole } from '@prisma/client';
 import { hashPassword, verifyPassword } from '@/lib/auth';
-import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
+import { recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
@@ -115,39 +115,42 @@ export async function createManagedUser(
   }
 
   const hashedPassword = await hashPassword(password);
-  const newUser = await runInTransaction((tx) => tx.user.create({
-    data: {
-      email,
-      password: hashedPassword,
-      name: input.name || null,
-      role: targetRole,
-      level: roleLevel[targetRole],
-      parentId: parent.id,
-      createdById: currentUser.id,
-    },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      level: true,
-      parentId: true,
-      createdAt: true,
-      createdById: true,
-    },
-  }));
+  const newUser = await runInTransaction(async (tx) => {
+    const newUser = await tx.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name: input.name || null,
+        role: targetRole,
+        level: roleLevel[targetRole],
+        parentId: parent.id,
+        createdById: currentUser.id,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        level: true,
+        parentId: true,
+        createdAt: true,
+        createdById: true,
+      },
+    });
 
-  await recordAuditEvent({
-    action: auditActions.USER_CREATE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.USER,
-    targetId: newUser.id,
-    metadata: {
-      email: newUser.email,
-      role: newUser.role,
-      level: newUser.level,
-      parentId: newUser.parentId,
-    },
+    await recordAuditEventInTransaction(tx, {
+      action: auditActions.USER_CREATE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.USER,
+      targetId: newUser.id,
+      metadata: {
+        email: newUser.email,
+        role: newUser.role,
+        level: newUser.level,
+        parentId: newUser.parentId,
+      },
+    });
+    return newUser;
   });
 
   return { data: newUser, message: '用户已创建' };
@@ -193,32 +196,35 @@ export async function updateManagedUserRole(
     throw createApiError({ code: 'ROLE_NOT_ALLOWED', status: 403, message: '当前账户无权设置该角色' });
   }
 
-  const updated = await runInTransaction((tx) => tx.user.update({
-    where: { id: userId },
-    data: { role: newRole, level: roleLevel[newRole] },
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      role: true,
-      level: true,
-      parentId: true,
-      createdAt: true,
-      createdById: true,
-    },
-  }));
+  const updated = await runInTransaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId, role: target.role, level: target.level },
+      data: { role: newRole, level: roleLevel[newRole] },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        level: true,
+        parentId: true,
+        createdAt: true,
+        createdById: true,
+      },
+    });
 
-  await recordAuditEvent({
-    action: auditActions.USER_ROLE_UPDATE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.USER,
-    targetId: updated.id,
-    metadata: {
-      previousRole: target.role,
-      previousLevel: target.level,
-      nextRole: updated.role,
-      nextLevel: updated.level,
-    },
+    await recordAuditEventInTransaction(tx, {
+      action: auditActions.USER_ROLE_UPDATE,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.USER,
+      targetId: updated.id,
+      metadata: {
+        previousRole: target.role,
+        previousLevel: target.level,
+        nextRole: updated.role,
+        nextLevel: updated.level,
+      },
+    });
+    return updated;
   });
 
   return { data: updated, message: '角色已更新' };
@@ -287,14 +293,16 @@ export async function resetManagedUserPassword(
   }
 
   const hashedPassword = await hashPassword(password);
-  await runInTransaction((tx) => tx.user.update({ where: { id: userId }, data: { password: hashedPassword, sessionVersion: { increment: 1 } } }));
+  await runInTransaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { password: hashedPassword, sessionVersion: { increment: 1 } } });
 
-  await recordAuditEvent({
-    action: auditActions.USER_PASSWORD_RESET,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.USER,
-    targetId: userId,
-    metadata: { email: target.email, level: target.level },
+    await recordAuditEventInTransaction(tx, {
+      action: auditActions.USER_PASSWORD_RESET,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.USER,
+      targetId: userId,
+      metadata: { email: target.email, level: target.level },
+    });
   });
 
   return { message: '密码已重置' };

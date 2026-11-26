@@ -1,6 +1,7 @@
 import { canEditReceiptStatus } from '@/lib/ledger-action-policy';
 import { Prisma, ReceiptEditRequestStatus, UserRole } from '@prisma/client';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
+import { checkedApprovalPatch } from '@/lib/approval-baseline';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
@@ -307,12 +308,9 @@ export async function reviewReceiptEdit(params: {
   const ownerIds = Array.from(scope.ownerVisibleIds);
 
   await runInTransaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ReceiptEditRequest WHERE id = ${requestId} FOR UPDATE`;
     const request = await tx.receiptEditRequest.findUnique({
       where: { id: requestId },
-      include: {
-        receipt: true,
-        requester: true,
-      },
     });
 
     if (!request) {
@@ -337,9 +335,10 @@ export async function reviewReceiptEdit(params: {
       });
     }
 
+    if (decision === 'approve') await tx.$queryRaw`SELECT id FROM Receipt WHERE id = ${request.receiptId} FOR UPDATE`;
     const visibleReceipt = await tx.receipt.findFirst({
       where: buildScopedReceiptWhere(request.receiptId, ownerIds),
-      select: { id: true },
+      select: { id: true, receiptNo: true, date: true, orderNo: true, invNo: true, customerMark: true, payer: true, tel: true },
     });
     if (!visibleReceipt) {
       throw forbidden('RECEIPT_EDIT_REVIEW_FORBIDDEN', '无权审批该收据修改申请', {
@@ -348,18 +347,18 @@ export async function reviewReceiptEdit(params: {
       });
     }
 
-    const nextSnapshot = validateEditablePatch(request.afterSnapshot as EditableSnapshotSource as ReceiptEditablePatch);
-    const nextDate = parseEditableDateValue(nextSnapshot.date);
     const reviewedAt = new Date();
 
     if (decision === 'approve') {
+      const current = normalizeEditableSnapshot({ ...visibleReceipt, date: visibleReceipt.date?.toISOString().slice(0, 10) ?? null });
+      const nextSnapshot = checkedApprovalPatch(current, request.beforeSnapshot, request.afterSnapshot, validateEditablePatch);
       await applyReceiptEditInTransaction({
         tx,
         currentUser,
         ownerIds,
         receiptId: request.receiptId,
         patch: nextSnapshot,
-        nextDate,
+        nextDate: parseEditableDateValue(nextSnapshot.date),
         historyNote: '审批修改前保存',
         source: 'APPROVED_RECEIPT_EDIT_REQUEST',
         expectedBalanceTransferId,
@@ -385,19 +384,15 @@ export async function reviewReceiptEdit(params: {
         requestId,
       });
     }
-  });
-
-  await recordAuditEvent({
-    action: decision === 'approve'
-      ? auditActions.RECEIPT_EDIT_REQUEST_APPROVE
-      : auditActions.RECEIPT_EDIT_REQUEST_REJECT,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
-    targetId: requestId,
-    metadata: {
-      decision,
-      comment: comment ?? null,
-    },
+    await recordAuditEventInTransaction(tx, {
+      action: decision === 'approve'
+        ? auditActions.RECEIPT_EDIT_REQUEST_APPROVE
+        : auditActions.RECEIPT_EDIT_REQUEST_REJECT,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.RECEIPT_EDIT_REQUEST,
+      targetId: requestId,
+      metadata: { decision, comment: comment ?? null },
+    });
   });
 
   return { message: toReviewDecisionMessage(decision) };

@@ -5,6 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 ENV_FILE="$ROOT_DIR/.env"
+SITE_DIR="$ROOT_DIR/out/site-releases"
+PINNED_OVERRIDE=""
 
 log() {
   printf '[rebuild-local-app] %s\n' "$*"
@@ -33,6 +35,12 @@ check_release_source() {
     refuse "Cannot determine the live Compose working directory."
   files="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$id")" ||
     refuse "Cannot determine the live Compose files."
+  if [[ "$workdir" = "$ROOT_DIR" && "$files" = "$base,$SITE_DIR/"* ]]; then
+    PINNED_OVERRIDE="${files#*,}"
+    registered_override "$PINNED_OVERRIDE" || refuse "Unregistered live site override."
+    [[ -r "$SITE_DIR/site.env" ]] || refuse "Registered site environment is missing."
+    return
+  fi
   [[ "$workdir" = "$ROOT_DIR" && "$files" = "$base" ]] ||
     refuse "Production uses another working directory or a release override ($files). Follow its deployment record instead."
   [[ "${COMPOSE_FILE:-$base}" = "$base" && "${COMPOSE_PROJECT_NAME:-$project}" = "$project" ]] ||
@@ -42,6 +50,50 @@ check_release_source() {
     const cfg = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
     if (cfg.name !== process.env.COMPOSE_PROJECT_NAME || cfg.services?.app?.build?.context !== process.cwd()) process.exit(1);
   ' || refuse "Resolved Compose project or app build context does not match this checkout."
+}
+
+registered_override() {
+  local f="$1" version
+  version="$(basename "$(dirname "$f")")"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$f" = "$SITE_DIR/$version/site.override.json" && -f "$f" ]] &&
+    [[ "$(node -p 'require("fs").realpathSync(process.argv[1])' "$f")" = "$f" ]]
+}
+
+run_pinned() {
+  local mode="${1:-}" target="${2:-$PINNED_OVERRIDE}" report key id
+  local -a clean=("PATH=$PATH" "HOME=$HOME")
+  for key in TMPDIR DOCKER_CONFIG DOCKER_HOST DOCKER_CONTEXT; do
+    if printenv "$key" >/dev/null; then clean+=("$key=$(printenv "$key")"); fi
+  done
+  case "$mode" in
+    --check-only|--release|--rollback) ;;
+    *) refuse "Site uses a fixed image. Preflight, then supply --release or --rollback and the registered override." ;;
+  esac
+  registered_override "$target" || refuse "Target must be a registered, immutable site override."
+  report="$(node scripts/check-site-compose.mjs "$SITE_DIR/site.env" "$target")" || refuse "Pinned release parity check failed; no change."
+  printf '%s\n' "$report"
+  node -e '
+    const [mode, file, json] = process.argv.slice(1), r = JSON.parse(json);
+    const version = require("path").basename(require("path").dirname(file));
+    const diff = version.split(".").map((v,i) => Number(v) - Number(r.currentVersion.split(".")[i])).find(Boolean) || 0;
+    if (r.candidateVersion !== version || (mode === "--release" &&
+       (version !== require("./package.json").version || diff < 0 || (!diff && r.candidateImage !== r.currentImage))) ||
+       (mode === "--rollback" && diff >= 0)) process.exit(1);
+  ' -- "$mode" "$target" "$report" || refuse "Version/direction does not match the registered target."
+  if [[ "$mode" = "--check-only" ]]; then log 'Pinned preflight passed; nothing was changed.'; return; fi
+  if [[ "$target" = "$PINNED_OVERRIDE" ]]; then log 'Selected release is already running; no change.'; return; fi
+  local -a site=(env -i "${clean[@]}" docker compose --project-directory "$ROOT_DIR" --env-file "$SITE_DIR/site.env" -p trading-ledger-system -f "$ROOT_DIR/docker-compose.yml" -f "$target")
+  log 'Switching only app to the verified local image (no migration, dependencies, builds or pulls)'
+  "${site[@]}" up -d --no-deps --no-build --pull never app
+  id="$("${site[@]}" ps -q app)"
+  for _ in $(seq 1 30); do
+    if docker exec "$id" node -e 'const http="http://"+require("os").hostname()+":3000"; Promise.all([fetch(http+"/"),fetch(http+"/api/system/health")]).then(([a,b])=>{if(a.status!==200||b.status!==401||require("/app/package.json").version!==process.argv[1])process.exit(1)}).catch(()=>process.exit(1))' "$(basename "$(dirname "$target")")"; then
+      node scripts/check-site-compose.mjs "$SITE_DIR/site.env" "$target" >/dev/null || refuse "Post-switch parity failed; consult the previous release record."
+      log 'Pinned release verified.'; return
+    fi
+    sleep 2
+  done
+  refuse "App switched but readiness/version failed; collect app logs and use the recorded rollback. Other services and data were not changed by this command."
 }
 
 random_secret() {
@@ -118,10 +170,12 @@ wait_for_app() {
 }
 
 case "$#:${1:-}" in
-  0:|1:--check-only) ;;
-  *) log 'Usage: scripts/rebuild-local-app.sh [--check-only]' >&2; exit 2 ;;
+  0:|1:--check-only|2:--release|2:--rollback) ;;
+  *) log 'Usage: scripts/rebuild-local-app.sh [--check-only | --release SITE_OVERRIDE | --rollback SITE_OVERRIDE]' >&2; exit 2 ;;
 esac
 check_release_source
+if [[ -n "$PINNED_OVERRIDE" ]]; then run_pinned "$@"; exit 0; fi
+if [[ "$#" = 2 ]]; then refuse "Site release flags require an already-adopted, registered site configuration."; fi
 if [ "${1:-}" = "--check-only" ]; then log 'Preflight passed; nothing was changed.'; exit 0; fi
 
 log 'checking local environment'

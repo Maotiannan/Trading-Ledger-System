@@ -14,7 +14,7 @@ import {
 } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { updateOrderBalance } from '@/lib/matching';
 import { cancelSourceNotificationsInTransaction } from '@/lib/email/email-notification-projector';
 import {
@@ -47,6 +47,7 @@ function makeUser(overrides: Partial<{
 
 jest.mock('@/lib/db', () => ({
   db: {
+    $queryRaw: jest.fn(),
     balanceTransfer: { count: jest.fn().mockResolvedValue(0) },
     deletionRequest: {
       findMany: jest.fn(),
@@ -94,6 +95,7 @@ jest.mock('@/lib/ownership', () => ({
 
 jest.mock('@/lib/audit', () => ({
   recordAuditEvent: jest.fn(),
+  recordAuditEventInTransaction: jest.fn(),
 }));
 
 jest.mock('@/lib/matching', () => ({
@@ -401,7 +403,7 @@ describe('deletion-service', () => {
   });
 
   it('rejects a pending deletion request and records audit event', async () => {
-    mockDb.deletionRequest.findUnique.mockResolvedValueOnce({
+    mockDb.deletionRequest.findUnique.mockResolvedValue({
       id: 'req-4',
       status: DeletionStatus.PENDING,
       targetType: DeletionTargetType.RECEIPT,
@@ -420,7 +422,7 @@ describe('deletion-service', () => {
       where: { id: 'req-4' },
       data: expect.objectContaining({ status: DeletionStatus.REJECTED, approvedBy: 'admin-1' }),
     }));
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({
       action: 'DELETION_REQUEST_REJECT',
       actorId: 'admin-1',
       targetType: DeletionTargetType.RECEIPT,
@@ -489,7 +491,7 @@ describe('deletion-service', () => {
       where: { id: 'req-5' },
       data: expect.objectContaining({ status: DeletionStatus.APPROVED, approvedBy: 'admin-1' }),
     }));
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(tx, expect.objectContaining({
       action: 'DELETION_REQUEST_APPROVE',
       actorId: 'admin-1',
       targetType: DeletionTargetType.SWIFT,
@@ -649,7 +651,8 @@ describe('deletion-service', () => {
       targetType: DeletionTargetType.RECEIPT,
       targetId: 'receipt-6',
     });
-    mockDb.$transaction.mockImplementationOnce(async (callback: (trx: { deletionRequest: { findUnique: jest.Mock } }) => Promise<unknown>) => callback({
+    mockDb.$transaction.mockImplementationOnce(async (callback: (trx: { $queryRaw: jest.Mock; deletionRequest: { findUnique: jest.Mock } }) => Promise<unknown>) => callback({
+      $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'req-6',

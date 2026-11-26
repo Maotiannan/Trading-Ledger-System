@@ -1,7 +1,7 @@
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { DetailEditablePatch, DetailEditRequestRow } from '@/lib/detail-edit-types';
@@ -14,6 +14,7 @@ import { updateDetailRecord } from '@/lib/detail-service';
 
 jest.mock('@/lib/db', () => ({
   db: {
+    $queryRaw: jest.fn(),
     detail: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -40,6 +41,7 @@ jest.mock('@/lib/user-hierarchy', () => ({
 
 jest.mock('@/lib/audit', () => ({
   recordAuditEvent: jest.fn(),
+  recordAuditEventInTransaction: jest.fn(),
 }));
 
 jest.mock('@/lib/detail-service', () => ({
@@ -211,7 +213,8 @@ describe('detail-edit-request-service', () => {
   });
 
   it('approves a pending detail edit request by replaying updateDetailRecord', async () => {
-    mockDb.detail.findFirst.mockResolvedValue({
+    const baseline = { ...validDetailPatch, date: null, agentId: null };
+    mockDb.detail.findFirst.mockResolvedValue({ ...baseline,
       id: 'detail-1',
       status: 'Waiting_SWIFT',
     });
@@ -222,6 +225,7 @@ describe('detail-edit-request-service', () => {
       requestedBy: 'sales-1',
       requester: salesUser,
       detail: { id: 'detail-1', createdBy: 'sales-owner', status: 'Waiting_SWIFT' },
+      beforeSnapshot: baseline,
       afterSnapshot: validDetailPatch,
     });
     mockDb.detailEditRequest.updateMany.mockResolvedValue({ count: 1 });

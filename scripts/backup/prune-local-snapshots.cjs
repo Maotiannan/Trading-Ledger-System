@@ -37,10 +37,31 @@ function prune(root, published, days) {
     throw new Error('Invalid retention root, publication or period');
   }
   const cutoff = Date.now() - (days + 1) * day; // same full-day boundary as find -mtime +N
+  const originalRoot = fs.statSync(root);
+  function verifyPublication() {
+    const currentRoot = fs.statSync(root);
+    if (currentRoot.dev !== originalRoot.dev || currentRoot.ino !== originalRoot.ino ||
+        fs.realpathSync(published) !== published || !fs.lstatSync(path.join(published, 'manifest.json')).isFile()) {
+      throw new Error('Backup mount or published snapshot changed during retention');
+    }
+  }
   let pending = false;
   let failed = false;
   function scan(parent, parts) {
-    for (const item of entries(parent)) {
+    let children;
+    try {
+      children = entries(parent);
+    } catch (error) {
+      const [year, month, date] = parts.map(Number);
+      const end = parts.length === 3 ? new Date(year, month - 1, date + 1) :
+        parts.length === 2 ? new Date(year, month, 1) : new Date(year + 1, 0, 1);
+      // SMB may enumerate a date directory that has already been removed.
+      if (error.code !== 'ENOENT' || error.path !== parent || !parts.length ||
+          published.startsWith(parent + path.sep) || !(end.getTime() <= cutoff)) throw error;
+      verifyPublication();
+      return;
+    }
+    for (const item of children) {
       if (!item.isDirectory()) continue;
       const dir = path.join(parent, item.name);
       if (parts.length < 3) {
@@ -62,7 +83,10 @@ function prune(root, published, days) {
         removeRetired(target);
         console.error('Removed expired snapshot: ' + path.relative(root, dir));
       } catch (error) {
-        if (busy(error)) {
+        if (error.code === 'ENOENT' && !fs.lstatSync(dir, { throwIfNoEntry: false }) &&
+            !fs.lstatSync(path.join(parent, '.retiring-' + item.name.replace(/^\.retiring-/, '')), { throwIfNoEntry: false })) {
+          verifyPublication();
+        } else if (busy(error)) {
           pending = true;
           console.error('WARN: expired snapshot still busy; retry cleanup after next publication: ' + dir);
         } else {
@@ -73,6 +97,7 @@ function prune(root, published, days) {
     }
   }
   scan(root, []);
+  verifyPublication();
   return failed ? 1 : pending ? 75 : 0;
 }
 

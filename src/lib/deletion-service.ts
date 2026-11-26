@@ -8,7 +8,7 @@ import {
 } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions } from '@/lib/audit-catalog';
 import { updateOrderBalance } from '@/lib/matching';
 import { assertReceiptRemovalDoesNotStrandTransfer } from '@/lib/order-balance-service';
@@ -463,26 +463,8 @@ export async function reviewDeletionRequest({
     });
   }
 
-  if (action === 'reject') {
-    await db.deletionRequest.update({
-      where: { id: requestId },
-      data: {
-        status: DeletionStatus.REJECTED,
-        approvedBy: currentUser.id,
-        approvedAt: new Date(),
-      },
-    });
-    await recordAuditEvent({
-      action: auditActions.DELETION_REQUEST_REJECT,
-      actorId: currentUser.id,
-      targetType: existingRequest.targetType,
-      targetId: existingRequest.targetId,
-      metadata: { requestId },
-    });
-    return { message: '申请已拒绝' };
-  }
-
   await runInTransaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM DeletionRequest WHERE id = ${requestId} FOR UPDATE`;
     const requestInTx = await tx.deletionRequest.findUnique({
       where: { id: requestId },
     });
@@ -495,31 +477,29 @@ export async function reviewDeletionRequest({
       });
     }
 
-    if (requestInTx.targetType === DeletionTargetType.RECEIPT) {
-      await approveReceiptDeletion(tx, requestInTx.targetId, currentUser.id);
-    } else if (requestInTx.targetType === DeletionTargetType.DETAIL) {
-      await approveDetailDeletion(tx, requestInTx.targetId, currentUser.id);
-    } else if (requestInTx.targetType === DeletionTargetType.SWIFT) {
-      await approveSwiftDeletion(tx, requestInTx.targetId);
+    if (action === 'approve') {
+      if (requestInTx.targetType === DeletionTargetType.RECEIPT) {
+        await approveReceiptDeletion(tx, requestInTx.targetId, currentUser.id);
+      } else if (requestInTx.targetType === DeletionTargetType.DETAIL) {
+        await approveDetailDeletion(tx, requestInTx.targetId, currentUser.id);
+      } else if (requestInTx.targetType === DeletionTargetType.SWIFT) {
+        await approveSwiftDeletion(tx, requestInTx.targetId);
+      }
     }
 
     await tx.deletionRequest.update({
       where: { id: requestId },
       data: {
-        status: DeletionStatus.APPROVED,
+        status: action === 'approve' ? DeletionStatus.APPROVED : DeletionStatus.REJECTED,
         approvedBy: currentUser.id,
         approvedAt: new Date(),
       },
     });
+    await recordAuditEventInTransaction(tx, {
+      action: action === 'approve' ? auditActions.DELETION_REQUEST_APPROVE : auditActions.DELETION_REQUEST_REJECT,
+      actorId: currentUser.id, targetType: requestInTx.targetType, targetId: requestInTx.targetId, metadata: { requestId },
+    });
   }, { isolationLevel: 'ReadCommitted' });
 
-  await recordAuditEvent({
-    action: auditActions.DELETION_REQUEST_APPROVE,
-    actorId: currentUser.id,
-    targetType: existingRequest.targetType,
-    targetId: existingRequest.targetId,
-    metadata: { requestId },
-  });
-
-  return { message: '删除成功，状态已回退' };
+  return { message: action === 'approve' ? '删除成功，状态已回退' : '申请已拒绝' };
 }

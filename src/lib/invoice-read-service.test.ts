@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
+import { loadDepositPool } from '@/lib/prepayments/pool-read-service';
 import { readInvoiceSourceMetadata } from '@/lib/integrations/mucont-invoice-metadata';
 import {
   listInvoiceRecords,
@@ -195,6 +196,9 @@ describe('invoice-read-service', () => {
       {
         id: 'order-1',
         orderNo: 'QZ-01A',
+        amount: 100,
+        receipts: [{ usd: 40, status: 'RECEIVED', funding: { id: 'fund-1' } }],
+        paymentAllocations: [{ amount: 15, funding: { active: true, receipt: { status: 'RECEIVED' } } }],
         customerId: 'customer-1',
         customerMark: 'IB',
         customerName: 'IB',
@@ -219,7 +223,9 @@ describe('invoice-read-service', () => {
     const result = await listOrderMatchCandidates(makeUser() as never, 'QZ-01B');
 
     expect(result.data).toHaveLength(1);
-    expect(result.data[0].id).toBe('order-1');
+    expect(result.data[0]).toMatchObject({ id: 'order-1', orderBalance: 85 });
+    expect(result.data[0]).toHaveProperty('receipts', [{ usd: 40, status: 'RECEIVED' }]);
+    expect(result.data[0]).not.toHaveProperty('paymentAllocations');
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'ORDER_MATCH_CANDIDATES_VIEW',
       metadata: expect.objectContaining({ mode: 'group-fallback', count: 1 }),
@@ -687,6 +693,20 @@ describe('invoice-read-service', () => {
     const result = await listInvoiceRecords(makeUser() as never, '');
 
     expect(result.data.map((row) => row.invNo)).toEqual(['DEPOSIT_POOL', 'Un_Associated', 'INV-001']);
+  });
+
+  it.each([true, false])('exposes only one pool for a retained credit (persisted pool: %s)', async (hasPool) => {
+    const pool = { rows: [{ id: 'retained-credit' }], availableTotal: '5.00', reservedTotal: '0.00', heldTotal: '0.00' };
+    (loadDepositPool as jest.Mock).mockResolvedValueOnce(pool);
+    const invoice = { id: 'inv-1', invNo: 'INV-1', createdAt: new Date(0), orders: [] };
+    mockDb.invoice.findMany.mockResolvedValueOnce(hasPool
+      ? [invoice, { ...invoice, id: 'existing-pool', invNo: 'DEPOSIT_POOL' }]
+      : [invoice]);
+
+    const { data } = await listInvoiceRecords(makeUser() as never, '');
+
+    expect(data.map(row => row.invNo)).toEqual(['DEPOSIT_POOL', 'INV-1']);
+    expect(data[0]).toMatchObject({ id: hasPool ? 'existing-pool' : 'deposit-pool-view', depositPool: pool });
   });
 
   it('sorts DEPOSIT_POOL before normal invoices', async () => {

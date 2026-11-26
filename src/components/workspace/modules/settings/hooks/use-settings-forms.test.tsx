@@ -4,6 +4,18 @@ import { DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE } from '@/lib/list-page-size-pre
 import { useSettingsForms } from './use-settings-forms';
 
 describe('useSettingsForms', () => {
+  it('tracks unsaved OCR changes against the last loaded or saved configuration', () => {
+    const { result } = renderHook(() => useSettingsForms());
+    act(() => result.current.setConfig({ OCR_MODEL: 'original' }));
+    expect(result.current.ocrConfigDirty).toBe(false);
+    act(() => result.current.updateConfigField('DETAIL_RECEIPT_MATCH_TOLERANCE', '9'));
+    expect(result.current.ocrConfigDirty).toBe(false);
+    act(() => result.current.updateConfigField('OCR_MODEL', 'updated'));
+    expect(result.current.ocrConfigDirty).toBe(true);
+    act(() => result.current.setConfig(result.current.config));
+    expect(result.current.ocrConfigDirty).toBe(false);
+  });
+
   it('updates config fields and toggles purge modules', () => {
     const { result } = renderHook(() => useSettingsForms());
 

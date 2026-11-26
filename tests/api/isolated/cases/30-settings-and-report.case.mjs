@@ -23,7 +23,6 @@ export default async function run(t) {
     json: {
       action: 'update-config',
       settings: {
-        ...currentSettings,
         DETAIL_RECEIPT_MATCH_TOLERANCE: nextTolerance,
         SWIFT_MAX_FEE_PER_COPY: nextFeeLimit,
       },
@@ -96,5 +95,12 @@ export default async function run(t) {
   await t.request('GET', '/api/report?format=pdf', { expectedStatus: 200 });
   t.step('pdf report export works');
 
+  await t.request('POST', '/api/settings', {
+    json: { action: 'update-config', settings: {
+      DETAIL_RECEIPT_MATCH_TOLERANCE: currentSettings.DETAIL_RECEIPT_MATCH_TOLERANCE,
+      SWIFT_MAX_FEE_PER_COPY: currentSettings.SWIFT_MAX_FEE_PER_COPY,
+    } },
+    expectedStatus: 200,
+  });
   await t.logout();
 }

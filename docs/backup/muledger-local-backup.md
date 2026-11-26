@@ -32,7 +32,9 @@ Check `~/.muledger-backup/status.json` and `~/.muledger-backup/logs/launchd.{out
 | Success | Deferred | An expired snapshot is busy on SMB. Keep the published snapshot; cleanup retries after a later publication. |
 | Success | Failed | The snapshot remains valid. Investigate the reported path/permission or mount error. The watchdog signals failure; **do not repeat the dump and archive for a cleanup error**. |
 
-Retention touches only recognized, expired snapshot names after verified publication. A previously listed, entirely expired date directory that disappears during traversal is harmless **only if the root and new publication are still present**. A missing root, new/retained directory, lost manifest or real access/I/O error is a failure. Unrecognized entries and snapshots in the retention period are not removed. `LOCAL_RETENTION_DAYS=0` disables retention.
+Retention lists names first, without asking SMB to stat every entry. It skips whole local-calendar years, months or days newer than the cutoff **before opening them**. On the cutoff day both the existing name/date and age checks still apply. It never follows directory symlinks or removes unrecognized entries. `LOCAL_RETENTION_DAYS=0` disables retention.
+
+A previously listed, entirely expired date branch may disappear only if the backup root and current publication still pass their checks. Losing either of those, the cutoff branch being scanned, or the published manifest is an error, as are access and I/O failures on the necessary paths. Busy expired entries are deferred, not reported as cleaned. A successful cleanup is **not** an inventory or restore test of the retained backups. If a historical publication appears missing, compare its directory and manifest from the scheduled runner's read-only mount with the host view, then investigate any discrepancy separately.
 
 ## Restore and change gate
 

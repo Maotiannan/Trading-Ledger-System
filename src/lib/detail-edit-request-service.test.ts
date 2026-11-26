@@ -174,6 +174,22 @@ describe('detail-edit-request-service', () => {
     })).rejects.toMatchObject({ code: 'DETAIL_EDIT_REQUEST_EXISTS' });
   });
 
+  it('can dismiss but not approve a stale request after receipt, without changing the original', async () => {
+    mockDb.detail.findFirst.mockResolvedValue({ id: 'target', status: 'RECEIVED' });
+    mockDb.detailEditRequest.findUnique.mockResolvedValue({
+      id: 'old-request', detailId: 'target', status: 'PENDING', requestedBy: 'sales-1', afterSnapshot: {},
+    });
+    mockDb.detailEditRequest.updateMany.mockResolvedValue({ count: 1 });
+    const args = { currentUser: adminUser, requestId: 'old-request' };
+    await expect(reviewDetailEdit({ ...args, decision: 'approve' })).rejects.toMatchObject({ status: 400 });
+    expect(mockDb.detailEditRequest.updateMany).not.toHaveBeenCalled();
+    await reviewDetailEdit({ ...args, decision: 'reject' });
+    expect(mockDb.detailEditRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'REJECTED', pendingDetailId: null }),
+    }));
+    expect(mockUpdateDetailRecord).not.toHaveBeenCalled();
+  });
+
   it('rejects detail edit requests when detail status is RECEIVED', async () => {
     mockDb.detail.findFirst.mockResolvedValue({
       id: 'detail-2',

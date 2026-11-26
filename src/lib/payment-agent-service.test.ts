@@ -14,6 +14,7 @@ jest.mock('@/lib/db', () => ({
 }));
 
 jest.mock('@/lib/resource-visibility', () => ({
+  ...jest.requireActual('@/lib/resource-visibility'),
   getOwnerVisibleIds: jest.fn(),
 }));
 

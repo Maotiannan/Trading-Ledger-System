@@ -351,6 +351,19 @@ describe('order-tracker-service', () => {
     }));
   });
 
+  it.each(['LATEST', '', null])('reads latest bound customer MARK without reviving the snapshot (%j)', async mark => {
+    mockDb.orderTracker.findMany.mockResolvedValueOnce([{ id: 'tracker', orderNo: 'ORDER-1', createdBy: 'sales-1',
+      customerId: 'stable', customerMark: 'OLD', customerName: 'Snapshot name', customerCity: 'Snapshot city',
+      customer: { id: 'stable', ownerId: 'sales-1', mark, name: 'New name', city: 'New city' } }]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([]);
+    const result = await listOrderTrackers(makeUser(), { search: 'LATEST' });
+    expect(result.data[0]).toMatchObject({ customerMark: mark, customerName: 'Snapshot name', customerCity: 'Snapshot city' });
+    expect(mockDb.orderTracker.findMany.mock.calls[0][0].where.AND).toContainEqual({ OR: expect.arrayContaining([
+      { customer: { mark: { contains: 'LATEST' } } },
+      { customer: null, customerMark: { contains: 'LATEST' } },
+    ]) });
+  });
+
   it('sums deposit receipts by exact order and slash-separated composite order segments', async () => {
     mockDb.orderTracker.findMany.mockResolvedValueOnce([
       {

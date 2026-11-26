@@ -1,13 +1,16 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
+import { refreshSourceInvoiceDateRows } from '@/lib/integrations/mucont-invoice-metadata';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
 import {
   normalizeCustomerHistoryPagination,
   paginateCustomerHistoryRows,
   sortCustomerHistoryOrders,
 } from '@/lib/customer-order-history-pagination';
 import { buildCompositeOrderLookupCandidates, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { customerBusinessNames } from '@/lib/customer-business-label';
 
 function trimStr(value: unknown): string {
   if (value === null || value === undefined) return '';
@@ -68,7 +71,7 @@ export async function readCustomerHistory(input: CustomerHistoryReadInput) {
           normalizedOrderName: true,
           isPrimary: true,
         },
-        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
       },
     },
   });
@@ -97,15 +100,16 @@ export async function readCustomerHistory(input: CustomerHistoryReadInput) {
     where: combineWhere({ customerId }, input.orderWhere as Record<string, unknown> | undefined),
     include: {
       invoice: {
-        select: { invNo: true, shipDate: true, releaseDate: true },
+        select: { id: true, invNo: true, shipDate: true, releaseDate: true, mucontSource: { select: { invoiceBatchId: true } } },
       },
-      receipts: {
-        select: { usd: true, status: true },
-      },
+      receipts: { select: receiptBalanceSelect },
+      paymentAllocations: paymentAllocationsSelect,
     },
     orderBy: [{ createdAt: 'desc' }],
   });
 
+  const sourceDates = await refreshSourceInvoiceDateRows([...new Map(orderRows.filter((row) => row.invoice?.mucontSource).map((row) => [row.invoice.id, row.invoice])).values()]);
+  const datesByInvoice = new Map(sourceDates.map((row) => [row.id, row]));
   const sortedOrders = sortCustomerHistoryOrders(orderRows
     .filter((row) => !normalizedOrderName || orderMatchesOrderName(row.orderNo, normalizedOrderName))
     .map((row) => ({
@@ -114,10 +118,10 @@ export async function readCustomerHistory(input: CustomerHistoryReadInput) {
       invNo: row.invoice?.invNo || null,
       amount: Number(row.amount),
       outstanding: Array.isArray(row.receipts)
-        ? computeOrderBalanceFromReceipts({ amount: row.amount, receipts: row.receipts })
+        ? computeOrderBalanceFromReceipts(row)
         : Number(row.orderBalance),
-      shipDate: row.invoice?.shipDate || null,
-      releaseDate: row.invoice?.releaseDate || null,
+      shipDate: (datesByInvoice.get(row.invoice?.id) || row.invoice)?.shipDate || null,
+      releaseDate: (datesByInvoice.get(row.invoice?.id) || row.invoice)?.releaseDate || null,
       createdAt: row.createdAt,
     })));
   const { items: orders, pagination: orderPagination } = paginateCustomerHistoryRows(
@@ -151,10 +155,7 @@ export async function readCustomerHistory(input: CustomerHistoryReadInput) {
     take: receiptPaginationRequest.pageSize,
   });
 
-  const orderNames = Array.from(new Set([
-    customer.orderName,
-    ...customer.orderNames.map((row) => row.orderName),
-  ].map(trimStr).filter(Boolean)));
+  const orderNames = customerBusinessNames(customer);
 
   return {
     data: {

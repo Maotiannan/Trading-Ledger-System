@@ -384,7 +384,7 @@ export default async function run(t) {
       where: { id: expiredAsset.id },
     });
     assert.equal(expiredAssetAfterCleanup?.status, 'DELETED');
-    assert.ok(!existsSync(expiredFixture.absolutePath), 'expired staged asset file removed');
+    assert.ok(existsSync(expiredFixture.absolutePath), 'recoverable staged asset file is retained until the fixed cutoff');
 
     const protectedAssetAfterCleanup = await prisma.uploadedAsset.findUnique({
       where: { id: cleanupProtectedAsset.id },
@@ -395,15 +395,44 @@ export default async function run(t) {
     const staleSessionAfterCleanup = await prisma.receiptGeneratorSession.findUnique({
       where: { id: staleSession.id },
     });
-    assert.equal(staleSessionAfterCleanup?.status, 'CANCELLED');
-    assert.equal(staleSessionAfterCleanup?.receiptId, null);
+    assert.equal(staleSessionAfterCleanup, null, 'stale session is hidden with its receipt in the recovery snapshot');
 
     const staleReceiptAfterCleanup = await prisma.receipt.findUnique({
       where: { id: staleReceipt.id },
     });
     assert.equal(staleReceiptAfterCleanup, null);
-    t.step('maintenance cleanup removes expired staged assets and cancels stale signing sessions');
+    const entries = await prisma.recoveryEntry.findMany({
+      where: { resourceId: { in: [expiredAsset.id, staleReceipt.id] }, status: 'RECOVERABLE' },
+    });
+    assert.equal(entries.length, 2);
+    const receiptEntry = entries.find((entry) => entry.kind === 'SIGNING_RECEIPT');
+    assert.equal(receiptEntry?.snapshot?.session?.id, staleSession.id);
+    assert.equal(receiptEntry?.snapshot?.session?.status, 'PENDING');
+    for (const entry of entries) {
+      const retentionDays = (entry.recoverableUntil.getTime() - entry.deletedAt.getTime()) / 86_400_000;
+      assert.ok(retentionDays >= 1 && retentionDays <= 15, 'recovery cutoff respects the configured hard limit');
+    }
+    const hidden = await t.request('GET', `/api/receipt?search=${encodeURIComponent(staleReceiptNo)}`, { expectedStatus: 200 });
+    assert.ok(!hidden.data.data.some((row) => row.id === staleReceipt.id));
+    await t.request('GET', '/api/recovery', { expectedStatus: 403 });
+    t.step('maintenance hides expired assets/drafts while retaining bounded recovery metadata and files');
 
+    await t.logout();
+    await t.loginAdmin();
+    const recoveryList = await t.request('GET', '/api/recovery', { expectedStatus: 200 });
+    for (const entry of entries) {
+      assert.ok(recoveryList.data.data.some((row) => row.id === entry.id), 'scoped ADMIN sees recoverable entries');
+      const restored = await t.request('POST', '/api/recovery', { json: { id: entry.id }, expectedStatus: 200 });
+      assert.equal(restored.data.data.restored, true);
+      assert.equal(restored.data.data.alreadyRestored, false);
+      const repeated = await t.request('POST', '/api/recovery', { json: { id: entry.id }, expectedStatus: 200 });
+      assert.equal(repeated.data.data.alreadyRestored, true);
+    }
+    assert.equal((await prisma.uploadedAsset.findUnique({ where: { id: expiredAsset.id } }))?.status, 'STAGED');
+    assert.equal((await prisma.receipt.findUnique({ where: { id: staleReceipt.id } }))?.status, 'SIGNING_PENDING');
+    assert.equal((await prisma.receiptGeneratorSession.findUnique({ where: { id: staleSession.id } }))?.receiptId, staleReceipt.id);
+    assert.ok(existsSync(expiredFixture.absolutePath));
+    t.step('ADMIN restores original asset/draft identities through HTTP and duplicate restore is idempotent');
     await t.logout();
   } finally {
     await prisma.$disconnect();

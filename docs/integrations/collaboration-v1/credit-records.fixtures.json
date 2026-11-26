@@ -1,0 +1,194 @@
+{
+  "contractVersion": "1.0.0",
+  "syntheticOnly": true,
+  "cases": [
+    {
+      "name": "same-name-distinct-identities-and-exact-decimals",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "creditRecordId": "fixture-credit-001",
+            "companyName": "SYNTHETIC INSURER",
+            "creditAmount": "9007199254740993.01",
+            "currency": "USD",
+            "creditState": "AVAILABLE",
+            "address": null,
+            "contacts": {
+              "details": null
+            },
+            "missingFields": [
+              "address",
+              "contacts.details"
+            ],
+            "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+            "sourceVersion": "sha256:ff4a193cd871abe67eecf8c1c3e999ab34c21d7b5319a12d2de04e8d3c585a93"
+          },
+          {
+            "creditRecordId": "fixture-credit-002",
+            "companyName": "SYNTHETIC INSURER",
+            "creditAmount": "0.01",
+            "currency": "USD",
+            "creditState": "AVAILABLE",
+            "address": null,
+            "contacts": {
+              "details": null
+            },
+            "missingFields": [
+              "address",
+              "contacts.details"
+            ],
+            "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+            "sourceVersion": "sha256:dc1afad267826022841805df20417500d9a2fbe4cec82b07c04ea631431caa75"
+          }
+        ],
+        "nextCursor": null,
+        "hasMore": false,
+        "readAt": "2026-11-03T07:01:00.000Z"
+      }
+    },
+    {
+      "name": "unset-not-zero",
+      "status": 200,
+      "response": {
+        "creditRecordId": "fixture-credit-unset",
+        "companyName": null,
+        "creditAmount": null,
+        "currency": "USD",
+        "creditState": "UNSET",
+        "address": null,
+        "contacts": {
+          "details": null
+        },
+        "missingFields": [
+          "companyName",
+          "creditAmount",
+          "address",
+          "contacts.details"
+        ],
+        "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+        "sourceVersion": "sha256:793ead48dc8e4c4839e82068efab9ed0859fcb27fa3b080625857f0f4a04095b"
+      }
+    },
+    {
+      "name": "zero-with-maintained-company-contact",
+      "status": 200,
+      "response": {
+        "creditRecordId": "fixture-credit-zero",
+        "companyName": "SYNTHETIC INSURER",
+        "creditAmount": "0.00",
+        "currency": "USD",
+        "creditState": "ZERO",
+        "address": "Synthetic address",
+        "contacts": {
+          "details": "Synthetic company desk +000 123"
+        },
+        "missingFields": [],
+        "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+        "sourceVersion": "sha256:31058ac988c517c5db125dbbbe11c5eea9c37c93073105ef1f0bc9b2a69cbbbe"
+      }
+    },
+    {
+      "name": "legacy-invalid-credit",
+      "status": 200,
+      "response": {
+        "creditRecordId": "fixture-credit-negative",
+        "companyName": "SYNTHETIC INSURER",
+        "creditAmount": "-1.00",
+        "currency": "USD",
+        "creditState": "INVALID",
+        "address": null,
+        "contacts": {
+          "details": null
+        },
+        "missingFields": [
+          "address",
+          "contacts.details"
+        ],
+        "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+        "sourceVersion": "sha256:dcbb4df9fc9fe5f8babfca9852bde2046e7fb3b6858557879d8a5a5d84fbdbfb"
+      }
+    },
+    {
+      "name": "empty-final-page",
+      "status": 200,
+      "response": {
+        "items": [],
+        "nextCursor": null,
+        "hasMore": false,
+        "readAt": "2026-11-03T07:01:00.000Z"
+      }
+    },
+    {
+      "name": "AUTH_REQUIRED",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "AUTH_REQUIRED",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "AUTH_INVALID",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "AUTH_INVALID",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "INVALID_CURSOR",
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_CURSOR",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "INVALID_QUERY",
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_QUERY",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "CREDIT_RECORD_NOT_FOUND",
+      "status": 404,
+      "response": {
+        "error": {
+          "code": "CREDIT_RECORD_NOT_FOUND",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "SERVICE_UNAVAILABLE",
+      "status": 503,
+      "response": {
+        "error": {
+          "code": "SERVICE_UNAVAILABLE",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "retry-later",
+      "status": 429,
+      "response": {
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Synthetic rate limit.",
+          "retryAfterMs": 1501
+        }
+      }
+    }
+  ]
+}

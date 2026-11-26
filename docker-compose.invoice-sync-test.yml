@@ -1,0 +1,13 @@
+services:
+  mysql:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: invoice-r2-isolated-only
+      MARIADB_DATABASE: muledger_invoice_r2_test
+    ports:
+      - "127.0.0.1:3313:3306"
+    volumes:
+      - invoice_r2_test:/var/lib/mysql
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+volumes:
+  invoice_r2_test:

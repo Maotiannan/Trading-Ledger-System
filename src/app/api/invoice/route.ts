@@ -29,6 +29,9 @@ import {
 import { withAuth, withRole } from '@/lib/route-auth';
 import { parseJsonRequest } from '@/lib/http-body';
 import { logger } from '@/lib/logger';
+import { MucontInvoiceError } from '@/lib/integrations/mucont-invoice-contract';
+import { invoiceErrorResponse } from '@/lib/integrations/mucont-invoice-http';
+import { renameInvoiceRecord } from '@/lib/invoice-rename-service';
 
 function mapInvoiceImportRows(rowsInput: unknown[]): InvoiceImportInputRow[] {
   return rowsInput.map((row, index) => {
@@ -45,6 +48,10 @@ function mapInvoiceImportRows(rowsInput: unknown[]): InvoiceImportInputRow[] {
       customerId: String(record.customerId || '').trim(),
     };
   });
+}
+
+function optionalCustomerText(value: unknown) {
+  return typeof value === 'string' || value === null ? value : undefined;
 }
 
 function toImportResponse(
@@ -136,7 +143,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     }
 
     const result = await listInvoiceRecords(currentUser, search);
-    return createApiSuccessResponse(result, request);
+    return createApiSuccessResponse(result, request, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     logger.error('Get invoices error', error);
     return toApiErrorResponse(error, {
@@ -295,6 +302,12 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
     const body = await parseJsonRequest<Record<string, unknown>>(request);
     const action = typeof body?.action === 'string' ? body.action : '';
 
+    if (action === 'renameInvoice') {
+      return createApiSuccessResponse(await renameInvoiceRecord(currentUser, {
+        invoiceId: body.invoiceId, expectedInvNo: body.expectedInvNo, invNo: body.invNo,
+      }), request);
+    }
+
     if (action === 'rematch-preview') {
       const data = await previewInvoiceRematch(currentUser);
       return NextResponse.json({ success: true, data });
@@ -337,11 +350,11 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
         invNo: typeof body.invNo === 'string' ? body.invNo : undefined,
         orderNo: typeof body.orderNo === 'string' ? body.orderNo : undefined,
         amount: body.amount !== undefined ? Number(body.amount) : undefined,
-        customerMark: typeof body.customerMark === 'string' ? body.customerMark : undefined,
-        customerName: typeof body.customerName === 'string' ? body.customerName : undefined,
-        customerId: typeof body.customerId === 'string' ? body.customerId : undefined,
-        customerPhone: typeof body.customerPhone === 'string' ? body.customerPhone : undefined,
-        customerCity: typeof body.customerCity === 'string' ? body.customerCity : undefined,
+        customerMark: optionalCustomerText(body.customerMark),
+        customerName: optionalCustomerText(body.customerName),
+        customerId: optionalCustomerText(body.customerId),
+        customerPhone: optionalCustomerText(body.customerPhone),
+        customerCity: optionalCustomerText(body.customerCity),
       });
       return createApiSuccessResponse({ data: result.data, message: result.message }, request);
     }
@@ -368,6 +381,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
         fromOrderId: typeof body.fromOrderId === 'string' ? body.fromOrderId : '',
         toOrderNo: typeof body.toOrderNo === 'string' ? body.toOrderNo : '',
         transferAmount: Number(body.transferAmount),
+        requestId: typeof body.requestId === 'string' ? body.requestId : '',
       });
       return createApiSuccessResponse({ message: result.message }, request);
     }
@@ -380,6 +394,7 @@ export const PUT = withRole(UserRole.ADMIN, async (request: NextRequest, current
     });
   } catch (error) {
     logger.error('Update order error', error);
+    if (error instanceof MucontInvoiceError) return invoiceErrorResponse(error);
     return toApiErrorResponse(error, {
       code: 'INTERNAL_ERROR',
       status: 500,

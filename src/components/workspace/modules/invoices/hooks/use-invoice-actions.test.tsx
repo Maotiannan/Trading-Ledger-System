@@ -261,7 +261,7 @@ describe('useInvoiceActions', () => {
     consoleSpy.mockRestore();
   });
 
-  it('updates order and refreshes invoices on success', async () => {
+  it.each([false, true])('updates only editable fields and refreshes invoices (sourceLinked=%s)', async sourceLinked => {
     mockApiCall.mockResolvedValue({ success: true });
 
     const { result } = renderHook(() => useInvoiceActions({
@@ -276,6 +276,7 @@ describe('useInvoiceActions', () => {
       handleCreateDialogOpenChange,
       resetCreateInvoiceDialog,
       editingOrder: {
+        sourceLinked,
         id: 'order-1',
         orderNo: 'MAB-1-02',
         invNo: 'INV-001',
@@ -308,11 +309,13 @@ describe('useInvoiceActions', () => {
         orderNo: 'MAB-1-02',
         invNo: 'INV-001',
         amount: 500,
-        customerMark: 'MAB-1',
-        customerName: 'MAB',
-        customerPhone: null,
-        customerCity: null,
-        customerId: 'cust-1',
+        ...(sourceLinked ? {} : {
+          customerMark: 'MAB-1',
+          customerName: 'MAB',
+          customerPhone: null,
+          customerCity: null,
+          customerId: 'cust-1',
+        }),
       }),
     }));
     expect(handleOrderDialogOpenChange).toHaveBeenCalledWith(false);

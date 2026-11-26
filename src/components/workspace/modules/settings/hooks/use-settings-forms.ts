@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { DEFAULT_DASHBOARD_LAYOUT, type DashboardLayoutPreference } from '@/lib/dashboard-layout-preference';
 import { DEFAULT_USER_LIST_PAGE_SIZE_PREFERENCE } from '@/lib/list-page-size-preference';
 import type {
@@ -38,7 +38,13 @@ export function useSettingsForms() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [config, setConfig] = useState<Record<string, string>>({});
+  const [config, setDraftConfig] = useState<Record<string, string>>({});
+  const [savedConfig, setSavedConfig] = useState<Record<string, string>>({});
+  const setConfig = useCallback((value: Record<string, string>) => {
+    setSavedConfig(value);
+    setDraftConfig(value);
+  }, []);
+  const ocrConfigDirty = Object.keys(config).some(key => key.startsWith('OCR_') && config[key] !== savedConfig[key]);
   const [userPreferences, setUserPreferences] = useState<UserPreferenceSettingsDraft>(defaultUserPreferenceSettingsDraft);
   const [canEditConfig, setCanEditConfig] = useState(false);
   const [canViewAudit, setCanViewAudit] = useState(false);
@@ -69,7 +75,7 @@ export function useSettingsForms() {
   const [pwd, setPwd] = useState<PasswordFormState>({ oldPassword: '', newPassword: '', confirmPassword: '' });
 
   const updateConfigField = (key: string, value: string) => {
-    setConfig((prev) => ({ ...prev, [key]: value }));
+    setDraftConfig((prev) => ({ ...prev, [key]: value }));
   };
 
   const updateUserPreferenceField = <K extends UserImageCompressionPreferenceField>(
@@ -182,6 +188,7 @@ export function useSettingsForms() {
     pwd,
     setPwd,
     updateConfigField,
+    ocrConfigDirty,
     updateUserPreferenceField,
     updateDashboardLayoutPreference,
     togglePurgeModule,

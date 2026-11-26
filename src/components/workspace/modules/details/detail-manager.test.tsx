@@ -1,3 +1,4 @@
+import { clearClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DetailManager } from './detail-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
@@ -58,6 +59,7 @@ const mockUseDetailActions = useDetailActions as jest.Mock;
 
 describe('DetailManager', () => {
   beforeEach(() => {
+    clearClientUserPreferences();
     delete (globalThis as { __detailListProps?: DetailListProps }).__detailListProps;
     delete (globalThis as { __detailEditDialogProps?: DetailEditDialogProps }).__detailEditDialogProps;
     delete (globalThis as { __detailDirectCreateDialogProps?: DetailDirectCreateDialogProps }).__detailDirectCreateDialogProps;

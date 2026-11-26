@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { DetailStatus, ReceiptStatus, SwiftStatus, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
@@ -13,6 +19,7 @@ import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notificati
 
 jest.mock('@/lib/db', () => ({
   db: {
+    mucontInvoiceGroup: { findUnique: jest.fn() },
     uploadedAsset: {
       updateMany: jest.fn(),
     },

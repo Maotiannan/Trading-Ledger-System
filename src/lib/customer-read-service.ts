@@ -27,6 +27,9 @@ function toSalesView<T extends Record<string, unknown>>(row: T, showExtended: bo
     ...row,
     companyName: null,
     companyAddress: null,
+    companyContact: null,
+    customerCode: null,
+    creditCode: null,
     credit: null,
   };
 }

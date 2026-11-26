@@ -38,10 +38,23 @@
     ".next-api-isolated/types/**/*.ts",
     ".next-api-isolated/dev/types/**/*.ts",
     ".next-e2e-isolated/types/**/*.ts",
-    ".next-e2e-isolated/dev/types/**/*.ts"
+    ".next-e2e-isolated/dev/types/**/*.ts",
+    ".next-reliability-isolated/types/**/*.ts",
+    ".next-reliability-isolated/dev/types/**/*.ts",
+    ".next-invoice-r2/types/**/*.ts",
+    ".next-invoice-r2/dev/types/**/*.ts",
+    ".next-prepayment-isolated/types/**/*.ts",
+    ".next-prepayment-isolated/dev/types/**/*.ts",
+    ".next-invoice-ui-236/types/**/*.ts",
+    ".next-invoice-ui-236/dev/types/**/*.ts",
+    ".next-237-isolated/types/**/*.ts",
+    ".next-237-isolated/dev/types/**/*.ts",
+    ".next-240-isolated/types/**/*.ts",
+    ".next-240-isolated/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
+    "out",
     "examples/websocket"
   ]
 }

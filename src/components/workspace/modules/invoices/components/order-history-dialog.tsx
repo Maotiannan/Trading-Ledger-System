@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -22,6 +23,8 @@ export type OrderHistoryDialogProps = {
   pagination?: { page: number; pageSize: number; totalItems: number; totalPages: number };
   pageSizeOptions?: readonly number[];
   loading?: boolean;
+  failed?: boolean;
+  onRetry?: () => void;
   onPreviousPage?: () => void;
   onNextPage?: () => void;
   onPageSizeChange?: (pageSize: number) => void;
@@ -37,6 +40,8 @@ export function OrderHistoryDialog({
   pagination,
   pageSizeOptions = [5, 10, 20, 50],
   loading = false,
+  failed = false,
+  onRetry,
   onPreviousPage,
   onNextPage,
   onPageSizeChange,
@@ -72,7 +77,7 @@ export function OrderHistoryDialog({
               <TableRow>
                 <TableHead>{tx('收据号', 'Receipt No.')}</TableHead>
                 <TableHead>{tx('付款人', 'Payer')}</TableHead>
-                <TableHead>{tx('金额', 'Amount')}</TableHead>
+                <TableHead>{tx('本票付款', 'Applied to This Order')}</TableHead>
                 <TableHead>{tx('状态', 'Status')}</TableHead>
                 <TableHead>{tx('日期', 'Date')}</TableHead>
                 <TableHead>{tx('创建时间', 'Created At')}</TableHead>
@@ -90,16 +95,32 @@ export function OrderHistoryDialog({
                       >
                         {(row.receiptNo as string) || '-'}
                       </button>
-                    ) : (row.receiptNo as string) || '-'}
+                    ) : row.sourceRestricted ? tx('转入款项', 'Transferred payment') : (row.receiptNo as string) || '-'}
                   </TableCell>
                   <TableCell>{(row.payer as string) || '-'}</TableCell>
-                  <TableCell>{formatUsdAmount(row.usd)}</TableCell>
+                  <TableCell>
+                    <div>{formatUsdAmount(row.appliedToOrderAmount ?? row.usd)}</div>
+                    {row.originalReceiptAmount != null && Number(row.originalReceiptAmount) !== Number(row.appliedToOrderAmount ?? row.usd) && (
+                      <div className="whitespace-nowrap text-xs text-muted-foreground">
+                        {tx('原收据', 'Original receipt')}: {formatUsdAmount(row.originalReceiptAmount)}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell><Badge>{String(row.status || '-')}</Badge></TableCell>
                   <TableCell>{row.date ? new Date(String(row.date)).toLocaleDateString() : '-'}</TableCell>
                   <TableCell>{formatAppDateTime(String(row.createdAt || ''))}</TableCell>
                 </TableRow>
               ))}
-              {rows.length === 0 && (
+              {failed && (
+                <TableRow><TableCell colSpan={6} className="text-center">
+                  <span role="alert">{tx('付款记录加载失败，不能确定是否有付款。', 'Payment records could not be loaded.')}</span>
+                  <Button variant="outline" size="sm" className="ml-2" onClick={onRetry}>{tx('重试', 'Retry')}</Button>
+                </TableCell></TableRow>
+              )}
+              {rows.length === 0 && loading && <TableRow><TableCell colSpan={6} className="text-center" role="status">
+                {tx('正在加载付款记录…', 'Loading payment records…')}
+              </TableCell></TableRow>}
+              {rows.length === 0 && !loading && !failed && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-gray-500">{tx('暂无付款记录', 'No payment records')}</TableCell>
                 </TableRow>

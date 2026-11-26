@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatAppDate } from '@/lib/app-time';
-import { Key, Trash2 } from 'lucide-react';
+import { Key, UserRoundX, UserRoundCheck, ArrowRightLeft } from 'lucide-react';
 
 export type UserListProps = {
   users: User[];
@@ -18,6 +18,8 @@ export type UserListProps = {
   onChangeRole: (userId: string, role: 'USER' | 'SALES' | 'ADMIN') => void;
   onResetPassword: (userId: string) => void;
   onDelete: (userId: string) => void;
+  onReactivate: (userId: string) => void;
+  onHandover: (user: User) => void;
 };
 
 export function UserList({
@@ -30,6 +32,8 @@ export function UserList({
   onChangeRole,
   onResetPassword,
   onDelete,
+  onReactivate,
+  onHandover,
 }: UserListProps) {
   return (
     <Card>
@@ -49,7 +53,7 @@ export function UserList({
           <TableBody>
             {users.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{row.email}</TableCell>
+                <TableCell>{row.email}{row.disabledAt && <Badge variant="secondary" className="ml-2">{tx('已停用', 'Disabled')}</Badge>}</TableCell>
                 <TableCell>{row.name || '-'}</TableCell>
                 <TableCell>
                   {isAdmin ? (
@@ -79,8 +83,11 @@ export function UserList({
                   <Button size="sm" variant="ghost" onClick={() => onResetPassword(row.id)} title={tx('重置密码', 'Reset password')} disabled={!canManageTarget(row)}>
                     <Key className="h-4 w-4" />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => onDelete(row.id)} disabled={!canManageTarget(row)}>
-                    <Trash2 className="h-4 w-4" />
+                  <Button size="sm" variant="ghost" title={row.disabledAt ? tx('启用账号', 'Reactivate account') : tx('停用账号', 'Disable account')} onClick={() => row.disabledAt ? onReactivate(row.id) : onDelete(row.id)} disabled={!canManageTarget(row) || isProtectedPrimaryAdmin(row)}>
+                    {row.disabledAt ? <UserRoundCheck className="h-4 w-4" /> : <UserRoundX className="h-4 w-4" />}
+                  </Button>
+                  <Button size="sm" variant="ghost" title={tx('业务交接', 'Business handover')} onClick={() => onHandover(row)} disabled={!canManageTarget(row) || isProtectedPrimaryAdmin(row)}>
+                    <ArrowRightLeft className="h-4 w-4" />
                   </Button>
                 </TableCell>
               </TableRow>

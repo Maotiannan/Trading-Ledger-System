@@ -1,4 +1,5 @@
 import { UserRole } from '@prisma/client';
+import { lockOrderBalances } from '@/lib/order-balance-lock';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
 import { recordAuditEventInTransaction } from '@/lib/audit';
@@ -13,7 +14,7 @@ import {
   buildOrderVisibilityWhere,
   buildReceiptVisibilityWhere,
 } from '@/lib/resource-visibility';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 const MONEY_EPSILON = 0.005;
@@ -269,6 +270,8 @@ export async function reverseBalanceTransferInTransaction(
     throw forbidden('仅管理员可以撤销余额转移');
   }
 
+  const initial = await tx.balanceTransfer.findUnique({ where: { id: input.balanceTransferId } });
+  if (initial) await lockOrderBalances(tx, [initial.fromOrderId, initial.toOrderId]);
   const transfer = await tx.balanceTransfer.findUnique({
     where: { id: input.balanceTransferId },
     include: transferInclude,

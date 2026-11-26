@@ -105,7 +105,7 @@ describe('DetailList', () => {
     expect(screen.getByTitle('导出图片')).toBeInTheDocument();
   });
 
-  it('keeps edit and deletion actions visible for admin users after the payment detail is received', () => {
+  it('does not offer forbidden actions to admins after the payment detail is received', () => {
     render(
       <DetailList
         details={[makeDetail({ status: 'RECEIVED' })]}
@@ -122,8 +122,8 @@ describe('DetailList', () => {
       />
     );
 
-    expect(screen.getByTitle('修改付款明细')).toBeInTheDocument();
-    expect(screen.getByTitle('申请删除')).toBeInTheDocument();
+    expect(screen.queryByTitle('修改付款明细')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('申请删除')).not.toBeInTheDocument();
   });
 
   it('renders compact pagination controls and emits page size changes', () => {

@@ -14,6 +14,9 @@ VERIFY_PATH=""
 BACKUP_ARGS=()
 STATUS_FINALIZED=0
 ATTEMPTS_USED=0
+PUBLISHED_SNAPSHOT=""
+CLEANUP_STATUS="NOT_RUN"
+CLEANUP_EXIT_CODE=""
 STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 usage() {
@@ -71,6 +74,7 @@ write_status() {
   BACKUP_COMPLETED_AT="$completed_at" \
   BACKUP_ATTEMPTS="$attempts" \
   BACKUP_EXIT_CODE="$exit_code" \
+  PUBLISHED_SNAPSHOT="$PUBLISHED_SNAPSHOT" CLEANUP_STATUS="$CLEANUP_STATUS" CLEANUP_EXIT_CODE="$CLEANUP_EXIT_CODE" \
   BACKUP_MODE="$MODE" \
   BACKUP_GIT_COMMIT="${GIT_COMMIT:-}" \
   BACKUP_MAX_AGE_SECONDS="${MULEDGER_BACKUP_MAX_AGE_SECONDS:-129600}" \
@@ -101,6 +105,9 @@ const payload = {
     : previous.lastSuccessfulAt || null,
   attempts: Number(process.env.BACKUP_ATTEMPTS || 0),
   exitCode,
+  publishedSnapshot: process.env.PUBLISHED_SNAPSHOT || null,
+  cleanupStatus: process.env.CLEANUP_STATUS,
+  cleanupExitCode: process.env.CLEANUP_EXIT_CODE === '' ? null : Number(process.env.CLEANUP_EXIT_CODE),
   mode: process.env.BACKUP_MODE,
   gitCommit: process.env.BACKUP_GIT_COMMIT || '',
   maxAgeSeconds: Number(process.env.BACKUP_MAX_AGE_SECONDS),
@@ -236,6 +243,8 @@ fi
   exit 1
 }
 
+backup_mount="type=bind,source=$MULEDGER_LOCAL_BACKUP_ROOT,target=/data/backup"
+if [ "$MODE" != "BACKUP" ]; then backup_mount="$backup_mount,readonly"; fi
 docker_args=(
   run
   --rm
@@ -245,7 +254,7 @@ docker_args=(
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m
   --mount "type=bind,source=$ROOT_DIR,target=/workspace,readonly"
   --mount "type=bind,source=$UPLOAD_HOST_DIR,target=/data/upload,readonly"
-  --mount "type=bind,source=$MULEDGER_LOCAL_BACKUP_ROOT,target=/data/backup"
+  --mount "$backup_mount"
   --workdir /workspace
   -e DATABASE_URL
   -e "UPLOAD_HOST_DIR=/data/upload"
@@ -269,12 +278,34 @@ last_exit=1
 for ((attempt = 1; attempt <= max_attempts; attempt += 1)); do
   ATTEMPTS_USED="$attempt"
   log "Starting $MODE attempt $attempt/$max_attempts through Docker"
-  if "$DOCKER_BIN" "${docker_args[@]}"; then
+  if output="$("$DOCKER_BIN" "${docker_args[@]}")"; then
     last_exit=0
-    break
   else
     last_exit=$?
   fi
+  if [ -n "$output" ]; then printf '%s\n' "$output"; fi
+  if [ "$MODE" = "BACKUP" ]; then
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^PUBLISHED_SNAPSHOT=(snapshots/[0-9]{4}/[0-9]{2}/[0-9]{2}/muledger-[0-9]{8}-[0-9]{6})$ ]]; then
+        PUBLISHED_SNAPSHOT="${BASH_REMATCH[1]}"
+      fi
+    done <<< "$output"
+    if [ -n "$PUBLISHED_SNAPSHOT" ]; then
+      CLEANUP_EXIT_CODE="$last_exit"
+      case "$last_exit" in
+        0) CLEANUP_STATUS="SUCCESS" ;;
+        75) CLEANUP_STATUS="DEFERRED"; last_exit=0
+            log "WARN: Snapshot is published; busy retention work is deferred. Not repeating the backup." ;;
+        *) CLEANUP_STATUS="FAILED"
+           log "ERROR: Snapshot is published; cleanup failed (exit $last_exit). Not repeating the backup." ;;
+      esac
+      break
+    elif [ "$last_exit" -eq 0 ]; then
+      log "ERROR: Worker exited without confirming publication"
+      last_exit=1
+    fi
+  fi
+  if [ "$last_exit" -eq 0 ]; then break; fi
   log "ERROR: $MODE attempt $attempt/$max_attempts failed with exit code $last_exit"
   if [ "$attempt" -lt "$max_attempts" ]; then
     log "Retrying in $MULEDGER_BACKUP_RETRY_SECONDS seconds"
@@ -282,16 +313,11 @@ for ((attempt = 1; attempt <= max_attempts; attempt += 1)); do
   fi
 done
 
-if [ "$last_exit" -ne 0 ]; then
-  if [ "$MODE" = "BACKUP" ]; then
-    write_status "FAILED" "$last_exit" "$ATTEMPTS_USED" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    STATUS_FINALIZED=1
-  fi
-  exit "$last_exit"
-fi
-
 if [ "$MODE" = "BACKUP" ]; then
-  write_status "SUCCESS" 0 "$ATTEMPTS_USED" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  publication_status="FAILED"
+  if [ -n "$PUBLISHED_SNAPSHOT" ]; then publication_status="SUCCESS"; fi
+  write_status "$publication_status" "$last_exit" "$ATTEMPTS_USED" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   STATUS_FINALIZED=1
 fi
-log "$MODE completed successfully"
+if [ "$last_exit" -eq 0 ]; then log "$MODE completed (cleanup: $CLEANUP_STATUS)"; fi
+exit "$last_exit"

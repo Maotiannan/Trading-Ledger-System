@@ -10,6 +10,40 @@ log() {
   printf '[rebuild-local-app] %s\n' "$*"
 }
 
+refuse() {
+  log "PRECHECK REFUSED: $*" >&2
+  exit 1
+}
+
+check_release_source() {
+  local id live source workdir files base="$ROOT_DIR/docker-compose.yml" project="trading-ledger-system"
+  id="$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter label=com.docker.compose.service=app)" ||
+    refuse "Cannot inspect the running Compose project."
+  [[ -n "$id" && "$id" != *$'\n'* ]] || refuse "Expected one existing MuLedger app; cannot establish the deployed release."
+  live="$(docker exec "$id" node -p 'require("/app/package.json").version')" || refuse "Cannot read the live app version."
+  source="$(node -p 'require("./package.json").version')" || refuse "Cannot read the source version in $ROOT_DIR."
+  log "Preflight: source=$source ($ROOT_DIR); deployed=$live"
+  node -e '
+    const [src, live] = process.argv.slice(1);
+    if (![src, live].every(v => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v))) process.exit(1);
+    const delta = src.split(".").map((v, i) => Number(v) - Number(live.split(".")[i])).find(n => n !== 0);
+    process.exit(delta < 0 ? 1 : 0);
+  ' "$source" "$live" || refuse "Source version is older than the deployed version or cannot be compared. Use the active release record, not this checkout."
+  workdir="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$id")" ||
+    refuse "Cannot determine the live Compose working directory."
+  files="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$id")" ||
+    refuse "Cannot determine the live Compose files."
+  [[ "$workdir" = "$ROOT_DIR" && "$files" = "$base" ]] ||
+    refuse "Production uses another working directory or a release override ($files). Follow its deployment record instead."
+  [[ "${COMPOSE_FILE:-$base}" = "$base" && "${COMPOSE_PROJECT_NAME:-$project}" = "$project" ]] ||
+    refuse "Compose environment selects a different project or configuration."
+  export COMPOSE_FILE="$base" COMPOSE_PROJECT_NAME="$project"
+  docker compose config --format json | node -e '
+    const cfg = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+    if (cfg.name !== process.env.COMPOSE_PROJECT_NAME || cfg.services?.app?.build?.context !== process.cwd()) process.exit(1);
+  ' || refuse "Resolved Compose project or app build context does not match this checkout."
+}
+
 random_secret() {
   openssl rand -hex 32
 }
@@ -82,6 +116,13 @@ wait_for_app() {
   done
   return 1
 }
+
+case "$#:${1:-}" in
+  0:|1:--check-only) ;;
+  *) log 'Usage: scripts/rebuild-local-app.sh [--check-only]' >&2; exit 2 ;;
+esac
+check_release_source
+if [ "${1:-}" = "--check-only" ]; then log 'Preflight passed; nothing was changed.'; exit 0; fi
 
 log 'checking local environment'
 ensure_env_defaults

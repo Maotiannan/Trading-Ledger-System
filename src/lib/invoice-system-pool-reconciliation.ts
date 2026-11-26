@@ -13,6 +13,8 @@ import {
 } from '@/lib/order-alias-db';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import type { DbTransactionClient } from '@/lib/transaction';
+import { lockOrderSnapshots } from '@/lib/order-balance-lock';
+import { assertUnlinkedInvoice } from '@/lib/integrations/mucont-invoice-guard';
 
 export type SystemPoolInvoiceNo =
   | typeof DEPOSIT_POOL_INVOICE_NO
@@ -72,6 +74,7 @@ export type SystemPoolRepairTargetInvoice = {
 
 type VerifiedSystemPoolOrder = {
   id: string;
+  updatedAt: Date;
   orderNo: string;
   amount: unknown;
   orderBalance: unknown;
@@ -86,6 +89,7 @@ type VerifiedSystemPoolOrder = {
 
 const verifiedSystemPoolOrderSelect = {
   id: true,
+  updatedAt: true,
   orderNo: true,
   amount: true,
   orderBalance: true,
@@ -115,6 +119,8 @@ async function applyVerifiedSystemPoolMove(
   },
 ): Promise<SystemPoolMigrationResult> {
   const source = input.source;
+  await assertUnlinkedInvoice(tx, input.targetInvoice.id);
+  await lockOrderSnapshots(tx, [source], input.targetOrderId ? [input.targetOrderId] : []);
   const sourcePool = source.invoice.invNo as SystemPoolInvoiceNo;
   const movedReceiptCount = await tx.receipt.count({ where: { orderId: source.id } });
   const amountBefore = Number(source.amount);
@@ -198,6 +204,7 @@ export async function previewSystemPoolRepairs(
   const poolInvoiceNos = Array.from(SYSTEM_POOL_INVOICE_NOS);
   const formalOrderWhere: Prisma.OrderWhereInput = {
     AND: [
+      { mucontGroup: null },
       input.orderWhere,
       { invoice: { invNo: { notIn: poolInvoiceNos } } },
     ],
@@ -384,6 +391,7 @@ export async function applySystemPoolRepairs(
       skipped += 1;
       continue;
     }
+    await lockOrderSnapshots(tx, [source, target]);
     const moved = await applyVerifiedSystemPoolMove(tx, {
       source,
       targetInvoice: { id: target.invoice.id, invNo: target.invoice.invNo },
@@ -436,6 +444,7 @@ export async function applySystemPoolRepairs(
           select: verifiedSystemPoolOrderSelect,
         })
       : null;
+    await lockOrderSnapshots(tx, targetOrder ? [source, targetOrder] : [source]);
     const moved = await applyVerifiedSystemPoolMove(tx, {
       source,
       targetInvoice,

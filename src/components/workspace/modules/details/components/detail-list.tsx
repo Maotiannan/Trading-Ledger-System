@@ -1,5 +1,6 @@
 'use client';
 
+import { canEditPaymentDetailStatus, canDeletePaymentDetailStatus } from '@/lib/ledger-action-policy';
 import type { Detail } from '@/lib/store';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,6 @@ export function DetailList({
   details,
   expandedDetails,
   canEdit,
-  isAdmin,
   tx,
   onToggleDetail,
   onViewImage,
@@ -64,8 +64,8 @@ export function DetailList({
   return (
     <div className="space-y-4">
       {details.map((detail) => {
-        const canEditThisDetail = canEdit && (detail.status !== 'RECEIVED' || isAdmin);
-        const canDeleteThisDetail = detail.status !== 'RECEIVED' || isAdmin;
+        const canEditThisDetail = canEdit && canEditPaymentDetailStatus(detail.status);
+        const canDeleteThisDetail = canDeletePaymentDetailStatus(detail.status);
         return (
         <Card key={detail.id} className={detail.status === 'ERROR' ? 'border-red-500' : ''}>
           <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => onToggleDetail(detail.id)}>

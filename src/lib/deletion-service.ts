@@ -1,3 +1,4 @@
+import { canDeletePaymentDetailStatus } from '@/lib/ledger-action-policy';
 import {
   DeletionStatus,
   DeletionTargetType,
@@ -10,8 +11,10 @@ import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions } from '@/lib/audit-catalog';
 import { updateOrderBalance } from '@/lib/matching';
+import { assertReceiptRemovalDoesNotStrandTransfer } from '@/lib/order-balance-service';
+import { lockReceiptBalances } from '@/lib/order-balance-lock';
 import { createApiError } from '@/lib/api-error';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import type { CurrentUser } from '@/lib/request-auth';
 import { addMoney, moneyToNumber } from '@/lib/money';
 import { cancelSourceNotificationsInTransaction } from '@/lib/email/email-notification-projector';
@@ -80,7 +83,7 @@ async function assertDeletionRequestableTarget(
     const canRequestSigningPendingDeletion =
       receipt.status === ReceiptStatus.SIGNING_PENDING
       && (currentUser.role === UserRole.ADMIN || receipt.createdBy === currentUser.id);
-    if (!canRequestSigningPendingDeletion && !(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
+    if (!canRequestSigningPendingDeletion && !(await canAccessOwnedResourceAsync(receipt.managedById || receipt.createdBy, currentUser))) {
       throw createApiError({
         code: 'FORBIDDEN',
         status: 403,
@@ -111,7 +114,7 @@ async function assertDeletionRequestableTarget(
         detail: { targetType, targetId },
       });
     }
-    if (!(await canAccessOwnedResourceAsync(detail.createdBy, currentUser))) {
+    if (!(await canAccessOwnedResourceAsync(detail.managedById || detail.createdBy, currentUser))) {
       throw createApiError({
         code: 'FORBIDDEN',
         status: 403,
@@ -120,8 +123,8 @@ async function assertDeletionRequestableTarget(
       });
     }
 
-    const blockedMessage = getDeletionBlockedStatusMessage(detail.status);
-    if (blockedMessage) {
+    if (!canDeletePaymentDetailStatus(detail.status)) {
+      const blockedMessage = getDeletionBlockedStatusMessage(detail.status)!;
       throw createApiError({
         code: 'DELETION_NOT_ALLOWED',
         status: 400,
@@ -141,7 +144,7 @@ async function assertDeletionRequestableTarget(
       detail: { targetType, targetId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(swift.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(swift.managedById || swift.createdBy, currentUser))) {
     throw createApiError({
       code: 'FORBIDDEN',
       status: 403,
@@ -156,6 +159,7 @@ async function approveReceiptDeletion(
   targetId: string,
   actorId: string
 ): Promise<{ affectedOrderId: string | null }> {
+  await lockReceiptBalances(tx, [targetId]);
   const receipt = await tx.receipt.findUnique({ where: { id: targetId } });
   if (!receipt) {
     return { affectedOrderId: null };
@@ -165,6 +169,7 @@ async function approveReceiptDeletion(
     where: { receiptId: targetId },
     select: { detailId: true },
   });
+  await assertReceiptRemovalDoesNotStrandTransfer(tx, receipt.orderId, receipt.usd, receipt.status);
   const affectedDetailIds = Array.from(new Set(affectedDetailItems.map((row) => row.detailId)));
   for (const detailId of affectedDetailIds.sort()) {
     await lockSwiftDetail(tx, detailId);
@@ -195,6 +200,7 @@ async function approveReceiptDeletion(
   });
   await tx.detailItem.deleteMany({ where: { receiptId: targetId } });
   await tx.receipt.delete({ where: { id: targetId } });
+  if (receipt.orderId) await updateOrderBalance(receipt.orderId, tx);
 
   for (const detailId of affectedDetailIds) {
     const remainItems = await tx.detailItem.findMany({
@@ -234,6 +240,14 @@ async function approveDetailDeletion(
   const receiptIds = Array.from(
     new Set(detail.items.map((item) => item.receiptId).filter((id): id is string => Boolean(id)))
   );
+  await lockReceiptBalances(tx, receiptIds);
+  await lockSwiftDetail(tx, targetId);
+  const currentDetail = await tx.detail.findUnique({ where: { id: targetId }, include: { items: true } });
+  if (!currentDetail) return;
+  const currentReceiptIds = [...new Set(currentDetail.items.map((item) => item.receiptId).filter(Boolean))].sort();
+  if (JSON.stringify(currentReceiptIds) !== JSON.stringify([...receiptIds].sort())) {
+    throw createApiError({ code: 'CONFLICT', status: 409, message: '付款明细关联已变化，请刷新后重试' });
+  }
   const receipts = receiptIds.length > 0
     ? await tx.receipt.findMany({
         where: { id: { in: receiptIds } },
@@ -241,11 +255,12 @@ async function approveDetailDeletion(
           id: true,
           note: true,
           orderId: true,
-          createdBy: true,
+          usd: true,
+          status: true,
+          createdBy: true, managedById: true,
         },
       })
     : [];
-
   for (const item of detail.items) {
     if (item.receiptId) {
       await tx.receipt.update({
@@ -285,6 +300,7 @@ async function approveDetailDeletion(
       actorId,
       reason: 'SOURCE_DELETED',
     });
+    await assertReceiptRemovalDoesNotStrandTransfer(tx, receipt.orderId, receipt.usd, receipt.status);
     await tx.receipt.delete({ where: { id: receipt.id } });
     if (receipt.orderId) {
       autoOrderCandidates.add(receipt.orderId);
@@ -466,8 +482,6 @@ export async function reviewDeletionRequest({
     return { message: '申请已拒绝' };
   }
 
-  let affectedReceiptOrderId: string | null = null;
-
   await runInTransaction(async (tx) => {
     const requestInTx = await tx.deletionRequest.findUnique({
       where: { id: requestId },
@@ -482,8 +496,7 @@ export async function reviewDeletionRequest({
     }
 
     if (requestInTx.targetType === DeletionTargetType.RECEIPT) {
-      const result = await approveReceiptDeletion(tx, requestInTx.targetId, currentUser.id);
-      affectedReceiptOrderId = result.affectedOrderId;
+      await approveReceiptDeletion(tx, requestInTx.targetId, currentUser.id);
     } else if (requestInTx.targetType === DeletionTargetType.DETAIL) {
       await approveDetailDeletion(tx, requestInTx.targetId, currentUser.id);
     } else if (requestInTx.targetType === DeletionTargetType.SWIFT) {
@@ -499,10 +512,6 @@ export async function reviewDeletionRequest({
       },
     });
   }, { isolationLevel: 'ReadCommitted' });
-
-  if (affectedReceiptOrderId) {
-    await updateOrderBalance(affectedReceiptOrderId);
-  }
 
   await recordAuditEvent({
     action: auditActions.DELETION_REQUEST_APPROVE,

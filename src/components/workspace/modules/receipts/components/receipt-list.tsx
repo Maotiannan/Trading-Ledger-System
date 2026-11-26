@@ -1,5 +1,6 @@
 'use client';
 
+import { canEditReceiptStatus } from '@/lib/ledger-action-policy';
 import type { Receipt } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -77,9 +78,10 @@ export function ReceiptList({
           <TableBody>
             {paginatedReceipts.map((receipt) => {
               const canEditThisReceipt = !receipt.isSystemTransfer
+                && canEditReceiptStatus(receipt.status)
                 && canEdit
                 && (receipt.status !== 'RECEIVED' || isAdmin);
-              const isSigningPendingCreator = receipt.status === 'SIGNING_PENDING' && receipt.creator?.id === currentUserId;
+              const isSigningPendingCreator = receipt.status === 'SIGNING_PENDING' && (receipt.managedById || receipt.creator?.id) === currentUserId;
               const canDeleteThisReceipt =
                 !receipt.isSystemTransfer
                 && receipt.status !== 'Bank_Transfer'

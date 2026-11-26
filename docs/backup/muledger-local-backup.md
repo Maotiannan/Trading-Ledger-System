@@ -2,6 +2,8 @@
 
 This runbook is only for the `muledger` project.
 
+The 1.0.243 source reconciliation does not run backups, migrations or data repairs. Include all tables in database snapshots, including invoice source identities, prepayment allocations, recovery records and audit history. Archive the complete configured media root. During an isolated restore, verify the restored relationships and a media file. Keep snapshots, site-specific configuration and incident evidence out of Git.
+
 ## 1. Data Scope
 
 Back up both authoritative business data areas:

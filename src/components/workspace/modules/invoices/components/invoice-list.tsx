@@ -1,5 +1,7 @@
 'use client';
 
+import { activePoolRowCount } from '@/lib/prepayments/pool-types';
+
 import type { CustomerCandidate } from '@/components/workspace/shared';
 import type { Invoice, Order } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -12,6 +14,9 @@ import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import { Loader2, Plus, Trash2, ArrowRight, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import type { BranchAdminOption, TransferFromOrder } from '../types';
+import { InvoiceSourceActions } from './invoice-source-actions';
+import { InvoiceRenameAction } from './invoice-rename-action';
+import { DepositPoolTable } from './deposit-pool-table';
 
 export type InvoiceListProps = {
   invoices: Invoice[];
@@ -53,8 +58,9 @@ export type InvoiceListProps = {
   onCancelAddOrder: () => void;
   onOpenOrderHistory: (orderId: string, orderNo: string) => void;
   onOpenTransfer: (order: TransferFromOrder) => void;
-  onOpenEditOrder: (invoiceId: string, invoiceInvNo: string, order: Order) => void;
+  onOpenEditOrder: (invoiceId: string, invoiceInvNo: string, order: Order, sourceLinked: boolean) => void;
   onDeleteOrder: (orderId: string) => void;
+  onSourceChanged?: () => void | Promise<void>;
 };
 
 export function InvoiceList({
@@ -99,6 +105,7 @@ export function InvoiceList({
   onOpenTransfer,
   onOpenEditOrder,
   onDeleteOrder,
+  onSourceChanged,
 }: InvoiceListProps) {
   if (invoices.length === 0) {
     return (
@@ -123,10 +130,14 @@ export function InvoiceList({
                   <ChevronRight className="h-5 w-5 text-gray-500" />
                 )}
                 <div>
-                  <CardTitle className="text-lg">{invoice.invNo}</CardTitle>
+                  <CardTitle className="flex flex-wrap items-center gap-1 text-lg">
+                    <span className="break-all">{invoice.invNo}</span>
+                <InvoiceRenameAction invoice={invoice} isAdmin={isAdmin} tx={tx} onChanged={onSourceChanged} />
+                    <InvoiceSourceActions invoice={invoice} tx={tx} onChanged={onSourceChanged} />
+                  </CardTitle>
                   <CardDescription>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span>{tx(`${invoice.orders.length} 个订单`, `${invoice.orders.length} orders`)}</span>
+                      <span>{tx(`${invoice.depositPool ? activePoolRowCount(invoice.depositPool.rows) : invoice.orders.length} 个条目`, `${invoice.depositPool ? activePoolRowCount(invoice.depositPool.rows) : invoice.orders.length} entries`)}</span>
                       {editingInvoiceDateId === invoice.id ? (
                         <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
                           <span>{tx('发货', 'SHIP')}</span>
@@ -158,7 +169,12 @@ export function InvoiceList({
                         <>
                           <span>{`${tx('发货', 'SHIP')}: ${invoice.shipDate ? new Date(invoice.shipDate).toLocaleDateString() : '-'}`}</span>
                           <span>{`${tx('放货', 'RELEASE')}: ${invoice.releaseDate ? new Date(invoice.releaseDate).toLocaleDateString() : '-'}`}</span>
-                          {isManager && (
+                          {invoice.source && <>
+                            <span>{tx('预计到港', 'ETA')}: {invoice.estimatedArrivalDate ? new Date(invoice.estimatedArrivalDate).toLocaleDateString() : '-'}</span>
+                            {invoice.source.creditInsurance && <span>{tx('信保', 'Credit insurance')}: {invoice.source.creditInsurance}</span>}
+                            {invoice.source.metadataStale && <span role="status">{tx('来源资料暂未更新，显示上次成功内容', 'Source unavailable; showing last successful data')}</span>}
+                          </>}
+                          {isManager && !invoice.source && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -180,13 +196,13 @@ export function InvoiceList({
               </div>
               <div className="flex flex-wrap items-center gap-4 text-sm sm:justify-end">
                 <div className="text-right">
-                  <div className="text-gray-500">{tx('总金额', 'Total Amount')}</div>
-                  <div className="font-semibold">{formatUsdAmount(invoice.invAmount)}</div>
+                  <div className="text-gray-500">{invoice.depositPool ? tx('预留 / 冻结', 'Reserved / Held') : tx('总金额', 'Total Amount')}</div>
+                  <div className="font-semibold">{invoice.depositPool ? `${formatUsdAmount(invoice.depositPool.reservedTotal)} / ${formatUsdAmount(invoice.depositPool.heldTotal)}` : formatUsdAmount(invoice.invAmount)}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-gray-500">{tx('未收金额', 'Outstanding')}</div>
+                  <div className="text-gray-500">{invoice.depositPool ? tx('可用余额', 'Available') : tx('未收金额', 'Outstanding')}</div>
                   <div className={`font-semibold ${invoice.invBalance > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                    {formatUsdAmount(invoice.invBalance)}
+                    {formatUsdAmount(invoice.depositPool?.availableTotal ?? invoice.invBalance)}
                   </div>
                 </div>
               </div>
@@ -195,6 +211,8 @@ export function InvoiceList({
 
           {expandedInvoices.has(invoice.id) && (
             <CardContent className="border-t pt-4">
+              {invoice.depositPool ? <DepositPoolTable pool={invoice.depositPool} tx={tx} isAdmin={isAdmin}
+                onHistory={onOpenOrderHistory} onTransfer={onOpenTransfer} onChanged={() => { void onSourceChanged?.(); }} /> : <>
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h4 className="font-medium">{tx('订单明细', 'Order Details')}</h4>
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
@@ -233,7 +251,7 @@ export function InvoiceList({
                       </div>
                     )
                   )}
-                  {isManager && (
+                  {isManager && !invoice.source && (
                     <Button size="sm" variant="outline" onClick={() => onStartAddOrder(invoice.id)}>
                       <Plus className="h-4 w-4 mr-1" />
                       {tx('添加订单', 'Add Order')}
@@ -287,12 +305,12 @@ export function InvoiceList({
                               <ArrowRight className="h-4 w-4" />
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => onOpenEditOrder(invoice.id, invoice.invNo, order)}>
+                          {(!invoice.source || invoice.source.revision) && <Button size="sm" variant="ghost" onClick={() => onOpenEditOrder(invoice.id, invoice.invNo, order, Boolean(invoice.source))}>
                             <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => onDeleteOrder(order.id)}>
+                          </Button>}
+                          {!invoice.source && <Button size="sm" variant="ghost" onClick={() => onDeleteOrder(order.id)}>
                             <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
+                          </Button>}
                         </TableCell>
                       )}
                     </TableRow>
@@ -357,6 +375,7 @@ export function InvoiceList({
                   </div>
                 </div>
               )}
+              </>}
             </CardContent>
           )}
         </Card>

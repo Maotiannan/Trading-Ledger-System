@@ -73,8 +73,7 @@ jest.mock('@/lib/system-settings', () => ({
     'OCR_DISABLED',
     'OCR_API_KEY',
     'DETAIL_RECEIPT_MATCH_TOLERANCE',
-    'SWIFT_WARNING_TOLERANCE',
-    'SWIFT_REJECT_TOLERANCE',
+    'SWIFT_MAX_FEE_PER_COPY',
     'SETTINGS_AUDIT_MAX_PAGE_SIZE',
     'SETTINGS_AUDIT_EXPORT_MAX_ROWS',
     'CUSTOMER_ANALYTICS_LOOKBACK_MONTHS',
@@ -101,8 +100,7 @@ jest.mock('@/lib/system-settings', () => ({
   secretSystemSettingKeys: ['OCR_API_KEY'],
   numericSystemSettingMinimums: {
     DETAIL_RECEIPT_MATCH_TOLERANCE: 0,
-    SWIFT_WARNING_TOLERANCE: 0,
-    SWIFT_REJECT_TOLERANCE: 0,
+    SWIFT_MAX_FEE_PER_COPY: 0,
     SETTINGS_AUDIT_MAX_PAGE_SIZE: 1,
     SETTINGS_AUDIT_EXPORT_MAX_ROWS: 1,
     CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: 1,
@@ -201,13 +199,15 @@ const validAnalyticsSettings = {
 describe('settings-service', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockDb.receipt.findMany.mockResolvedValue([]);
+    mockDb.order.findMany.mockResolvedValue([]);
+    mockDb.customer.findMany.mockResolvedValue([]);
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockGetSystemSettingsWithDefaults.mockResolvedValue({
       OCR_DISABLED: 'false',
       OCR_API_KEY: 'old-secret',
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
-      SWIFT_WARNING_TOLERANCE: '5',
-      SWIFT_REJECT_TOLERANCE: '50',
+      SWIFT_MAX_FEE_PER_COPY: '40',
       SETTINGS_AUDIT_MAX_PAGE_SIZE: '100',
       SETTINGS_AUDIT_EXPORT_MAX_ROWS: '5000',
       CUSTOMER_ANALYTICS_LOOKBACK_MONTHS: '12',
@@ -230,7 +230,8 @@ describe('settings-service', () => {
 
     const result = await listSettings(makeUser());
 
-    expect(result.settings.SWIFT_WARNING_TOLERANCE).toBe('5');
+    expect(result.settings.SWIFT_MAX_FEE_PER_COPY).toBe('40');
+    expect(result.settings).not.toHaveProperty('SWIFT_WARNING_TOLERANCE');
     expect(result.canEdit).toBe(true);
     expect(result.canViewAudit).toBe(true);
     expect(result.canPurgeBranch).toBe(true);
@@ -247,7 +248,7 @@ describe('settings-service', () => {
       targetType: 'SYSTEM_SETTING',
       actorId: 'admin-1',
       metadata: expect.objectContaining({
-        editableKeyCount: 17,
+        editableKeyCount: 16,
         branchPurgeTargetCount: 1,
         canEdit: true,
         canViewAudit: true,
@@ -741,13 +742,13 @@ describe('settings-service', () => {
     ]);
   });
 
-  it('validates swift tolerance ordering before saving config', async () => {
+  it('rejects retired SWIFT settings instead of silently accepting them', async () => {
     await expect(updateSystemSettings(makeUser(), {
       SWIFT_WARNING_TOLERANCE: '10',
       SWIFT_REJECT_TOLERANCE: '5',
     })).rejects.toMatchObject({
       code: 'BAD_REQUEST',
-      message: 'SWIFT_REJECT_TOLERANCE 不能小于 SWIFT_WARNING_TOLERANCE',
+      message: '旧 SWIFT 容差已停用，请刷新后使用每张手续费上限',
     });
   });
 
@@ -843,17 +844,16 @@ describe('settings-service', () => {
 
     const result = await updateSystemSettings(makeUser(), {
       DETAIL_RECEIPT_MATCH_TOLERANCE: '7',
-      SWIFT_WARNING_TOLERANCE: '6',
-      SWIFT_REJECT_TOLERANCE: '60',
+      SWIFT_MAX_FEE_PER_COPY: '41',
     });
 
     expect(result.message).toBe('配置已更新');
-    expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(3);
+    expect(mockDb.systemSetting.upsert).toHaveBeenCalledTimes(2);
     expect(mockInvalidateSystemSettingsCache).toHaveBeenCalled();
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'SYSTEM_SETTINGS_UPDATE',
       metadata: expect.objectContaining({
-        updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE'],
+        updatedKeys: ['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_MAX_FEE_PER_COPY'],
       }),
     }));
   });
@@ -893,8 +893,7 @@ describe('settings-service', () => {
       OCR_DISABLED: 'false',
       OCR_API_KEY: 'old-secret',
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
-      SWIFT_WARNING_TOLERANCE: '5',
-      SWIFT_REJECT_TOLERANCE: '50',
+      SWIFT_MAX_FEE_PER_COPY: '40',
       SETTINGS_AUDIT_MAX_PAGE_SIZE: '100',
       SETTINGS_AUDIT_EXPORT_MAX_ROWS: '5000',
       ...validAnalyticsSettings,
@@ -921,8 +920,7 @@ describe('settings-service', () => {
       OCR_DISABLED: 'false',
       OCR_API_KEY: 'old-secret',
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
-      SWIFT_WARNING_TOLERANCE: '5',
-      SWIFT_REJECT_TOLERANCE: '50',
+      SWIFT_MAX_FEE_PER_COPY: '40',
       SETTINGS_AUDIT_MAX_PAGE_SIZE: '30',
       SETTINGS_AUDIT_EXPORT_MAX_ROWS: '200',
     });
@@ -950,8 +948,7 @@ describe('settings-service', () => {
       OCR_DISABLED: 'false',
       OCR_API_KEY: 'old-secret',
       DETAIL_RECEIPT_MATCH_TOLERANCE: '5',
-      SWIFT_WARNING_TOLERANCE: '5',
-      SWIFT_REJECT_TOLERANCE: '50',
+      SWIFT_MAX_FEE_PER_COPY: '40',
       SETTINGS_AUDIT_MAX_PAGE_SIZE: '0',
       SETTINGS_AUDIT_EXPORT_MAX_ROWS: '-9',
     });

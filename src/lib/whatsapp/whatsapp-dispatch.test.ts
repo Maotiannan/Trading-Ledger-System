@@ -4,7 +4,7 @@ jest.mock('./whatsapp-template-service', () => ({ listWhatsAppTemplateVersions: 
 jest.mock('./ycloud-template-status', () => ({ isYCloudTemplateApproved: jest.fn(async () => true) }));
 jest.mock('./whatsapp-settings', () => ({ getWhatsAppSettings: jest.fn(async () => ({outboundEnabled:true,testMode:true,testDestination:'+8613619767412'})) }));
 
-jest.mock('@/lib/db', () => ({ db: { whatsAppDelivery: { updateMany: jest.fn(), findUnique: jest.fn() } } }));
+jest.mock('@/lib/db', () => ({ db: { mucontInvoiceSource: { findMany: jest.fn(async () => []) }, whatsAppDelivery: { updateMany: jest.fn(), findUnique: jest.fn() } } }));
 jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn() }));
 jest.mock('./whatsapp-queue', () => ({ claimWhatsAppInTransaction: jest.fn() }));
 jest.mock('./ycloud-provider', () => ({
@@ -44,6 +44,14 @@ it('never sends when outbound is disabled or claim is lost', async () => {
   await dispatchWhatsAppDelivery('delivery');
   expect(sendYCloudTemplate).not.toHaveBeenCalled();
 });
+it('defers before claiming or sending when source dates cannot be verified', async () => {
+  (db.mucontInvoiceSource.findMany as jest.Mock).mockRejectedValueOnce(new Error('source unavailable'));
+  expect(await dispatchWhatsAppDelivery('delivery')).toEqual({ sent: false });
+  expect(refreshWhatsAppInTransaction).not.toHaveBeenCalled();
+  expect(claimWhatsAppInTransaction).not.toHaveBeenCalled();
+  expect(sendYCloudTemplate).not.toHaveBeenCalled();
+  expect(db.whatsAppDelivery.updateMany).not.toHaveBeenCalled();
+});
 it('records timeout uncertainty without a retry', async () => {
   (sendYCloudTemplate as jest.Mock).mockRejectedValue(new Error('timeout'));
   expect(await dispatchWhatsAppDelivery('delivery')).toMatchObject({ uncertain: true });
@@ -70,7 +78,7 @@ it('dispatches an explicit reminder retry while automatic projection is disabled
   (refreshWhatsAppInTransaction as jest.Mock).mockResolvedValue(retry);
   (claimWhatsAppInTransaction as jest.Mock).mockResolvedValue(retry);
   (db.whatsAppDelivery.findUnique as jest.Mock).mockResolvedValue({ ...retry, id: 'parent', retryOf: null,
-    status: 'FAILED', failureCode: 'PROVIDER_REJECTED', providerMessageId: null });
+    status: 'FAILED', failureCode: 'PROVIDER_REJECTED', providerMessageId: null, contact: { customerId: 'customer' } });
   expect(await dispatchWhatsAppDelivery(retry.id)).toMatchObject({ sent: true });
   expect(sendYCloudTemplate).toHaveBeenCalledWith(expect.objectContaining({ imageId: 'fresh-media' }), expect.anything());
   (getWhatsAppSettings as jest.Mock).mockResolvedValue({ outboundEnabled: false, reminderEnabled: false });

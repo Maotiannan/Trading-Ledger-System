@@ -101,6 +101,16 @@ describe('ReceiptList', () => {
     expect(screen.getByTestId('list-pagination-content')).toHaveClass('flex-row', 'flex-nowrap');
   });
 
+  it.each([true, false])('hides ordinary Bank_Transfer editing even with edit permission (admin=%s)', isAdmin => {
+    const rows = [{ ...baseReceipt, status: 'Bank_Transfer' as const }];
+    render(<ReceiptList receipts={rows} paginatedReceipts={rows} currentPage={1} totalPages={1} isAdmin={isAdmin}
+      currentUserId="user-1" canEdit canResumeSigning tx={tx} getStatusBadge={status => <span>{status}</span>}
+      onViewImage={jest.fn()} onEditReceipt={jest.fn()} onMarkReceived={jest.fn()} onDeleteReceipt={jest.fn()}
+      onResumeSigning={jest.fn()} onPreviousPage={jest.fn()} onNextPage={jest.fn()} pageSize={20}
+      pageSizeOptions={[20]} onPageSizeChange={jest.fn()} />);
+    expect(screen.queryByTitle('修改收据')).not.toBeInTheDocument();
+  });
+
   it('hides RECEIVED edit/delete actions from sales users and keeps them visible for admins', () => {
     const { rerender } = render(
       <ReceiptList

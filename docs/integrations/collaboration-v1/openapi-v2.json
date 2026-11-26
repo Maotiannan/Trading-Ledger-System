@@ -1,0 +1,415 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MuLedger Collaboration Credit Records V2",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://muledger.example.invalid",
+      "description": "Replace with authorized Ledger server URL; no browser access"
+    }
+  ],
+  "security": [
+    {
+      "collaborationCreditRead": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "collaborationCreditRead": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Independent server-only credential. Fixed scope credit-records:read."
+      },
+      "collaborationCreditWrite": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Separate server-only credit-records:write token; must differ from read token."
+      }
+    }
+  },
+  "paths": {
+    "/api/integrations/collaboration/v2/credit-records": {
+      "get": {
+        "operationId": "listCreditRecords",
+        "parameters": [
+          {
+            "name": "includeZero",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "true includes ZERO and AVAILABLE credit records; false or omitted includes AVAILABLE only. Excludes unset and negative credit. Keep this value across pages; cursors are filter-bound."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            },
+            "description": "Capped to 50"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "GET only; framework response may be empty"
+          },
+          "429": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/collaboration/v2/credit-records/{creditRecordId}": {
+      "get": {
+        "operationId": "readCreditRecord",
+        "parameters": [
+          {
+            "name": "creditRecordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 191
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current source records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/creditRecord"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "GET only; framework response may be empty"
+          },
+          "429": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "See README error codes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/integrations/collaboration/v2/credit-records/{creditRecordId}/writeback": {
+      "post": {
+        "operationId": "writeCreditRecordV2",
+        "security": [
+          {
+            "collaborationCreditWrite": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "creditRecordId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 191
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "requestId",
+                  "expectedSourceVersion",
+                  "confirmation",
+                  "actor",
+                  "fields"
+                ],
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+                  },
+                  "expectedSourceVersion": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "confirmation": {
+                    "const": "MODIFY_WRITEBACK_CONFIRM"
+                  },
+                  "actor": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "name"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 191
+                      },
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 191
+                      }
+                    }
+                  },
+                  "fields": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "minProperties": 1,
+                    "properties": {
+                      "customerCode": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 191
+                      },
+                      "creditCode": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 191
+                      },
+                      "orderName": {
+                        "type": "string",
+                        "maxLength": 191,
+                        "minLength": 1
+                      },
+                      "companyName": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 10000
+                      },
+                      "creditAmount": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,2})?$"
+                      },
+                      "currency": {
+                        "const": "USD"
+                      },
+                      "address": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 10000
+                      },
+                      "phone": {
+                        "type": "string",
+                        "maxLength": 191,
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed writeback or original idempotent result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/writeResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "See V2 error contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "See V2 error contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "See V2 error contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "See V2 error contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "See V2 error contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "See V2 error contract",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./credit-records-v2.schema.json#/definitions/error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

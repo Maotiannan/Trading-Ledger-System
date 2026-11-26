@@ -71,6 +71,7 @@ let result = 'HEALTHY';
 if (status.status !== 'SUCCESS') result = status.status === 'RUNNING' ? 'RUNNING' : 'FAILED';
 else if (ageSeconds < 0) result = 'INVALID';
 else if (ageSeconds > maxAgeSeconds) result = 'STALE';
+else if (status.cleanupStatus === 'FAILED') result = 'CLEANUP_FAILED';
 
 console.log(`RESULT=${result}`);
 console.log(`STATUS=${status.status || 'UNKNOWN'}`);
@@ -79,6 +80,10 @@ console.log(`AGE_SECONDS=${ageSeconds}`);
 console.log(`MAX_AGE_SECONDS=${maxAgeSeconds}`);
 console.log(`ATTEMPTS=${Number(status.attempts || 0)}`);
 console.log(`EXIT_CODE=${status.exitCode ?? 'NA'}`);
+console.log(`PUBLISHED_SNAPSHOT=${status.publishedSnapshot || 'NA'}`);
+console.log(`CLEANUP_STATUS=${status.cleanupStatus || 'NOT_REPORTED'}`);
+console.log(`CLEANUP_EXIT_CODE=${status.cleanupExitCode ?? 'NA'}`);
+if (status.cleanupStatus === 'DEFERRED') console.log('WARNING=Expired snapshots still busy; cleanup will retry after the next publication.');
 console.log(`STATUS_FILE=${file}`);
 process.exit(result === 'HEALTHY' ? 0 : 1);
 NODE

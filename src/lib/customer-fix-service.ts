@@ -14,7 +14,9 @@ import {
   resolveCustomerUpsertTargetId,
 } from '@/lib/customer-scope';
 import { syncCustomerOrderNames } from '@/lib/customer-order-name-service';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { managedOwnershipWhere } from '@/lib/resource-visibility';
+import { customerCreditCodeError } from '@/lib/customer-credit-codes';
 
 export type FixCustomerPayload = {
   mark: string;
@@ -26,6 +28,8 @@ export type FixCustomerPayload = {
   companyName: string | null;
   companyAddress: string | null;
   credit: number | null;
+  customerCode?: string | null;
+  creditCode?: string | null;
 };
 
 function trimStr(value: unknown): string {
@@ -55,7 +59,9 @@ export function parseFixCustomerPayload(body: Record<string, unknown>): FixCusto
     return { error: 'CREDIT必须为大于等于0的数字' };
   }
 
-  return { mark, orderName, name, phone, city, consignee, companyName, companyAddress, credit };
+  return { mark, orderName, name, phone, city, consignee, companyName, companyAddress, credit,
+    ...(body.customerCode === undefined ? {} : { customerCode: trimStr(body.customerCode) || null }),
+    ...(body.creditCode === undefined ? {} : { creditCode: trimStr(body.creditCode) || null }) };
 }
 
 async function salesCanEditExtended(): Promise<boolean> {
@@ -78,6 +84,14 @@ async function upsertCustomer(
     phone: payload.phone,
     companyName: scopedCompanyName,
   }, tx);
+
+  if (allowExtended) {
+    const existingCodes = targetId && payload.credit ? await tx.customer.findUnique({ where: { id: targetId }, select: { customerCode: true, creditCode: true } }) : null;
+    const error = customerCreditCodeError(payload.credit,
+      payload.customerCode === undefined ? existingCodes?.customerCode : payload.customerCode,
+      payload.creditCode === undefined ? existingCodes?.creditCode : payload.creditCode);
+    if (error) throw createApiError({ code: 'VALIDATION_ERROR', status: 400, message: error });
+  }
 
   if (targetId) {
     await assertNoCustomerScopeConflict(
@@ -106,6 +120,8 @@ async function upsertCustomer(
               companyName: payload.companyName,
               companyAddress: payload.companyAddress,
               credit: payload.credit,
+              customerCode: payload.customerCode,
+              creditCode: payload.creditCode,
             }
           : {}),
       },
@@ -131,6 +147,8 @@ async function upsertCustomer(
       companyName: allowExtended ? payload.companyName : null,
       companyAddress: allowExtended ? payload.companyAddress : null,
       credit: allowExtended ? payload.credit : null,
+      customerCode: allowExtended ? payload.customerCode : null,
+      creditCode: allowExtended ? payload.creditCode : null,
       createdBy: currentUserId,
       ownerId,
     },
@@ -149,7 +167,7 @@ async function syncSameGroupCustomer(
   if (!groupKey) return 0;
 
   const allOrders = await tx.order.findMany({
-    where: ownerId ? { createdBy: ownerId } : undefined,
+    where: ownerId ? managedOwnershipWhere([ownerId]) : undefined,
     select: { id: true, orderNo: true },
   });
   const targetOrderIds = allOrders
@@ -182,7 +200,7 @@ async function syncSameGroupCustomer(
   const receiptCandidates = await tx.receipt.findMany({
     where: {
       orderNo: { not: null },
-      ...(ownerId ? { createdBy: ownerId } : {}),
+      ...(ownerId ? managedOwnershipWhere([ownerId]) : {}),
     },
     select: { id: true, orderNo: true },
   });
@@ -284,12 +302,12 @@ export async function resolveOrderCustomerFix(
 
   const existingOrder = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true, createdBy: true, orderNo: true },
+    select: { id: true, createdBy: true, managedById: true, orderNo: true },
   });
   if (!existingOrder) {
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '订单不存在' });
   }
-  if (currentUser.role === UserRole.SALES && existingOrder.createdBy !== currentUser.id) {
+  if (currentUser.role === UserRole.SALES && (existingOrder.managedById || existingOrder.createdBy) !== currentUser.id) {
     throw createApiError({ code: 'CUSTOMER_SCOPE_FORBIDDEN', status: 403, message: '无权修复该订单' });
   }
 
@@ -337,12 +355,12 @@ export async function resolveReceiptCustomerFix(
 
   const existingReceipt = await db.receipt.findUnique({
     where: { id: receiptId },
-    select: { id: true, createdBy: true, orderId: true, orderNo: true },
+    select: { id: true, createdBy: true, managedById: true, orderId: true, orderNo: true },
   });
   if (!existingReceipt) {
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '收据不存在' });
   }
-  if (currentUser.role === UserRole.SALES && existingReceipt.createdBy !== currentUser.id) {
+  if (currentUser.role === UserRole.SALES && (existingReceipt.managedById || existingReceipt.createdBy) !== currentUser.id) {
     throw createApiError({ code: 'CUSTOMER_SCOPE_FORBIDDEN', status: 403, message: '无权修复该收据' });
   }
 
@@ -399,12 +417,12 @@ export async function linkOrderCustomerFix(
 
   const existingOrder = await db.order.findUnique({
     where: { id: orderId },
-    select: { id: true, createdBy: true, orderNo: true },
+    select: { id: true, createdBy: true, managedById: true, orderNo: true },
   });
   if (!existingOrder) {
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '订单不存在' });
   }
-  if (currentUser.role === UserRole.SALES && existingOrder.createdBy !== currentUser.id) {
+  if (currentUser.role === UserRole.SALES && (existingOrder.managedById || existingOrder.createdBy) !== currentUser.id) {
     throw createApiError({ code: 'CUSTOMER_SCOPE_FORBIDDEN', status: 403, message: '无权修复该订单' });
   }
 
@@ -452,12 +470,12 @@ export async function linkReceiptCustomerFix(
 
   const existingReceipt = await db.receipt.findUnique({
     where: { id: receiptId },
-    select: { id: true, createdBy: true, orderId: true, orderNo: true },
+    select: { id: true, createdBy: true, managedById: true, orderId: true, orderNo: true },
   });
   if (!existingReceipt) {
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '收据不存在' });
   }
-  if (currentUser.role === UserRole.SALES && existingReceipt.createdBy !== currentUser.id) {
+  if (currentUser.role === UserRole.SALES && (existingReceipt.managedById || existingReceipt.createdBy) !== currentUser.id) {
     throw createApiError({ code: 'CUSTOMER_SCOPE_FORBIDDEN', status: 403, message: '无权修复该收据' });
   }
 

@@ -22,6 +22,7 @@ jest.mock('@/lib/db', () => ({
       update: jest.fn(),
       delete: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     customerOrderName: {
       createMany: jest.fn(),
@@ -75,6 +76,7 @@ const mockDb = db as unknown as {
     update: jest.Mock;
     delete: jest.Mock;
     findUnique: jest.Mock;
+    findMany: jest.Mock;
   };
   customerOrderName: {
     createMany: jest.Mock;
@@ -97,12 +99,38 @@ const mockAssertNoCustomerScopeConflict = assertNoCustomerScopeConflict as jest.
 describe('customer-service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb.customer.findMany.mockResolvedValue([{ id: 'customer-1' }]);
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockGetSystemSettings.mockResolvedValue({ SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS: 'true' });
     mockResolveCustomerOwnerId.mockResolvedValue('sales-1');
     mockFindDuplicateCustomersInScope.mockResolvedValue([]);
     mockFindPhoneConflictCustomersInScope.mockResolvedValue([]);
     mockAssertNoCustomerScopeConflict.mockResolvedValue(undefined);
+  });
+
+  it('stores a dedicated company contact without repurposing customer phone', async () => {
+    mockDb.customer.create.mockResolvedValueOnce({ id: 'contact-source' });
+    await createCustomerRecord(makeUser(), { mark: 'CONTACT', orderName: 'CONTACT', name: 'Customer', phone: 'customer-phone', city: 'City', companyContact: 'Company desk' });
+    expect(mockDb.customer.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ companyContact: 'Company desk', phone: 'customer-phone' }) }));
+  });
+
+  it('preserves company contact on old update requests and allows explicit clear', async () => {
+    mockDb.customer.findUnique.mockResolvedValue({ id: 'contact-source', ownerId: 'admin-1' });
+    mockDb.customer.update.mockResolvedValue({ id: 'contact-source' });
+    const payload = { mark: 'CONTACT', orderName: 'CONTACT', name: 'Customer', phone: 'customer-phone', city: 'City' };
+    await updateCustomerRecord(makeUser(), 'contact-source', payload);
+    expect(mockDb.customer.update.mock.calls[0][0].data.companyContact).toBeUndefined();
+    await updateCustomerRecord(makeUser(), 'contact-source', { ...payload, companyContact: null });
+    expect(mockDb.customer.update.mock.calls[1][0].data.companyContact).toBeNull();
+  });
+
+  it('ignores new contact writes without existing extended permission and rejects overlong input', async () => {
+    mockGetSystemSettings.mockResolvedValue({ SALES_CAN_VIEW_EXTENDED_CUSTOMER_FIELDS: 'false' });
+    mockDb.customer.create.mockResolvedValueOnce({ id: 'contact-source' });
+    const payload = { mark: 'CONTACT', orderName: 'CONTACT', name: 'Customer', phone: 'customer-phone', city: 'City', companyContact: 'Company desk' };
+    await createCustomerRecord(makeUser({ id: 'sales-1', role: UserRole.SALES }), payload);
+    expect(mockDb.customer.create.mock.calls[0][0].data.companyContact).toBeNull();
+    await expect(createCustomerRecord(makeUser(), { ...payload, companyContact: 'x'.repeat(2001) })).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
   });
 
   it('creates customer in transaction and records audit', async () => {

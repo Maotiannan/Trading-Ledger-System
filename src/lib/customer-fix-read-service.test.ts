@@ -1,11 +1,15 @@
 import { UserRole } from '@prisma/client';
+jest.mock('@/lib/order-balance-lock', () => ({ guardFinancialWrites: (tx: unknown) => tx }));
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { listCustomerFixQueue } from '@/lib/customer-fix-read-service';
+import { managedOwnershipWhere } from '@/lib/resource-visibility';
 
 jest.mock('@/lib/db', () => ({
   db: {
+    mucontInvoiceGroup: { findMany: jest.fn(async () => []) },
+    $transaction: jest.fn((callback) => callback(db)),
     order: {
       findMany: jest.fn(),
       update: jest.fn(),
@@ -69,7 +73,7 @@ describe('customer-fix-read-service', () => {
     expect(result.data.orders).toHaveLength(1);
     expect(result.data.receipts).toHaveLength(1);
     expect(mockDb.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ createdBy: 'sales-1' }),
+      where: expect.objectContaining(managedOwnershipWhere(['sales-1'])),
     }));
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
       action: 'CUSTOMER_FIX_QUEUE_VIEW',
@@ -115,5 +119,15 @@ describe('customer-fix-read-service', () => {
       }),
     });
     expect(result.data.orders).toEqual([]);
+  });
+  it('does not text-rematch source orders or their receipts during a queue read', async () => {
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'source-order', customerMark: 'OLD', customerId: null }]);
+    mockDb.receipt.findMany.mockResolvedValueOnce([{ id: 'receipt', orderId: 'source-order', customerId: null }]);
+    (db.mucontInvoiceGroup.findMany as jest.Mock).mockResolvedValueOnce([{ orderId: 'source-order' }]);
+    const result = await listCustomerFixQueue(makeUser());
+    expect(result.data.orders).toHaveLength(1);
+    expect(mockResolveCustomer).not.toHaveBeenCalled();
+    expect(mockDb.order.update).not.toHaveBeenCalled();
+    expect(mockDb.receipt.update).not.toHaveBeenCalled();
   });
 });

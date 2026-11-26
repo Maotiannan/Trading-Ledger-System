@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -326,6 +327,59 @@ printf '%s\n' 'CREATE TABLE sample(id INT);' 'INSERT INTO sample VALUES (1);'
     } finally {
       f.cleanup();
     }
+  });
+
+  it('defers SMB tombstones without deleting them, prunes other expired snapshots and resumes only retired work', () => {
+    const f = fixture();
+    try {
+      const expired = createSnapshotDirectory(f.backup, '20200101-023000');
+      const other = createSnapshotDirectory(f.backup, '20200102-023000');
+      const legacy = createSnapshotDirectory(f.backup, '20200103-023000');
+      renameSync(path.join(legacy, 'sentinel.txt'), path.join(legacy, '.smbdelete-legacy'));
+      const media = path.join(expired, 'media');
+      mkdirSync(media);
+      writeFileSync(path.join(media, '.smbdelete-test'), 'held by SMB');
+      execFileSync('touch', ['-t', '202001010000', expired, other]);
+      const first = runBackup(f);
+      expect(first.stdout).toMatch(/^PUBLISHED_SNAPSHOT=snapshots\//m);
+      expect(first.status).toBe(75);
+      expect(existsSync(other)).toBe(false);
+      expect(existsSync(expired)).toBe(false);
+      const retired = path.join(path.dirname(expired), '.retiring-' + path.basename(expired));
+      const retiredLegacy = path.join(path.dirname(legacy), '.retiring-' + path.basename(legacy));
+      expect(existsSync(legacy)).toBe(false);
+      expect(existsSync(path.join(retiredLegacy, '.smbdelete-legacy'))).toBe(true);
+      const marker = path.join(retired, 'media', '.smbdelete-test');
+      expect(readFileSync(marker, 'utf8')).toBe('held by SMB');
+      const published = findOnlySnapshot(f.backup);
+      expect(runBackup(f, ['--verify', published]).status).toBe(0);
+      // Move only this synthetic snapshot aside to avoid a same-second name collision on rerun.
+      renameSync(published, path.join(f.root, 'verified-first-snapshot'));
+      rmSync(marker);
+      rmSync(path.join(retiredLegacy, '.smbdelete-legacy'));
+      const next = runBackup(f);
+      expect(next.status).toBe(0);
+      expect(existsSync(retired)).toBe(false);
+      expect(existsSync(retiredLegacy)).toBe(false);
+    } finally { f.cleanup(); }
+  });
+
+  it('does not prune a mismatched date path or a symlink to a different backup tree', () => {
+    const f = fixture();
+    try {
+      const good = createSnapshotDirectory(f.backup, '20200101-023000');
+      const wrongDay = path.join(path.dirname(good), 'muledger-19990101-023000');
+      renameSync(good, wrongDay);
+      execFileSync('touch', ['-t', '202001010000', wrongDay]);
+      const outside = path.join(f.root, 'elsewhere');
+      mkdirSync(outside);
+      writeFileSync(path.join(outside, 'keep'), 'untouched');
+      symlinkSync(outside, good);
+      runBackup(f);
+      expect(readFileSync(path.join(wrongDay, 'sentinel.txt'), 'utf8')).toBe('20200101-023000');
+      expect(lstatSync(good).isSymbolicLink()).toBe(true);
+      expect(readFileSync(path.join(outside, 'keep'), 'utf8')).toBe('untouched');
+    } finally { f.cleanup(); }
   });
 
   it('rejects an explicitly configured environment file that is not mode 600', () => {

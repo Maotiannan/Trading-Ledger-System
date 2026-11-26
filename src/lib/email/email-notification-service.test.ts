@@ -21,7 +21,7 @@ import {
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 jest.mock('@/lib/db', () => ({
-  db: {
+  db: { mucontInvoiceSource: { findMany: jest.fn(async () => []) },
     emailNotification: {},
     emailDelivery: {},
     emailDeliveryAttempt: {},

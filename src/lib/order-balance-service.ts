@@ -1,6 +1,9 @@
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { db } from '@/lib/db';
+import { runFinancialTransaction as runInTransaction } from '@/lib/transaction';
+import { lockOrderBalances } from '@/lib/order-balance-lock';
+import { createApiError } from '@/lib/api-error';
 import { logger } from '@/lib/logger';
 import type { DbTransactionClient } from '@/lib/transaction';
 import {
@@ -10,8 +13,10 @@ import {
   type OrderBalanceReceiptInput,
 } from '@/lib/order-balance';
 import type { MoneyInput } from '@/lib/money';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
+import type { OrderPaymentAllocationInput } from '@/lib/order-balance';
 
-export type OrderBalanceClient = Pick<DbTransactionClient, 'order'>;
+export type OrderBalanceClient = Pick<DbTransactionClient, 'order'> & Partial<Pick<DbTransactionClient, '$queryRaw' | 'auditLog'>>;
 
 export type OrderBalanceRow = {
   id: string;
@@ -19,6 +24,7 @@ export type OrderBalanceRow = {
   amount: MoneyInput;
   orderBalance?: MoneyInput;
   receipts?: OrderBalanceReceiptInput[] | null;
+  paymentAllocations?: OrderPaymentAllocationInput[] | null;
 };
 
 export type OrderBalanceUpdateOptions = {
@@ -44,12 +50,8 @@ async function loadOrderBalanceRow(orderId: string, client: OrderBalanceClient):
       orderNo: true,
       amount: true,
       orderBalance: true,
-      receipts: {
-        select: {
-          usd: true,
-          status: true,
-        },
-      },
+      receipts: { select: receiptBalanceSelect },
+      paymentAllocations: paymentAllocationsSelect,
     },
   }) as Promise<OrderBalanceRow | null>;
 }
@@ -58,6 +60,7 @@ function computeComparison(row: OrderBalanceRow): OrderBalanceComparison {
   const computed = computeOrderBalanceFromReceipts({
     amount: row.amount,
     receipts: row.receipts || [],
+    paymentAllocations: row.paymentAllocations,
   });
 
   return compareStoredOrderBalance({
@@ -66,11 +69,10 @@ function computeComparison(row: OrderBalanceRow): OrderBalanceComparison {
   });
 }
 
-async function writeBalanceRepairAudit(row: OrderBalanceRow, comparison: OrderBalanceComparison, options: OrderBalanceUpdateOptions) {
+async function writeBalanceRepairAudit(row: OrderBalanceRow, comparison: OrderBalanceComparison, options: OrderBalanceUpdateOptions, client: OrderBalanceClient) {
   if (!options.actorId) return;
 
-  try {
-    await recordAuditEvent({
+  const event = {
       action: auditActions.ORDER_BALANCE_CACHE_REPAIR,
       actorId: options.actorId,
       targetType: auditTargetTypes.ORDER,
@@ -82,15 +84,9 @@ async function writeBalanceRepairAudit(row: OrderBalanceRow, comparison: OrderBa
         difference: comparison.difference,
         source: options.source || DEFAULT_BALANCE_SOURCE,
       },
-    });
-  } catch (error) {
-    logger.error('Order balance cache repair audit failed', {
-      orderId: row.id,
-      orderNo: row.orderNo || null,
-      source: options.source || DEFAULT_BALANCE_SOURCE,
-      error,
-    });
-  }
+    };
+  if (client.auditLog) await recordAuditEventInTransaction({ auditLog: { create: (input) => client.auditLog!.create(input) } }, event);
+  else await recordAuditEvent(event);
 }
 
 export async function calculateLiveOrderBalance(
@@ -107,6 +103,11 @@ export async function updateOrderBalance(
   client: OrderBalanceClient = db,
   options: OrderBalanceUpdateOptions = {},
 ): Promise<OrderBalanceRepairResult> {
+  if (client === db) return runInTransaction(async (tx) => {
+    await lockOrderBalances(tx, [orderId]);
+    return updateOrderBalance(orderId, tx, options);
+  });
+  if (client.$queryRaw) await lockOrderBalances(client as DbTransactionClient, [orderId]);
   const row = await loadOrderBalanceRow(orderId, client);
   if (!row) {
     const comparison = compareStoredOrderBalance({ stored: 0, computed: 0 });
@@ -140,26 +141,22 @@ export async function repairOrderBalanceCacheIfNeeded(
   client: OrderBalanceClient = db,
   options: OrderBalanceUpdateOptions = {},
 ): Promise<OrderBalanceRepairResult> {
-  const comparison = computeComparison(row);
-  if (comparison.matches) {
-    return { repaired: false, comparison, stored: comparison.stored, computed: comparison.computed, difference: comparison.difference };
+  // Re-read under the same write protocol; a caller's snapshot may already be stale.
+  if (client === db) return runInTransaction(async (tx) => {
+    await lockOrderBalances(tx, [row.id]);
+    return repairOrderBalanceCacheIfNeeded(row, tx, options);
+  });
+  const result = await updateOrderBalance(row.id, client, options);
+  if (result.repaired) await writeBalanceRepairAudit(row, result.comparison, options, client);
+  return result;
+}
+
+export async function assertReceiptRemovalDoesNotStrandTransfer(
+  tx: DbTransactionClient, orderId: string | null, amount: MoneyInput, status: string,
+) {
+  if (!orderId || status === 'SIGNING_PENDING') return;
+  const outgoing = await tx.balanceTransfer.count({ where: { fromOrderId: orderId } });
+  if (outgoing && (await calculateLiveOrderBalance(orderId, tx)) + Number(amount) > 0.005) {
+    throw createApiError({ code: 'CONFLICT', status: 409, message: '该收款已用于余额转移，请先撤销关联转移再修改或删除收据' });
   }
-
-  await client.order.update({
-    where: { id: row.id },
-    data: { orderBalance: comparison.computed },
-  });
-
-  logger.warn('Order balance cache mismatch repaired', {
-    orderId: row.id,
-    orderNo: row.orderNo || null,
-    stored: comparison.stored,
-    computed: comparison.computed,
-    difference: comparison.difference,
-    source: options.source || DEFAULT_BALANCE_SOURCE,
-  });
-
-  await writeBalanceRepairAudit(row, comparison, options);
-
-  return { repaired: true, comparison, stored: comparison.stored, computed: comparison.computed, difference: comparison.difference };
 }

@@ -2,15 +2,20 @@ import type { Prisma } from '@prisma/client';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
+export function managedOwnershipWhere(ownerIds: string[]) {
+  return { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] };
+}
+
 export async function getOwnerVisibleIds(currentUser: CurrentUser): Promise<string[]> {
   const scope = await getHierarchyScope(currentUser);
   return Array.from(scope.ownerVisibleIds);
 }
 
-export function buildOrderVisibilityWhere(ownerIds: string[]): Prisma.OrderWhereInput {
+export function buildOrderVisibilityWhere(ownerIds: string[], includeCanceled = false): Prisma.OrderWhereInput {
   return {
+    ...(!includeCanceled ? { canceledAt: null } : {}),
     OR: [
-      { createdBy: { in: ownerIds } },
+      managedOwnershipWhere(ownerIds),
       { customer: { ownerId: { in: ownerIds } } },
     ],
   };
@@ -20,17 +25,18 @@ export function buildCustomerVisibilityWhere(ownerIds: string[]): Prisma.Custome
   return {
     OR: [
       { ownerId: { in: ownerIds } },
-      { orders: { some: { createdBy: { in: ownerIds } } } },
-      { receipts: { some: { createdBy: { in: ownerIds } } } },
+      { orders: { some: managedOwnershipWhere(ownerIds) } },
+      { receipts: { some: managedOwnershipWhere(ownerIds) } },
     ],
   };
 }
 
-export function buildInvoiceVisibilityWhere(ownerIds: string[]): Prisma.InvoiceWhereInput {
+export function buildInvoiceVisibilityWhere(ownerIds: string[], includeCanceled = false): Prisma.InvoiceWhereInput {
   return {
+    ...(!includeCanceled ? { canceledAt: null } : {}),
     OR: [
-      { createdBy: { in: ownerIds } },
-      { orders: { some: { createdBy: { in: ownerIds } } } },
+      managedOwnershipWhere(ownerIds),
+      { orders: { some: managedOwnershipWhere(ownerIds) } },
       { orders: { some: { customer: { ownerId: { in: ownerIds } } } } },
     ],
   };
@@ -39,9 +45,9 @@ export function buildInvoiceVisibilityWhere(ownerIds: string[]): Prisma.InvoiceW
 export function buildReceiptVisibilityWhere(ownerIds: string[]): Prisma.ReceiptWhereInput {
   return {
     OR: [
-      { createdBy: { in: ownerIds } },
+      managedOwnershipWhere(ownerIds),
       { customer: { ownerId: { in: ownerIds } } },
-      { order: { createdBy: { in: ownerIds } } },
+      { order: managedOwnershipWhere(ownerIds) },
       { order: { customer: { ownerId: { in: ownerIds } } } },
     ],
   };
@@ -50,8 +56,8 @@ export function buildReceiptVisibilityWhere(ownerIds: string[]): Prisma.ReceiptW
 export function buildDetailVisibilityWhere(ownerIds: string[]): Prisma.DetailWhereInput {
   return {
     OR: [
-      { createdBy: { in: ownerIds } },
-      { items: { some: { receipt: { createdBy: { in: ownerIds } } } } },
+      managedOwnershipWhere(ownerIds),
+      { items: { some: { receipt: managedOwnershipWhere(ownerIds) } } },
       { items: { some: { receipt: { customer: { ownerId: { in: ownerIds } } } } } },
     ],
   };
@@ -60,9 +66,9 @@ export function buildDetailVisibilityWhere(ownerIds: string[]): Prisma.DetailWhe
 export function buildSwiftVisibilityWhere(ownerIds: string[]): Prisma.SwiftWhereInput {
   return {
     OR: [
-      { createdBy: { in: ownerIds } },
-      { detail: { createdBy: { in: ownerIds } } },
-      { detail: { items: { some: { receipt: { createdBy: { in: ownerIds } } } } } },
+      managedOwnershipWhere(ownerIds),
+      { detail: managedOwnershipWhere(ownerIds) },
+      { detail: { items: { some: { receipt: managedOwnershipWhere(ownerIds) } } } },
       { detail: { items: { some: { receipt: { customer: { ownerId: { in: ownerIds } } } } } } },
     ],
   };

@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { DetailStatus, ReceiptStatus, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
@@ -11,6 +17,7 @@ import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notificati
 
 jest.mock('@/lib/db', () => ({
   db: {
+    mucontInvoiceGroup: { findUnique: jest.fn() },
     uploadedAsset: {
       updateMany: jest.fn(),
     },
@@ -153,7 +160,7 @@ describe('detail-service', () => {
       actorId: 'sales-1',
     });
     expect(mockDb.order.update).toHaveBeenCalled();
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1', mockDb);
     expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-1');
     expect(result.message).toBe('付款明细已直接创建');
     expect(mockRecordAuditEvent).toHaveBeenCalled();

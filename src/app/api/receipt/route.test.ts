@@ -51,6 +51,11 @@ jest.mock('@/lib/balance-transfer-reversal-service', () => ({
   reverseTransferReceipt: jest.fn(),
 }));
 
+jest.mock('@/lib/ocr', () => ({ recognizeReceipt: jest.fn() }));
+jest.mock('@/lib/ocr-input', () => ({ toOcrDataUrl: jest.fn(async () => 'data:image/png;base64,test') }));
+jest.mock('@/lib/rate-limit', () => ({ enforceRateLimit: jest.fn() }));
+jest.mock('@/lib/uploaded-asset-service', () => ({ stageUploadedAsset: jest.fn() }));
+
 jest.mock('@/lib/db', () => ({
   db: {
     receipt: {
@@ -81,6 +86,8 @@ import { listReceiptEditRequests, requestReceiptEdit, reviewReceiptEdit } from '
 import { db } from '@/lib/db';
 import { updateReceiptRecord } from '@/lib/receipt-service';
 import { reverseTransferReceipt } from '@/lib/balance-transfer-reversal-service';
+import { recognizeReceipt } from '@/lib/ocr';
+import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 
 const mockRequestReceiptEdit = requestReceiptEdit as jest.Mock;
 const mockReviewReceiptEdit = reviewReceiptEdit as jest.Mock;
@@ -121,6 +128,23 @@ describe('receipt route edit-approval actions', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore();
+  });
+
+  it.each([true, false])('returns OCR deposit flag %s without overriding recognition', async (isDeposit) => {
+    (recognizeReceipt as jest.Mock).mockResolvedValueOnce({ orderNo: 'TEST-02', usd: 500, isDeposit });
+    (stageUploadedAsset as jest.Mock).mockResolvedValueOnce({ path: '/synthetic/receipt.png', name: 'receipt.png' });
+    const formData = new FormData();
+    formData.set('action', 'recognize');
+    formData.set('file', new File(['synthetic'], 'receipt.png', { type: 'image/png' }));
+    const response = await POST({
+      headers: { get: (name: string) => name === 'content-type' ? 'multipart/form-data' : null },
+      formData: async () => formData,
+    } as unknown as NextRequest);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { ocrResult: { orderNo: 'TEST-02', usd: 500, isDeposit } },
+    });
   });
 
   it('submits request-edit through the receipt edit request service', async () => {

@@ -13,6 +13,7 @@ import { normalizeWhatsAppCustomerPhone } from './customer-phone';
 import { bufferDeadline, pendingDeliveryUpdate } from './whatsapp-buffer';
 import { enqueueWhatsAppInTransaction } from './whatsapp-queue';
 import { failedRetryAncestors } from './whatsapp-retry-policy';
+import { prepareNotificationInvoiceDates, resolveInvoiceDateProjection } from '@/lib/integrations/mucont-invoice-metadata';
 
 const TYPE = 'OUTSTANDING_REMINDER' as const;
 const editable = ['PENDING', 'QUEUED', 'PAUSED', 'SENDING', 'UNCERTAIN'] as const;
@@ -20,7 +21,10 @@ const editable = ['PENDING', 'QUEUED', 'PAUSED', 'SENDING', 'UNCERTAIN'] as cons
 async function resolveReminder(tx: DbTransactionClient, customerId: string, testMode: boolean, now: Date, excludeId?: string, ancestors: WhatsAppDelivery[] = []) {
   const customer = await tx.customer.findUnique({ where: { id: customerId } });
   if (!customer) return null;
-  const invoices = await tx.invoice.findMany({ where: { orders: { some: { customerId } } }, select: dashboardOutstandingInvoiceSelect({ customerId }) });
+  const invoiceRows = await tx.invoice.findMany({ where: { orders: { some: { customerId } } }, select: {
+    ...dashboardOutstandingInvoiceSelect({ customerId }), mucontSource: { select: { metadata: true, metadataAvailability: true, metadataReadAt: true } },
+  } });
+  const invoices = invoiceRows.map(resolveInvoiceDateProjection);
   const outstanding = buildDashboardOutstandingSnapshot(invoices, now.getTime()).customerOutstanding.find(item => item.customerId === customerId);
   const episodeKey = `whatsapp.reminder.episode.${customerId}.${testMode ? 'test' : 'live'}`;
   if (!outstanding?.orders.some(order => order.statusGroup === 'RELEASED' && order.outstanding > OUTSTANDING_REMINDER_POLICY.minimumBalance)) {
@@ -109,6 +113,7 @@ export async function projectOutstandingReminders(now = new Date()) {
   if (scan?.value === today) return;
   const templates = await listWhatsAppTemplateVersions();
   const contacts = await db.customerWhatsAppContact.findMany({ where: { optedInAt: { not: null }, optedOutAt: null }, select: { customerId: true } });
+  await prepareNotificationInvoiceDates({ customerIds: [...new Set(contacts.map((row) => row.customerId))] });
   for (const customerId of new Set(contacts.map(contact => contact.customerId))) {
     await runWhatsAppTransaction(async tx => {
       // Lock an existing row before reads; no financial/customer fields are changed.

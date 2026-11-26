@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mucont:invoice-generation:v1",
+  "title": "MuCont successful invoice generation snapshot V1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "source": {
+      "const": "MUCONT"
+    },
+    "generationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "publicationSequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "invoiceBatchId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "invoiceNo": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "documentVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "currency": {
+      "const": "USD"
+    },
+    "invoiceTotal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$"
+    },
+    "customers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "billingGroupId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "muledgerCustomerId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "customerSnapshot": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "mark": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mark",
+              "name",
+              "phone",
+              "city"
+            ]
+          },
+          "orderRefs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "sourceOrderNo": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 191
+                },
+                "displayOrderNo": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 191
+                }
+              },
+              "required": [
+                "sourceOrderNo",
+                "displayOrderNo"
+              ]
+            }
+          },
+          "goodsAmount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$"
+          },
+          "adjustmentAmount": {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]{0,15})\\.[0-9]{2}$"
+          },
+          "freightAmount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$"
+          },
+          "totalAmount": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$"
+          }
+        },
+        "required": [
+          "billingGroupId",
+          "muledgerCustomerId",
+          "customerSnapshot",
+          "orderRefs",
+          "goodsAmount",
+          "adjustmentAmount",
+          "freightAmount",
+          "totalAmount"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "source",
+    "generationId",
+    "publicationSequence",
+    "invoiceBatchId",
+    "invoiceNo",
+    "generatedAt",
+    "documentVersion",
+    "currency",
+    "invoiceTotal",
+    "customers"
+  ]
+}

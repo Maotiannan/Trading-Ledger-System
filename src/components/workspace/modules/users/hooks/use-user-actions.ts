@@ -104,17 +104,26 @@ export function useUserActions({
   }, [tx]);
 
   const handleDelete = useCallback(async (userId: string) => {
-    if (confirm(tx('确定要删除此用户吗？', 'Delete this user?'))) {
+    if (confirm(tx('停用此账号？账号层级、业务归属和历史记录将保留，现有登录会失效。', 'Disable this account? Hierarchy, ownership and history are retained. Existing sessions will stop working.'))) {
       try {
-        await apiCall('auth', {
+        const result = await apiCall('auth', {
           method: 'POST',
           body: JSON.stringify({ action: 'delete', userId }),
         });
+        if (!result.success) throw result;
         await loadUsers();
       } catch (error) {
-        alert(getApiErrorMessage(error, tx('删除失败', 'Delete failed')));
+        alert(getApiErrorMessage(error, tx('停用失败', 'Disable failed')));
       }
     }
+  }, [loadUsers, tx]);
+
+  const handleReactivate = useCallback(async (userId: string) => {
+    try {
+      const result = await apiCall('auth', { method: 'POST', body: JSON.stringify({ action: 'reactivate', userId }) });
+      if (!result.success) throw result;
+      await loadUsers();
+    } catch (error) { alert(getApiErrorMessage(error, tx('启用失败', 'Reactivate failed'))); }
   }, [loadUsers, tx]);
 
   const handleChangeRole = useCallback(async (userId: string, role: ManagedUserRole) => {
@@ -138,6 +147,7 @@ export function useUserActions({
     handleCreate,
     handleResetPassword,
     handleDelete,
+    handleReactivate,
     handleChangeRole,
   };
 }

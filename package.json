@@ -1,6 +1,6 @@
 {
   "name": "nextjs_tailwind_shadcn_ts",
-  "version": "1.0.233",
+  "version": "1.0.243",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
@@ -14,7 +14,8 @@
     "test:e2e:isolated": "bash scripts/test-e2e-isolated.sh",
     "test:e2e:ui": "playwright test --ui",
     "test:api:isolated": "bash scripts/test-api-isolated.sh",
-    "test:ci": "npm run typecheck && npm run lint && npm test -- --runInBand --coverage && npm run test:api:isolated && npm run test:e2e:isolated",
+    "test:reliability:isolated": "bash scripts/test-reliability-isolated.sh",
+    "test:ci": "npm run typecheck && npm run lint && npm test -- --runInBand --coverage && npm run test:api:isolated && npm run test:e2e:isolated && npm run test:reliability:isolated",
     "i18n:audit": "bash scripts/i18n-audit.sh",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",

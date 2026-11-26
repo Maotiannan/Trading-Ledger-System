@@ -84,6 +84,20 @@ describe('useInvoiceViewState', () => {
     expect(mockRememberPrefetchedApiResult).toHaveBeenCalledWith('invoice', { success: true, data: [{ id: 'fresh-1', invNo: 'FRESH-1', orders: [] }] });
   });
 
+  it('shows the fresh heading only to the same viewer, without putting it in shared invoice state', async () => {
+    const setInvoices = jest.fn(), setLoading = jest.fn();
+    const row = { id: 'i', invNo: 'INV', orders: [], source: { creditInsurance: 'INSURED SHORT', canResync: true } };
+    mockApiCall.mockResolvedValue({ success: true, data: [row] });
+    const { result, rerender } = renderHook(({ adminId }) => useInvoiceViewState({ setInvoices, setLoading, adminId }), {
+      initialProps: { adminId: 'branch' },
+    });
+    await act(async () => { await result.current.loadInvoices(); });
+    expect(result.current.authorizedInvoices).toEqual([row]);
+    expect(setInvoices.mock.lastCall[0][0].source).toEqual({ canResync: true });
+    rerender({ adminId: 'sibling' });
+    expect(result.current.authorizedInvoices).toBeNull();
+  });
+
   it('ignores stale cached and api responses when request token is no longer latest', async () => {
     const setInvoices = jest.fn();
     const setLoading = jest.fn();

@@ -126,9 +126,11 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const receipts = await db.receipt.findMany({
       where,
       include: {
+        customer: { select: { mark: true } },
         creator: { select: { id: true, name: true, email: true } },
         order: {
           include: {
+            customer: { select: { mark: true } },
             invoice: { select: { id: true, invNo: true } },
           },
         },
@@ -184,6 +186,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       const { generatedByBalanceTransfer, ...row } = receipt;
       return {
         ...row,
+        customerMark: row.customer?.mark ?? row.customerMark,
+        order: row.order ? { ...row.order, customerMark: row.order.customer?.mark ?? row.order.customerMark } : null,
         isSystemTransfer: Boolean(generatedByBalanceTransfer),
         balanceAfter: balanceMap.get(receipt.id) ?? null,
       };

@@ -149,7 +149,7 @@ describe('report-service', () => {
         orders: expect.objectContaining({
           include: expect.objectContaining({
             receipts: expect.objectContaining({
-              select: { usd: true },
+              select: { usd: true, status: true, funding: { select: { id: true } } },
             }),
           }),
         }),

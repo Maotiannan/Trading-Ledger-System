@@ -8,6 +8,31 @@ type BusinessMessageRule = {
 };
 
 const exactMessages: Record<string, LocalizedMessage> = {
+  '旧 SWIFT 容差已停用，请刷新后使用每张手续费上限': {
+    zh: '旧 SWIFT 容差已停用，请刷新后使用每张手续费上限', en: 'The old SWIFT tolerances were retired. Refresh and use the per-copy fee limit.',
+  },
+  '请在收货人管理中修改收货人或默认项': {
+    zh: '请在收货人管理中修改收货人或默认项', en: 'Use CONSIGNEE Management to change consignees or the default.',
+  },
+  'Customer details on a source invoice are read-only. Use Customer Management.': {
+    zh: '来源账单的客户资料为只读，请在客户管理中维护。', en: 'Customer details on a source invoice are read-only. Use Customer Management.',
+  },
+  'Invalid invoice number. System pool names cannot be used.': {
+    zh: 'INV NO 不能为空、超过191个字符或包含控制字符，也不能使用系统资金池名称。',
+    en: 'Invalid invoice number. Use 1-191 characters without control characters or system pool names.',
+  },
+  'Invoice ID and current invoice number are required.': {
+    zh: '缺少发票 ID 或原 INV NO，请刷新后重试。', en: 'Invoice ID and current invoice number are required. Refresh and retry.',
+  },
+  'Invoice number is already occupied.': {
+    zh: '此 INV NO 已被其他发票使用。', en: 'Invoice number is already occupied.',
+  },
+  'Invoice number has changed. Refresh before editing.': {
+    zh: 'INV NO 已被修改，请刷新后重新编辑。', en: 'Invoice number has changed. Refresh before editing.',
+  },
+  'Complete or cancel the pending invoice generation before editing locally.': {
+    zh: '请先完成或取消正在进行的发票生成，再修改 INV NO。', en: 'Complete or cancel the pending invoice generation before editing locally.',
+  },
   '请选择付款代理': {
     zh: '请选择付款代理',
     en: 'Please select a payment agent.',

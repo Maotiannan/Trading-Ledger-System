@@ -8,8 +8,10 @@ import { isDeepStrictEqual } from 'node:util';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { logger } from '@/lib/logger';
 import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
 import { SYSTEM_POOL_INVOICE_NOS } from '@/lib/payment-type-classifier';
 import type { DbTransactionClient } from '@/lib/transaction';
+import { resolveInvoiceDateProjection } from '@/lib/integrations/mucont-invoice-metadata';
 
 type ProjectionClient = Pick<
   DbTransactionClient,
@@ -41,6 +43,7 @@ type NotificationSnapshot = {
   paymentDate?: string;
   shipmentDate?: string;
   releaseDate?: string;
+  sourceMetadataStale?: boolean;
 };
 
 const EDITABLE_NOTIFICATION_STATUSES = new Set<EmailNotificationStatus>([
@@ -259,8 +262,10 @@ export async function projectPaymentReceiptInTransaction(
       generatedByBalanceTransfer: { select: { id: true } },
       order: { select: {
         customerId: true, amount: true,
-        receipts: { select: { usd: true, status: true } },
-        invoice: { select: { invNo: true, shipDate: true, releaseDate: true } },
+        receipts: { select: receiptBalanceSelect },
+        paymentAllocations: paymentAllocationsSelect,
+        invoice: { select: { invNo: true, shipDate: true, releaseDate: true,
+          mucontSource: { select: { metadata: true, metadataAvailability: true, metadataReadAt: true } } } },
       } },
     },
   });
@@ -283,7 +288,7 @@ export async function projectPaymentReceiptInTransaction(
 
   const paymentDate = dateToIso(receipt.date || receipt.createdAt);
   const order = receipt.order?.customerId === receipt.customerId ? receipt.order : null;
-  const linkedInvoice = order?.invoice;
+  const linkedInvoice = order?.invoice ? resolveInvoiceDateProjection(order.invoice) : null;
   const formalInvoice = linkedInvoice && !SYSTEM_POOL_INVOICE_NOS.has(linkedInvoice.invNo)
     ? linkedInvoice : null;
   const action = await upsertCurrentNotification(tx, {
@@ -299,6 +304,9 @@ export async function projectPaymentReceiptInTransaction(
       orderBalance: order ? computeOrderBalanceFromReceipts(order) : null,
       ...(formalInvoice?.shipDate ? { shipmentDate: dateToIso(formalInvoice.shipDate) } : {}),
       ...(formalInvoice?.releaseDate ? { releaseDate: dateToIso(formalInvoice.releaseDate) } : {}),
+      ...(formalInvoice && 'sourceMetadataStale' in formalInvoice ? {
+        sourceMetadataStale: formalInvoice.sourceMetadataStale as boolean,
+      } : {}),
       receiptNo: receipt.receiptNo || receipt.id,
       amount: Number(receipt.usd),
       ...(paymentDate ? { paymentDate } : {}),
@@ -363,9 +371,10 @@ async function loadInvoiceProjection(
   tx: ProjectionClient,
   invoiceId: string,
 ): Promise<InvoiceProjection | null> {
-  return tx.invoice.findUnique({
+  const invoice = await tx.invoice.findUnique({
     where: { id: invoiceId },
     include: {
+      mucontSource: { select: { metadata: true, metadataAvailability: true, metadataReadAt: true } },
       orders: {
         select: {
           id: true,
@@ -385,6 +394,7 @@ async function loadInvoiceProjection(
       },
     },
   });
+  return invoice ? resolveInvoiceDateProjection(invoice) : null;
 }
 
 async function markNotificationRowsForSourceRemoval(

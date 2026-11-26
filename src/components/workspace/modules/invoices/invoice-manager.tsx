@@ -1,5 +1,6 @@
 'use client';
 
+import { OrderPaymentHistoryDialog } from './components/order-payment-history-dialog';
 import React, { useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { useUiText } from '@/components/workspace/shared';
@@ -10,7 +11,6 @@ import {
   InvoiceList,
   InvoiceSearchCard,
   InvoiceToolbar,
-  OrderHistoryDialog,
   RematchDialog,
   TransferBalanceDialog,
 } from './components';
@@ -19,9 +19,10 @@ import { useInvoiceActions, useInvoiceCustomerLookup, useInvoiceImport, useInvoi
 export function InvoiceManager() {
   const tx = useUiText();
   const { invoices, setInvoices, setLoading, user } = useStore();
-  const { search, setSearch, expandedInvoices, invoiceImportInputRef, loadInvoices, toggleInvoice } = useInvoiceViewState({
+  const { search, setSearch, expandedInvoices, invoiceImportInputRef, loadInvoices, toggleInvoice, authorizedInvoices } = useInvoiceViewState({
     setInvoices,
     setLoading,
+    adminId: user?.role === 'ADMIN' ? user.id : null,
   });
 
   const { loadCustomerCandidates } = useInvoiceCustomerLookup();
@@ -93,10 +94,8 @@ export function InvoiceManager() {
     updatePoolSelection,
     openRematchDialog,
     handleRematchApply,
-    orderHistoryOpen,
-    orderHistoryTitle,
-    orderHistoryRows,
-    setOrderHistoryOpen,
+    historyOrder,
+    setHistoryOrder,
     openOrderHistory,
     editingInvoiceDateId,
     editingInvoiceShipDate,
@@ -200,7 +199,8 @@ export function InvoiceManager() {
       />
 
       <InvoiceList
-        invoices={invoices}
+        onSourceChanged={() => loadInvoices()}
+        invoices={authorizedInvoices ?? invoices}
         expandedInvoices={expandedInvoices}
         isManager={canWriteInvoices}
         isAdmin={isAdmin}
@@ -291,13 +291,8 @@ export function InvoiceManager() {
         onSubmit={handleTransferBalance}
       />
 
-      <OrderHistoryDialog
-        open={orderHistoryOpen}
-        title={orderHistoryTitle}
-        rows={orderHistoryRows}
-        tx={tx}
-        onOpenChange={setOrderHistoryOpen}
-      />
+      {historyOrder && <OrderPaymentHistoryDialog key={historyOrder.id} orderId={historyOrder.id}
+        title={historyOrder.title} tx={tx} onClose={() => setHistoryOrder(null)} />}
 
       <ImportResultDialog
         open={showInvoiceImportIssues}

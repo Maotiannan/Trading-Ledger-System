@@ -5,6 +5,8 @@ import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 import { resolveCustomer } from '@/lib/customer-matching';
+import { managedOwnershipWhere } from '@/lib/resource-visibility';
+import { runFinancialTransaction } from '@/lib/transaction';
 
 function ensureManager(currentUser: CurrentUser): void {
   if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES) {
@@ -24,17 +26,23 @@ async function repairResolvableCustomerFixes(
   receipts: Array<Record<string, unknown>>,
 ): Promise<number> {
   let repaired = 0;
+  const orderIds = [...new Set([...orders.map((row) => String(row.id)),
+    ...receipts.flatMap((row) => typeof row.orderId === 'string' ? [row.orderId] : [])])];
+  const sourceOrders = new Set((await db.mucontInvoiceGroup.findMany({
+    where: { orderId: { in: orderIds } }, select: { orderId: true },
+  })).map((row) => row.orderId));
 
   for (const order of orders) {
+    if (sourceOrders.has(String(order.id))) continue;
     const resolved = await resolveCustomer({
       customerMark: String(order.customerMark || ''),
       customerOrderName: String(order.customerName || ''),
       customerId: typeof order.customerId === 'string' ? order.customerId : null,
       customerOrderNo: String(order.orderNo || ''),
-      ownerIds: fixOwnerIds(currentUser, order.createdBy),
+      ownerIds: fixOwnerIds(currentUser, order.managedById || order.createdBy),
     });
     if (!resolved.customerId || resolved.needsCustomerFix) continue;
-    await db.order.update({
+    await runFinancialTransaction((tx) => tx.order.update({
       where: { id: String(order.id) },
       data: {
         customerId: resolved.customerId,
@@ -44,20 +52,21 @@ async function repairResolvableCustomerFixes(
         customerCity: resolved.customerCity,
         needsCustomerFix: false,
       },
-    });
+    }));
     repaired += 1;
   }
 
   for (const receipt of receipts) {
+    if (typeof receipt.orderId === 'string' && sourceOrders.has(receipt.orderId)) continue;
     const resolved = await resolveCustomer({
       customerMark: String(receipt.customerMark || ''),
       customerOrderName: String(receipt.customerName || ''),
       customerId: typeof receipt.customerId === 'string' ? receipt.customerId : null,
       customerOrderNo: String(receipt.orderNo || ''),
-      ownerIds: fixOwnerIds(currentUser, receipt.createdBy),
+      ownerIds: fixOwnerIds(currentUser, receipt.managedById || receipt.createdBy),
     });
     if (!resolved.customerId || resolved.needsCustomerFix) continue;
-    await db.receipt.update({
+    await runFinancialTransaction((tx) => tx.receipt.update({
       where: { id: String(receipt.id) },
       data: {
         customerId: resolved.customerId,
@@ -67,7 +76,7 @@ async function repairResolvableCustomerFixes(
         customerCity: resolved.customerCity,
         needsCustomerFix: false,
       },
-    });
+    }));
     repaired += 1;
   }
 
@@ -80,7 +89,7 @@ export async function listCustomerFixQueue(currentUser: CurrentUser) {
   const buildOrderQuery = () => db.order.findMany({
     where: {
       needsCustomerFix: true,
-      ...(currentUser.role === UserRole.SALES ? { createdBy: currentUser.id } : {}),
+      ...(currentUser.role === UserRole.SALES ? managedOwnershipWhere([currentUser.id]) : {}),
     },
     include: {
       invoice: { select: { id: true, invNo: true } },
@@ -91,7 +100,7 @@ export async function listCustomerFixQueue(currentUser: CurrentUser) {
   const buildReceiptQuery = () => db.receipt.findMany({
     where: {
       needsCustomerFix: true,
-      ...(currentUser.role === UserRole.SALES ? { createdBy: currentUser.id } : {}),
+      ...(currentUser.role === UserRole.SALES ? managedOwnershipWhere([currentUser.id]) : {}),
     },
     select: {
       id: true,
@@ -107,6 +116,7 @@ export async function listCustomerFixQueue(currentUser: CurrentUser) {
       customerCity: true,
       createdAt: true,
       createdBy: true,
+      managedById: true,
       orderId: true,
     },
     orderBy: { createdAt: 'desc' },

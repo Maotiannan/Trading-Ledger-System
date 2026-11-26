@@ -3,6 +3,9 @@ import {
   migrateSystemPoolOrderForInvoiceRow,
   previewSystemPoolRepairs,
 } from '@/lib/invoice-system-pool-reconciliation';
+
+// Stable resource locking and stale-snapshot rejection run against real MySQL.
+jest.mock('@/lib/order-balance-lock', () => ({ lockOrderSnapshots: jest.fn() }));
 import { updateOrderBalance } from '@/lib/matching';
 import {
   findOrderIdByNoOrAliasWithExecutor,
@@ -33,6 +36,7 @@ const customer = {
 
 function makeTx() {
   return {
+    mucontInvoiceSource: { findUnique: jest.fn().mockResolvedValue(null) },
     order: {
       findFirst: jest.fn(),
       findMany: jest.fn(),

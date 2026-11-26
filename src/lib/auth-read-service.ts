@@ -6,6 +6,7 @@ import { createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { canCreateRole, parseManagedRole } from '@/lib/auth-service';
+import { getInitialUserPreferences } from '@/lib/user-preference-service';
 
 function ensureManager(currentUser: CurrentUser): void {
   if (currentUser.role !== UserRole.ADMIN && currentUser.role !== UserRole.SALES) {
@@ -26,7 +27,7 @@ export async function getCurrentAccount(currentUser: CurrentUser) {
     },
   });
 
-  return { data: currentUser, message: '当前用户信息已加载' };
+  return { data: { ...currentUser, preferences: await getInitialUserPreferences(currentUser) }, message: '当前用户信息已加载' };
 }
 
 export async function listManagedUserParentOptions(currentUser: CurrentUser, roleInput: unknown) {
@@ -91,6 +92,7 @@ export async function listManagedUsers(currentUser: CurrentUser) {
       parentId: true,
       createdAt: true,
       createdById: true,
+      disabledAt: true,
     },
     orderBy: { createdAt: 'desc' },
   });

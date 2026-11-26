@@ -1,5 +1,6 @@
 'use client';
 
+import { canEditSwiftStatus } from '@/lib/ledger-action-policy';
 import type { Swift } from '@/lib/store';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -84,7 +85,7 @@ export function SwiftList({
                       <Eye className="h-4 w-4" />
                     </Button>
                   )}
-                  {canEdit && (
+                  {canEdit && canEditSwiftStatus(status, swift.detail?.status) && (
                     <Button size="sm" variant="ghost" onClick={() => onEditSwift(swift)} title={tx('修改SWIFT', 'Edit SWIFT')}>
                       <Pencil className="h-4 w-4" />
                     </Button>

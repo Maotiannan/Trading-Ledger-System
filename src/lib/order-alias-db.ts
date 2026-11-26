@@ -6,13 +6,16 @@ import { buildOrderNoWithAliases, canonicalizeOrderNo, isCompositeOrderNo, norma
 import { buildCompositeOrderLookupCandidates } from '@/lib/order-name-kernel';
 import { addMoney, moneyToNumber } from '@/lib/money';
 import { updateOrderBalance } from '@/lib/order-balance-service';
+import { runFinancialTransaction } from '@/lib/transaction';
+import { lockOrderBalances } from '@/lib/order-balance-lock';
+import { createApiError } from '@/lib/api-error';
 
 type DbExecutor = Prisma.TransactionClient | typeof db;
 
 async function findFirstOrderMatch(
   executor: DbExecutor,
   args: NonNullable<Parameters<typeof db.order.findFirst>[0]>
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; paymentAllocationMode?: boolean; invoice?: { invNo: string } } | null> {
   const orderDelegate = (executor as DbExecutor & {
     order?: {
       findFirst?: typeof db.order.findFirst;
@@ -41,6 +44,7 @@ export async function findOrderIdByNoOrAliasWithExecutor(
   orderNo: string | null | undefined,
   orderWhere?: Prisma.OrderWhereInput
 ): Promise<string | null> {
+  orderWhere = { ...orderWhere, canceledAt: null };
   const raw = (orderNo || '').trim();
   if (!raw) return null;
   const candidates = buildCompositeOrderLookupCandidates(raw);
@@ -59,10 +63,13 @@ export async function findOrderIdByNoOrAliasWithExecutor(
             },
           ],
         },
-        select: { id: true },
+        select: { id: true, paymentAllocationMode: true, invoice: { select: { invNo: true } } },
       })
     : null;
-  if (orderMatch?.id) return orderMatch.id;
+  // Combined invoices retain funding pools for lineage. Prefer their verified
+  // invoice alias, while still accepting a pool that has not yet been invoiced.
+  const isFundingPool = ['DEPOSIT_POOL', 'Un_Associated'].includes(orderMatch?.invoice?.invNo || '');
+  if (orderMatch?.id && !isFundingPool) return orderMatch.id;
 
   const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findFirst?: typeof db.orderAlias.findFirst; findMany?: typeof db.orderAlias.findMany } }).orderAlias;
 
@@ -78,6 +85,7 @@ export async function findOrderIdByNoOrAliasWithExecutor(
       })
     : null;
   if (aliasMatch) return aliasMatch.orderId;
+  if (orderMatch?.id) return orderMatch.id;
 
   if (candidates.exactOrderNos.length === 0) return null;
 
@@ -105,9 +113,10 @@ export async function findOrderIdByNoOrAliasWithExecutor(
 
 export async function findOrderIdByNoOrAlias(
   orderNo: string | null | undefined,
-  orderWhere?: Prisma.OrderWhereInput
+  orderWhere?: Prisma.OrderWhereInput,
+  executor: DbExecutor = db,
 ): Promise<string | null> {
-  return findOrderIdByNoOrAliasWithExecutor(db, orderNo, orderWhere);
+  return findOrderIdByNoOrAliasWithExecutor(executor, orderNo, orderWhere);
 }
 
 export async function mapOrderIdsByOrderNosWithExecutor(
@@ -115,24 +124,26 @@ export async function mapOrderIdsByOrderNosWithExecutor(
   orderNos: Array<string | null | undefined>,
   orderWhere?: Prisma.OrderWhereInput
 ): Promise<Map<string, string>> {
+  orderWhere = { ...orderWhere, canceledAt: null };
   const normalizedOrderNos = Array.from(new Set(orderNos.map((value) => normalizeOrderNo(value)).filter(Boolean)));
   const mapped = new Map<string, string>();
   if (normalizedOrderNos.length === 0) return mapped;
 
   const orderRows = await executor.order.findMany({
     where: { AND: [...(orderWhere ? [orderWhere] : []), { orderNo: { in: normalizedOrderNos } }] },
-    select: { id: true, orderNo: true },
+    select: { id: true, orderNo: true, paymentAllocationMode: true, invoice: { select: { invNo: true } } },
   });
-  for (const row of orderRows) mapped.set(normalizeOrderNo(row.orderNo), row.id);
+  for (const row of orderRows) if (!mapped.has(normalizeOrderNo(row.orderNo))) mapped.set(normalizeOrderNo(row.orderNo), row.id);
 
-  const unresolved = normalizedOrderNos.filter(value => !mapped.has(value));
+  const fundingPools = new Set(orderRows.filter(row => ['DEPOSIT_POOL', 'Un_Associated'].includes(row.invoice?.invNo || '')).map(row => normalizeOrderNo(row.orderNo)));
+  const unresolved = normalizedOrderNos.filter(value => !mapped.has(value) || fundingPools.has(value));
   const aliasDelegate = (executor as DbExecutor & { orderAlias?: { findMany?: typeof db.orderAlias.findMany } }).orderAlias;
   if (unresolved.length && aliasDelegate?.findMany) {
     const aliasRows = await aliasDelegate.findMany({
       where: { aliasNo: { in: unresolved }, ...(orderWhere ? { order: orderWhere } : {}) },
       select: { aliasNo: true, orderId: true },
     });
-    for (const row of aliasRows) if (!mapped.has(row.aliasNo)) mapped.set(row.aliasNo, row.orderId);
+    for (const row of aliasRows) if (!mapped.has(row.aliasNo) || fundingPools.has(row.aliasNo)) mapped.set(row.aliasNo, row.orderId);
   }
 
   return mapped;
@@ -174,6 +185,7 @@ export async function consolidateGroupedOrders(params?: {
 
   const baseWhere: Prisma.OrderWhereInput = {
     AND: [
+      { mucontGroup: null },
       ...(orderWhere ? [orderWhere] : []),
       ...(invoiceIds && invoiceIds.length > 0 ? [{ invoiceId: { in: invoiceIds } }] : []),
       ...(skipSystemPool
@@ -240,7 +252,13 @@ export async function consolidateGroupedOrders(params?: {
     const preferred = rows.find((row) => row.customerId && !row.needsCustomerFix) || rows[0];
     const existingComposite = rows.find((row) => isCompositeOrderNo(row.orderNo));
 
-    await db.$transaction(async (tx) => {
+    await runFinancialTransaction(async (tx) => {
+      await lockOrderBalances(tx, rows.map((row) => row.id));
+      const currentRows = await tx.order.findMany({ where: { id: { in: rows.map((row) => row.id) } }, select: { id: true, updatedAt: true } });
+      if (currentRows.length !== rows.length || currentRows.some((current) =>
+        current.updatedAt.getTime() !== rows.find((row) => row.id === current.id)?.updatedAt.getTime())) {
+        throw createApiError({ code: 'CONFLICT', status: 409, message: '订单已变化，请重新匹配' });
+      }
       let targetId: string;
       if (existingComposite) {
         targetId = existingComposite.id;

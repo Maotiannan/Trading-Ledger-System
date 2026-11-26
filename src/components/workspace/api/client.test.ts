@@ -6,10 +6,17 @@ import {
   lookupOrderContextByOrderNo,
   peekPrefetchedApiResult,
   prefetchApiResult,
+  rememberPrefetchedApiResult,
   WorkspaceApiError,
 } from '@/components/workspace/api/client';
 
 describe('workspace api client', () => {
+  it.each(['invoice', 'invoice?search=INV'])('keeps the %s preview but never caches an authorized insurance title', (endpoint) => {
+    const response = { success: true, data: [{ id: 'i', source: { creditInsurance: 'PRIVATE SHORT', canResync: true } }] };
+    rememberPrefetchedApiResult(endpoint, response);
+    expect(peekPrefetchedApiResult(endpoint)).toEqual({ success: true, data: [{ id: 'i', source: { canResync: true } }] });
+    expect(response.data[0].source.creditInsurance).toBe('PRIVATE SHORT');
+  });
   let originalLang = 'zh';
 
   beforeEach(() => {

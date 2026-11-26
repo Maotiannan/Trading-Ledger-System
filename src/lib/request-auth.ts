@@ -20,8 +20,10 @@ export async function getCurrentUser(request: NextRequest): Promise<CurrentUser 
   const payload = verifySessionToken(token);
   if (!payload) return null;
 
-  return db.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdById: true },
+    select: { id: true, email: true, name: true, role: true, level: true, parentId: true, createdById: true, disabledAt: true, sessionVersion: true },
   });
+  if (!user || user.disabledAt || (user.sessionVersion ?? 0) !== (payload.version ?? 0)) return null;
+  return user;
 }

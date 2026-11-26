@@ -30,6 +30,16 @@ describe('SwiftList', () => {
     createdAt: '2026-05-07T00:00:00.000Z',
   };
 
+  it.each([
+    ['RECEIVED', 'Bank_Transfer', false], ['Bank_Transfer', 'RECEIVED', false], ['Bank_Transfer', 'Bank_Transfer', true],
+  ] as const)('gates edit on SWIFT %s and detail %s', (status, parent, expected) => {
+    const row = { ...swift, status, detail: { status: parent } };
+    render(<SwiftList {...paginationProps} swifts={[row]} isAdmin canEdit tx={tx}
+      getSwiftStatus={() => status} onViewImage={jest.fn()} onEditSwift={jest.fn()}
+      onMarkReceived={jest.fn()} onDeleteSwift={jest.fn()} />);
+    expect(Boolean(screen.queryByTitle('修改SWIFT'))).toBe(expected);
+  });
+
   it('shows an admin received confirmation action for bank-transfer swifts', () => {
     const onMarkReceived = jest.fn();
     render(

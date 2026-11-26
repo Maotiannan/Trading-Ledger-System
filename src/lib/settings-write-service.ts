@@ -5,7 +5,7 @@ import { testOcrConnectivity } from '@/lib/ocr';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
-import { runInTransaction } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction } from '@/lib/transaction';
 import { MU_CONTRACT_PROVIDER } from '@/lib/integrations/mu-contract-constants';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
@@ -125,6 +125,9 @@ async function validateSettingUpdates(
   settings: Record<string, unknown>,
   currentSettings: Record<string, string>
 ): Promise<Array<{ key: string; value: string }>> {
+  if (['SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE'].some(key => Object.hasOwn(settings, key))) {
+    throw createApiError({ code: 'BAD_REQUEST', status: 400, message: '旧 SWIFT 容差已停用，请刷新后使用每张手续费上限' });
+  }
   const updates = editableSystemSettingKeys
     .filter((key) => Object.prototype.hasOwnProperty.call(settings, key))
     .map((key) => ({
@@ -167,25 +170,6 @@ async function validateSettingUpdates(
         (integerSystemSettingKeys as readonly string[]).includes(item.key),
       );
     }
-  }
-
-  const merged = { ...currentSettings };
-  for (const update of updates) {
-    merged[update.key as keyof typeof merged] = update.value;
-  }
-
-  const warningTolerance = Number(merged.SWIFT_WARNING_TOLERANCE);
-  const rejectTolerance = Number(merged.SWIFT_REJECT_TOLERANCE);
-  if (Number.isFinite(warningTolerance) && Number.isFinite(rejectTolerance) && rejectTolerance < warningTolerance) {
-    throw createApiError({
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: 'SWIFT_REJECT_TOLERANCE 不能小于 SWIFT_WARNING_TOLERANCE',
-      detail: {
-        SWIFT_WARNING_TOLERANCE: merged.SWIFT_WARNING_TOLERANCE,
-        SWIFT_REJECT_TOLERANCE: merged.SWIFT_REJECT_TOLERANCE,
-      },
-    });
   }
 
   const analyticsValuesChanged = analyticsUpdates.some((item) => (

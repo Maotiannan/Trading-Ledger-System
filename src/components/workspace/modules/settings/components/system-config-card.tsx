@@ -11,6 +11,7 @@ export type SystemConfigCardProps = {
   loading: boolean;
   savingConfig: boolean;
   testingConfig: boolean;
+  ocrConfigDirty?: boolean;
   canEditConfig: boolean;
   config: Record<string, string>;
   tx: (zh: string, en: string) => string;
@@ -23,6 +24,7 @@ export function SystemConfigCard({
   loading,
   savingConfig,
   testingConfig,
+  ocrConfigDirty = false,
   canEditConfig,
   config,
   tx,
@@ -118,14 +120,6 @@ export function SystemConfigCard({
                 <Input value={config.DETAIL_RECEIPT_MATCH_TOLERANCE || '5'} onChange={(e) => onConfigFieldChange('DETAIL_RECEIPT_MATCH_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
               </div>
               <div>
-                <Label>SWIFT_WARNING_TOLERANCE</Label>
-                <Input value={config.SWIFT_WARNING_TOLERANCE || '5'} onChange={(e) => onConfigFieldChange('SWIFT_WARNING_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
-              </div>
-              <div>
-                <Label>SWIFT_REJECT_TOLERANCE</Label>
-                <Input value={config.SWIFT_REJECT_TOLERANCE || '50'} onChange={(e) => onConfigFieldChange('SWIFT_REJECT_TOLERANCE', e.target.value)} disabled={!canEditConfig} />
-              </div>
-              <div>
                 <Label>SWIFT_MAX_FEE_PER_COPY</Label>
                 <Input value={config.SWIFT_MAX_FEE_PER_COPY ?? '40'} onChange={(e) => onConfigFieldChange('SWIFT_MAX_FEE_PER_COPY', e.target.value)} disabled={!canEditConfig} />
               </div>
@@ -170,10 +164,13 @@ export function SystemConfigCard({
                 <Input value={config.SETTINGS_AUDIT_EXPORT_MAX_ROWS || '5000'} onChange={(e) => onConfigFieldChange('SETTINGS_AUDIT_EXPORT_MAX_ROWS', e.target.value)} disabled={!canEditConfig} />
               </div>
             </div>
+            {ocrConfigDirty && <p role="status" className="text-sm text-muted-foreground">
+              {tx('OCR 配置有未保存修改。请先保存，再测试新配置。', 'Save your OCR changes before testing the new configuration.')}
+            </p>}
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={onTestOcrConfig} disabled={!canEditConfig || testingConfig}>
+              <Button variant="outline" onClick={onTestOcrConfig} disabled={!canEditConfig || testingConfig || savingConfig || ocrConfigDirty}>
                 {testingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {tx('测试OCR连通', 'Test OCR Connection')}
+                {tx('测试已保存的 OCR 配置', 'Test saved OCR configuration')}
               </Button>
               <Button onClick={onSaveConfig} disabled={!canEditConfig || savingConfig}>
                 {savingConfig && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

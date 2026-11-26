@@ -1,5 +1,6 @@
 import { DetailEditRequestStatus, DetailStatus, DeletionStatus, ReceiptEditRequestStatus, SwiftEditRequestStatus } from '@prisma/client';
 import { db } from '@/lib/db';
+import { refreshSourceInvoiceDateRows } from '@/lib/integrations/mucont-invoice-metadata';
 import {
   buildDashboardOutstandingSnapshot,
   dashboardOutstandingInvoiceSelect,
@@ -7,7 +8,6 @@ import {
   type DashboardReleasedInvoice,
 } from '@/lib/dashboard-customer-outstanding';
 import { compareStoredOrderBalance } from '@/lib/order-balance';
-import { repairOrderBalanceCacheIfNeeded } from '@/lib/order-balance-service';
 import { logger } from '@/lib/logger';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
@@ -120,35 +120,22 @@ export async function getDashboardSummary(currentUser: CurrentUser): Promise<Das
     db.swiftEditRequest.count({ where: { status: SwiftEditRequestStatus.PENDING } }),
   ]);
 
-  const outstandingSnapshot = buildDashboardOutstandingSnapshot(visibleInvoices);
-  const balanceRepairTasks: Array<Promise<unknown>> = [];
+  const outstandingSnapshot = buildDashboardOutstandingSnapshot(await refreshSourceInvoiceDateRows(visibleInvoices));
 
   for (const invoice of visibleInvoices) {
     for (const order of invoice.orders) {
       const computed = outstandingSnapshot.orderBalances.get(order.id) ?? 0;
       const comparison = compareStoredOrderBalance({ stored: order.orderBalance, computed });
       if (!comparison.matches) {
-        balanceRepairTasks.push(
-          repairOrderBalanceCacheIfNeeded(order, db, {
-            actorId: currentUser.id,
-            source: 'dashboard-summary',
-          }).catch((error) => {
-            logger.error('Dashboard order balance cache repair failed', {
+            logger.warn('Dashboard order balance cache mismatch', {
               orderId: order.id,
               orderNo: order.orderNo,
               stored: comparison.stored,
               computed: comparison.computed,
               difference: comparison.difference,
-              error,
             });
-          }),
-        );
       }
     }
-  }
-
-  if (balanceRepairTasks.length > 0) {
-    await Promise.allSettled(balanceRepairTasks);
   }
 
   return {

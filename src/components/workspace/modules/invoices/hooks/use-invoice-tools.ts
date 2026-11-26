@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import { apiCall, getErrorMessage, toDateInputValue } from '@/components/workspace/shared';
 import type { User } from '@/lib/store';
 import type {
@@ -43,6 +43,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
   const [transferAmount, setTransferAmount] = useState('');
   const [transferError, setTransferError] = useState('');
   const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const transferIntent = useRef<{ payload: string; requestId: string } | null>(null);
 
   const [showRematchDialog, setShowRematchDialog] = useState(false);
   const [rematchLoading, setRematchLoading] = useState(false);
@@ -53,9 +54,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
   const [rematchTargetInvoices, setRematchTargetInvoices] = useState<RematchTargetInvoice[]>([]);
   const [poolSelections, setPoolSelections] = useState<Record<string, string>>({});
 
-  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
-  const [orderHistoryTitle, setOrderHistoryTitle] = useState('');
-  const [orderHistoryRows, setOrderHistoryRows] = useState<Array<Record<string, unknown>>>([]);
+  const [historyOrder, setHistoryOrder] = useState<{ id: string; title: string } | null>(null);
 
   const [editingInvoiceDateId, setEditingInvoiceDateId] = useState<string | null>(null);
   const [editingInvoiceShipDate, setEditingInvoiceShipDate] = useState('');
@@ -147,6 +146,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
   };
 
   const openTransferDialog = (order: TransferFromOrder) => {
+    transferIntent.current = null;
     setTransferFromOrder(order);
     setTransferAmount(String(Math.round(Math.abs(order.balance))));
     setShowTransferDialog(true);
@@ -169,6 +169,10 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     setTransferError('');
 
     try {
+      const intentPayload = JSON.stringify([transferFromOrder.id, transferToOrderNo.trim(), amount]);
+      if (transferIntent.current?.payload !== intentPayload) {
+        transferIntent.current = { payload: intentPayload, requestId: crypto.randomUUID() };
+      }
       const result = await apiCall('invoice', {
         method: 'PUT',
         body: JSON.stringify({
@@ -176,6 +180,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
           fromOrderId: transferFromOrder.id,
           toOrderNo: transferToOrderNo.trim(),
           transferAmount: amount,
+          requestId: transferIntent.current.requestId,
         }),
       });
 
@@ -236,18 +241,7 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     }
   };
 
-  const openOrderHistory = async (orderId: string, orderNo: string) => {
-    try {
-      const result = await apiCall(`invoice?orderId=${encodeURIComponent(orderId)}`);
-      if (result.success) {
-        setOrderHistoryRows(Array.isArray(result.data) ? result.data : []);
-        setOrderHistoryTitle(orderNo);
-        setOrderHistoryOpen(true);
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : tx('加载付款记录失败', 'Failed to load payment records'));
-    }
-  };
+  const openOrderHistory = (id: string, title: string) => setHistoryOrder({ id, title });
 
   const updateRematchSelection = (groupId: string, value: Partial<RematchSelection>, group: RematchPreviewGroup) => {
     setRematchSelections((prev) => ({
@@ -385,10 +379,8 @@ export function useInvoiceTools(tx: InvoiceToolText, loadInvoices: () => Promise
     updatePoolSelection,
     openRematchDialog,
     handleRematchApply,
-    orderHistoryOpen,
-    orderHistoryTitle,
-    orderHistoryRows,
-    setOrderHistoryOpen,
+    historyOrder,
+    setHistoryOrder,
     openOrderHistory,
     editingInvoiceDateId,
     editingInvoiceShipDate,

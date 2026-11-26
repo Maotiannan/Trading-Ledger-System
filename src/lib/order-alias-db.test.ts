@@ -27,19 +27,19 @@ describe('order-alias-db', () => {
     mockDb.orderAlias.findFirst.mockResolvedValueOnce(null);
     mockDb.order.findFirst.mockResolvedValueOnce(null);
     mockDb.order.findMany.mockResolvedValueOnce([
-      { id: 'order-1', orderNo: 'PIKIN-23/PIKIN-19C' },
+      { id: 'order-1', orderNo: 'KITEM-23/KITEM-19C' },
     ]);
 
-    const matched = await findOrderIdByNoOrAliasWithExecutor(mockDb as never, 'PIKIN-23');
+    const matched = await findOrderIdByNoOrAliasWithExecutor(mockDb as never, 'KITEM-23');
 
     expect(mockDb.orderAlias.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ aliasNo: 'pikin-23' }),
+      where: expect.objectContaining({ aliasNo: 'kitem-23' }),
     }));
     expect(mockDb.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         AND: expect.arrayContaining([
           expect.objectContaining({
-            OR: [expect.objectContaining({ orderNo: { contains: 'PIKIN-23' } })],
+            OR: [expect.objectContaining({ orderNo: { contains: 'KITEM-23' } })],
           }),
         ]),
       }),
@@ -61,28 +61,28 @@ describe('order-alias-db', () => {
   });
 });
 
-it('prefers independent SADIO-09 even when a composite owns its alias', async () => {
+it('prefers independent DEMOX-09 even when a composite owns its alias', async () => {
   const executor = { order: { findFirst: jest.fn().mockResolvedValue({ id: 'independent' }) }, orderAlias: { findFirst: jest.fn().mockResolvedValue({ orderId: 'composite' }) } };
-  expect(await findOrderIdByNoOrAliasWithExecutor(executor as never, 'SADIO-09')).toBe('independent');
+  expect(await findOrderIdByNoOrAliasWithExecutor(executor as never, 'DEMOX-09')).toBe('independent');
   expect(executor.orderAlias.findFirst).not.toHaveBeenCalled();
 });
 it('looks up the complete composite rather than its individual components first', async () => {
   const executor = { order: { findFirst: jest.fn().mockResolvedValue({ id: 'composite' }) } };
-  expect(await findOrderIdByNoOrAliasWithExecutor(executor as never, 'SADIO-08D/SADIO-09')).toBe('composite');
-  expect(executor.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { AND: [{ orderNo: { equals: 'SADIO-08D/SADIO-09' } }] } }));
+  expect(await findOrderIdByNoOrAliasWithExecutor(executor as never, 'DEMOX-08D/DEMOX-09')).toBe('composite');
+  expect(executor.order.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { AND: [{ canceledAt: null }, { orderNo: { equals: 'DEMOX-08D/DEMOX-09' } }] } }));
 });
 it('retains visible alias fallback when no independent order exists', async () => {
   const scope = { createdBy: { in: ['visible-owner'] } };
   const executor = { order: { findFirst: jest.fn().mockResolvedValue(null) }, orderAlias: { findFirst: jest.fn().mockResolvedValue({ orderId: 'composite' }) } };
-  expect(await findOrderIdByNoOrAliasWithExecutor(executor as never, 'SADIO-09', scope)).toBe('composite');
-  expect(executor.order.findFirst.mock.calls[0][0].where.AND).toContainEqual(scope);
-  expect(executor.orderAlias.findFirst.mock.calls[0][0].where.order).toEqual(scope);
+  expect(await findOrderIdByNoOrAliasWithExecutor(executor as never, 'DEMOX-09', scope)).toBe('composite');
+  expect(executor.order.findFirst.mock.calls[0][0].where.AND).toContainEqual({ ...scope, canceledAt: null });
+  expect(executor.orderAlias.findFirst.mock.calls[0][0].where.order).toEqual({ ...scope, canceledAt: null });
 });
 
 it('batch lookup keeps exact orders and resolves only remaining aliases', async () => {
-  const executor = { order: { findMany: jest.fn().mockResolvedValue([{ id: 'standalone', orderNo: 'SADIO-09' }]) }, orderAlias: { findMany: jest.fn().mockResolvedValue([{ aliasNo: 'sadio-08d', orderId: 'composite' }]) } };
-  const result = await mapOrderIdsByOrderNosWithExecutor(executor as never, ['SADIO-09', 'SADIO-08D']);
-  expect(result.get('sadio-09')).toBe('standalone');
-  expect(result.get('sadio-08d')).toBe('composite');
-  expect(executor.orderAlias.findMany.mock.calls[0][0].where.aliasNo.in).toEqual(['sadio-08d']);
+  const executor = { order: { findMany: jest.fn().mockResolvedValue([{ id: 'standalone', orderNo: 'DEMOX-09' }]) }, orderAlias: { findMany: jest.fn().mockResolvedValue([{ aliasNo: 'demox-08d', orderId: 'composite' }]) } };
+  const result = await mapOrderIdsByOrderNosWithExecutor(executor as never, ['DEMOX-09', 'DEMOX-08D']);
+  expect(result.get('demox-09')).toBe('standalone');
+  expect(result.get('demox-08d')).toBe('composite');
+  expect(executor.orderAlias.findMany.mock.calls[0][0].where.aliasNo.in).toEqual(['demox-08d']);
 });

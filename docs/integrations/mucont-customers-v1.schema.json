@@ -6,9 +6,26 @@
   "oneOf": [
     { "$ref": "#/definitions/OptionsResponse" },
     { "$ref": "#/definitions/DetailResponse" },
+    { "$ref": "#/definitions/MarksResponse" },
     { "$ref": "#/definitions/ErrorResponse" }
   ],
   "definitions": {
+    "MarksRequest": {
+      "type": "object", "additionalProperties": false, "required": ["customerIds"],
+      "$comment": "POST /api/integrations/mucont/v1/customers/marks; IDs must not have surrounding whitespace. Deduplicate before applying maximum 200 distinct IDs; empty input allowed.",
+      "properties": { "customerIds": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 191 } } }
+    },
+    "MarksResponse": {
+      "type": "object", "additionalProperties": false, "required": ["items", "missingCustomerIds"],
+      "properties": {
+        "items": { "type": "array", "maxItems": 200, "items": {
+          "type": "object", "additionalProperties": false, "required": ["customerId", "mark", "sourceVersion"],
+          "properties": { "customerId": { "type": "string", "minLength": 1 }, "mark": { "$ref": "#/definitions/NullableText" },
+            "sourceVersion": { "type": "string", "format": "date-time" } }
+        } },
+        "missingCustomerIds": { "type": "array", "maxItems": 200, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
     "NullableText": { "type": ["string", "null"] },
     "CustomerOption": {
       "type": "object",

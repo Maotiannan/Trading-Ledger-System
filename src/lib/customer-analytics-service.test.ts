@@ -222,6 +222,7 @@ describe('customer analytics service', () => {
       where: { createdBy: { in: ['sales-a', 'user-a'] } },
       select: {
         id: true,
+        funding: { select: { id: true } },
         usd: true,
         status: true,
         date: true,

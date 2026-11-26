@@ -15,4 +15,8 @@ describe('mucont customer producer contract', () => {
     expect(validate({ items: [], hasMore: false, nextCursor: 'invalid' })).toBe(false);
     expect(validate({ customerId: 'a', capturedAt: '2026-10-30T07:00:00Z', completeness: 'MASTER_FULL', profile: {} })).toBe(false);
   });
+  it('accepts latest-mark batches with a database version and explicit missing IDs', () => {
+    expect(validate({ items: [{ customerId: 'id', mark: null, sourceVersion: '2026-11-13T00:00:00.000Z' }], missingCustomerIds: ['missing'] })).toBe(true);
+    expect(validate({ items: [{ customerId: 'id', mark: 'NEW' }], missingCustomerIds: [] })).toBe(false);
+  });
 });

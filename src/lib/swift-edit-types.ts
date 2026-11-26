@@ -20,4 +20,5 @@ export type SwiftEditRequestRow = {
   beforeSnapshot: SwiftEditablePatch;
   afterSnapshot: SwiftEditablePatch;
   reviewComment: string | null;
+  approvalBlocked?: boolean;
 };

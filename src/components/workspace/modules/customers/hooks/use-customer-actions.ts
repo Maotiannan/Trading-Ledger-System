@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback } from 'react';
+import { clearDashboardSummaryCache } from '../../dashboard/dashboard-summary-cache';
+import { clearCustomerHistoryCache } from '../../dashboard/customer-history-cache';
 import {
   apiCall,
   getApiErrorMessage,
@@ -103,9 +105,12 @@ export function useCustomerActions({
         name: form.name,
         phone: form.phone,
         city: form.city,
-        consignee: form.consignee,
+        ...(editing ? {} : { consignee: form.consignee }),
         companyName: form.companyName || null,
         companyAddress: form.companyAddress || null,
+        companyContact: form.companyContact?.trim() || null,
+        customerCode: form.customerCode?.trim() || null,
+        creditCode: form.creditCode?.trim() || null,
         credit: form.credit === '' ? null : Number(form.credit),
         ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
       };
@@ -116,6 +121,8 @@ export function useCustomerActions({
       }
       setShowCreate(false);
       setEditing(null);
+      clearDashboardSummaryCache();
+      clearCustomerHistoryCache();
       resetForm();
       await loadCustomers();
       if (result.data?.phoneConflict) {
@@ -161,6 +168,8 @@ export function useCustomerActions({
             consignee: form.consignee,
             companyName: form.companyName || null,
             companyAddress: form.companyAddress || null,
+            customerCode: form.customerCode?.trim() || null,
+            creditCode: form.creditCode?.trim() || null,
             credit: form.credit === '' ? null : Number(form.credit),
             ownerId: isAdmin ? (form.ownerId || importOwnerId || defaultOwnerId) : defaultOwnerId,
           };

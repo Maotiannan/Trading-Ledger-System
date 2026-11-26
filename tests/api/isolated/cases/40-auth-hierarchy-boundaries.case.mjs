@@ -146,13 +146,17 @@ export default async function run(t) {
     action: 'delete',
     userId: userCId,
   }, 200);
-  t.assertEqual(Boolean(ownUserDelete.data?.success), true, 'sales can delete descendant user');
+  t.assertEqual(Boolean(ownUserDelete.data?.success), true, 'sales can disable descendant user');
 
   const deletedUserCheck = await t.auth({ action: 'list' }, 200);
   const deletedUserRows = Array.isArray(deletedUserCheck.data?.data) ? deletedUserCheck.data.data : [];
-  t.assertOk(!deletedUserRows.some((row) => row.id === userCId), 'deleted descendant user disappears from list');
+  const disabledUser = deletedUserRows.find((row) => row.id === userCId);
+  t.assertOk(Boolean(disabledUser?.disabledAt), 'disabled descendant remains in management list with explicit disabled state');
+  t.assertEqual(disabledUser?.parentId, salesAId, 'disable preserves the original hierarchy');
 
   await t.logout();
+  const disabledLogin = await t.auth({ action: 'login', email: userCEmail, password: 'UserC@2026!' }, 401);
+  t.assertEqual(disabledLogin.data?.code, 'INVALID_CREDENTIALS', 'disabled descendant cannot log in');
   await t.login(userBEmail, 'UserB@2026!');
 
   const userCreateDenied = await t.createUser({

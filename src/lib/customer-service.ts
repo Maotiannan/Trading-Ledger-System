@@ -14,7 +14,8 @@ import {
 } from '@/lib/customer-scope';
 import { syncCustomerOrderNames } from '@/lib/customer-order-name-service';
 import { syncCustomerPrimaryConsigneeFromLegacy } from '@/lib/customer-consignee-service';
-import { runInTransaction } from '@/lib/transaction';
+import { runInTransaction, runFinancialTransaction } from '@/lib/transaction';
+import { customerCreditCodeError } from '@/lib/customer-credit-codes';
 
 export type CustomerPayload = {
   mark?: string;
@@ -27,6 +28,9 @@ export type CustomerPayload = {
   companyName?: string | null;
   credit?: number | null;
   companyAddress?: string | null;
+  companyContact?: string | null;
+  customerCode?: string | null;
+  creditCode?: string | null;
 };
 
 export type ImportRow = {
@@ -172,6 +176,7 @@ function validateRequired(payload: CustomerPayload): string | null {
   }
   if ((payload.phone?.length || 0) > 191) return 'PHONE长度不能超过191';
   if ((payload.city?.length || 0) > 191) return 'CITY长度不能超过191';
+  if ((payload.companyContact?.length || 0) > 2000) return 'COMPANY_CONTACT must not exceed 2000 characters';
   if (payload.credit !== null && payload.credit !== undefined) {
     if (!Number.isFinite(payload.credit) || payload.credit < 0) return 'CREDIT必须为大于等于0的数字';
   }
@@ -224,6 +229,8 @@ export async function createCustomerRecord(
   }
 
   const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedCustomerFields());
+  const codesError = showExtended ? customerCreditCodeError(payload.credit, payload.customerCode, payload.creditCode) : null;
+  if (codesError) throw createApiError({ code: 'VALIDATION_ERROR', status: 400, message: codesError });
   try {
     let ownerId = currentUser.id;
     let phoneConflict = false;
@@ -255,6 +262,9 @@ export async function createCustomerRecord(
           consignee: payload.consignee || null,
           companyName: showExtended ? payload.companyName : null,
           companyAddress: showExtended ? payload.companyAddress : null,
+          companyContact: showExtended ? trimStr(payload.companyContact) || null : null,
+          customerCode: showExtended ? trimStr(payload.customerCode) || null : null,
+          creditCode: showExtended ? trimStr(payload.creditCode) || null : null,
           credit: showExtended ? payload.credit : null,
           createdBy: currentUser.id,
           ownerId,
@@ -316,13 +326,24 @@ export async function updateCustomerRecord(
   const showExtended = currentUser.role === UserRole.ADMIN || (await canSalesEditExtendedCustomerFields());
   const existing = await db.customer.findUnique({
     where: { id },
-    select: { id: true, ownerId: true, mark: true, orderName: true, name: true, phone: true },
+    select: { id: true, ownerId: true, mark: true, orderName: true, name: true, phone: true, consignee: true, credit: true, customerCode: true, creditCode: true },
   });
   if (!existing) {
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '客户不存在' });
   }
   if (currentUser.role !== UserRole.ADMIN && existing.ownerId !== currentUser.id) {
     throw createApiError({ code: 'CUSTOMER_SCOPE_FORBIDDEN', status: 403, message: '无权修改该客户' });
+  }
+
+  if (payload.consignee !== undefined && trimStr(payload.consignee) !== trimStr(existing.consignee)) {
+    throw createApiError({ code: 'VALIDATION_ERROR', status: 400, message: '请在收货人管理中修改收货人或默认项' });
+  }
+
+  if (showExtended && (payload.credit !== undefined || payload.customerCode !== undefined || payload.creditCode !== undefined)) {
+    const codesError = customerCreditCodeError(payload.credit === undefined ? existing.credit : payload.credit,
+      payload.customerCode === undefined ? existing.customerCode : payload.customerCode,
+      payload.creditCode === undefined ? existing.creditCode : payload.creditCode);
+    if (codesError) throw createApiError({ code: 'VALIDATION_ERROR', status: 400, message: codesError });
   }
 
   try {
@@ -353,19 +374,20 @@ export async function updateCustomerRecord(
           name: payload.name!,
           phone: payload.phone!,
           city: payload.city!,
-          consignee: payload.consignee || null,
           ownerId,
           ...(showExtended
             ? {
                 companyName: payload.companyName,
                 companyAddress: payload.companyAddress,
+                companyContact: payload.companyContact === undefined ? undefined : trimStr(payload.companyContact) || null,
+                customerCode: payload.customerCode === undefined ? undefined : trimStr(payload.customerCode) || null,
+                creditCode: payload.creditCode === undefined ? undefined : trimStr(payload.creditCode) || null,
                 credit: payload.credit,
               }
             : {}),
         },
       });
       await syncCustomerOrderNames(tx as unknown as Parameters<typeof syncCustomerOrderNames>[0], id, payload.orderName!, payload.orderNames || []);
-      await syncCustomerPrimaryConsigneeFromLegacy(tx, id, payload.consignee || null);
 
       const phoneConflicts = await findPhoneConflictCustomersInScope(ownerId, payload.phone!, id, tx);
       phoneConflict = phoneConflicts.length > 0;
@@ -421,7 +443,7 @@ export async function deleteCustomerRecord(currentUser: CurrentUser, idInput: st
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '客户不存在' });
   }
 
-  await runInTransaction((tx) => tx.customer.delete({ where: { id } }));
+  await runFinancialTransaction((tx) => tx.customer.delete({ where: { id } }));
 
   await recordAuditEvent({
     action: auditActions.CUSTOMER_DELETE,
@@ -488,7 +510,7 @@ export async function processCustomerImportRows(
 
   for (const row of rows) {
     const payload = row.payload;
-    const requiredError = validateRequired(payload);
+    const requiredError = validateRequired(payload) || (showExtended ? customerCreditCodeError(payload.credit, payload.customerCode, payload.creditCode) : null);
     if (requiredError) {
       issueRows.push(toCustomerImportIssueRow(row, requiredError));
       rowResults.push(toCustomerImportRowResult(row, 'FAILED', requiredError));
@@ -540,6 +562,8 @@ export async function processCustomerImportRows(
             consignee: payload.consignee || null,
             companyName: showExtended ? payload.companyName || null : null,
             companyAddress: showExtended ? payload.companyAddress || null : null,
+            customerCode: showExtended ? trimStr(payload.customerCode) || null : null,
+            creditCode: showExtended ? trimStr(payload.creditCode) || null : null,
             credit: showExtended ? payload.credit ?? null : null,
             createdBy: currentUser.id,
             ownerId: effectiveOwnerId,

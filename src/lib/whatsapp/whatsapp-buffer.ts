@@ -14,6 +14,10 @@ export function pendingDeliveryUpdate(input: { paused: boolean; changed: boolean
 type SequencedReceipt = OrderBalanceReceiptInput & { id: string; createdAt: Date };
 // Recording sequence, not an editable/backdated receipt date, defines the cutoff.
 export function computeReceiptBalanceAfter(order: Omit<ComputeOrderBalanceInput, 'receipts'> & { receipts: SequencedReceipt[] }, receipt: Pick<SequencedReceipt, 'id' | 'createdAt'>) {
-  return computeOrderBalanceFromReceipts({ amount: order.amount, receipts: order.receipts.filter(row =>
+  const cutoff = receipt.createdAt.getTime();
+  return computeOrderBalanceFromReceipts({ amount: order.amount,
+    paymentAllocations: order.paymentAllocations?.filter(row => row.funding.originalReceiptId === receipt.id
+      || (row.appliedAt ? new Date(row.appliedAt).getTime() <= cutoff : false)),
+    receipts: order.receipts.filter(row =>
     row.createdAt < receipt.createdAt || (row.createdAt.getTime() === receipt.createdAt.getTime() && row.id <= receipt.id)) });
 }

@@ -8,7 +8,10 @@ import {
   UserRole,
 } from '@prisma/client';
 import { rm } from 'fs/promises';
+import { randomUUID } from 'crypto';
 import { db } from '@/lib/db';
+import { promoteUnassociatedDepositOrder } from '@/lib/deposit-order-routing';
+import { customerOrderName } from '@/lib/customer-business-label';
 import { createApiError } from '@/lib/api-error';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -22,7 +25,8 @@ import {
 } from '@/lib/receipt-generator-layout';
 import { saveReceiptGeneratorArtifact } from '@/lib/receipt-generator-image';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
-import { runInTransaction } from '@/lib/transaction';
+import { lockReceiptBalances } from '@/lib/order-balance-lock';
+import { runFinancialTransaction as runInTransaction } from '@/lib/transaction';
 import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { ensureDepositPoolInvoice, updateOrderBalance } from '@/lib/matching';
@@ -132,7 +136,8 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
         id: resolvedCustomerOrder.customerId,
         mark: resolvedCustomerOrder.customerMark,
         companyName: getReceiptGeneratorCustomerCompanyName(resolvedCustomerOrder.customer),
-        name: getReceiptGeneratorCustomerName(resolvedCustomerOrder.customer, resolvedCustomerOrder.customerName),
+        name: getReceiptGeneratorCustomerName(resolvedCustomerOrder.customer, resolvedCustomerOrder.customer ? null : resolvedCustomerOrder.customerName),
+        orderName: customerOrderName(resolvedCustomerOrder.customer || { mark: resolvedCustomerOrder.customerMark }, resolvedCustomerOrder.customerName),
         phone: resolvedCustomerOrder.customerPhone,
         city: resolvedCustomerOrder.customerCity,
       }
@@ -142,6 +147,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
           mark: inferredCustomer.mark,
           companyName: getReceiptGeneratorCustomerCompanyName(inferredCustomer),
           name: inferredCustomer.name,
+          orderName: customerOrderName(inferredCustomer),
           phone: inferredCustomer.phone,
           city: inferredCustomer.city,
         }
@@ -150,7 +156,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
   if (!latestMatch && !options.allowDepositPoolOrder) {
     throw badRequest('未找到对应订单，无法生成签名收据', { orderNo: rawOrderNo });
   }
-  if (!customer?.id || !customer?.mark || !customer?.name) {
+  if (!customer?.id || !customer?.mark || (!customer?.name && !customer?.companyName)) {
     throw badRequest('订单未能唯一匹配客户，请先修复客户信息', {
       orderNo: rawOrderNo,
       derivedOrderName: context.data?.derivedOrderName || null,
@@ -181,6 +187,7 @@ async function buildCreationContext(currentUser: CurrentUser, rawOrderNo: string
     customerMark: customer.mark,
     customerCompanyName: customer.companyName || null,
     customerName: customer.name,
+    customerOrderName: customer.orderName,
     customerPhone: customer.phone || null,
     customerCity: customer.city || null,
     balanceBefore,
@@ -222,12 +229,15 @@ export async function createReceiptGeneratorSession(currentUser: CurrentUser, in
             usd: usdAmount,
             customerId: creationContext.customerId,
             customerMark: creationContext.customerMark,
-            customerName: creationContext.customerName,
+            customerName: creationContext.customerOrderName,
             customerPhone: creationContext.customerPhone,
             customerCity: creationContext.customerCity,
             currentUserId: currentUser.id,
           })
         : null);
+      if (isDeposit && creationContext.orderId) {
+        await promoteUnassociatedDepositOrder(tx, creationContext.orderId, currentUser.id);
+      }
       const finalizedLayout = buildReceiptGeneratorLayout({
         receiptNo,
         orderNo: effectiveOrderNo,
@@ -355,7 +365,8 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
         select: {
           id: true,
           orderId: true,
-          createdBy: true,
+          updatedAt: true,
+          createdBy: true, managedById: true,
           status: true,
           receiptNo: true,
         },
@@ -371,7 +382,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
       detail: { sessionId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(session.receipt.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(session.receipt.managedById || session.receipt.createdBy, currentUser))) {
     throw forbidden('无权完成该签名收据', {
       sessionId,
       receiptId: session.receipt.id,
@@ -393,11 +404,13 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
   ]);
 
   const savedArtifacts: Array<{ path: string }> = [];
+  const attemptId = randomUUID();
   let updated;
 
   try {
     const receiptImage = await saveReceiptGeneratorArtifact({
       kind: 'receipt',
+      attemptId,
       receiptNo: session.receiptNo,
       buffer: receiptBuffer,
       mime: input.receiptImage.type || 'image/png',
@@ -406,6 +419,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
 
     const receiverSignature = await saveReceiptGeneratorArtifact({
       kind: 'receiver-signature',
+      attemptId,
       receiptNo: session.receiptNo,
       buffer: receiverSignatureBuffer,
       mime: input.receiverSignature.type || 'image/png',
@@ -414,6 +428,7 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
 
     const payerSignature = await saveReceiptGeneratorArtifact({
       kind: 'payer-signature',
+      attemptId,
       receiptNo: session.receiptNo,
       buffer: payerSignatureBuffer,
       mime: input.payerSignature.type || 'image/png',
@@ -421,6 +436,12 @@ export async function finalizeReceiptGeneratorSession(currentUser: CurrentUser, 
     savedArtifacts.push(payerSignature);
 
     updated = await runInTransaction(async (tx) => {
+      await lockReceiptBalances(tx, [receipt.id]);
+      const claim = await tx.receiptGeneratorSession.updateMany({ where: {
+        id: sessionId, status: 'PENDING', updatedAt: session.updatedAt,
+        receipt: { is: { id: receipt.id, status: 'SIGNING_PENDING', updatedAt: receipt.updatedAt } },
+      }, data: { status: 'FINALIZED' } });
+      if (claim.count !== 1) throw createApiError({ code: 'CONFLICT', status: 409, message: '签名会话已结束或进入恢复区，请刷新后查看' });
       const sessionUpdateData: Prisma.ReceiptGeneratorSessionUpdateInput = {
         status: ReceiptGeneratorSessionStatus.FINALIZED,
         receiverSignatureUrl: receiverSignature.path,

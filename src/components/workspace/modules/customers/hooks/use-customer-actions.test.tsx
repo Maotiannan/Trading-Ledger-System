@@ -2,6 +2,11 @@ import { act, renderHook } from '@testing-library/react';
 import { useCustomerActions } from './use-customer-actions';
 import type { CustomerFormState } from '../types';
 import { apiCall, getApiResponseErrorMessage, getErrorMessage } from '@/components/workspace/shared';
+import { clearDashboardSummaryCache } from '../../dashboard/dashboard-summary-cache';
+import { clearCustomerHistoryCache } from '../../dashboard/customer-history-cache';
+
+jest.mock('../../dashboard/dashboard-summary-cache', () => ({ clearDashboardSummaryCache: jest.fn() }));
+jest.mock('../../dashboard/customer-history-cache', () => ({ clearCustomerHistoryCache: jest.fn() }));
 
 jest.mock('@/components/workspace/shared', () => {
   return {
@@ -43,6 +48,8 @@ describe('useCustomerActions', () => {
   let formState: CustomerFormState;
 
   beforeEach(() => {
+    jest.mocked(clearDashboardSummaryCache).mockClear();
+    jest.mocked(clearCustomerHistoryCache).mockClear();
     mockApiCall.mockReset();
     mockGetApiResponseErrorMessage.mockClear();
     mockGetErrorMessage.mockClear();
@@ -187,7 +194,7 @@ describe('useCustomerActions', () => {
       importOwnerId: 'sales-1',
       editing: null,
       fixingTarget: null,
-      form: { ...formState, ownerId: 'sales-1' },
+      form: { ...formState, ownerId: 'sales-1', companyContact: 'Company contact desk' },
       latestFailedRows: [],
       loadCustomers,
       loadFixes,
@@ -224,6 +231,9 @@ describe('useCustomerActions', () => {
         consignee: '',
         companyName: null,
         companyAddress: null,
+        companyContact: 'Company contact desk',
+        customerCode: null,
+        creditCode: null,
         credit: null,
         ownerId: 'sales-1',
       }),
@@ -232,6 +242,8 @@ describe('useCustomerActions', () => {
     expect(setEditing).toHaveBeenCalledWith(null);
     expect(resetForm).toHaveBeenCalled();
     expect(loadCustomers).toHaveBeenCalled();
+    expect(clearDashboardSummaryCache).toHaveBeenCalledTimes(1);
+    expect(clearCustomerHistoryCache).toHaveBeenCalledTimes(1);
   });
 
   it('shows alert when create fails', async () => {
@@ -272,6 +284,8 @@ describe('useCustomerActions', () => {
 
     expect(window.alert).toHaveBeenCalledWith('保存失败');
     expect(loadCustomers).not.toHaveBeenCalled();
+    expect(clearDashboardSummaryCache).not.toHaveBeenCalled();
+    expect(clearCustomerHistoryCache).not.toHaveBeenCalled();
   });
 
   it('shows alert when create request throws', async () => {
@@ -457,9 +471,11 @@ describe('useCustomerActions', () => {
         name: 'Customer',
         phone: '620000001',
         city: 'Conakry',
-        consignee: '',
         companyName: null,
         companyAddress: null,
+        companyContact: null,
+        customerCode: null,
+        creditCode: null,
         credit: null,
         ownerId: 'admin-1',
       }),

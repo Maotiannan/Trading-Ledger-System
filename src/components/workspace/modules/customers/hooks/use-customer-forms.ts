@@ -35,6 +35,9 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
     companyName: '',
     credit: '',
     companyAddress: '',
+    companyContact: '',
+      customerCode: '',
+      creditCode: '',
     ownerId: defaultOwnerId,
   });
 
@@ -50,6 +53,9 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
       companyName: '',
       credit: '',
       companyAddress: '',
+      companyContact: '',
+      customerCode: '',
+      creditCode: '',
       ownerId: isAdmin ? (importOwnerId || defaultOwnerId) : defaultOwnerId,
     });
   }, [defaultOwnerId, importOwnerId, isAdmin]);
@@ -72,6 +78,9 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
       companyName: String(row.companyName || ''),
       credit: row.credit === null || row.credit === undefined ? '' : String(row.credit),
       companyAddress: String(row.companyAddress || ''),
+      companyContact: String(row.companyContact || ''),
+      customerCode: String(row.customerCode || ''),
+      creditCode: String(row.creditCode || ''),
       ownerId: String(row.ownerId || importOwnerId || defaultOwnerId),
     });
     setShowCreate(true);
@@ -90,6 +99,9 @@ export function useCustomerForms({ isAdmin, defaultOwnerId, importOwnerId }: Use
       companyName: '',
       credit: '',
       companyAddress: '',
+      companyContact: '',
+      customerCode: '',
+      creditCode: '',
       ownerId: importOwnerId || defaultOwnerId,
     });
   }, [defaultOwnerId, importOwnerId]);

@@ -138,6 +138,7 @@ describe('customer-read-service', () => {
         city: 'Conakry',
         companyName: 'Hidden Co',
         companyAddress: 'Address',
+        companyContact: 'Private company contact',
         credit: 100,
         owner: { id: 'sales-1', email: 'sales@example.com', name: 'Sales', role: UserRole.SALES, level: 3 },
         createdAt: new Date('2026-03-12T00:00:00Z'),
@@ -157,6 +158,7 @@ describe('customer-read-service', () => {
       expect.objectContaining({
         companyName: null,
         companyAddress: null,
+        companyContact: null,
         credit: null,
       }),
     ]);
@@ -580,7 +582,7 @@ describe('customer-read-service', () => {
     expect(mockDb.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
       include: expect.objectContaining({
         receipts: {
-          select: { usd: true, status: true },
+          select: { usd: true, status: true, funding: { select: { id: true } } },
         },
       }),
     }));

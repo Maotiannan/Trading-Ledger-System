@@ -16,7 +16,7 @@ import {
   confirmedAtForNewOrder,
   confirmedAtForStatusUpdate,
 } from '@/lib/order-tracker-confirmation';
-import { buildOrderVisibilityWhere } from '@/lib/resource-visibility';
+import { buildOrderVisibilityWhere, managedOwnershipWhere } from '@/lib/resource-visibility';
 import { getSystemSettingsWithDefaults } from '@/lib/system-settings';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { runInTransaction } from '@/lib/transaction';
@@ -89,7 +89,7 @@ function buildTrackerVisibilityWhere(
   role: UserRole,
 ): Prisma.OrderTrackerWhereInput {
   const scopedRows: Prisma.OrderTrackerWhereInput[] = [
-    { createdBy: { in: ownerIds } },
+    managedOwnershipWhere(ownerIds),
     { customer: { ownerId: { in: ownerIds } } },
   ];
   if (role === UserRole.ADMIN) {
@@ -130,10 +130,10 @@ function sanitizeStatus(value: unknown, options: string[], fallback = DEFAULT_OR
 function canEditBaseFields(
   currentUser: CurrentUser,
   scope: Awaited<ReturnType<typeof loadHierarchy>>,
-  target: { createdBy: string; customer?: { ownerId: string } | null },
+  target: { createdBy: string; managedById?: string | null; customer?: { ownerId: string } | null },
 ): boolean {
-  if (target.createdBy === currentUser.id) return true;
-  if (scope.ownerVisibleIds.has(target.createdBy)) return true;
+  if ((target.managedById || target.createdBy) === currentUser.id) return true;
+  if (scope.ownerVisibleIds.has(target.managedById || target.createdBy)) return true;
   if (target.customer?.ownerId && scope.ownerVisibleIds.has(target.customer.ownerId)) return true;
   return false;
 }
@@ -141,11 +141,11 @@ function canEditBaseFields(
 function canEditAdminFields(
   currentUser: CurrentUser,
   scope: Awaited<ReturnType<typeof loadHierarchy>>,
-  target: { createdBy: string; customer?: { ownerId: string } | null },
+  target: { createdBy: string; managedById?: string | null; customer?: { ownerId: string } | null },
 ): boolean {
   if (currentUser.role !== UserRole.ADMIN) return false;
-  if (target.createdBy === currentUser.id) return true;
-  if (scope.ownerVisibleIds.has(target.createdBy)) return true;
+  if ((target.managedById || target.createdBy) === currentUser.id) return true;
+  if (scope.ownerVisibleIds.has(target.managedById || target.createdBy)) return true;
   if (target.customer?.ownerId && scope.ownerVisibleIds.has(target.customer.ownerId)) return true;
   return false;
 }
@@ -163,6 +163,9 @@ function serializeTracker(
     : [];
   const source = externalSourceLinks[0] || null;
   const { externalSourceLinks: _hiddenSourceLinks, ...publicRow } = row;
+  const customer = row.customer && typeof row.customer === 'object'
+    ? row.customer as { mark: string | null }
+    : null;
   const financeOrder = row.financeOrder && typeof row.financeOrder === 'object'
     ? row.financeOrder as Record<string, unknown>
     : null;
@@ -174,6 +177,7 @@ function serializeTracker(
       || source?.customerMatchStatus === ExternalCustomerMatchStatus.CONFLICT);
   return {
     ...publicRow,
+    customerMark: customer ? customer.mark : row.customerMark,
     amount: asNumber(row.amount),
     orderBalance: asNumber(row.orderBalance),
     confirmedAt: row.confirmedAt instanceof Date ? row.confirmedAt : null,
@@ -196,7 +200,7 @@ function serializeTracker(
     canDelete: adminEditable || canResolveSourceCustomer,
     canEdit: baseEditable,
     canEditAdminFields: adminEditable,
-    isMine: row.createdBy === currentUser.id,
+    isMine: (row.managedById || row.createdBy) === currentUser.id,
   };
 }
 
@@ -310,9 +314,9 @@ async function calculateDepositAmounts(
         { status: { not: ReceiptStatus.SIGNING_PENDING } },
         {
           OR: [
-            { createdBy: { in: ownerIds } },
+            managedOwnershipWhere(ownerIds),
             { customer: { ownerId: { in: ownerIds } } },
-            { order: { createdBy: { in: ownerIds } } },
+            { order: managedOwnershipWhere(ownerIds) },
             { order: { customer: { ownerId: { in: ownerIds } } } },
           ],
         },
@@ -365,7 +369,8 @@ export async function listOrderTrackers(
         ? {
             OR: [
               { orderNo: { contains: search } },
-              { customerMark: { contains: search } },
+              { customer: { mark: { contains: search } } },
+              { customer: null, customerMark: { contains: search } },
               { customerName: { contains: search } },
               { customerPhone: { contains: search } },
               { remark: { contains: search } },

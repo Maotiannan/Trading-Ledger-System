@@ -1,12 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { readFile } from 'fs/promises';
+import { NextRequest } from 'next/server';
 import path from 'path';
 import { UploadedAssetAttachmentType, UploadedAssetCategory, UploadedAssetStatus } from '@prisma/client';
 import { apiErrorCodes } from '@/lib/api-error';
 import { createApiErrorResponse, toApiErrorResponse } from '@/lib/api-error-response';
 import { getCurrentUser } from '@/lib/request-auth';
 import { db } from '@/lib/db';
-import { buildDetailVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds } from '@/lib/resource-visibility';
+import { buildDetailVisibilityWhere, buildReceiptVisibilityWhere, buildSwiftVisibilityWhere, getOwnerVisibleIds, managedOwnershipWhere } from '@/lib/resource-visibility';
 import { parseActionRequest } from '@/lib/http-body';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { createApiError } from '@/lib/api-error';
@@ -14,6 +13,7 @@ import { saveUploadedImage, UploadValidationError } from '@/lib/upload';
 import { createApiSuccessResponse } from '@/lib/api-success-response';
 import { stageUploadedAsset } from '@/lib/uploaded-asset-service';
 import { logger } from '@/lib/logger';
+import { privateFileResponse } from '@/lib/private-file-response';
 
 const DEFAULT_UPLOAD_DIR = '/app/upload/images';
 const PUBLIC_UPLOAD_PREFIX = '/upload/images/';
@@ -83,9 +83,7 @@ export async function GET(request: NextRequest) {
         where: {
           path: rawPath,
           agent: {
-            createdBy: {
-              in: ownerIds,
-            },
+            ...managedOwnershipWhere(ownerIds),
           },
         },
         select: { id: true },
@@ -121,15 +119,7 @@ export async function GET(request: NextRequest) {
 
     const uploadDir = process.env.UPLOAD_DIR || DEFAULT_UPLOAD_DIR;
     const absolutePath = path.join(uploadDir, relativePath);
-    const content = await readFile(absolutePath);
-
-    return new NextResponse(content, {
-      status: 200,
-      headers: {
-        'Content-Type': resolveImageMimeType(absolutePath),
-        'Cache-Control': 'private, max-age=3600',
-      },
-    });
+    return await privateFileResponse(request, absolutePath, { contentType: resolveImageMimeType(absolutePath), maxAgeSeconds: 3600 });
   } catch (error) {
     logger.error('Read upload image error', error);
     return toApiErrorResponse(error, {
@@ -139,6 +129,8 @@ export async function GET(request: NextRequest) {
     }, request);
   }
 }
+
+export const HEAD = GET;
 
 export async function POST(request: NextRequest) {
   try {

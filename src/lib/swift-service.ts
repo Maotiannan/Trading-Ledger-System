@@ -1,3 +1,4 @@
+import { canEditSwiftStatus } from '@/lib/ledger-action-policy';
 import { Prisma, SwiftStatus, UploadedAssetAttachmentType, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
@@ -50,9 +51,8 @@ async function applySwiftUpdate(params: {
 }) {
   const { tx, currentUser, swiftId, payload, maxFeePerCopy } = params;
   const existing = await loadSwiftForMutation(tx, swiftId);
-  await assertAccess(existing.createdBy, currentUser, '无权修改该SWIFT记录');
-  if (existing.status === SwiftStatus.RECEIVED) throw badRequest('RECEIVED状态下禁止修改SWIFT');
-  if (existing.detail.status === 'RECEIVED') throw badRequest('RECEIVED状态下禁止修改SWIFT');
+  await assertAccess(existing.managedById || existing.createdBy, currentUser, '无权修改该SWIFT记录');
+  if (!canEditSwiftStatus(existing.status, existing.detail.status)) throw badRequest('RECEIVED状态下禁止修改SWIFT');
   const others = existing.detail.swifts.filter((swift) => swift.id !== swiftId && !swift.hasError && swift.status !== 'ERROR');
   const validation = assertAmount(existing.detail.totalAmount, others.map((swift) => swift.amount), payload.amount);
   const swift = await tx.swift.update({
@@ -81,7 +81,7 @@ export async function createSwiftRecord(params: {
     await lockSwiftDetail(tx, detailId);
     const detail = await tx.detail.findUnique({ where: { id: detailId }, include: { swifts: true } });
     if (!detail) throw badRequest('关联的付款明细不存在');
-    await assertAccess(detail.createdBy, currentUser, '无权关联该付款明细');
+    await assertAccess(detail.managedById || detail.createdBy, currentUser, '无权关联该付款明细');
     const before = calculateSwiftTransferSummary(detail.totalAmount, detail.swifts, maxFeePerCopy);
     if (detail.status === 'RECEIVED' || before.remainingAmount <= 0) {
       throw badRequest('该付款明细的SWIFT已足额或已完成签收');
@@ -136,7 +136,7 @@ export async function markSwiftReceived(params: { currentUser: CurrentUser; swif
   const maxFeePerCopy = await getSwiftFeePerCopy();
   const result = await runInTransaction(async (tx) => {
     const existing = await loadSwiftForMutation(tx, swiftId);
-    await assertAccess(existing.createdBy, currentUser, '无权签收该SWIFT记录');
+    await assertAccess(existing.managedById || existing.createdBy, currentUser, '无权签收该SWIFT记录');
     if (existing.status === SwiftStatus.RECEIVED) throw badRequest('SWIFT已签收，无需重复确认');
     if (existing.status === SwiftStatus.ERROR || existing.hasError) throw badRequest('异常SWIFT不能签收，请先修复');
     const swift = await tx.swift.update({ where: { id: swiftId }, data: { status: SwiftStatus.RECEIVED } });
@@ -156,9 +156,9 @@ export async function deleteSwiftRecord(params: { currentUser: CurrentUser; swif
   const maxFeePerCopy = await getSwiftFeePerCopy();
   const result = await runInTransaction(async (tx) => {
     const existing = await loadSwiftForMutation(tx, swiftId);
-    const canDeleteError = existing.hasError && await canAccessOwnedResourceAsync(existing.createdBy, currentUser);
+    const canDeleteError = existing.hasError && await canAccessOwnedResourceAsync(existing.managedById || existing.createdBy, currentUser);
     if (currentUser.role !== UserRole.ADMIN && !canDeleteError) throw createApiError({ code: 'FORBIDDEN', status: 403, message: '只有管理员可以删除该SWIFT记录' });
-    await assertAccess(existing.createdBy, currentUser, '无权删除该SWIFT记录');
+    await assertAccess(existing.managedById || existing.createdBy, currentUser, '无权删除该SWIFT记录');
     await tx.swift.delete({ where: { id: swiftId } });
     const summary = await syncSwiftTransferState(tx, existing.detailId, maxFeePerCopy);
     return { hadError: existing.hasError, summary };

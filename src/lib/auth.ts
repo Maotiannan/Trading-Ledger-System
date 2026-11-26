@@ -36,12 +36,13 @@ export async function verifyPassword(password: string, hashedPassword: string): 
 }
 
 // 迁移旧密码到 bcrypt
-export async function migratePassword(userId: string, newPassword: string): Promise<void> {
+export async function migratePassword(userId: string, newPassword: string, expectedHash: string): Promise<boolean> {
   const hashedPassword = await hashPassword(newPassword);
-  await runInTransaction((tx) => tx.user.update({
-    where: { id: userId },
+  const changed = await runInTransaction((tx) => tx.user.updateMany({
+    where: { id: userId, password: expectedHash, disabledAt: null },
     data: { password: hashedPassword }
   }));
+  return changed.count === 1;
 }
 
 // 创建默认管理员账户
@@ -81,6 +82,10 @@ export interface UserSession {
   email: string;
   name: string | null;
   role: UserRole;
+  sessionVersion: number;
+  level: number;
+  parentId: string | null;
+  createdById: string | null;
 }
 
 // 验证用户登录（支持密码自动迁移）
@@ -96,12 +101,12 @@ export async function validateUser(email: string, password: string): Promise<Use
   }
 
   const isValid = await verifyPassword(password, user.password);
-  if (!isValid) return null;
+  if (!isValid || user.disabledAt) return null;
 
   // 如果是旧密码格式，自动迁移到 bcrypt
   if (isLegacyHash(user.password)) {
       logger.info('Migrating legacy password hash to bcrypt');
-    await migratePassword(user.id, password);
+    if (!await migratePassword(user.id, password, user.password)) return null;
   }
 
   return {
@@ -109,5 +114,9 @@ export async function validateUser(email: string, password: string): Promise<Use
     email: user.email,
     name: user.name,
     role: user.role,
+    sessionVersion: user.sessionVersion,
+    level: user.level,
+    parentId: user.parentId,
+    createdById: user.createdById,
   };
 }

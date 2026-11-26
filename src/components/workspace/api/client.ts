@@ -2,6 +2,7 @@
 
 import { translateApiErrorCode, translateApiErrorMessage } from '@/i18n/workspace/api-error-map';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
+import { invoiceListPreview } from '@/lib/invoice-list-preview';
 import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 
 const DECIMAL_KEYS = new Set([
@@ -169,6 +170,9 @@ export function peekPrefetchedApiResult<T>(endpoint: string, maxAgeMs = API_PREF
 
 export function rememberPrefetchedApiResult<T>(endpoint: string, result: T): T {
   const key = normalizeEndpointKey(endpoint);
+  if (key.split('?', 1)[0] === 'invoice' && result && typeof result === 'object' && 'data' in result && Array.isArray(result.data)) {
+    result = { ...result, data: invoiceListPreview(result.data) };
+  }
   apiPrefetchCache.set(key, {
     value: result,
     storedAt: Date.now(),

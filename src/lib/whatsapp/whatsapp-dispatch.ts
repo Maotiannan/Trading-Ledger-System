@@ -8,6 +8,7 @@ import { listWhatsAppTemplateVersions } from './whatsapp-template-service';
 import { isYCloudTemplateApproved } from './ycloud-template-status';
 import { logger } from '@/lib/logger';
 import { failedRetryAncestors, verifyFailedWhatsAppProvider } from './whatsapp-retry-policy';
+import { prepareNotificationInvoiceDates } from '@/lib/integrations/mucont-invoice-metadata';
 
 // Not scheduled until business projection, consent UI and isolated rollout checks are complete.
 export async function dispatchWhatsAppDelivery(id: string) {
@@ -16,6 +17,14 @@ export async function dispatchWhatsAppDelivery(id: string) {
   let settings = await getWhatsAppSettings();
   if (process.env.WHATSAPP_OUTBOUND_ENABLED !== 'true') return { sent: false };
   if (!apiKey || !senderPhone || !settings.outboundEnabled) return { sent: false };
+  const sourceDelivery = await db.whatsAppDelivery.findUnique({ where: { id }, include: { contact: { select: { customerId: true } } } });
+  try {
+    await prepareNotificationInvoiceDates(sourceDelivery?.type === 'OUTSTANDING_REMINDER'
+      ? { customerIds: [sourceDelivery.contact.customerId] } : { notificationIds: sourceDelivery?.sourceId ? [sourceDelivery.sourceId] : [] });
+  } catch {
+    logger.warn('WhatsApp source dates unverified; dispatch deferred', { deliveryId: id });
+    return { sent: false };
+  }
   const templates = await listWhatsAppTemplateVersions();
   const preview = await runInTransaction(tx => refreshWhatsAppInTransaction(tx, id, templates));
   if (preview?.type === 'OUTSTANDING_REMINDER' && !settings.reminderEnabled && !preview.retryOf) return { sent: false };

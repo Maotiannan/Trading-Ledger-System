@@ -10,6 +10,7 @@ import { listWhatsAppTemplateVersions } from './whatsapp-template-service';
 import { resolveWhatsAppSource } from './whatsapp-live-source';
 import { refreshWhatsAppInTransaction } from './whatsapp-refresh';
 import { projectWhatsAppCorrections } from './whatsapp-corrections';
+import { prepareNotificationInvoiceDates } from '@/lib/integrations/mucont-invoice-metadata';
 
 // Reuse persisted business-event snapshots already produced transactionally by
 // receipt/invoice services. No second balance formula and no email approvals changed.
@@ -37,6 +38,8 @@ export async function projectWhatsAppBusinessEvents() {
       orderBy: { id: 'asc' }, take: 100,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
+    try { await prepareNotificationInvoiceDates({ notificationIds: events.map((row) => row.id) }); }
+    catch { logger.warn('WhatsApp source date refresh deferred'); break; }
     for (const event of events) {
       if (settings.enabledTypes && !settings.enabledTypes.includes(event.type)) continue;
       const contacts = await db.customerWhatsAppContact.findMany({

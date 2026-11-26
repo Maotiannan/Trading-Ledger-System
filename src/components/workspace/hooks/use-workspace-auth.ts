@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import { apiCall } from '@/components/workspace/shared';
+import { initializeClientUserPreferences, clearClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 
 export function useWorkspaceAuth() {
   const { user, setUser } = useStore();
@@ -19,12 +20,14 @@ export function useWorkspaceAuth() {
         });
         if (cancelled) return;
         if (result.success && result.data) {
+          initializeClientUserPreferences(result.data.id, result.data.preferences);
           setUser(result.data);
         } else {
+          clearClientUserPreferences();
           setUser(null);
         }
       } catch {
-        if (!cancelled) setUser(null);
+        if (!cancelled) { clearClientUserPreferences(); setUser(null); }
       } finally {
         if (!cancelled) setInitialized(true);
       }

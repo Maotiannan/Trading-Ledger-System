@@ -21,4 +21,5 @@ export type ReceiptEditRequestRow = {
   beforeSnapshot: ReceiptEditablePatch;
   afterSnapshot: ReceiptEditablePatch;
   reviewComment: string | null;
+  approvalBlocked?: boolean;
 };

@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { apiCall, useUiText } from '@/components/workspace/shared';
+import { apiCall, getApiErrorMessage, useUiText } from '@/components/workspace/shared';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
@@ -53,6 +53,7 @@ export function DeletionManager() {
   const { deletionRequests, setDeletionRequests, user } = useStore();
   const canApprove = user?.role === 'ADMIN';
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [receiptEditRequests, setReceiptEditRequests] = useState<ReceiptEditRequestRow[]>([]);
   const [detailEditRequests, setDetailEditRequests] = useState<DetailEditRequestRow[]>([]);
   const [swiftEditRequests, setSwiftEditRequests] = useState<SwiftEditRequestRow[]>([]);
@@ -66,24 +67,27 @@ export function DeletionManager() {
 
   const loadApprovalData = useCallback(async () => {
     setLoading(true);
-    const [deletionResult, receiptResult, detailResult, swiftResult] = await Promise.all([
-      apiCall('deletion'),
-      apiCall('receipt', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
-      apiCall('detail', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
-      apiCall('swift', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
-    ]);
+    setError('');
+    try {
+      const [deletionResult, receiptResult, detailResult, swiftResult] = await Promise.all([
+        apiCall('deletion'),
+        apiCall('receipt', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
+        apiCall('detail', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
+        apiCall('swift', { method: 'POST', body: JSON.stringify({ action: 'list-edit-requests' }) }),
+      ]);
 
-    if (deletionResult.success && Array.isArray(deletionResult.data)) {
+      const failed = [deletionResult, receiptResult, detailResult, swiftResult].find(result => !result.success || !Array.isArray(result.data));
+      if (failed) throw failed;
       setDeletionRequests(deletionResult.data);
-    } else {
-      setDeletionRequests([]);
+      setReceiptEditRequests(receiptResult.data as ReceiptEditRequestRow[]);
+      setDetailEditRequests(detailResult.data as DetailEditRequestRow[]);
+      setSwiftEditRequests(swiftResult.data as SwiftEditRequestRow[]);
+    } catch (cause) {
+      setError(getApiErrorMessage(cause, tx('审批记录加载失败', 'Could not load approval records.')));
+    } finally {
+      setLoading(false);
     }
-
-    setReceiptEditRequests(receiptResult.success && Array.isArray(receiptResult.data) ? receiptResult.data as ReceiptEditRequestRow[] : []);
-    setDetailEditRequests(detailResult.success && Array.isArray(detailResult.data) ? detailResult.data as DetailEditRequestRow[] : []);
-    setSwiftEditRequests(swiftResult.success && Array.isArray(swiftResult.data) ? swiftResult.data as SwiftEditRequestRow[] : []);
-    setLoading(false);
-  }, [setDeletionRequests]);
+  }, [setDeletionRequests, tx]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -92,39 +96,20 @@ export function DeletionManager() {
     return () => window.clearTimeout(timeoutId);
   }, [loadApprovalData]);
 
-  const handleDeletionDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
-    const result = await apiCall('deletion', {
-      method: 'POST',
-      body: JSON.stringify({ action: decision, requestId }),
-    });
-    if (result.success) {
+  const decide = async (endpoint: string, requestId: string, decision: 'approve' | 'reject') => {
+    setError('');
+    setLoading(true);
+    try {
+      const body = endpoint === 'deletion' ? { action: decision, requestId } : { action: 'review-edit', requestId, decision };
+      const result = await apiCall(endpoint, { method: 'POST', body: JSON.stringify(body) });
+      if (!result.success) throw result;
       await loadApprovalData();
+    } catch (cause) {
+      setError(getApiErrorMessage(cause, tx('审批操作未完成，请刷新记录后重试。', 'Decision failed. Refresh the records and retry.')));
+    } finally {
+      setLoading(false);
     }
-  }, [loadApprovalData]);
-
-  const handleReceiptDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
-    const result = await apiCall('receipt', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'review-edit', requestId, decision }),
-    });
-    if (result.success) await loadApprovalData();
-  }, [loadApprovalData]);
-
-  const handleDetailDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
-    const result = await apiCall('detail', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'review-edit', requestId, decision }),
-    });
-    if (result.success) await loadApprovalData();
-  }, [loadApprovalData]);
-
-  const handleSwiftDecision = useCallback(async (requestId: string, decision: 'approve' | 'reject') => {
-    const result = await apiCall('swift', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'review-edit', requestId, decision }),
-    });
-    if (result.success) await loadApprovalData();
-  }, [loadApprovalData]);
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -355,16 +340,17 @@ export function DeletionManager() {
   const paginatedDetailEditRequests = paginateRows(filteredDetailEditRequests, 'detailEdits');
   const paginatedSwiftEditRequests = paginateRows(filteredSwiftEditRequests, 'swiftEdits');
 
-  const renderPendingActions = (requestId: string, onDecision: (requestId: string, decision: 'approve' | 'reject') => Promise<void>) => {
+  const renderPendingActions = (requestId: string, onDecision: (requestId: string, decision: 'approve' | 'reject') => Promise<void>, approvalBlocked = false) => {
     if (!canApprove) {
       return <span className="text-xs text-muted-foreground">{tx('等待审批', 'Pending review')}</span>;
     }
     return (
       <div className="flex gap-2">
-        <Button size="sm" variant="default" onClick={() => void onDecision(requestId, 'approve')} disabled={loading}>
-          <Check className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="destructive" onClick={() => void onDecision(requestId, 'reject')} disabled={loading}>
+        {approvalBlocked ? <span className="self-center text-xs text-muted-foreground">{tx('原单已锁定，仅可拒绝', 'Record locked; reject only')}</span> :
+          <Button size="sm" variant="default" aria-label={tx('批准', 'Approve')} onClick={() => void onDecision(requestId, 'approve')} disabled={loading}>
+            <Check className="h-4 w-4" />
+          </Button>}
+        <Button size="sm" variant="destructive" aria-label={tx('拒绝', 'Reject')} onClick={() => void onDecision(requestId, 'reject')} disabled={loading}>
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -373,6 +359,9 @@ export function DeletionManager() {
 
   return (
     <div className="space-y-6">
+      {error && <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
+        {error}<Button variant="outline" size="sm" disabled={loading} onClick={() => void loadApprovalData()}>{tx('刷新', 'Refresh')}</Button>
+      </div>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold">{tx('审批', 'Approval')}</h2>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
@@ -403,7 +392,7 @@ export function DeletionManager() {
                   <TableCell>{formatAppDate(request.createdAt)}</TableCell>
                   <TableCell>
                     {request.status === 'PENDING'
-                      ? renderPendingActions(request.id, handleDeletionDecision)
+                      ? renderPendingActions(request.id, (id, decision) => decide('deletion', id, decision))
                       : <span className="text-xs text-muted-foreground">{request.approver?.name || request.approver?.email || '-'}</span>}
                   </TableCell>
                 </TableRow>
@@ -445,7 +434,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{formatAppDate(request.requestedAt)}</td>
                     <td className="px-4 py-3">
                       {request.status === 'PENDING'
-                        ? renderPendingActions(request.id, handleReceiptDecision)
+                        ? renderPendingActions(request.id, (id, decision) => decide('receipt', id, decision), request.approvalBlocked)
                         : <span className="text-xs text-muted-foreground">{request.approvedByName || '-'}</span>}
                     </td>
                   </tr>
@@ -487,7 +476,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{formatAppDate(request.requestedAt)}</td>
                     <td className="px-4 py-3">
                       {request.status === 'PENDING'
-                        ? renderPendingActions(request.id, handleDetailDecision)
+                        ? renderPendingActions(request.id, (id, decision) => decide('detail', id, decision), request.approvalBlocked)
                         : <span className="text-xs text-muted-foreground">{request.approvedByName || '-'}</span>}
                     </td>
                   </tr>
@@ -529,7 +518,7 @@ export function DeletionManager() {
                     <td className="px-4 py-3">{formatAppDate(request.requestedAt)}</td>
                     <td className="px-4 py-3">
                       {request.status === 'PENDING'
-                        ? renderPendingActions(request.id, handleSwiftDecision)
+                        ? renderPendingActions(request.id, (id, decision) => decide('swift', id, decision), request.approvalBlocked)
                         : <span className="text-xs text-muted-foreground">{request.approvedByName || '-'}</span>}
                     </td>
                   </tr>

@@ -13,7 +13,10 @@ import {
   syncOrderAliases,
 } from '@/lib/order-alias-db';
 import { serializeOrderTokens } from '@/lib/tokenizer';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { lockReceiptBalances } from '@/lib/order-balance-lock';
+import { assertUnlinkedInvoice, assertUnlinkedOrders } from '@/lib/integrations/mucont-invoice-guard';
+import { createApiError } from '@/lib/api-error';
 import {
   projectInvoiceEventsInTransaction,
   refreshOrderLinkedNotificationsInTransaction,
@@ -97,6 +100,7 @@ async function persistInvoiceWithOrders(
   });
   const beforeShipDate = targetInvoice?.shipDate ?? null;
   const beforeReleaseDate = targetInvoice?.releaseDate ?? null;
+  if (targetInvoice) await assertUnlinkedInvoice(tx, targetInvoice.id);
 
   if (!targetInvoice) {
     targetInvoice = await tx.invoice.create({
@@ -188,6 +192,7 @@ async function persistInvoiceWithOrders(
         })
       : null;
     if (existingGlobalOrder) {
+      await assertUnlinkedOrders(tx, [existingGlobalOrder.id]);
       await tx.order.update({
         where: { id: existingGlobalOrder.id },
         data: {
@@ -256,13 +261,15 @@ async function persistInvoiceWithOrders(
 
 async function reconcileTouchedOrders(orderIds: string[]): Promise<void> {
   for (const orderId of orderIds) {
-    const order = await db.order.findUnique({
+    await runInTransaction(async (tx) => {
+    const order = await tx.order.findUnique({
       where: { id: orderId },
       select: { id: true, orderNo: true },
     });
-    if (!order) continue;
+    if (!order) return;
+    await assertUnlinkedOrders(tx, [orderId]);
 
-    const allDeposits = await db.receipt.findMany({
+    const allDeposits = await tx.receipt.findMany({
       where: {
         isDeposit: true,
         isMerged: false,
@@ -274,17 +281,29 @@ async function reconcileTouchedOrders(orderIds: string[]): Promise<void> {
       deposit.orderNo ? normalizeOrderNoLocal(deposit.orderNo).includes(normalizedOrderNo) : false
     );
 
+    // Acquire all source and destination orders in one stable order, before receipts.
+    await lockReceiptBalances(tx, deposits.map((deposit) => deposit.id), [orderId]);
+    const lockedOrder = await tx.order.findUnique({ where: { id: orderId }, select: { id: true, orderNo: true } });
+    if (!lockedOrder || lockedOrder.orderNo !== order.orderNo) {
+      throw createApiError({ code: 'CONFLICT', status: 409, message: '订单已变化，请刷新后重试' });
+    }
+
     for (const deposit of deposits) {
-      await db.receipt.update({
+      const current = await tx.receipt.findUnique({ where: { id: deposit.id } });
+      if (!current || current.isMerged || !current.isDeposit
+        || !current.orderNo || !normalizeOrderNoLocal(current.orderNo).includes(normalizedOrderNo)) continue;
+      await tx.receipt.update({
         where: { id: deposit.id },
         data: {
           orderId: order.id,
           isMerged: true,
         },
       });
+      if (current.orderId && current.orderId !== order.id) await updateOrderBalance(current.orderId, tx);
     }
 
-    await updateOrderBalance(order.id);
+    await updateOrderBalance(order.id, tx);
+    });
   }
 }
 

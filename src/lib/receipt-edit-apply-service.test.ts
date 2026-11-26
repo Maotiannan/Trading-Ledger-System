@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { ReceiptStatus, UserRole } from '@prisma/client';
 import { recordAuditEventInTransaction } from '@/lib/audit';
 import {
@@ -26,6 +32,7 @@ jest.mock('@/lib/balance-transfer-reversal-service', () => ({
 
 jest.mock('@/lib/order-balance-service', () => ({
   updateOrderBalance: jest.fn(),
+  assertReceiptRemovalDoesNotStrandTransfer: jest.fn(),
 }));
 
 jest.mock('@/lib/receipt-edit-binding', () => ({
@@ -72,6 +79,7 @@ const patch = {
 };
 
 const existingReceipt = {
+  updatedAt: new Date('2026-08-20T00:00:00.000Z'),
   id: 'real-receipt',
   receiptNo: '0001170',
   date: new Date('2026-08-20T00:00:00.000Z'),
@@ -106,6 +114,7 @@ const impact = {
 
 function makeTx() {
   return {
+    mucontInvoiceGroup: { findUnique: jest.fn() },
     receipt: {
       findUnique: jest.fn().mockResolvedValue(existingReceipt),
       update: jest.fn().mockResolvedValue({ ...existingReceipt, ...patch, orderId: 'target-order' }),

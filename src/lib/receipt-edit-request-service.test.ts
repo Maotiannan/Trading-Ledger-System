@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { ReceiptEditRequestStatus, ReceiptStatus, UserRole } from '@prisma/client';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { db } from '@/lib/db';
@@ -401,6 +407,13 @@ describe('receipt-edit-request-service', () => {
       orderNo: input.orderNo || null,
       invNo: input.invNo || null,
     }));
+  });
+
+  it('does not queue an edit for a bank-transfer receipt', async () => {
+    mockTx.receipt.findFirst.mockResolvedValueOnce({ id: 'receipt-1', status: 'Bank_Transfer' });
+    await expect(requestReceiptEdit({ currentUser: salesUser, receiptId: 'receipt-1', data: validEditPayload }))
+      .rejects.toMatchObject({ status: 400 });
+    expect(mockTx.receiptEditRequest.create).not.toHaveBeenCalled();
   });
 
   it('creates a pending receipt edit request for SALES on a visible receipt', async () => {

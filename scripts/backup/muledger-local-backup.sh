@@ -46,7 +46,7 @@ cleanup() {
   if [ "$LOCK_ACQUIRED" -eq 1 ] && [ -n "$LOCK_DIR" ] && [ -d "$LOCK_DIR" ]; then
     if ! rmdir "$LOCK_DIR" 2>/dev/null; then
       log "ERROR: Unable to remove the backup lock directory: $LOCK_DIR"
-      if [ "$exit_code" -eq 0 ]; then exit_code=1; fi
+      if [ "$exit_code" -eq 0 ] || [ "$exit_code" -eq 75 ]; then exit_code=1; fi
     fi
   fi
   exit "$exit_code"
@@ -486,26 +486,6 @@ NODE
   write_checksum "$STAGING_DIR/manifest.json"
 }
 
-apply_retention() {
-  [ "$LOCAL_RETENTION_DAYS" -gt 0 ] || return 0
-  snapshots_root="$BACKUP_ROOT_RESOLVED/snapshots"
-  [ -d "$snapshots_root" ] || return 0
-  find "$snapshots_root" -mindepth 4 -maxdepth 4 -type d -name 'muledger-*' \
-    -mtime +"$LOCAL_RETENTION_DAYS" -print | while IFS= read -r candidate; do
-      candidate_resolved="$(resolve_directory "$candidate")"
-      case "$candidate_resolved/" in
-        "$snapshots_root/"*) ;;
-        *) fail "Retention candidate escaped backup root: $candidate_resolved" ;;
-      esac
-      candidate_name="$(basename "$candidate_resolved")"
-      if ! printf '%s\n' "$candidate_name" | grep -Eq '^muledger-[0-9]{8}-[0-9]{6}$'; then
-        fail "Retention candidate has an unsafe name: $candidate_name"
-      fi
-      log "Removing expired snapshot: $candidate_resolved"
-      find "$candidate_resolved" -depth -delete
-    done
-}
-
 dump_database
 archive_media
 write_manifest
@@ -517,6 +497,9 @@ final_snapshot="$final_parent/muledger-$timestamp"
 mkdir -p "$final_parent"
 mv "$STAGING_DIR" "$final_snapshot"
 STAGING_DIR=""
+printf 'PUBLISHED_SNAPSHOT=%s\n' "${final_snapshot#"$BACKUP_ROOT_RESOLVED"/}"
 log "Snapshot published: $final_snapshot"
-apply_retention
+if [ "$LOCAL_RETENTION_DAYS" -gt 0 ]; then
+  node "$ROOT_DIR/scripts/backup/prune-local-snapshots.cjs" "$BACKUP_ROOT_RESOLVED/snapshots" "$final_snapshot" "$LOCAL_RETENTION_DAYS"
+fi
 log "Local backup completed"

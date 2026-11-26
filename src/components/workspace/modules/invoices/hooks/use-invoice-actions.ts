@@ -18,6 +18,7 @@ export type InvoiceActionDeps = {
   handleCreateDialogOpenChange: (open: boolean) => void;
   resetCreateInvoiceDialog: () => void;
   editingOrder: {
+    sourceLinked?: boolean;
     id: string;
     orderNo: string;
     invNo: string;
@@ -163,11 +164,13 @@ export function useInvoiceActions({
           orderNo: editingOrder.orderNo,
           invNo: editingOrder.invNo,
           amount: editingOrder.amount,
-          customerMark: editingOrder.customerMark,
-          customerName: editingOrder.customerName || null,
-          customerPhone: editingOrder.customerPhone || null,
-          customerCity: editingOrder.customerCity || null,
-          customerId: editingOrder.customerId || null,
+          ...(editingOrder.sourceLinked ? {} : {
+            customerMark: editingOrder.customerMark,
+            customerName: editingOrder.customerName || null,
+            customerPhone: editingOrder.customerPhone || null,
+            customerCity: editingOrder.customerCity || null,
+            customerId: editingOrder.customerId || null,
+          }),
         }),
       });
 

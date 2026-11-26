@@ -1,4 +1,6 @@
+import { canEditReceiptStatus } from '@/lib/ledger-action-policy';
 import { ReceiptStatus } from '@prisma/client';
+import { lockReceiptBalances } from '@/lib/order-balance-lock';
 import { createApiError } from '@/lib/api-error';
 import { recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -7,7 +9,7 @@ import {
   inspectReceiptEditTransferImpact,
   reverseBalanceTransferInTransaction,
 } from '@/lib/balance-transfer-reversal-service';
-import { updateOrderBalance } from '@/lib/order-balance-service';
+import { updateOrderBalance, assertReceiptRemovalDoesNotStrandTransfer } from '@/lib/order-balance-service';
 import {
   resolveReceiptEditBinding,
   syncReceiptDetailItemsForBinding,
@@ -17,6 +19,7 @@ import { syncPendingReceiptGeneratorDraft } from '@/lib/receipt-generator-draft-
 import type { CurrentUser } from '@/lib/request-auth';
 import type { DbTransactionClient } from '@/lib/transaction';
 import { refreshReceiptNotificationInTransaction } from '@/lib/email/email-notification-projector';
+import { sourceReceiptCustomer } from '@/lib/integrations/mucont-invoice-customer';
 
 export type ApplyReceiptEditInput = {
   tx: DbTransactionClient;
@@ -75,7 +78,7 @@ export async function applyReceiptEditInTransaction(
     expectedBalanceTransferId,
   } = input;
 
-  const existingReceipt = await tx.receipt.findUnique({ where: { id: receiptId } });
+  let existingReceipt = await tx.receipt.findUnique({ where: { id: receiptId } });
   if (!existingReceipt) {
     throw createApiError({
       code: 'RESOURCE_NOT_FOUND',
@@ -84,7 +87,7 @@ export async function applyReceiptEditInTransaction(
       detail: { receiptId },
     });
   }
-  if (existingReceipt.status === ReceiptStatus.Bank_Transfer) {
+  if (!canEditReceiptStatus(existingReceipt.status)) {
     throw badRequest('Bank_Transfer状态下禁止修改', {
       receiptId,
       status: existingReceipt.status,
@@ -104,6 +107,12 @@ export async function applyReceiptEditInTransaction(
     customerCity: existingReceipt.customerCity,
     needsCustomerFix: existingReceipt.needsCustomerFix,
   });
+  await lockReceiptBalances(tx, [receiptId], binding.orderId ? [binding.orderId] : []);
+  const lockedReceipt = await tx.receipt.findUnique({ where: { id: receiptId } });
+  if (!lockedReceipt || lockedReceipt.updatedAt.getTime() !== existingReceipt.updatedAt.getTime()) {
+    throw conflict('收据已变化，请刷新后重试');
+  }
+  existingReceipt = lockedReceipt;
 
   const transferImpact = await inspectReceiptEditTransferImpact(tx, {
     receiptId,
@@ -137,6 +146,9 @@ export async function applyReceiptEditInTransaction(
     });
   }
 
+  if (existingReceipt.orderId !== binding.orderId) {
+    await assertReceiptRemovalDoesNotStrandTransfer(tx, existingReceipt.orderId, existingReceipt.usd, existingReceipt.status);
+  }
   await tx.receiptHistory.create({
     data: {
       receiptId,
@@ -155,12 +167,13 @@ export async function applyReceiptEditInTransaction(
     },
   });
 
-  const nextCustomerMark = patch.customerMark || null;
-  const matchedCustomer = binding.matchedCustomer
+  const sourceCustomer = await sourceReceiptCustomer(tx, binding.orderId);
+  const nextCustomerMark = sourceCustomer?.customerMark || patch.customerMark || null;
+  const matchedCustomer = sourceCustomer || (binding.matchedCustomer
     && binding.matchedCustomer.customerId
     && !binding.matchedCustomer.needsCustomerFix
     ? binding.matchedCustomer
-    : null;
+    : null);
   const updatedReceipt = await tx.receipt.update({
     where: { id: receiptId },
     data: {

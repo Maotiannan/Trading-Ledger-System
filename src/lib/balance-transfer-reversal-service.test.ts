@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { ReceiptStatus, UserRole } from '@prisma/client';
 import {
   inspectReceiptEditTransferImpact,
@@ -301,8 +307,12 @@ describe('balance-transfer-reversal-service', () => {
         AND: [
           { id: { in: ['source-order', 'target-order'] } },
           {
+            canceledAt: null,
             OR: [
-              { createdBy: { in: ['admin-1'] } },
+              { OR: [
+                { managedById: { in: ['admin-1'] } },
+                { managedById: null, createdBy: { in: ['admin-1'] } },
+              ] },
               { customer: { ownerId: { in: ['admin-1'] } } },
             ],
           },

@@ -5,6 +5,12 @@ import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { updateOrderBalance } from '@/lib/matching';
 import { updateOrderBalance as updateOrderBalanceCache } from '@/lib/order-balance-service';
+import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { executeMutationIntent } from '@/lib/mutation-intent';
+import { randomUUID } from 'crypto';
+import { lockOrderBalances, lockOrderSnapshots } from '@/lib/order-balance-lock';
+import { editSourceInvoiceOrder } from '@/lib/integrations/mucont-invoice-service';
+import { assertUnlinkedInvoice, assertUnlinkedOrders } from '@/lib/integrations/mucont-invoice-guard';
 import { serializeOrderTokens } from '@/lib/tokenizer';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { deriveOrderGroupKey } from '@/lib/order-group';
@@ -27,7 +33,7 @@ import {
   buildOrderVisibilityWhere as buildOrderVisibilityWhereShared,
   buildReceiptVisibilityWhere as buildReceiptVisibilityWhereShared,
 } from '@/lib/resource-visibility';
-import { runInTransaction } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction } from '@/lib/transaction';
 import {
   cancelSourceNotificationsInTransaction,
   projectInvoiceEventsInTransaction,
@@ -510,7 +516,7 @@ export async function createInvoiceRecord(currentUser: CurrentUser, input: {
 }
 
 async function rematchAllOrders(ownerIds: string[], actorId: string) {
-  const orderVisibilityWhere = buildOrderVisibilityWhere(ownerIds);
+  const orderVisibilityWhere = { AND: [buildOrderVisibilityWhere(ownerIds), { mucontGroup: null }] };
   const receiptVisibilityWhere = buildReceiptVisibilityWhere(ownerIds);
 
   const allOrders = await db.order.findMany({
@@ -546,6 +552,7 @@ async function rematchAllOrders(ownerIds: string[], actorId: string) {
     );
     if (sourceOrders.length === 0) continue;
     await runInTransaction(async (tx) => {
+      await lockOrderSnapshots(tx, [targetOrder, ...sourceOrders]);
       for (const sourceOrder of sourceOrders) {
         await tx.receipt.updateMany({
           where: { orderId: sourceOrder.id },
@@ -685,7 +692,7 @@ async function rematchAllOrders(ownerIds: string[], actorId: string) {
     if (sameOrderId) {
       await runInTransaction(async (tx) => {
         await tx.receipt.update({
-          where: { id: receipt.id },
+          where: { id: receipt.id, orderId: null, updatedAt: receipt.updatedAt },
           data: { orderId: sameOrderId },
         });
         await updateOrderBalance(sameOrderId, tx);
@@ -710,7 +717,7 @@ async function rematchAllOrders(ownerIds: string[], actorId: string) {
     if (matchedByGroup) {
       await runInTransaction(async (tx) => {
         await tx.receipt.update({
-          where: { id: receipt.id },
+          where: { id: receipt.id, orderId: null, updatedAt: receipt.updatedAt },
           data: { orderId: matchedByGroup.id },
         });
         await updateOrderBalance(matchedByGroup.id, tx);
@@ -771,6 +778,7 @@ async function rematchAllOrders(ownerIds: string[], actorId: string) {
   for (const order of zeroOrders) {
     if (order._count.receipts > 0) continue;
     await runInTransaction(async (tx) => {
+      await lockOrderSnapshots(tx, [order]);
       await tx.order.delete({ where: { id: order.id } });
       await refreshOrderLinkedNotificationsInTransaction(tx, {
         orderIds: [],
@@ -918,6 +926,8 @@ async function applyRematchConflicts(
 
     let incrementAmount = 0;
     await runInTransaction(async (tx) => {
+      await lockOrderSnapshots(tx, rows);
+      await assertUnlinkedOrders(tx, uniqueOrderIds);
       for (const source of sourceRows) {
         await tx.receipt.updateMany({
           where: { orderId: source.id },
@@ -1052,73 +1062,52 @@ export async function assignInvoiceToBranchAdmin(currentUser: CurrentUser, paylo
     throw badRequest('目标管理员不能为空');
   }
 
-  const scope = await getHierarchyScope(currentUser);
-  const descendantIds = Array.from(scope.descendantIds);
-  const ownerIds = Array.from(scope.ownerVisibleIds);
-  if (!descendantIds.includes(targetAdminId)) {
-    throw forbidden('目标管理员不属于当前分支', { targetAdminId });
-  }
-  const targetAdmin = await db.user.findFirst({
-    where: {
-      id: targetAdminId,
-      role: UserRole.ADMIN,
-    },
-    select: { id: true, email: true, level: true },
-  });
-  if (!targetAdmin) {
-    throw forbidden('目标管理员不属于当前分支', { targetAdminId });
-  }
+  return runInTransaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM User WHERE id = ${targetAdminId} FOR UPDATE`;
+    const scope = await getHierarchyScope(currentUser, tx);
+    if (!scope.descendantIds.has(targetAdminId)) {
+      throw forbidden('目标管理员不属于当前分支', { targetAdminId });
+    }
+    const targetAdmin = await tx.user.findFirst({
+      where: { id: targetAdminId, role: UserRole.ADMIN, disabledAt: null },
+      select: { id: true, email: true, level: true },
+    });
+    if (!targetAdmin) throw forbidden('目标管理员不属于当前分支或账号已停用', { targetAdminId });
 
-  const invoice = await db.invoice.findFirst({
-    where: {
-      id: invoiceId,
-      ...buildInvoiceVisibilityWhere(ownerIds),
-    },
-    select: {
-      id: true,
-      invNo: true,
-      createdBy: true,
-      orders: { select: { id: true } },
-    },
-  });
-  if (!invoice) {
-    throw notFound('账单不存在或无权限修改', { invoiceId });
-  }
-
-  if (invoice.createdBy !== targetAdminId) {
-    await runInTransaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM Invoice WHERE id = ${invoiceId} FOR UPDATE`;
+    const invoice = await tx.invoice.findFirst({
+      where: { id: invoiceId, ...buildInvoiceVisibilityWhere(Array.from(scope.ownerVisibleIds)) },
+      select: { id: true, invNo: true, createdBy: true, managedById: true,
+        orders: { select: { id: true, createdBy: true, managedById: true } } },
+    });
+    if (!invoice) throw notFound('账单不存在或无权限修改', { invoiceId });
+    const previousOwnerId = invoice.managedById || invoice.createdBy;
+    const changed = previousOwnerId !== targetAdminId
+      || invoice.orders.some((order) => (order.managedById || order.createdBy) !== targetAdminId);
+    if (changed) {
       await tx.invoice.update({
         where: { id: invoiceId },
-        data: { createdBy: targetAdminId },
+        data: { managedById: targetAdminId },
       });
       await tx.order.updateMany({
         where: { invoiceId },
-        data: { createdBy: targetAdminId },
+        data: { managedById: targetAdminId },
       });
+    }
+    await recordAuditEventInTransaction(tx, {
+      action: auditActions.INVOICE_ASSIGN_BRANCH_ADMIN,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.INVOICE,
+      targetId: invoiceId,
+      metadata: {
+        invNo: invoice.invNo, previousOwnerId, nextOwnerId: targetAdminId,
+        orderCount: invoice.orders.length, targetAdminEmail: targetAdmin.email,
+        originalAuthorsUnchanged: true,
+        previousOrderOwners: invoice.orders.map((order) => ({ id: order.id, ownerId: order.managedById || order.createdBy })),
+      },
     });
-  }
-
-  await recordAuditEvent({
-    action: auditActions.INVOICE_ASSIGN_BRANCH_ADMIN,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.INVOICE,
-    targetId: invoiceId,
-    metadata: {
-      invNo: invoice.invNo,
-      previousOwnerId: invoice.createdBy,
-      nextOwnerId: targetAdminId,
-      orderCount: invoice.orders.length,
-      targetAdminEmail: targetAdmin.email,
-    },
+    return { data: { invoiceId, targetAdminId }, message: changed ? '账单归属已分配' : '账单归属未变化' };
   });
-
-  return {
-    data: {
-      invoiceId,
-      targetAdminId,
-    },
-    message: invoice.createdBy === targetAdminId ? '账单归属未变化' : '账单归属已分配',
-  };
 }
 
 export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
@@ -1163,6 +1152,7 @@ export async function updateInvoiceDates(currentUser: CurrentUser, payload: {
   }
 
   const updated = await runInTransaction(async (tx) => {
+    await assertUnlinkedInvoice(tx, targetInvoiceId);
     const row = await tx.invoice.update({
       where: { id: targetInvoiceId },
       data: updateData,
@@ -1199,16 +1189,19 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
   invNo?: string;
   orderNo?: string;
   amount?: number;
-  customerMark?: string;
-  customerName?: string;
-  customerId?: string;
-  customerPhone?: string;
-  customerCity?: string;
+  customerMark?: string | null;
+  customerName?: string | null;
+  customerId?: string | null;
+  customerPhone?: string | null;
+  customerCity?: string | null;
 }) {
   const orderId = payload.orderId;
   if (!orderId) {
     throw badRequest('订单ID不能为空');
   }
+
+  const sourceUpdate = await editSourceInvoiceOrder(currentUser, payload);
+  if (sourceUpdate) return sourceUpdate;
 
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
@@ -1305,6 +1298,7 @@ export async function updateInvoiceOrder(currentUser: CurrentUser, payload: {
           select: { id: true, invNo: true },
         });
       }
+      await assertUnlinkedInvoice(tx, targetInvoice.id);
       const conflictingOrder = await tx.order.findFirst({
         where: {
           invoiceId: targetInvoice.id,
@@ -1453,6 +1447,8 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
 
   if (existingOrder) {
     const updated = await runInTransaction(async (tx) => {
+      await assertUnlinkedInvoice(tx, payload.invoiceId);
+      await assertUnlinkedOrders(tx, [existingOrder.id]);
       const row = await tx.order.update({
         where: { id: existingOrder.id },
         data: {
@@ -1496,6 +1492,7 @@ export async function addInvoiceOrder(currentUser: CurrentUser, payload: {
   }
 
   const order = await runInTransaction(async (tx) => {
+    await assertUnlinkedInvoice(tx, payload.invoiceId);
     const created = await tx.order.create({
       data: {
         invoiceId: payload.invoiceId,
@@ -1563,6 +1560,7 @@ export async function deleteInvoiceOrder(currentUser: CurrentUser, orderId: stri
   }
 
   await runInTransaction(async (tx) => {
+    await assertUnlinkedOrders(tx, [orderId]);
     await tx.order.delete({ where: { id: orderId } });
     const remaining = await tx.order.count({ where: { invoiceId: order.invoiceId } });
     if (remaining === 0) {
@@ -1619,6 +1617,7 @@ export async function deleteInvoiceRecord(currentUser: CurrentUser, invoiceId: s
   }
 
   await runInTransaction(async (tx) => {
+    await assertUnlinkedInvoice(tx, invoiceId);
     await cancelSourceNotificationsInTransaction(tx, {
       invoiceId,
       actorId: currentUser.id,
@@ -1639,18 +1638,26 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
   fromOrderId: string;
   toOrderNo: string;
   transferAmount: number;
+  requestId?: string;
 }) {
   const { fromOrderId } = payload;
   const canonicalToOrderNo = canonicalizeOrderNo(typeof payload.toOrderNo === 'string' ? payload.toOrderNo : '');
   const transferAmount = Number(payload.transferAmount);
 
-  if (!fromOrderId || !canonicalToOrderNo || transferAmount <= 0) {
+  if (!fromOrderId || !canonicalToOrderNo || !Number.isFinite(transferAmount) || transferAmount <= 0 || Math.abs(transferAmount * 100 - Math.round(transferAmount * 100)) > 1e-6) {
     throw badRequest('缺少必要参数或金额无效');
   }
 
   const scope = await getHierarchyScope(currentUser);
   const ownerIds = Array.from(scope.ownerVisibleIds);
-  const fromOrder = await db.order.findFirst({
+  return runInTransaction(async (tx) => executeMutationIntent(tx, {
+    actorId: currentUser.id, kind: 'balance-transfer', requestId: payload.requestId || '',
+    payload: { fromOrderId, toOrderNo: canonicalToOrderNo, transferAmount },
+  }, async () => {
+  const matchedToOrderId = await findOrderIdByNoOrAlias(canonicalToOrderNo, buildOrderVisibilityWhere(ownerIds), tx);
+  if (matchedToOrderId === fromOrderId) throw badRequest('不能转移到同一订单');
+  await lockOrderBalances(tx, [fromOrderId, matchedToOrderId]);
+  const fromOrder = await tx.order.findFirst({
     where: {
       id: fromOrderId,
       ...buildOrderVisibilityWhere(ownerIds),
@@ -1660,9 +1667,8 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
     throw notFound('源订单不存在', { fromOrderId });
   }
 
-  const fromReceipts = await db.receipt.findMany({ where: { orderId: fromOrderId } });
-  const fromReceived = fromReceipts.reduce((sum, row) => sum + Number(row.usd), 0);
-  const fromBalance = Number(fromOrder.amount) - fromReceived;
+  const fromReceipts = await tx.receipt.findMany({ where: { orderId: fromOrderId } });
+  const fromBalance = computeOrderBalanceFromReceipts({ amount: fromOrder.amount, receipts: fromReceipts });
   if (fromBalance >= 0) {
     throw badRequest('该订单没有多付余额可转移', { fromOrderId, fromBalance });
   }
@@ -1674,10 +1680,8 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
     });
   }
 
-  const matchedToOrderId = await findOrderIdByNoOrAlias(canonicalToOrderNo, buildOrderVisibilityWhere(ownerIds));
   let targetOrderId = matchedToOrderId;
 
-  await runInTransaction(async (tx) => {
     let toOrder = targetOrderId
       ? await tx.order.findUnique({ where: { id: targetOrderId } })
       : null;
@@ -1711,7 +1715,7 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
 
     const generatedReceipt = await tx.receipt.create({
       data: {
-        receiptNo: `TRANSFER-${Date.now()}`,
+        receiptNo: `TRANSFER-${randomUUID()}`,
         usd: transferAmount,
         orderNo: canonicalToOrderNo,
         payer: `余额转移自 ${fromOrder.orderNo}`,
@@ -1761,7 +1765,6 @@ export async function transferInvoiceBalance(currentUser: CurrentUser, payload: 
         transferAmount,
       },
     });
-  });
-
   return { message: `成功转移 ${formatUsdAmount(transferAmount)} 到订单 ${canonicalToOrderNo}` };
+  }));
 }

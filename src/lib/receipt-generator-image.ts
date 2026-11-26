@@ -68,6 +68,7 @@ export async function saveReceiptGeneratorArtifact(params: {
   buffer: Buffer;
   mime: string;
   now?: Date;
+  attemptId?: string;
 }) {
   const now = params.now || new Date();
   const subDir = params.kind === 'receipt' ? resolveGeneratorSubDir(now) : resolveSignatureSubDir(now);
@@ -78,6 +79,6 @@ export async function saveReceiptGeneratorArtifact(params: {
     buffer: params.buffer,
     mime: params.mime,
     subDir,
-    fileNamePrefix: `${params.receiptNo}-${suffix}`,
+    fileNamePrefix: `${params.receiptNo}${params.attemptId ? `-${params.attemptId}` : ''}-${suffix}`,
   });
 }

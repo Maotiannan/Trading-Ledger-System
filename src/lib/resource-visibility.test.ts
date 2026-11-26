@@ -14,50 +14,61 @@ describe('resource-visibility', () => {
     expect(buildCustomerVisibilityWhere(ownerIds)).toEqual({
       OR: [
         { ownerId: { in: ownerIds } },
-        { orders: { some: { createdBy: { in: ownerIds } } } },
-        { receipts: { some: { createdBy: { in: ownerIds } } } },
+        { orders: { some: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } } },
+        { receipts: { some: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } } },
       ],
     });
 
     expect(buildOrderVisibilityWhere(ownerIds)).toEqual({
+      canceledAt: null,
       OR: [
-        { createdBy: { in: ownerIds } },
+        { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] },
         { customer: { ownerId: { in: ownerIds } } },
       ],
     });
 
     expect(buildInvoiceVisibilityWhere(ownerIds)).toEqual({
+      canceledAt: null,
       OR: [
-        { createdBy: { in: ownerIds } },
-        { orders: { some: { createdBy: { in: ownerIds } } } },
+        { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] },
+        { orders: { some: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } } },
         { orders: { some: { customer: { ownerId: { in: ownerIds } } } } },
       ],
     });
 
     expect(buildReceiptVisibilityWhere(ownerIds)).toEqual({
       OR: [
-        { createdBy: { in: ownerIds } },
+        { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] },
         { customer: { ownerId: { in: ownerIds } } },
-        { order: { createdBy: { in: ownerIds } } },
+        { order: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } },
         { order: { customer: { ownerId: { in: ownerIds } } } },
       ],
     });
 
     expect(buildDetailVisibilityWhere(ownerIds)).toEqual({
       OR: [
-        { createdBy: { in: ownerIds } },
-        { items: { some: { receipt: { createdBy: { in: ownerIds } } } } },
+        { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] },
+        { items: { some: { receipt: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } } } },
         { items: { some: { receipt: { customer: { ownerId: { in: ownerIds } } } } } },
       ],
     });
 
     expect(buildSwiftVisibilityWhere(ownerIds)).toEqual({
       OR: [
-        { createdBy: { in: ownerIds } },
-        { detail: { createdBy: { in: ownerIds } } },
-        { detail: { items: { some: { receipt: { createdBy: { in: ownerIds } } } } } },
+        { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] },
+        { detail: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } },
+        { detail: { items: { some: { receipt: { OR: [{ managedById: { in: ownerIds } }, { managedById: null, createdBy: { in: ownerIds } }] } } } } },
         { detail: { items: { some: { receipt: { customer: { ownerId: { in: ownerIds } } } } } } },
       ],
     });
+  });
+
+  it('retains owner scope when reading canceled order and invoice history', () => {
+    for (const build of [buildOrderVisibilityWhere, buildInvoiceVisibilityWhere]) {
+      const { canceledAt, ...scope } = build(['sales-1']);
+      expect(canceledAt).toBeNull();
+      expect(build(['sales-1'], true)).toEqual(scope);
+      expect(build([], true).OR).not.toHaveLength(0);
+    }
   });
 });

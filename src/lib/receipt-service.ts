@@ -1,11 +1,12 @@
 import { DetailStatus, Prisma, ReceiptStatus, UploadedAssetAttachmentType, UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
+import { lockOrderBalances } from '@/lib/order-balance-lock';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { createOrder, ensureDepositPoolInvoice, findMatchingOrder, updateOrderBalance } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
@@ -18,6 +19,8 @@ import type { ReceiptPayload } from '@/lib/validators';
 import { attachUploadedAssetByPath } from '@/lib/uploaded-asset-service';
 import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notification-projector';
 import { getSwiftFeePerCopy, lockSwiftDetail, syncSwiftTransferState } from '@/lib/swift-transfer-service';
+import { sourceReceiptCustomer } from '@/lib/integrations/mucont-invoice-customer';
+import { promoteUnassociatedDepositOrder } from '@/lib/deposit-order-routing';
 
 function badRequest(message: string, detail?: unknown) {
   return createApiError({ code: 'BAD_REQUEST', status: 400, message, detail });
@@ -188,6 +191,13 @@ export async function createReceiptRecord(params: {
       if (!orderId && effectiveOrderNo) {
         orderId = await createOrder(effectiveOrderNo, currentUser.id, tx);
       }
+      await lockOrderBalances(tx, [orderId]);
+      const promoted = payload.isDeposit && matchedOrder && orderId
+        ? await promoteUnassociatedDepositOrder(tx, orderId, currentUser.id)
+        : false;
+      const sourceCustomer = await sourceReceiptCustomer(tx, orderId, customerId);
+      const boundCustomer = sourceCustomer || customerResolution;
+      const boundPayer = sourceCustomer ? formatCustomerPayerLabel({ name: sourceCustomer.customerPayerName, mark: sourceCustomer.customerMark }) : effectivePayer;
 
       const created = await tx.receipt.create({
         data: {
@@ -195,15 +205,15 @@ export async function createReceiptRecord(params: {
           date: effectiveDate,
           tel: payload.tel || null,
           usd,
-          invNo: effectiveInvNo,
+          invNo: promoted ? null : effectiveInvNo,
           orderNo: effectiveOrderNo,
-          payer: effectivePayer,
-          customerId: customerResolution.customerId,
-          customerMark: customerResolution.customerMark,
-          customerName: customerResolution.customerName,
-          customerPhone: customerResolution.customerPhone,
-          customerCity: customerResolution.customerCity,
-          needsCustomerFix: customerResolution.needsCustomerFix,
+          payer: boundPayer,
+          customerId: boundCustomer.customerId,
+          customerMark: boundCustomer.customerMark,
+          customerName: boundCustomer.customerName,
+          customerPhone: boundCustomer.customerPhone,
+          customerCity: boundCustomer.customerCity,
+          needsCustomerFix: boundCustomer.needsCustomerFix,
           isDeposit: payload.isDeposit || false,
           status: ReceiptStatus.SR_Received,
           imageUrl: imagePath || null,
@@ -216,7 +226,7 @@ export async function createReceiptRecord(params: {
         },
       });
 
-      if (orderId) {
+      if (orderId && !sourceCustomer) {
         await tx.order.update({
           where: { id: orderId },
           data: {
@@ -242,17 +252,15 @@ export async function createReceiptRecord(params: {
         actorId: currentUser.id,
       });
 
-      return { created, orderId };
+      if (orderId) await updateOrderBalance(orderId, tx);
+
+      return { created, orderId, needsCustomerFix: boundCustomer.needsCustomerFix };
     });
   } catch (error) {
     if (isReceiptNoUniqueError(error)) {
       throw receiptNoConflict(receiptNo);
     }
     throw error;
-  }
-
-  if (receipt.orderId) {
-    await updateOrderBalance(receipt.orderId);
   }
 
   await recordAuditEvent({
@@ -265,7 +273,7 @@ export async function createReceiptRecord(params: {
 
   return {
     data: receipt.created,
-    message: customerResolution.needsCustomerFix
+    message: receipt.needsCustomerFix
       ? '请修复客户信息'
       : (mode === 'direct-create' ? '收据已直接创建' : undefined),
   };
@@ -380,7 +388,7 @@ export async function markReceiptReceived(params: {
       detail: { receiptId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(existingReceipt.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(existingReceipt.managedById || existingReceipt.createdBy, currentUser))) {
     throw forbidden('无权确认该收据完成', {
       receiptId,
       createdBy: existingReceipt.createdBy,

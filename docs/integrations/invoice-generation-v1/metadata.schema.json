@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mucont:invoice-metadata:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "items": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "invoiceBatchId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "availability": {
+                "const": "available"
+              },
+              "metadataVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "sourceUpdatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "departureDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "estimatedArrivalDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "releaseDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date"
+              },
+              "creditInsurance": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "creditRecordId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "companyName": {
+                        "type": "string"
+                      },
+                      "sourceVersion": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "creditRecordId",
+                      "companyName",
+                      "sourceVersion"
+                    ]
+                  }
+                ]
+              },
+              "billOfLading": {
+                "anyOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "versionId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      "fileName": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "contentType": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "byteSize": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-f]{64}$"
+                      }
+                    },
+                    "required": [
+                      "versionId",
+                      "fileName",
+                      "contentType",
+                      "byteSize",
+                      "sha256"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "invoiceBatchId",
+              "availability",
+              "metadataVersion",
+              "sourceUpdatedAt",
+              "departureDate",
+              "estimatedArrivalDate",
+              "releaseDate",
+              "creditInsurance",
+              "billOfLading"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "invoiceBatchId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "availability": {
+                "enum": [
+                  "not_found",
+                  "deleted"
+                ]
+              }
+            },
+            "required": [
+              "invoiceBatchId",
+              "availability"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "items"
+  ]
+}

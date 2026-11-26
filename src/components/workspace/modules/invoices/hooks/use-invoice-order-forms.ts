@@ -221,8 +221,9 @@ export function useInvoiceOrderForms(loadCustomerCandidates: LoadCustomerCandida
     setAddError('');
   };
 
-  const openEditOrder = (invoiceId: string, invoiceInvNo: string, order: Order) => {
+  const openEditOrder = (invoiceId: string, invoiceInvNo: string, order: Order, sourceLinked = false) => {
     setEditingOrder({
+      sourceLinked,
       id: order.id,
       orderNo: order.orderNo,
       invNo: invoiceInvNo,
@@ -235,7 +236,7 @@ export function useInvoiceOrderForms(loadCustomerCandidates: LoadCustomerCandida
       customerId: '',
     });
     setEditingOrderCandidates([]);
-    if (order.customerMark) {
+    if (!sourceLinked && order.customerMark) {
       loadCustomerCandidates(
         order.customerMark,
         setEditingOrderCandidates,

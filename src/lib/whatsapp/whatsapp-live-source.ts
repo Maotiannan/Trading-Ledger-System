@@ -3,6 +3,8 @@ import type { EmailNotification } from '@prisma/client';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { SYSTEM_POOL_INVOICE_NOS } from '@/lib/payment-type-classifier';
 import { computeReceiptBalanceAfter } from './whatsapp-buffer';
+import { resolveInvoiceDateProjection } from '@/lib/integrations/mucont-invoice-metadata';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
 
 const customerSelect = { id: true, name: true, companyName: true, mark: true, phone: true, notificationLanguage: true } as const;
 const split = (value: string | null) => [...new Set((value || '').split('/').map(s => s.trim()).filter(Boolean))];
@@ -13,7 +15,9 @@ export async function resolveWhatsAppSource(tx: DbTransactionClient, source: Ema
       customer: { select: customerSelect },
       generatedByBalanceTransfer: { select: { id: true } },
       detailItems: { select: { detailId: true } },
-      order: { include: { receipts: { select: { id: true, createdAt: true, usd: true, status: true, detailItems: { select: { detailId: true } } } }, invoice: true } },
+      order: { include: { receipts: { select: { id: true, createdAt: true, ...receiptBalanceSelect, detailItems: { select: { detailId: true } } } },
+        paymentAllocations: paymentAllocationsSelect,
+        invoice: { include: { mucontSource: true } } } },
     } });
     if (!receipt?.customer || receipt.status === 'SIGNING_PENDING' || receipt.generatedByBalanceTransfer || receipt.receiptNo?.startsWith('TRANSFER-')) return null;
     // Later messages depend on earlier payments too; hold them rather than send
@@ -21,12 +25,13 @@ export async function resolveWhatsAppSource(tx: DbTransactionClient, source: Ema
     const dependencies = (receipt.order?.receipts || [receipt]).filter(row => row.createdAt < receipt.createdAt
       || (row.createdAt.getTime() === receipt.createdAt.getTime() && row.id <= receipt.id));
     const paused = Boolean(await tx.deletionRequest.findFirst({ where: { status: 'PENDING', OR: [
-      { targetType: 'RECEIPT', targetId: { in: [...new Set([receipt.id, ...dependencies.map(row => row.id)])] } },
+      { targetType: 'RECEIPT', targetId: { in: [...new Set([receipt.id, ...dependencies.map(row => row.id),
+        ...(receipt.order?.paymentAllocations || []).map(row => row.funding.originalReceiptId)])] } },
       { targetType: 'DETAIL', targetId: { in: [...new Set([...receipt.detailItems, ...dependencies.flatMap(row => row.detailItems)].map(item => item.detailId))] } },
     ] }, select: { id: true } }));
     const customer = receipt.customer;
     const order = receipt.order?.customerId === customer.id ? receipt.order : null;
-    const invoice = order?.invoice && !SYSTEM_POOL_INVOICE_NOS.has(order.invoice.invNo) ? order.invoice : null;
+    const invoice = order?.invoice && !SYSTEM_POOL_INVOICE_NOS.has(order.invoice.invNo) ? resolveInvoiceDateProjection(order.invoice) : null;
     return { customer, paused, snapshot: {
       customerId: customer.id, customerName: formatCustomerPayerLabel(customer), mark: customer.mark,
       language: customer.notificationLanguage, orderId: order?.id || null,
@@ -39,9 +44,11 @@ export async function resolveWhatsAppSource(tx: DbTransactionClient, source: Ema
     } };
   }
   if (!source.invoiceId || !source.customerId) return null;
-  const invoice = await tx.invoice.findUnique({ where: { id: source.invoiceId }, include: {
+  const invoiceRow = await tx.invoice.findUnique({ where: { id: source.invoiceId }, include: {
+    mucontSource: true,
     orders: { where: { customerId: source.customerId }, include: { customer: { select: customerSelect } } },
   } });
+  const invoice = invoiceRow ? resolveInvoiceDateProjection(invoiceRow) : null;
   const customer = invoice?.orders[0]?.customer;
   const date = source.type === 'SHIPMENT' ? invoice?.shipDate : invoice?.releaseDate;
   if (!invoice || !customer || !date) return null;

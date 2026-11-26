@@ -299,7 +299,7 @@ describe('ReceiptCanvas', () => {
     expect(payerSignatureX).toBeGreaterThan(450);
   });
 
-  it('uses the approved interactive signature row layout for labels, signatures, and underline positions', async () => {
+  it.each(['Transferred via bank account', 'Espèces'])('draws receiver %s using the approved signature row layout', async (receivedBy) => {
     const ref = createRef<ReceiptCanvasHandle>();
 
     render(
@@ -307,7 +307,7 @@ describe('ReceiptCanvas', () => {
         ref={ref}
         layout={{
           ...layout,
-          receivedBy: 'Transferred via bank account',
+          receivedBy,
         }}
         receiverSignature="data:image/png;base64,receiver"
         payerSignature="data:image/png;base64,payer"
@@ -317,7 +317,7 @@ describe('ReceiptCanvas', () => {
     await ref.current?.exportBlob();
 
     const recuParCall = fillTextCalls.find((call) => call.text === 'Reçu par :');
-    const receivedByCall = fillTextCalls.find((call) => call.text === 'Transferred via bank account');
+    const receivedByCall = fillTextCalls.find((call) => call.text === receivedBy && call.y > recuParCall!.y);
     const signatureCall = fillTextCalls.find((call) => call.text === 'Signature :');
     const payerLabelCall = fillTextCalls.find((call) => call.text === 'Signature du payeur :');
     expect(recuParCall).toBeDefined();

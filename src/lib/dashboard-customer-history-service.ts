@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
+import { refreshSourceInvoiceDateRows } from '@/lib/integrations/mucont-invoice-metadata';
 import { apiErrorCodes, createApiError } from '@/lib/api-error';
 import {
   buildDashboardOutstandingSnapshot,
@@ -8,6 +9,7 @@ import {
 import { findOrderIdByNoOrAlias } from '@/lib/order-alias-db';
 import { readCustomerHistory, type CustomerHistoryReadInput } from '@/lib/customer-history-service';
 import { normalizeOrderIdentifier } from '@/lib/order-name-kernel';
+import { customerBusinessNames } from '@/lib/customer-business-label';
 import type { CurrentUser } from '@/lib/request-auth';
 import {
   buildCustomerVisibilityWhere,
@@ -27,12 +29,6 @@ export type DashboardCustomerSearchResult = {
   query: string;
   items: DashboardCustomerSearchItem[];
 };
-
-function uniqueOrderNames(primary: string, aliases: Array<{ orderName: string }>): string[] {
-  return Array.from(new Set([primary, ...aliases.map((row) => row.orderName)]
-    .map((value) => String(value || '').trim())
-    .filter(Boolean)));
-}
 
 export async function searchDashboardCustomers(
   currentUser: CurrentUser,
@@ -73,7 +69,7 @@ export async function searchDashboardCustomers(
       name: true,
       orderNames: {
         select: { orderName: true, normalizedOrderName: true, isPrimary: true },
-        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
       },
     },
   });
@@ -98,7 +94,7 @@ export async function searchDashboardCustomers(
       customerId: row.id,
       mark: row.mark,
       name: row.name,
-      orderNames: uniqueOrderNames(row.orderName, row.orderNames),
+      orderNames: customerBusinessNames(row),
     })),
   };
 }
@@ -128,7 +124,7 @@ export async function getDashboardCustomerHistory(
     },
     select: dashboardOutstandingInvoiceSelect(customerOrderWhere),
   });
-  const snapshot = buildDashboardOutstandingSnapshot(invoices);
+  const snapshot = buildDashboardOutstandingSnapshot(await refreshSourceInvoiceDateRows(invoices));
 
   return {
     data: {

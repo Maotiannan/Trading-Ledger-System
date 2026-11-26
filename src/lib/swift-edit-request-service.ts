@@ -1,3 +1,4 @@
+import { canEditSwiftStatus } from '@/lib/ledger-action-policy';
 import { Prisma, SwiftEditRequestStatus, UserRole } from '@prisma/client';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -52,8 +53,8 @@ function parseEditableDateValue(date: string | null | undefined): Date | null {
   return parsed;
 }
 
-function assertEditableSwiftStatus(status: string, detail?: unknown) {
-  if (status === 'RECEIVED') {
+function assertEditableSwiftStatus(status: string, detail?: unknown, parentStatus?: string) {
+  if (!canEditSwiftStatus(status, parentStatus)) {
     throw badRequest('RECEIVED状态下禁止修改SWIFT', detail);
   }
 }
@@ -104,6 +105,7 @@ function mapSwiftEditRequestRow(row: {
   beforeSnapshot: Prisma.JsonValue;
   afterSnapshot: Prisma.JsonValue;
   reviewComment: string | null;
+  swift: { status: string; detail: { status: string } };
   requester: { name: string | null; email: string | null };
   approver: { name: string | null; email: string | null } | null;
 }): SwiftEditRequestRow {
@@ -112,6 +114,7 @@ function mapSwiftEditRequestRow(row: {
     swiftId: row.swiftId,
     status: row.status,
     requestedBy: row.requestedBy,
+    ...(row.status === 'PENDING' && row.swift && !canEditSwiftStatus(row.swift.status, row.swift.detail?.status) ? { approvalBlocked: true } : {}),
     requestedByName: row.requester.name || row.requester.email || row.requestedBy,
     approvedBy: row.approvedBy,
     approvedByName: row.approver
@@ -194,6 +197,7 @@ export async function requestSwiftEdit(params: {
         select: {
           id: true,
           createdBy: true,
+          detail: { select: { status: true } },
           status: true,
           date: true,
           amount: true,
@@ -211,7 +215,7 @@ export async function requestSwiftEdit(params: {
         });
       }
 
-      assertEditableSwiftStatus(swift.status, { swiftId, status: swift.status });
+      assertEditableSwiftStatus(swift.status, { swiftId, status: swift.status }, swift.detail?.status);
 
       const existingPending = await tx.swiftEditRequest.findFirst({
         where: {
@@ -329,7 +333,7 @@ export async function reviewSwiftEdit(params: {
 
     const visibleSwift = await tx.swift.findFirst({
       where: buildScopedSwiftWhere(request.swiftId, ownerIds),
-      select: { id: true, status: true },
+      select: { id: true, status: true, detail: { select: { status: true } } },
     });
     if (!visibleSwift) {
       throw forbidden('SWIFT_EDIT_REVIEW_FORBIDDEN', '无权审批该SWIFT修改申请', {
@@ -338,9 +342,9 @@ export async function reviewSwiftEdit(params: {
       });
     }
 
-    assertEditableSwiftStatus(visibleSwift.status, { swiftId: request.swiftId, status: visibleSwift.status });
-
-    const nextSnapshot = validateSwiftPatch(request.afterSnapshot as SwiftSnapshotSource as SwiftEditablePatch);
+    if (decision === 'approve') {
+      assertEditableSwiftStatus(visibleSwift.status, { swiftId: request.swiftId, status: visibleSwift.status }, visibleSwift.detail?.status);
+    }
     const reviewedAt = new Date();
     const claimResult = await tx.swiftEditRequest.updateMany({
       where: {
@@ -362,6 +366,7 @@ export async function reviewSwiftEdit(params: {
     }
 
     if (decision === 'approve') {
+      const nextSnapshot = validateSwiftPatch(request.afterSnapshot as SwiftSnapshotSource as SwiftEditablePatch);
       await updateSwiftRecord({
         currentUser,
         swiftId: request.swiftId,
@@ -393,6 +398,7 @@ export async function listSwiftEditRequests(currentUser: CurrentUser): Promise<S
   const rows = await db.swiftEditRequest.findMany({
     where,
     include: {
+      swift: { select: { status: true, detail: { select: { status: true } } } },
       requester: {
         select: {
           name: true,

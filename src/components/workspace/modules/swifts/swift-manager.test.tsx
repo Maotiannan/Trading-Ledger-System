@@ -1,3 +1,4 @@
+import { clearClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SwiftManager } from './swift-manager';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
@@ -53,6 +54,7 @@ const mockUseSwiftActions = useSwiftActions as jest.Mock;
 
 describe('SwiftManager', () => {
   beforeEach(() => {
+    clearClientUserPreferences();
     delete (globalThis as { __swiftListProps?: SwiftListProps }).__swiftListProps;
     delete (globalThis as { __swiftEditDialogProps?: SwiftEditDialogProps }).__swiftEditDialogProps;
     mockApiCall.mockClear();

@@ -1,4 +1,6 @@
 import { UserRole } from '@prisma/client';
+// Transaction locking/source guards have dedicated API and boundary tests.
+jest.mock('@/lib/order-balance-lock', () => ({ guardFinancialWrites: (tx: unknown) => tx }));
 import { db } from '@/lib/db';
 import { recordAuditEvent } from '@/lib/audit';
 import { getSystemSettings } from '@/lib/system-settings';
@@ -124,7 +126,7 @@ describe('customer-fix-service', () => {
   });
 
   it('resolves order customer fix in transaction and records audit', async () => {
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'QZ-01' });
     mockDb.customer.create.mockResolvedValueOnce({
       id: 'customer-1',
       mark: 'IB',
@@ -133,8 +135,8 @@ describe('customer-fix-service', () => {
       phone: '622443103',
       city: 'Conakry',
     });
-    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'IB-01' });
-    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'QZ-01' });
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'QZ-01' }]);
     mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
     mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 0 });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
@@ -163,7 +165,7 @@ describe('customer-fix-service', () => {
   });
 
   it('resolves receipt customer fix and syncs linked order', async () => {
-    mockDb.receipt.findUnique.mockResolvedValueOnce({ id: 'receipt-1', createdBy: 'sales-1', orderId: 'order-1', orderNo: 'IB-01' });
+    mockDb.receipt.findUnique.mockResolvedValueOnce({ id: 'receipt-1', createdBy: 'sales-1', orderId: 'order-1', orderNo: 'QZ-01' });
     mockDb.customer.create.mockResolvedValueOnce({
       id: 'customer-1',
       mark: 'IB',
@@ -172,9 +174,9 @@ describe('customer-fix-service', () => {
       phone: '622443103',
       city: 'Conakry',
     });
-    mockDb.receipt.update.mockResolvedValueOnce({ orderId: 'order-1', orderNo: 'IB-01' });
+    mockDb.receipt.update.mockResolvedValueOnce({ orderId: 'order-1', orderNo: 'QZ-01' });
     mockDb.order.update.mockResolvedValueOnce({ id: 'order-1' });
-    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'QZ-01' }]);
     mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
     mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
@@ -203,7 +205,7 @@ describe('customer-fix-service', () => {
   });
 
   it('forbids sales from fixing another sales order', async () => {
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-2', orderNo: 'IB-01' });
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-2', orderNo: 'QZ-01' });
 
     await expect(resolveOrderCustomerFix(makeUser({ role: UserRole.SALES, id: 'sales-1' }), {
       orderId: 'order-1',
@@ -252,7 +254,7 @@ describe('customer-fix-service', () => {
 
   it('updates existing customer instead of creating a new one when scoped match exists', async () => {
     mockResolveCustomerUpsertTargetId.mockResolvedValueOnce('customer-1');
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'QZ-01' });
     mockDb.customer.update.mockResolvedValueOnce({
       id: 'customer-1',
       mark: 'IB',
@@ -261,8 +263,8 @@ describe('customer-fix-service', () => {
       phone: '622443103',
       city: 'Conakry',
     });
-    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'IB-01' });
-    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'QZ-01' });
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'QZ-01' }]);
     mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
     mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 0 });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
@@ -291,7 +293,7 @@ describe('customer-fix-service', () => {
   });
 
   it('maps unexpected transaction errors to structured api errors', async () => {
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'QZ-01' });
     mockDb.$transaction.mockImplementationOnce(async () => {
       throw new Error('db fail');
     });
@@ -318,8 +320,8 @@ describe('customer-fix-service', () => {
     });
   });
 
-  it('links an unresolved order fix target to an existing customer and syncs the same group', async () => {
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'sales-1', orderNo: 'IB-01' });
+  it('links a handed-over order and scopes same-group repair by current custody rather than historical author', async () => {
+    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', createdBy: 'former-sales', managedById: 'sales-1', orderNo: 'QZ-01' });
     mockDb.customer.findFirst.mockResolvedValueOnce({
       id: 'customer-1',
       mark: 'IB',
@@ -329,8 +331,8 @@ describe('customer-fix-service', () => {
       city: 'Conakry',
       ownerId: 'sales-1',
     });
-    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'IB-01' });
-    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.update.mockResolvedValueOnce({ orderNo: 'QZ-01' });
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'QZ-01' }]);
     mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
     mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 0 });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
@@ -341,6 +343,14 @@ describe('customer-fix-service', () => {
     });
 
     expect(result.message).toBe('订单已关联到已有客户');
+    const custody = { OR: [
+      { managedById: { in: ['sales-1'] } },
+      { managedById: null, createdBy: { in: ['sales-1'] } },
+    ] };
+    expect(mockDb.order.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: custody }));
+    expect(mockDb.receipt.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { orderNo: { not: null }, ...custody },
+    }));
     expect(mockDb.order.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'order-1' },
       data: expect.objectContaining({
@@ -352,7 +362,7 @@ describe('customer-fix-service', () => {
   });
 
   it('links an unresolved receipt fix target to an existing customer and syncs the linked order', async () => {
-    mockDb.receipt.findUnique.mockResolvedValueOnce({ id: 'receipt-1', createdBy: 'sales-1', orderId: 'order-1', orderNo: 'IB-01' });
+    mockDb.receipt.findUnique.mockResolvedValueOnce({ id: 'receipt-1', createdBy: 'sales-1', orderId: 'order-1', orderNo: 'QZ-01' });
     mockDb.customer.findFirst.mockResolvedValueOnce({
       id: 'customer-1',
       mark: 'IB',
@@ -362,9 +372,9 @@ describe('customer-fix-service', () => {
       city: 'Conakry',
       ownerId: 'sales-1',
     });
-    mockDb.receipt.update.mockResolvedValueOnce({ orderId: 'order-1', orderNo: 'IB-01' });
+    mockDb.receipt.update.mockResolvedValueOnce({ orderId: 'order-1', orderNo: 'QZ-01' });
     mockDb.order.update.mockResolvedValueOnce({ id: 'order-1' });
-    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'IB-01' }]);
+    mockDb.order.findMany.mockResolvedValueOnce([{ id: 'order-1', orderNo: 'QZ-01' }]);
     mockDb.order.updateMany.mockResolvedValueOnce({ count: 1 });
     mockDb.receipt.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);

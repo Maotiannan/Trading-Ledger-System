@@ -60,7 +60,12 @@ case "\${1:-}" in
     if [ -f "$FAKE_DOCKER_COUNT" ]; then count="$(cat "$FAKE_DOCKER_COUNT")"; fi
     count=$((count + 1))
     printf '%s' "$count" > "$FAKE_DOCKER_COUNT"
-    if [ "$count" -lt "$FAKE_DOCKER_SUCCEED_ON" ]; then exit 42; fi
+    if [ -n "\${FAKE_PUBLISH_EXIT:-}" ]; then
+      echo 'PUBLISHED_SNAPSHOT=snapshots/2026/11/18/muledger-20261118-023010'
+      exit "$FAKE_PUBLISH_EXIT"
+    fi
+    if [ "$count" -lt "$FAKE_DOCKER_SUCCEED_ON" ]; then exit "\${FAKE_DOCKER_FAIL_CODE:-42}"; fi
+    echo 'PUBLISHED_SNAPSHOT=snapshots/2026/11/18/muledger-20261118-023010'
     exit 0
     ;;
 esac
@@ -105,6 +110,26 @@ function runRunner(
 }
 
 describe('MULEDGER Docker backup runner', () => {
+  it.each([
+    ['75', 'DEFERRED', 0, 'HEALTHY'],
+    ['1', 'FAILED', 1, 'CLEANUP_FAILED'],
+  ] as const)('does not redump after publication with cleanup exit %s', (exit, cleanup, expectedExit, health) => {
+    const f = fixture();
+    try {
+      const result = runRunner(f, { FAKE_PUBLISH_EXIT: exit });
+      expect(result.status).toBe(expectedExit);
+      expect(readFileSync(f.dockerCount, 'utf8')).toBe('1');
+      const status = JSON.parse(readFileSync(f.statusFile, 'utf8'));
+      expect(status).toMatchObject({ status: 'SUCCESS', attempts: 1, cleanupStatus: cleanup,
+        cleanupExitCode: Number(exit), publishedSnapshot: 'snapshots/2026/11/18/muledger-20261118-023010' });
+      expect(status.lastSuccessfulAt).toBe(status.completedAt);
+      const check = spawnSync('bash', [statusChecker, '--status', f.statusFile], { encoding: 'utf8' });
+      expect(check.status).toBe(expectedExit);
+      expect(check.stdout).toContain(`RESULT=${health}`);
+      expect(check.stdout).toContain(`CLEANUP_STATUS=${cleanup}`);
+    } finally { f.cleanup(); }
+  });
+
   it('retries inside Docker and records a successful scheduled backup', () => {
     const f = fixture();
     try {
@@ -137,22 +162,25 @@ describe('MULEDGER Docker backup runner', () => {
     }
   });
 
-  it('records a failed scheduled backup after the configured attempts', () => {
+  it.each(['42', '75'])('still retries an unpublished backup after worker exit %s', (failure) => {
     const f = fixture();
     try {
       const result = runRunner(f, {
         FAKE_DOCKER_SUCCEED_ON: '99',
+        FAKE_DOCKER_FAIL_CODE: failure,
         MULEDGER_BACKUP_MAX_ATTEMPTS: '2',
       });
 
-      expect(result.status).toBe(42);
+      expect(result.status).toBe(Number(failure));
       expect(readFileSync(f.dockerCount, 'utf8')).toBe('2');
       const status = JSON.parse(readFileSync(f.statusFile, 'utf8'));
       expect(status).toMatchObject({
         schemaVersion: 1,
         status: 'FAILED',
         attempts: 2,
-        exitCode: 42,
+        exitCode: Number(failure),
+        publishedSnapshot: null,
+        cleanupStatus: 'NOT_RUN',
         mode: 'BACKUP',
         lastSuccessfulAt: null,
       });

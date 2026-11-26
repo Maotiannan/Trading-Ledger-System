@@ -8,11 +8,11 @@ import { MoneyInput } from '@/components/workspace/modules/shared/money-input';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { formatUsdAmount } from '@/lib/display-format';
 import {
-  RECEIPT_GENERATOR_BANK_RECEIVED_BY,
+  RECEIPT_GENERATOR_CASH_RECEIVED_BY,
   RECEIPT_GENERATOR_FRAIS_STATUSES,
   RECEIPT_GENERATOR_PAYMENT_MODES,
   RECEIPT_GENERATOR_PAYMENT_TYPES,
-  RECEIPT_GENERATOR_RECEIVED_BY,
+  RECEIPT_GENERATOR_RECEIVED_BY_OPTIONS,
   normalizeReceiptGeneratorFraisStatus,
   normalizeReceiptGeneratorPaymentMode,
   normalizeReceiptGeneratorPaymentType,
@@ -200,8 +200,13 @@ export function ReceiptGeneratorLaunchDialog({
               value={receivedBy}
               onChange={(event) => onReceivedByChange(normalizeReceiptGeneratorReceivedBy(event.target.value))}
             >
-              <option value={RECEIPT_GENERATOR_RECEIVED_BY}>{RECEIPT_GENERATOR_RECEIVED_BY}</option>
-              <option value={RECEIPT_GENERATOR_BANK_RECEIVED_BY}>{RECEIPT_GENERATOR_BANK_RECEIVED_BY}</option>
+              {RECEIPT_GENERATOR_RECEIVED_BY_OPTIONS.map((receiver) => (
+                <option key={receiver} value={receiver}>
+                  {receiver === RECEIPT_GENERATOR_CASH_RECEIVED_BY
+                    ? tx('现金（Espèces）', 'Cash (Espèces)')
+                    : receiver}
+                </option>
+              ))}
             </select>
           </div>
 

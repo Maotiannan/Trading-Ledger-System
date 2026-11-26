@@ -1,10 +1,11 @@
+import { canEditPaymentDetailStatus } from '@/lib/ledger-action-policy';
 import { DetailSourceMode, DetailStatus, ReceiptStatus, UploadedAssetAttachmentType } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError, isApiError } from '@/lib/api-error';
-import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { findMatchingReceipt, findOrCreateOrder, updateOrderBalance, type FindMatchingReceiptOptions } from '@/lib/matching';
 import { resolveCustomer } from '@/lib/customer-matching';
 import type { CurrentUser } from '@/lib/request-auth';
@@ -17,6 +18,8 @@ import { projectPaymentReceiptInTransaction } from '@/lib/email/email-notificati
 import { getSwiftFeePerCopy, lockSwiftDetail, syncSwiftTransferState } from '@/lib/swift-transfer-service';
 import { calculateSwiftTransferSummary } from '@/lib/swift-transfer-summary';
 import { addMoney } from '@/lib/money';
+import { lockOrderBalances } from '@/lib/order-balance-lock';
+import { sourceReceiptCustomer } from '@/lib/integrations/mucont-invoice-customer';
 
 type DetailProcessedItem = {
   mark: string | null;
@@ -63,7 +66,7 @@ async function getAccessibleReceipt(
 ) {
   const receipt = await client.receipt.findUnique({
     where: { id: receiptId },
-    select: { id: true, createdBy: true, imageUrl: true, imageName: true, status: true },
+    select: { id: true, createdBy: true, managedById: true, imageUrl: true, imageName: true, status: true },
   });
   if (!receipt) {
     throw createApiError({
@@ -73,7 +76,7 @@ async function getAccessibleReceipt(
       detail: { receiptId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(receipt.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(receipt.managedById || receipt.createdBy, currentUser))) {
     throw forbidden('无权关联该收据', {
       receiptId,
       createdBy: receipt.createdBy,
@@ -161,7 +164,9 @@ async function processDetailItems(params: {
 
     if (!receiptId && item.orderNo) {
       const orderId = await findOrCreateOrder(item.orderNo, params.currentUser.id, params.tx);
-      const customerInfo = await resolveDetailItemCustomer(item.mark);
+      await lockOrderBalances(params.tx, [orderId]);
+      const sourceCustomer = await sourceReceiptCustomer(params.tx, orderId);
+      const customerInfo = sourceCustomer || await resolveDetailItemCustomer(item.mark);
       const newReceipt = await params.tx.receipt.create({
         data: {
           orderNo: item.orderNo,
@@ -184,7 +189,7 @@ async function processDetailItems(params: {
       createdReceiptIds.push(newReceipt.id);
       touchedOrderIds.add(orderId);
 
-      await params.tx.order.update({
+      if (!sourceCustomer) await params.tx.order.update({
         where: { id: orderId },
         data: {
           customerId: customerInfo.customerId,
@@ -267,13 +272,13 @@ async function applyDetailUpdate(params: {
       detail: { detailId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(existingDetail.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(existingDetail.managedById || existingDetail.createdBy, currentUser))) {
     throw forbidden('无权修改该明细', {
       detailId,
       createdBy: existingDetail.createdBy,
     });
   }
-  if (existingDetail.status === DetailStatus.RECEIVED) {
+  if (!canEditPaymentDetailStatus(existingDetail.status)) {
     throw badRequest('RECEIVED状态下禁止修改', { detailId, status: existingDetail.status });
   }
 
@@ -413,12 +418,9 @@ export async function createDetailRecord(params: {
       });
     }
 
+    for (const orderId of processedItems.touchedOrderIds) await updateOrderBalance(orderId, tx);
     return { detail: created, touchedOrderIds: processedItems.touchedOrderIds };
   });
-
-  for (const orderId of result.touchedOrderIds) {
-    await updateOrderBalance(orderId);
-  }
 
   try {
     const previewImage = await ensureDetailPreviewImage(result.detail.id);
@@ -456,17 +458,8 @@ export async function updateDetailRecord(params: {
     throw badRequest('缺少明细ID');
   }
 
-  const result = txClient
-    ? await applyDetailUpdate({
-        tx: txClient,
-        currentUser,
-        detailId,
-        payload,
-        imagePath,
-        imageName,
-        historyNote,
-      })
-    : await runInTransaction(async (tx) => applyDetailUpdate({
+  const applyAndRecalculate = async (tx: DbTransactionClient | typeof db) => {
+    const result = await applyDetailUpdate({
         tx,
         currentUser,
         detailId,
@@ -474,17 +467,13 @@ export async function updateDetailRecord(params: {
         imagePath,
         imageName,
         historyNote,
-      }), { isolationLevel: 'ReadCommitted' });
-
-  if (txClient) {
-    for (const orderId of result.touchedOrderIds) {
-      await updateOrderBalance(orderId, txClient as never);
-    }
-  } else {
-    for (const orderId of result.touchedOrderIds) {
-      await updateOrderBalance(orderId);
-    }
-  }
+      });
+    for (const orderId of [...result.touchedOrderIds].sort()) await updateOrderBalance(orderId, tx);
+    return result;
+  };
+  const result = txClient && txClient !== db
+    ? await applyAndRecalculate(txClient)
+    : await runInTransaction(applyAndRecalculate, { isolationLevel: 'ReadCommitted' });
 
   if (!skipAudit) {
     await recordAuditEvent({

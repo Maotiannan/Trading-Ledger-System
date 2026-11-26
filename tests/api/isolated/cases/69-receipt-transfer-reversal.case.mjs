@@ -86,6 +86,7 @@ async function transferBalance(t, { sourceOrderId, targetOrderNo, amount }) {
   await t.request('PUT', '/api/invoice', {
     json: {
       action: 'transferBalance',
+      requestId: t.unique('transfer-intent'),
       fromOrderId: sourceOrderId,
       toOrderNo: targetOrderNo,
       transferAmount: amount,

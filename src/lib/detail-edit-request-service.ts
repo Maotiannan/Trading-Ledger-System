@@ -1,6 +1,7 @@
 import { canEditPaymentDetailStatus } from '@/lib/ledger-action-policy';
 import { DetailEditRequestStatus, Prisma, UserRole } from '@prisma/client';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
+import { checkedApprovalPatch } from '@/lib/approval-baseline';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
@@ -326,12 +327,9 @@ export async function reviewDetailEdit(params: {
   const ownerIds = Array.from(scope.ownerVisibleIds);
 
   await runInTransaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM DetailEditRequest WHERE id = ${requestId} FOR UPDATE`;
     const request = await tx.detailEditRequest.findUnique({
       where: { id: requestId },
-      include: {
-        detail: true,
-        requester: true,
-      },
     });
 
     if (!request) {
@@ -356,9 +354,13 @@ export async function reviewDetailEdit(params: {
       });
     }
 
+    if (decision === 'approve') {
+      await tx.$queryRaw`SELECT id FROM Detail WHERE id = ${request.detailId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM DetailItem WHERE detailId = ${request.detailId} ORDER BY id FOR UPDATE`;
+    }
     const visibleDetail = await tx.detail.findFirst({
       where: buildScopedDetailWhere(request.detailId, ownerIds),
-      select: { id: true, status: true },
+      select: { id: true, status: true, date: true, agentId: true, items: { select: { mark: true, orderNo: true, amount: true, receiptId: true } } },
     });
     if (!visibleDetail) {
       throw forbidden('DETAIL_EDIT_REVIEW_FORBIDDEN', '无权审批该付款明细修改申请', {
@@ -391,8 +393,10 @@ export async function reviewDetailEdit(params: {
     }
 
     if (decision === 'approve') {
-      const nextSnapshot = validateDetailPatch(request.afterSnapshot as DetailSnapshotSource as DetailEditablePatch);
-      const result = await updateDetailRecord({
+      const current: DetailEditablePatch = { date: visibleDetail.date?.toISOString().slice(0, 10) ?? null, agentId: visibleDetail.agentId,
+        items: visibleDetail.items.map(item => ({ ...item, amount: Number(item.amount) })) };
+      const nextSnapshot = checkedApprovalPatch(current, request.beforeSnapshot, request.afterSnapshot, validateDetailPatch);
+      await updateDetailRecord({
         currentUser,
         detailId: request.detailId,
         payload: nextSnapshot,
@@ -400,23 +404,17 @@ export async function reviewDetailEdit(params: {
         skipAudit: true,
         historyNote: '审批修改前保存',
       });
-      return result.touchedOrderIds;
     }
-    return [];
+    await recordAuditEventInTransaction(tx, {
+      action: decision === 'approve'
+        ? auditActions.DETAIL_EDIT_REQUEST_APPROVE
+        : auditActions.DETAIL_EDIT_REQUEST_REJECT,
+      actorId: currentUser.id,
+      targetType: auditTargetTypes.DETAIL_EDIT_REQUEST,
+      targetId: requestId,
+      metadata: { decision, comment: comment ?? null },
+    });
   }, { isolationLevel: 'ReadCommitted' });
-
-  await recordAuditEvent({
-    action: decision === 'approve'
-      ? auditActions.DETAIL_EDIT_REQUEST_APPROVE
-      : auditActions.DETAIL_EDIT_REQUEST_REJECT,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.DETAIL_EDIT_REQUEST,
-    targetId: requestId,
-    metadata: {
-      decision,
-      comment: comment ?? null,
-    },
-  });
 
   return { message: toReviewDecisionMessage(decision) };
 }

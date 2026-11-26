@@ -51,6 +51,7 @@ const codeMessages: Record<ApiErrorCode, Record<SupportedLocale, string>> = {
   DELETION_REQUEST_EXISTS: { zh: '删除申请已存在', en: 'Deletion request already exists' },
   DELETION_REQUEST_NOT_FOUND: { zh: '删除申请不存在', en: 'Deletion request not found' },
   DELETION_REQUEST_ALREADY_PROCESSED: { zh: '删除申请已处理', en: 'Deletion request has already been processed' },
+  APPROVAL_BASELINE_CONFLICT: { zh: '原单已变更或申请基线不完整。请拒绝旧申请，按最新信息重新提交。', en: 'The record changed or its baseline is incomplete. Reject the old request and resubmit using the current record.' },
   DELETION_REQUEST_STATE_CHANGED: { zh: '删除申请状态已变化', en: 'Deletion request state has changed' },
   RECEIPT_EDIT_TRANSFER_REVERSAL_REQUIRED: {
     zh: '该收据已发生余额转移。请确认撤销转移后再修改收据。',

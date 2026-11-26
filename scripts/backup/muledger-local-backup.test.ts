@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -118,6 +119,39 @@ function createSnapshotDirectory(backup: string, stamp: string): string {
 
 describe('MULEDGER NAS local backup', () => {
   jest.setTimeout(30_000);
+
+  it.each(['expired', 'root', 'recent', 'EACCES', 'EIO'])('handles a disappearing retention path: %s', (scenario) => {
+    const f = fixture();
+    try {
+      const expired = createSnapshotDirectory(f.backup, '20200101-010000');
+      const today = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+      const published = realpathSync(createSnapshotDirectory(f.backup, today + '-023000'));
+      writeFileSync(path.join(published, 'manifest.json'), '{}');
+      const recent = createSnapshotDirectory(f.backup, today + '-010000');
+      const root = realpathSync(path.join(f.backup, 'snapshots'));
+      const oldDay = realpathSync(path.dirname(expired));
+      const injected = path.join(f.root, 'filesystem.cjs');
+      writeFileSync(injected, `
+        const fs = require('node:fs'), orig = fs.readdirSync;
+        fs.readdirSync = function (p, ...args) {
+          if (p === process.env.FAULT_PATH) {
+            if (process.env.SCENARIO === 'root') fs.renameSync(process.env.ROOT, process.env.ROOT + '-gone');
+            else if (['expired','recent'].includes(process.env.SCENARIO)) fs.renameSync(p, p+'-gone');
+            else throw Object.assign(new Error(process.env.SCENARIO), {code:process.env.SCENARIO, syscall:'scandir', path:p});
+          }
+          return orig.call(fs,p,...args);
+        };
+      `);
+      const result = spawnSync(process.execPath, ['-r', injected, path.join(path.dirname(script), 'prune-local-snapshots.cjs'), root, published, '30'], {
+        encoding: 'utf8', env: { ...process.env, ROOT: root, SCENARIO: scenario, FAULT_PATH: scenario === 'recent' ? path.dirname(published) : oldDay },
+      });
+      expect(result.status).toBe(scenario === 'expired' ? 0 : 1);
+      if (scenario === 'expired') {
+        expect(existsSync(path.join(published, 'manifest.json'))).toBe(true);
+        expect(existsSync(path.join(recent, 'sentinel.txt'))).toBe(true);
+      }
+    } finally { f.cleanup(); }
+  });
 
   it('prints a local plan without creating files during dry run', () => {
     const f = fixture();

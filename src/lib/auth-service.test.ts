@@ -1,7 +1,7 @@
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { hashPassword, verifyPassword } from '@/lib/auth';
-import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
+import { recordAuditEventInTransaction } from '@/lib/audit';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import {
   changeCurrentUserPassword,
@@ -94,7 +94,6 @@ const mockDb = db as unknown as {
 
 const mockHashPassword = hashPassword as jest.Mock;
 const mockVerifyPassword = verifyPassword as jest.Mock;
-const mockRecordAuditEvent = recordAuditEvent as jest.Mock;
 const mockGetHierarchyScope = getHierarchyScope as jest.Mock;
 
 describe('auth-service', () => {
@@ -135,7 +134,7 @@ describe('auth-service', () => {
 
     expect(mockDb.user.create).toHaveBeenCalled();
     expect(result.data.role).toBe(UserRole.SALES);
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({
       action: 'USER_CREATE',
       targetType: 'USER',
       targetId: 'sales-child',
@@ -168,7 +167,7 @@ describe('auth-service', () => {
     });
 
     expect(result.data.role).toBe(UserRole.SALES);
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({
       action: 'USER_ROLE_UPDATE',
       metadata: expect.objectContaining({ previousRole: UserRole.USER, nextRole: UserRole.SALES }),
     }));
@@ -212,7 +211,7 @@ describe('auth-service', () => {
     });
 
     expect(mockDb.user.update).toHaveBeenCalledWith({ where: { id: 'user-child' }, data: { password: 'hashed-password', sessionVersion: { increment: 1 } } });
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'USER_PASSWORD_RESET' }));
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({ action: 'USER_PASSWORD_RESET' }));
   });
 
   it('changes current user password after verifying old password', async () => {

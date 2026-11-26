@@ -130,6 +130,23 @@ describe('DeletionManager approval pagination', () => {
     jest.useRealTimers();
   });
 
+  it('shows the three values for a conflict and leaves rejection available', async () => {
+    mockApiCall.mockImplementation(async (endpoint, options) => {
+      if (options?.body?.includes('"review-edit"')) return { success: false, code: 'APPROVAL_BASELINE_CONFLICT',
+        detail: { fields: [{ field: 'payer', known: true, before: 'Old', requested: 'Proposed', current: 'Current' }] } };
+      return { success: true, data: endpoint === 'receipt' ? buildReceiptEditRequests(1) : [] };
+    });
+    render(<DeletionManager />);
+    await act(async () => { jest.runOnlyPendingTimers(); });
+    const row = screen.getByText(/ORD-1 → ORD-UPDATED-1/).closest('tr')!;
+    await act(async () => { fireEvent.click(within(row).getByRole('button', { name: '批准' })); });
+    expect(screen.getByText('申请时: Old')).toBeVisible();
+    expect(screen.getByText('申请修改为: Proposed')).toBeVisible();
+    expect(screen.getByText('当前值: Current')).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('拒绝此申请');
+    expect(within(row).getByRole('button', { name: '拒绝' })).toBeEnabled();
+  });
+
   it('offers only rejection for a locked request and reports an unsuccessful decision', async () => {
     mockApiCall.mockImplementation(async (endpoint, options) => {
       const action = options?.body ? JSON.parse(options.body).action : '';

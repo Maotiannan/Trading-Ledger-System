@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { apiCall, getApiErrorMessage, useUiText } from '@/components/workspace/shared';
+import { getApiErrorCode, getApiErrorDetail } from '@/components/workspace/api/client';
+import type { ApprovalDifference } from '@/lib/approval-baseline';
 import { submitSearchOnEnter } from '@/components/workspace/shared/search-key';
 import { formatAppDate } from '@/lib/app-time';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
@@ -54,6 +56,7 @@ export function DeletionManager() {
   const canApprove = user?.role === 'ADMIN';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [conflicts, setConflicts] = useState<ApprovalDifference[]>([]);
   const [receiptEditRequests, setReceiptEditRequests] = useState<ReceiptEditRequestRow[]>([]);
   const [detailEditRequests, setDetailEditRequests] = useState<DetailEditRequestRow[]>([]);
   const [swiftEditRequests, setSwiftEditRequests] = useState<SwiftEditRequestRow[]>([]);
@@ -66,6 +69,7 @@ export function DeletionManager() {
   });
 
   const loadApprovalData = useCallback(async () => {
+    setConflicts([]);
     setLoading(true);
     setError('');
     try {
@@ -97,6 +101,7 @@ export function DeletionManager() {
   }, [loadApprovalData]);
 
   const decide = async (endpoint: string, requestId: string, decision: 'approve' | 'reject') => {
+    setConflicts([]);
     setError('');
     setLoading(true);
     try {
@@ -105,6 +110,12 @@ export function DeletionManager() {
       if (!result.success) throw result;
       await loadApprovalData();
     } catch (cause) {
+      if (getApiErrorCode(cause) === 'APPROVAL_BASELINE_CONFLICT') {
+        const detail = getApiErrorDetail(cause) as { fields?: ApprovalDifference[] } | undefined;
+        setConflicts(detail?.fields || []);
+        setError(tx('当前值未改动。请拒绝此申请，再按原单最新信息重新提交。', 'The current values were kept. Reject this request and resubmit using the latest record.'));
+        return;
+      }
       setError(getApiErrorMessage(cause, tx('审批操作未完成，请刷新记录后重试。', 'Decision failed. Refresh the records and retry.')));
     } finally {
       setLoading(false);
@@ -361,6 +372,18 @@ export function DeletionManager() {
     <div className="space-y-6">
       {error && <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
         {error}<Button variant="outline" size="sm" disabled={loading} onClick={() => void loadApprovalData()}>{tx('刷新', 'Refresh')}</Button>
+      </div>}
+      {conflicts.length > 0 && <div className="space-y-2 rounded border p-3 text-sm">
+        {conflicts.map(({ field, known, before, requested, current }) => {
+          const names: Record<string, string> = { receiptNo: tx('收据号', 'Receipt No'), orderNo: 'ORDER NO', invNo: 'INV NO', customerMark: 'MARK',
+            date: tx('日期', 'Date'), payer: tx('付款人', 'Payer'), tel: tx('电话', 'Phone'), agentId: tx('代理 ID', 'Agent ID'), items: tx('付款明细行', 'Detail rows') };
+          const format = (v: unknown) => Array.isArray(v) ? v.map(row => [row.mark, row.orderNo, formatUsdAmount(row.amount), row.receiptId].filter(Boolean).join(' / ')).join('; ') : textValue(v);
+          return <div key={field} className="break-words"><strong>{names[field] || field}</strong>
+            <div>{tx('申请时', 'At request')}: {known ? format(before) : tx('旧申请未记录', 'Not recorded')}</div>
+            <div>{tx('申请修改为', 'Requested')}: {format(requested)}</div>
+            <div>{tx('当前值', 'Current')}: {format(current)}</div>
+          </div>;
+        })}
       </div>}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-bold">{tx('审批', 'Approval')}</h2>

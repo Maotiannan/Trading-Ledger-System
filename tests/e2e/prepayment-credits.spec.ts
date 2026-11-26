@@ -2,18 +2,26 @@ import { expect, test } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import fs from 'node:fs';
+import { ensureAdminInitialized } from './helpers/session';
 
 test('prepayment credits: desktop/mobile transfer, reverse and ordinary-user read-only access', async ({ page }) => {
   test.setTimeout(120000);
-  expect(process.env.PLAYWRIGHT_BASE_URL).toBe('http://127.0.0.1:3317');
+  expect(process.env.PLAYWRIGHT_BASE_URL).toBe('http://127.0.0.1:3200');
   const url = new URL(process.env.DATABASE_URL!);
-  expect(`${url.host}${url.pathname}`).toBe('127.0.0.1:3313/muledger_prepayment_20261111');
+  expect(`${url.host}${url.pathname}`).toBe('127.0.0.1:3307/trading_ledger_test');
+  await ensureAdminInitialized(page.request);
+  const login = await page.request.post('/api/auth', { data: {
+    action: 'login', email: process.env.PW_TEST_ADMIN_EMAIL, password: process.env.PW_TEST_ADMIN_PASSWORD,
+  } });
+  expect(login.ok()).toBeTruthy();
+  const adminId = (await login.json()).data.id;
+  expect(adminId).toBeTruthy();
   const db = new PrismaClient();
   const label = `prepay-ui-${Date.now()}`;
   const password = 'Synthetic-ui-only-123!';
-  const operator = await db.user.create({ data: { email: `${label}@example.test`, password: await bcrypt.hash(password, 4), role: 'USER', level: 3, parentId: 'prepay-admin' } });
+  const operator = await db.user.create({ data: { email: `${label}@example.test`, password: await bcrypt.hash(password, 4), role: 'USER', level: 3, parentId: adminId } });
   const customer = await db.customer.create({ data: { mark: label, normalizedMark: label, name: label, orderName: label, phone: '', city: '', ownerId: operator.id, createdBy: operator.id } });
-  const pool = await db.invoice.findUniqueOrThrow({ where: { invNo: 'DEPOSIT_POOL' } });
+  const pool = await db.invoice.upsert({ where: { invNo: 'DEPOSIT_POOL' }, update: {}, create: { invNo: 'DEPOSIT_POOL', createdBy: adminId } });
   const order = await db.order.create({ data: { orderNo: `${label}-ORIGINAL`, customerId: customer.id, invoiceId: pool.id, paymentAllocationMode: true, amount: 0, orderBalance: 0, createdBy: operator.id } });
   const receipt = await db.receipt.create({ data: { orderId: order.id, orderNo: order.orderNo, receiptNo: label, customerId: customer.id, usd: 3000, status: 'RECEIVED', createdBy: operator.id } });
   const source = await db.prepaymentSource.create({ data: { customerId: customer.id, orderId: order.id, originalOrderNo: order.orderNo, normalizedOrderNo: order.orderNo.toUpperCase() } });
@@ -22,17 +30,16 @@ test('prepayment credits: desktop/mobile transfer, reverse and ordinary-user rea
   const tracker = await db.orderTracker.create({ data: { orderNo: `${label}-TARGET`, normalizedOrderNo: `${label}-TARGET`.toUpperCase(), customerId: customer.id, createdBy: operator.id } });
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   try {
-    const login = await page.request.post('/api/auth', { data: { action: 'login', email: 'prepay-admin@example.test', password: 'Prepay-isolated-test-123!' } });
-    expect(login.ok()).toBeTruthy();
     await page.goto('/invoices');
-    await page.getByRole('button', { name: /^预付款余额$|^Prepayments$/ }).click();
-    const dialog = page.getByRole('dialog'); await expect(dialog).toBeVisible();
-    await dialog.getByRole('textbox', { name: /筛选预付款|Filter credits/ }).fill(label);
-    await expect(dialog.getByText(/3,000/)).toBeVisible();
+    await page.getByText('DEPOSIT_POOL', { exact: true }).click();
+    const poolRow = page.getByRole('row').filter({ hasText: new RegExp(order.orderNo, 'i') });
+    await expect(poolRow.getByText(/3,000/)).toBeVisible();
     fs.mkdirSync('out/prepayment', { recursive: true });
     await page.screenshot({ path: 'out/prepayment/prepayment-desktop.png' });
     await page.setViewportSize({ width: 390, height: 844 });
-    await dialog.getByRole('button', { name: /^转移$|^Transfer$/ }).click();
+    await poolRow.getByRole('button', { name: /^转移$|^Transfer$/ }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
     await dialog.getByRole('textbox', { name: /搜索目标订单|Search target order/ }).fill(tracker.orderNo);
     await dialog.getByRole('button', { name: /^搜索$|^Search$/ }).click();
     await dialog.getByRole('button', { name: new RegExp(tracker.orderNo) }).click();
@@ -53,11 +60,11 @@ test('prepayment credits: desktop/mobile transfer, reverse and ordinary-user rea
     await expect(dialog.getByText(/操作成功|Completed/)).toBeVisible();
     expect((await db.prepaymentCredit.findUniqueOrThrow({ where: { id: credit.id } })).amount.toFixed(2)).toBe('3000.00');
     expect(await db.receipt.count({ where: { customerId: customer.id } })).toBe(1);
-    await page.request.post('/api/auth', { data: { action: 'login', email: operator.email, password } });
+    expect((await page.request.post('/api/auth', { data: { action: 'login', email: operator.email, password } })).ok()).toBeTruthy();
     await page.reload();
-    await page.getByRole('button', { name: /^预付款余额$|^Prepayments$/ }).click();
-    await expect(dialog.getByText(/3,000/)).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /^转移$|^Transfer$/ })).toHaveCount(0);
+    await page.getByText('DEPOSIT_POOL', { exact: true }).click();
+    await expect(poolRow.getByText(/3,000/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^转移$|^Transfer$|转移与记录|Transfers & History/ })).toHaveCount(0);
     await page.screenshot({ path: 'out/prepayment/prepayment-mobile-readonly.png' });
     expect(errors).toEqual([]);
   } finally { await db.$disconnect(); }

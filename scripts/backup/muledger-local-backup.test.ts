@@ -13,6 +13,7 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -120,7 +121,7 @@ function createSnapshotDirectory(backup: string, stamp: string): string {
 describe('MULEDGER NAS local backup', () => {
   jest.setTimeout(30_000);
 
-  it.each(['expired', 'root', 'recent', 'EACCES', 'EIO'])('handles a disappearing retention path: %s', (scenario) => {
+  it.each(['expired', 'root', 'publication', 'manifest', 'EACCES', 'EIO'])('handles a disappearing retention path: %s', (scenario) => {
     const f = fixture();
     try {
       const expired = createSnapshotDirectory(f.backup, '20200101-010000');
@@ -134,22 +135,92 @@ describe('MULEDGER NAS local backup', () => {
       writeFileSync(injected, `
         const fs = require('node:fs'), orig = fs.readdirSync;
         fs.readdirSync = function (p, ...args) {
-          if (p === process.env.FAULT_PATH) {
+          if (p === process.env.ROOT && process.env.SCENARIO === 'publication') {
+            fs.renameSync(process.env.PUBLICATION, process.env.PUBLICATION + '-gone');
+          } else if (p === process.env.ROOT && process.env.SCENARIO === 'manifest') {
+            fs.unlinkSync(process.env.PUBLICATION + '/manifest.json');
+          } else if (p === process.env.FAULT_PATH) {
             if (process.env.SCENARIO === 'root') fs.renameSync(process.env.ROOT, process.env.ROOT + '-gone');
-            else if (['expired','recent'].includes(process.env.SCENARIO)) fs.renameSync(p, p+'-gone');
-            else throw Object.assign(new Error(process.env.SCENARIO), {code:process.env.SCENARIO, syscall:'scandir', path:p});
+            else if (process.env.SCENARIO === 'expired') fs.renameSync(p, p+'-gone');
+            else if (['EACCES','EIO'].includes(process.env.SCENARIO)) throw Object.assign(new Error(process.env.SCENARIO), {code:process.env.SCENARIO, syscall:'scandir', path:p});
           }
           return orig.call(fs,p,...args);
         };
       `);
       const result = spawnSync(process.execPath, ['-r', injected, path.join(path.dirname(script), 'prune-local-snapshots.cjs'), root, published, '30'], {
-        encoding: 'utf8', env: { ...process.env, ROOT: root, SCENARIO: scenario, FAULT_PATH: scenario === 'recent' ? path.dirname(published) : oldDay },
+        encoding: 'utf8', env: { ...process.env, ROOT: root, PUBLICATION: published, SCENARIO: scenario, FAULT_PATH: oldDay },
       });
       expect(result.status).toBe(scenario === 'expired' ? 0 : 1);
       if (scenario === 'expired') {
         expect(existsSync(path.join(published, 'manifest.json'))).toBe(true);
         expect(existsSync(path.join(recent, 'sentinel.txt'))).toBe(true);
       }
+    } finally { f.cleanup(); }
+  });
+
+  it('skips protected date branches before any SMB type lookup and still processes the local cutoff day', () => {
+    const f = fixture();
+    try {
+      const expired = createSnapshotDirectory(f.backup, '20261026-010000');
+      const onCutoff = createSnapshotDirectory(f.backup, '20261027-010000');
+      const afterCutoff = createSnapshotDirectory(f.backup, '20261027-030000');
+      const nextDay = createSnapshotDirectory(f.backup, '20261028-010000');
+      const recent = createSnapshotDirectory(f.backup, '20261102-010000');
+      const published = realpathSync(createSnapshotDirectory(f.backup, '20261127-023000'));
+      writeFileSync(path.join(published, 'manifest.json'), '{}');
+      for (const dir of [expired, onCutoff, nextDay, recent]) utimesSync(dir, 1, 1);
+      const late = new Date('2026-10-27T03:00:00+08:00');
+      utimesSync(afterCutoff, late, late);
+      const root = realpathSync(path.join(f.backup, 'snapshots'));
+      const injected = path.join(f.root, 'cifs.cjs');
+      writeFileSync(injected, `
+        const fs = require('node:fs'), path = require('node:path');
+        Date.now = () => Date.parse('2026-11-27T02:30:00+08:00');
+        const mixed = path.join(process.env.ROOT, '2026/10'), protectedDay = path.join(mixed, '28');
+        const protectedMonth = path.join(process.env.ROOT, '2026/11');
+        for (const op of ['readdirSync', 'lstatSync']) {
+          const original = fs[op];
+          fs[op] = function (dir, ...args) {
+            if (op === 'readdirSync' && dir === mixed && args[0]?.withFileTypes)
+              throw Object.assign(Error('stale DT_UNKNOWN child'), {code:'ENOENT', path:protectedDay, syscall:'lstat'});
+            if (dir === protectedDay || dir === protectedMonth)
+              throw Object.assign(Error('probed a protected branch'), {code:'EIO', path:dir});
+            return original.call(fs, dir, ...args);
+          };
+        }
+      `);
+      const result = spawnSync(process.execPath, ['-r', injected, path.join(path.dirname(script), 'prune-local-snapshots.cjs'), root, published, '30'], {
+        encoding: 'utf8', env: { ...process.env, ROOT: root, TZ: 'Asia/Shanghai' },
+      });
+      expect({ status: result.status, error: result.stderr.includes('ERROR:') }).toEqual({ status: 0, error: false });
+      for (const dir of [expired, onCutoff]) expect(existsSync(dir)).toBe(false);
+      for (const dir of [afterCutoff, nextDay, recent]) expect(existsSync(path.join(dir, 'sentinel.txt'))).toBe(true);
+      expect(existsSync(path.join(published, 'manifest.json'))).toBe(true);
+    } finally { f.cleanup(); }
+  });
+
+  it('reports loss of the cutoff day, which may still contain retained snapshots', () => {
+    const f = fixture();
+    try {
+      const cutoff = realpathSync(createSnapshotDirectory(f.backup, '20261027-030000'));
+      const published = realpathSync(createSnapshotDirectory(f.backup, '20261127-023000'));
+      writeFileSync(path.join(published, 'manifest.json'), '{}');
+      const injected = path.join(f.root, 'cutoff.cjs');
+      writeFileSync(injected, `
+        const fs = require('node:fs'), original = fs.readdirSync;
+        Date.now = () => Date.parse('2026-11-27T02:30:00+08:00');
+        fs.readdirSync = function (dir, ...args) {
+          if (dir === process.env.CUTOFF_DAY) fs.renameSync(dir, dir + '-gone');
+          return original.call(fs, dir, ...args);
+        }
+      `);
+      const result = spawnSync(process.execPath, ['-r', injected, path.join(path.dirname(script), 'prune-local-snapshots.cjs'),
+        realpathSync(path.join(f.backup, 'snapshots')), published, '30'], {
+        encoding: 'utf8', env: { ...process.env, CUTOFF_DAY: path.dirname(cutoff), TZ: 'Asia/Shanghai' },
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('ENOENT');
+      expect(existsSync(path.join(published, 'manifest.json'))).toBe(true);
     } finally { f.cleanup(); }
   });
 

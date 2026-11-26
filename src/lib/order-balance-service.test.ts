@@ -81,7 +81,7 @@ describe('order-balance-service', () => {
   });
 
   it('repairs mismatched cache once and records audit/log details', async () => {
-    const client = makeClient(null) as unknown as { order: { update: jest.Mock } };
+    const client = makeClient(null) as unknown as { order: { findUnique: jest.Mock; update: jest.Mock } };
     const row = {
       id: 'order-super-dt2-07',
       orderNo: 'SUPER DT2-07',
@@ -93,6 +93,7 @@ describe('order-balance-service', () => {
       ],
     };
 
+    client.order.findUnique.mockResolvedValue(row);
     const result = await repairOrderBalanceCacheIfNeeded(row, client as never, {
       actorId: 'admin-1',
       source: 'dashboard-summary',
@@ -109,10 +110,10 @@ describe('order-balance-service', () => {
       where: { id: 'order-super-dt2-07' },
       data: { orderBalance: 3674 },
     });
-    expect(mockLogger.warn).toHaveBeenCalledWith('Order balance cache mismatch repaired', expect.objectContaining({
+    expect(mockLogger.info).toHaveBeenCalledWith('Order balance cache updated', expect.objectContaining({
       orderId: 'order-super-dt2-07',
-      stored: 38674,
-      computed: 3674,
+      before: 38674,
+      after: 3674,
       difference: -35000,
       source: 'dashboard-summary',
     }));

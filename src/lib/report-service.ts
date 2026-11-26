@@ -5,6 +5,8 @@ import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { formatOrderNameDisplay, formatUsdAmount } from '@/lib/display-format';
 import type { CurrentUser } from '@/lib/request-auth';
+import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
 import {
   buildDetailVisibilityWhere,
   buildInvoiceVisibilityWhere,
@@ -38,8 +40,9 @@ async function exportExcel(currentUser: CurrentUser) {
           include: {
             receipts: {
               where: receiptWhere,
-              select: { usd: true },
+              select: receiptBalanceSelect,
             },
+            paymentAllocations: paymentAllocationsSelect,
           },
         },
       },
@@ -67,7 +70,7 @@ async function exportExcel(currentUser: CurrentUser) {
   invoiceSheet.getRow(1).font = { bold: true };
   for (const invoice of invoices) {
     const amount = invoice.orders.reduce((sum, order) => sum + Number(order.amount), 0);
-    const received = invoice.orders.reduce((sum, order) => sum + order.receipts.reduce((innerSum, receipt) => innerSum + Number(receipt.usd), 0), 0);
+    const received = invoice.orders.reduce((sum, order) => sum + Number(order.amount) - computeOrderBalanceFromReceipts(order), 0);
     invoiceSheet.addRow([invoice.invNo, invoice.orders.length, amount, received, amount - received]);
   }
 

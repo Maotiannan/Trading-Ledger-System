@@ -191,11 +191,11 @@ describe('receipt-generator-read-service', () => {
   it('suggests Deposit when no exact order exists but a customer is inferred', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {
-        derivedOrderName: 'AKD',
+        derivedOrderName: 'QXX',
         inferredCustomer: {
-          id: 'customer-akd',
+          id: 'customer-qxx',
           mark: 'A K D',
-          orderName: 'AKD',
+          orderName: 'QXX',
           companyName: null,
           name: 'Abdoulaye Diallo',
           phone: '+224 622 05 71 47',
@@ -205,7 +205,7 @@ describe('receipt-generator-read-service', () => {
       },
     });
 
-    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'AKD-01', 500);
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'QXX-01', 500);
 
     expect(result.data.invNo).toBeNull();
     expect(result.data.suggestedPaymentType).toBe('Deposit');
@@ -215,16 +215,16 @@ describe('receipt-generator-read-service', () => {
   it('prefers the customer profile name over the order row customerName for signed receipts', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {
-        derivedOrderName: 'PIKIN',
+        derivedOrderName: 'KITEM',
         inferredCustomer: null,
         exactMatches: [
           {
-            id: 'order-pikin',
-            orderNo: 'PIKIN-20',
+            id: 'order-kitem',
+            orderNo: 'KITEM-20',
             orderBalance: 8458,
-            customerId: 'customer-pikin',
-            customerMark: 'PIKIN',
-            customerName: 'PIKIN',
+            customerId: 'customer-kitem',
+            customerMark: 'KITEM',
+            customerName: 'KITEM',
             customerPhone: '620000020',
             customerCity: 'Conakry',
             needsCustomerFix: false,
@@ -232,20 +232,20 @@ describe('receipt-generator-read-service', () => {
               companyName: null,
               name: 'Mamadou Dian Diallo',
             },
-            invoice: { id: 'inv-pikin', invNo: 'INV-PIKIN', createdAt: new Date('2026-05-07T00:00:00Z') },
+            invoice: { id: 'inv-kitem', invNo: 'INV-KITEM', createdAt: new Date('2026-05-07T00:00:00Z') },
           },
         ],
       },
     });
 
-    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'PIKIN-20', 1);
+    const result = await lookupReceiptGeneratorOrderContext(makeUser(), 'KITEM-20', 1);
 
     expect(result.data.customer).toEqual(expect.objectContaining({
       name: 'Mamadou Dian Diallo',
       companyName: null,
-      mark: 'PIKIN',
+      mark: 'KITEM',
     }));
-    expect(result.data.preview?.clientName).toBe('Mamadou Dian Diallo "PIKIN"');
+    expect(result.data.preview?.clientName).toBe('Mamadou Dian Diallo "KITEM"');
   });
 
   it('returns the full matched composite ORDER NO for generator context', async () => {
@@ -279,7 +279,7 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.preview?.orderNo).toBe('AB-13B/AB-12B');
   });
 
-  it('loads a pending generator session by sessionId', async () => {
+  it.each([undefined, 'Espèces'])('loads a pending generator session preserving receiver %s', async (receivedBy) => {
     mockDb.receiptGeneratorSession.findUnique.mockResolvedValueOnce({
       id: 'session-1',
       receiptId: 'receipt-1',
@@ -291,6 +291,7 @@ describe('receipt-generator-read-service', () => {
         customerCompanyName: 'Alpha Trading SARL',
         clientName: 'Edited Payer "Big Alpha"',
         dateText: '26/08/2026',
+        receivedBy,
         paymentMode: 'Transfer',
         fraisStatus: 'Non payé',
       },
@@ -325,7 +326,7 @@ describe('receipt-generator-read-service', () => {
     expect(result.data.layout.paymentMode).toBe('Virement');
     expect(result.data.layout.fraisStatus).toBe('Non payé');
     expect(result.data.layout.paymentType).toBe('Standard');
-    expect(result.data.layout.receivedBy).toBe('Mamadou Dian Diallo');
+    expect(result.data.layout.receivedBy).toBe(receivedBy ?? 'Mamadou Dian Diallo');
   });
 
   it('resolves a pending generator session by receiptId', async () => {

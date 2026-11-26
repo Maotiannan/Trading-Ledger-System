@@ -219,6 +219,7 @@ export async function verifyExcelApiTokenFromHeader(
           level: true,
           parentId: true,
           createdById: true,
+          disabledAt: true,
         },
       },
     },
@@ -232,7 +233,7 @@ export async function verifyExcelApiTokenFromHeader(
     });
   }
 
-  if (row.revokedAt) {
+  if (row.user.disabledAt || row.revokedAt) {
     throw createApiError({
       code: apiErrorCodes.EXCEL_TOKEN_REVOKED,
       status: 401,

@@ -27,6 +27,9 @@ export type CustomerFormState = {
   companyName: string;
   credit: string;
   companyAddress: string;
+  companyContact?: string;
+  customerCode?: string;
+  creditCode?: string;
   ownerId: string;
 };
 

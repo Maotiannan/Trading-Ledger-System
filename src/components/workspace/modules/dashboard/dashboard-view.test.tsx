@@ -1,3 +1,4 @@
+import { clearClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Dashboard } from './dashboard-view';
 import { apiCall, useLatestRequestGuard, useUiText } from '@/components/workspace/shared';
@@ -27,7 +28,7 @@ jest.mock('@/components/workspace/shared', () => ({
 }));
 
 jest.mock('@/lib/store', () => ({
-  useStore: jest.fn(),
+  useStore: Object.assign(jest.fn(), { getState: jest.fn() }),
 }));
 
 jest.mock('@/components/workspace/modules/receipts/components/receipt-image-preview-dialog', () => ({
@@ -139,6 +140,8 @@ function makeSummary() {
 
 describe('Dashboard customer outstanding status dialog', () => {
   beforeEach(() => {
+    (useStore.getState as jest.Mock).mockImplementation(() => mockUseStore());
+    clearClientUserPreferences();
     jest.clearAllMocks();
     mockUseLatestRequestGuard.mockReturnValue({ nextToken: jest.fn(() => 1), isLatest: jest.fn(() => true) });
     mockUseUiText.mockReturnValue((_zh: string, en: string) => en);
@@ -147,6 +150,7 @@ describe('Dashboard customer outstanding status dialog', () => {
       receipts: [],
       details: [],
       deletionRequests: [],
+      user: { id: "admin-1", role: "ADMIN" },
     });
     mockApiCall.mockResolvedValue({ success: true, data: makeSummary() });
   });

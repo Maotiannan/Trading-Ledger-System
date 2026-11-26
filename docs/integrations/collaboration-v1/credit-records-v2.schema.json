@@ -1,0 +1,308 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:muledger:collaboration:credit-records:2.0.0",
+  "title": "Collaboration Credit Records 2.0.0",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/creditRecord"
+    },
+    {
+      "$ref": "#/definitions/page"
+    },
+    {
+      "$ref": "#/definitions/error"
+    },
+    {
+      "$ref": "#/definitions/writeResult"
+    }
+  ],
+  "definitions": {
+    "creditRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "creditRecordId",
+        "companyName",
+        "creditAmount",
+        "currency",
+        "creditState",
+        "address",
+        "contacts",
+        "missingFields",
+        "sourceUpdatedAt",
+        "sourceVersion",
+        "customerCode",
+        "creditCode",
+        "orderName",
+        "phone"
+      ],
+      "properties": {
+        "creditRecordId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 191
+        },
+        "companyName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "creditAmount": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?(0|[1-9][0-9]{0,15})\\.[0-9]{2}$"
+        },
+        "currency": {
+          "const": "USD"
+        },
+        "creditState": {
+          "enum": [
+            "AVAILABLE",
+            "ZERO",
+            "UNSET",
+            "INVALID"
+          ]
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "details"
+          ],
+          "properties": {
+            "details": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "missingFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "companyName",
+              "creditAmount",
+              "address",
+              "contacts.details",
+              "customerCode",
+              "creditCode"
+            ]
+          }
+        },
+        "sourceUpdatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceVersion": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "customerCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 191
+        },
+        "creditCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 191
+        },
+        "orderName": {
+          "type": "string",
+          "maxLength": 191
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 191
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "creditState": {
+                "const": "UNSET"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "creditAmount": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "creditAmount": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "creditState": {
+                "const": "ZERO"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "creditAmount": {
+                "const": "0.00"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "page": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "nextCursor",
+        "hasMore",
+        "readAt"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/definitions/creditRecord"
+          }
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "readAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "hasMore": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "nextCursor": {
+                "type": "null"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "nextCursor": {
+                "type": "string",
+                "minLength": 1
+              },
+              "items": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_QUERY",
+                "INVALID_CURSOR",
+                "AUTH_REQUIRED",
+                "AUTH_INVALID",
+                "CREDIT_RECORD_NOT_FOUND",
+                "RATE_LIMITED",
+                "SERVICE_UNAVAILABLE",
+                "VALIDATION_ERROR",
+                "BAD_REQUEST",
+                "INVALID_JSON",
+                "PAYLOAD_TOO_LARGE",
+                "CONFLICT",
+                "SOURCE_VERSION_CONFLICT",
+                "CUSTOMER_SCOPE_CONFLICT"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "retryAfterMs": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "writeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "written",
+        "requestId",
+        "auditId",
+        "record"
+      ],
+      "properties": {
+        "written": {
+          "const": true
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "auditId": {
+          "type": "string"
+        },
+        "record": {
+          "$ref": "#/definitions/creditRecord"
+        }
+      }
+    }
+  }
+}

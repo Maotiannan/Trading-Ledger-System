@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { ReceiptGeneratorLaunchDialog } from './receipt-generator-launch-dialog';
 
 describe('ReceiptGeneratorLaunchDialog', () => {
@@ -148,5 +148,22 @@ describe('ReceiptGeneratorLaunchDialog', () => {
     expect(screen.getByRole('dialog')).toHaveClass('overflow-hidden', 'p-0');
     expect(screen.getByTestId('receipt-generator-scroll-body')).toHaveClass('overflow-y-auto', 'flex-1');
     expect(screen.getByTestId('receipt-generator-footer')).toHaveClass('shrink-0', 'border-t');
+  });
+
+  it.each(['zh', 'en'])('supports the cash receiver in %s without changing payment mode', (locale) => {
+    const onReceivedByChange = jest.fn();
+    const onPaymentModeChange = jest.fn();
+    render(<ReceiptGeneratorLaunchDialog {...defaultProps}
+      tx={(zh, en) => locale === 'zh' ? zh : en}
+      onReceivedByChange={onReceivedByChange}
+      onPaymentModeChange={onPaymentModeChange}
+    />);
+    const receiver = screen.getByLabelText('Reçu par');
+    expect(within(receiver).getByRole('option', {
+      name: locale === 'zh' ? '现金（Espèces）' : 'Cash (Espèces)',
+    })).toHaveValue('Espèces');
+    fireEvent.change(receiver, { target: { value: 'Espèces' } });
+    expect(onReceivedByChange).toHaveBeenCalledWith('Espèces');
+    expect(onPaymentModeChange).not.toHaveBeenCalled();
   });
 });

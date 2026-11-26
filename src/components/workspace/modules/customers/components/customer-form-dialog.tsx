@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type {
   CustomerCompanyFileOverwriteProposal,
@@ -202,7 +203,9 @@ export function CustomerFormDialog({
               )}
             </div>
             <Input placeholder="CITY*" value={form.city} onChange={(e) => onFormChange((prev) => ({ ...prev, city: e.target.value }))} />
-            <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => onFormChange((prev) => ({ ...prev, consignee: e.target.value }))} />
+            {editing ? <p className="self-center text-sm text-muted-foreground">
+              {tx('收货人及默认项：请在客户列表点击 CONSIGNEE 管理。', 'To manage consignees or change the default, click CONSIGNEE in the customer list.')}
+            </p> : <Input placeholder={tx('CONSIGNEE(可空)', 'CONSIGNEE (optional)')} value={form.consignee} onChange={(e) => onFormChange((prev) => ({ ...prev, consignee: e.target.value }))} />}
             {isAdmin && (
               <select
                 className="h-10 border rounded-md px-3 text-sm bg-white"
@@ -220,7 +223,29 @@ export function CustomerFormDialog({
               <>
                 <Input placeholder="COMPANY_NAME" value={form.companyName} onChange={(e) => onFormChange((prev) => ({ ...prev, companyName: e.target.value }))} />
                 <Input placeholder="CREDIT" type="number" min="0" step="0.01" value={form.credit} onChange={(e) => onFormChange((prev) => ({ ...prev, credit: e.target.value }))} />
+                <details className="col-span-full rounded-md border p-2">
+                  <summary className="cursor-pointer text-sm">{tx('客户 / 信保编码', 'Customer / credit codes')}</summary>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Input aria-label="CUSTOMER CODE" placeholder="CUSTOMER CODE" maxLength={191} value={form.customerCode || ''} onChange={(e) => {
+                      const customerCode = e.currentTarget.value;
+                      onFormChange((prev) => ({ ...prev, customerCode }));
+                    }} />
+                    <Input aria-label="CREDIT CODE" placeholder="CREDIT CODE" maxLength={191} value={form.creditCode || ''} onChange={(e) => {
+                      const creditCode = e.currentTarget.value;
+                      onFormChange((prev) => ({ ...prev, creditCode }));
+                    }} />
+                    <p className="text-xs text-muted-foreground sm:col-span-2">{tx('CREDIT 不为零时两项必填；不显示在客户列表中。', 'Both codes are required when CREDIT is not zero; hidden from the customer list.')}</p>
+                  </div>
+                </details>
                 <Input placeholder="COMPANY_ADDRESS" value={form.companyAddress} onChange={(e) => onFormChange((prev) => ({ ...prev, companyAddress: e.target.value }))} />
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="customer-company-contact">{tx('公司联系方式', 'Company contact details')}</Label>
+                  <Textarea id="customer-company-contact" placeholder="COMPANY_CONTACT" maxLength={2000} value={form.companyContact || ''} onChange={(e) => {
+                    const companyContact = e.currentTarget.value;
+                    onFormChange((prev) => ({ ...prev, companyContact }));
+                  }} />
+                  <p className="text-xs text-muted-foreground">{tx('选填；填写该公司的联系方式，不会自动使用客户PHONE。', 'Optional. Contact details for this company; the customer PHONE is not used automatically.')}</p>
+                </div>
               </>
             )}
             {editing && (

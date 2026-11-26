@@ -1,0 +1,214 @@
+{
+  "contractVersion": "2.0.0",
+  "syntheticOnly": true,
+  "cases": [
+    {
+      "name": "same-name-distinct-identities-and-exact-decimals",
+      "status": 200,
+      "response": {
+        "items": [
+          {
+            "creditRecordId": "fixture-credit-001",
+            "companyName": "SYNTHETIC INSURER",
+            "creditAmount": "9007199254740993.01",
+            "currency": "USD",
+            "creditState": "AVAILABLE",
+            "address": null,
+            "contacts": {
+              "details": null
+            },
+            "missingFields": [
+              "address",
+              "contacts.details"
+            ],
+            "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+            "sourceVersion": "sha256:b8effe0d2032b9d051c30d4d0ba18ba84ff77ca67b6f807579f201113997a267",
+            "customerCode": "SYN-001",
+            "creditCode": "CR-001",
+            "orderName": "SYNTHETIC BUYER",
+            "phone": "+000 123"
+          },
+          {
+            "creditRecordId": "fixture-credit-002",
+            "companyName": "SYNTHETIC INSURER",
+            "creditAmount": "0.01",
+            "currency": "USD",
+            "creditState": "AVAILABLE",
+            "address": null,
+            "contacts": {
+              "details": null
+            },
+            "missingFields": [
+              "address",
+              "contacts.details"
+            ],
+            "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+            "sourceVersion": "sha256:4102a169babb7578e91ea2314700b5bfc2cec90173eb3a167817994193ad949b",
+            "customerCode": "SYN-001",
+            "creditCode": "CR-001",
+            "orderName": "SYNTHETIC BUYER",
+            "phone": "+000 123"
+          }
+        ],
+        "nextCursor": null,
+        "hasMore": false,
+        "readAt": "2026-11-03T07:01:00.000Z"
+      }
+    },
+    {
+      "name": "unset-not-zero",
+      "status": 200,
+      "response": {
+        "creditRecordId": "fixture-credit-unset",
+        "companyName": null,
+        "creditAmount": null,
+        "currency": "USD",
+        "creditState": "UNSET",
+        "address": null,
+        "contacts": {
+          "details": null
+        },
+        "missingFields": [
+          "companyName",
+          "creditAmount",
+          "address",
+          "contacts.details"
+        ],
+        "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+        "sourceVersion": "sha256:aee37ee5193645a844d70074b8892886ca1fc2620dae2968490dbcc1a7350d8d",
+        "customerCode": "SYN-001",
+        "creditCode": "CR-001",
+        "orderName": "SYNTHETIC BUYER",
+        "phone": "+000 123"
+      }
+    },
+    {
+      "name": "zero-with-maintained-company-contact",
+      "status": 200,
+      "response": {
+        "creditRecordId": "fixture-credit-zero",
+        "companyName": "SYNTHETIC INSURER",
+        "creditAmount": "0.00",
+        "currency": "USD",
+        "creditState": "ZERO",
+        "address": "Synthetic address",
+        "contacts": {
+          "details": "Synthetic company desk +000 123"
+        },
+        "missingFields": [],
+        "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+        "sourceVersion": "sha256:15bd98cf301a7f7acea1da7448dddda7b3ee7b58112ee2ace223381a85ba7e06",
+        "customerCode": "SYN-001",
+        "creditCode": "CR-001",
+        "orderName": "SYNTHETIC BUYER",
+        "phone": "+000 123"
+      }
+    },
+    {
+      "name": "legacy-invalid-credit",
+      "status": 200,
+      "response": {
+        "creditRecordId": "fixture-credit-negative",
+        "companyName": "SYNTHETIC INSURER",
+        "creditAmount": "-1.00",
+        "currency": "USD",
+        "creditState": "INVALID",
+        "address": null,
+        "contacts": {
+          "details": null
+        },
+        "missingFields": [
+          "address",
+          "contacts.details"
+        ],
+        "sourceUpdatedAt": "2026-11-03T07:00:00.000Z",
+        "sourceVersion": "sha256:2a360ec530f119119f0fe371c60808ad97b4f7e5ca2bc446af9004323ca8c03a",
+        "customerCode": "SYN-001",
+        "creditCode": "CR-001",
+        "orderName": "SYNTHETIC BUYER",
+        "phone": "+000 123"
+      }
+    },
+    {
+      "name": "empty-final-page",
+      "status": 200,
+      "response": {
+        "items": [],
+        "nextCursor": null,
+        "hasMore": false,
+        "readAt": "2026-11-03T07:01:00.000Z"
+      }
+    },
+    {
+      "name": "AUTH_REQUIRED",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "AUTH_REQUIRED",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "AUTH_INVALID",
+      "status": 401,
+      "response": {
+        "error": {
+          "code": "AUTH_INVALID",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "INVALID_CURSOR",
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_CURSOR",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "INVALID_QUERY",
+      "status": 400,
+      "response": {
+        "error": {
+          "code": "INVALID_QUERY",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "CREDIT_RECORD_NOT_FOUND",
+      "status": 404,
+      "response": {
+        "error": {
+          "code": "CREDIT_RECORD_NOT_FOUND",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "SERVICE_UNAVAILABLE",
+      "status": 503,
+      "response": {
+        "error": {
+          "code": "SERVICE_UNAVAILABLE",
+          "message": "Synthetic integration error."
+        }
+      }
+    },
+    {
+      "name": "retry-later",
+      "status": 429,
+      "response": {
+        "error": {
+          "code": "RATE_LIMITED",
+          "message": "Synthetic rate limit.",
+          "retryAfterMs": 1501
+        }
+      }
+    }
+  ]
+}

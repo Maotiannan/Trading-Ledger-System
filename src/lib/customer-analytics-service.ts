@@ -49,7 +49,9 @@ type RawAnalyticsOrder = {
     invNo: string;
     releaseDate: Date | null;
   };
-  receipts?: CustomerAnalyticsReceiptInput[];
+  receipts?: Array<CustomerAnalyticsReceiptInput & { funding?: { id: string } | null }>;
+  paymentAllocations?: Array<{ id: string; amount: CustomerAnalyticsReceiptInput['usd']; appliedAt: Date | null;
+    funding: { active: boolean; receipt: CustomerAnalyticsReceiptInput | null } }>;
 };
 
 type AnalyticsCalculationResult = ReturnType<
@@ -85,11 +87,14 @@ const receiptCalculationSelect = {
   date: true,
   createdAt: true,
   isDeposit: true,
+  funding: { select: { id: true } },
 } as const satisfies Prisma.ReceiptSelect;
 
 function orderWithReceiptsSelect(receiptWhere: Prisma.ReceiptWhereInput): Prisma.OrderSelect {
   return {
     ...annualOrderSelect,
+    paymentAllocations: { where: { state: 'APPLIED' }, select: { id: true, amount: true, appliedAt: true,
+      funding: { select: { active: true, receipt: { select: receiptCalculationSelect } } } } },
     receipts: {
       where: receiptWhere,
       select: receiptCalculationSelect,
@@ -122,7 +127,7 @@ function fixedAsOf(value: Date | undefined): Date {
   return asOf;
 }
 
-function normalizeOrders(rows: RawAnalyticsOrder[], includeReceipts: boolean): CustomerAnalyticsOrderInput[] {
+export function normalizeAnalyticsOrders(rows: RawAnalyticsOrder[], metric: CustomerAnalyticsMetric): CustomerAnalyticsOrderInput[] {
   return rows.map((row) => ({
     id: row.id,
     customerId: row.customerId,
@@ -130,7 +135,15 @@ function normalizeOrders(rows: RawAnalyticsOrder[], includeReceipts: boolean): C
     invNo: row.invoice.invNo,
     releaseDate: row.invoice.releaseDate,
     amount: row.amount,
-    receipts: includeReceipts ? (row.receipts || []) : [],
+    receipts: metric === 'annual-amount' ? [] : metric === 'payment-capacity' ? (row.receipts || []) : [
+      ...(row.receipts || []).filter(receipt => !receipt.funding),
+      ...(row.paymentAllocations || []).flatMap(allocation => {
+        const receipt = allocation.funding.receipt;
+        if (!allocation.funding.active || !receipt || receipt.status === 'SIGNING_PENDING') return [];
+        return [{ ...receipt, id: `allocation:${allocation.id}`, usd: allocation.amount,
+          date: allocation.appliedAt || receipt.date, createdAt: allocation.appliedAt || receipt.createdAt }];
+      }),
+    ],
   }));
 }
 
@@ -262,7 +275,7 @@ export async function getCustomerAnalyticsRanking(
     }),
     unboundReceiptCount(request.metric, receiptWhere),
   ]);
-  const orders = normalizeOrders(rawOrders as RawAnalyticsOrder[], includeReceipts);
+  const orders = normalizeAnalyticsOrders(rawOrders as RawAnalyticsOrder[], request.metric);
   const calculated = calculateMetric({
     metric: request.metric,
     customers,
@@ -336,7 +349,7 @@ export async function getCustomerAnalyticsDetail(
     }),
     unboundReceiptCount(request.metric, receiptWhere),
   ]);
-  const orders = normalizeOrders(rawOrders as RawAnalyticsOrder[], includeReceipts);
+  const orders = normalizeAnalyticsOrders(rawOrders as RawAnalyticsOrder[], request.metric);
   const calculated = calculateMetric({
     metric: request.metric,
     customers: [customer],

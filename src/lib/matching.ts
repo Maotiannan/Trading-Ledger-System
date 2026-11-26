@@ -136,7 +136,7 @@ export async function findOrCreateOrder(orderNo: string, userId: string, client?
 
   // 先按订单号分词收窄候选，再在小集合上算相似度，避免热路径全表扫描。
   const orders = await db.order.findMany({
-    where: buildOrderCandidateWhere(orderNo),
+    where: { ...buildOrderCandidateWhere(orderNo), canceledAt: null },
     orderBy: { createdAt: 'asc' },
     take: ORDER_MATCH_CANDIDATE_LIMIT,
     select: { id: true, orderNo: true, tokens: true }
@@ -189,7 +189,7 @@ export async function findMatchingOrder(orderNo: string | null): Promise<{
 
   // 只查询可能相关的候选订单，避免因大小写兜底而扫描全表。
   const orders = await db.order.findMany({
-    where: buildOrderCandidateWhere(orderNo),
+    where: { ...buildOrderCandidateWhere(orderNo), canceledAt: null },
     orderBy: { createdAt: 'asc' },
     take: ORDER_MATCH_CANDIDATE_LIMIT,
     select: {

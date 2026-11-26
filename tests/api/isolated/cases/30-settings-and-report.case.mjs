@@ -17,8 +17,7 @@ export default async function run(t) {
   t.assertEqual(Boolean(settingsBefore.data?.data?.canPurgeBranch), true, 'admin can purge branch data');
 
   const nextTolerance = '7';
-  const nextSwiftWarningTolerance = '6';
-  const nextSwiftRejectTolerance = '60';
+  const nextFeeLimit = '41';
   const currentSettings = settingsBefore.data?.data?.settings || {};
   const saveSettings = await t.request('POST', '/api/settings', {
     json: {
@@ -26,8 +25,7 @@ export default async function run(t) {
       settings: {
         ...currentSettings,
         DETAIL_RECEIPT_MATCH_TOLERANCE: nextTolerance,
-        SWIFT_WARNING_TOLERANCE: nextSwiftWarningTolerance,
-        SWIFT_REJECT_TOLERANCE: nextSwiftRejectTolerance,
+        SWIFT_MAX_FEE_PER_COPY: nextFeeLimit,
       },
     },
     expectedStatus: 200,
@@ -36,25 +34,28 @@ export default async function run(t) {
 
   const settingsAfter = await t.request('GET', '/api/settings', { expectedStatus: 200 });
   t.assertEqual(String(settingsAfter.data?.data?.settings?.DETAIL_RECEIPT_MATCH_TOLERANCE || ''), nextTolerance, 'updated tolerance persisted');
-  t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_WARNING_TOLERANCE || ''), nextSwiftWarningTolerance, 'updated swift warning tolerance persisted');
-  t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_REJECT_TOLERANCE || ''), nextSwiftRejectTolerance, 'updated swift reject tolerance persisted');
+  t.assertEqual(String(settingsAfter.data?.data?.settings?.SWIFT_MAX_FEE_PER_COPY), nextFeeLimit, 'per-copy SWIFT fee persisted');
+  for (const retired of ['SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE']) {
+    t.assertEqual(Object.hasOwn(settingsAfter.data.data.settings, retired), false, 'retired key not offered');
+    await t.request('POST', '/api/settings', { json: { action: 'update-config', settings: { [retired]: '5' } }, expectedStatus: 400 });
+  }
 
   const auditList = await t.request('GET', '/api/settings?view=audit&limit=20', { expectedStatus: 200 });
   t.assertEqual(Array.isArray(auditList.data?.data?.items), true, 'settings audit list returns item array');
   t.assertEqual(Boolean(auditList.data?.data?.meta?.maxPageSize), true, 'settings audit list returns server paging meta');
   const updatedToleranceAuditEntry = auditList.data?.data?.items?.find(
-    (item) => Array.isArray(item?.updatedKeys) && item.updatedKeys.includes('SWIFT_WARNING_TOLERANCE'),
+    (item) => Array.isArray(item?.updatedKeys) && item.updatedKeys.includes('SWIFT_MAX_FEE_PER_COPY'),
   );
   t.assertEqual(Boolean(updatedToleranceAuditEntry?.createdAt), true, 'settings audit list includes updated tolerance entry');
   const filterDate = toLocalDateInput(updatedToleranceAuditEntry.createdAt);
 
   const filteredAuditList = await t.request(
     'GET',
-    `/api/settings?view=audit&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_WARNING_TOLERANCE&dateFrom=${filterDate}&dateTo=${filterDate}`,
+    `/api/settings?view=audit&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_MAX_FEE_PER_COPY&dateFrom=${filterDate}&dateTo=${filterDate}`,
     { expectedStatus: 200 },
   );
   t.assertEqual(
-    filteredAuditList.data?.data?.items?.some((item) => Array.isArray(item?.updatedKeys) && item.updatedKeys.includes('SWIFT_WARNING_TOLERANCE')),
+    filteredAuditList.data?.data?.items?.some((item) => Array.isArray(item?.updatedKeys) && item.updatedKeys.includes('SWIFT_MAX_FEE_PER_COPY')),
     true,
     'filtered settings audit list can match updated key',
   );
@@ -75,11 +76,11 @@ export default async function run(t) {
   );
   const filteredExportHistory = await t.request(
     'GET',
-    `/api/settings?view=audit-export-history&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_WARNING_TOLERANCE`,
+    `/api/settings?view=audit-export-history&limit=20&actor=${encodeURIComponent(t.adminEmail)}&key=SWIFT_MAX_FEE_PER_COPY`,
     { expectedStatus: 200 },
   );
   t.assertEqual(
-    filteredExportHistory.data?.data?.items?.some((item) => Array.isArray(item?.exportedKeys) && item.exportedKeys.includes('SWIFT_WARNING_TOLERANCE')),
+    filteredExportHistory.data?.data?.items?.some((item) => Array.isArray(item?.exportedKeys) && item.exportedKeys.includes('SWIFT_MAX_FEE_PER_COPY')),
     true,
     'settings audit export history can be filtered by key',
   );

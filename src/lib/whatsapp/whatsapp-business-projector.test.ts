@@ -2,7 +2,7 @@
 jest.mock('./whatsapp-corrections', () => ({ projectWhatsAppCorrections: jest.fn() }));
 jest.mock('./whatsapp-refresh', () => ({ refreshWhatsAppInTransaction: jest.fn() }));
 jest.mock('./whatsapp-live-source', () => ({ resolveWhatsAppSource: jest.fn() }));
-jest.mock('@/lib/db', () => ({ db: { whatsAppDelivery: { findMany: jest.fn(async () => []) }, emailNotification: { findMany: jest.fn() }, customerWhatsAppContact: { findMany: jest.fn() } } }));
+jest.mock('@/lib/db', () => ({ db: { mucontInvoiceSource: { findMany: jest.fn(async () => []) }, whatsAppDelivery: { findMany: jest.fn(async () => []) }, emailNotification: { findMany: jest.fn() }, customerWhatsAppContact: { findMany: jest.fn() } } }));
 jest.mock('@/lib/transaction', () => ({ runInTransaction: jest.fn(async fn => fn({emailNotification:{findUnique:jest.fn(async()=>({id:'source'}))}})) }));
 jest.mock('./whatsapp-template-service', () => ({ listWhatsAppTemplateVersions: jest.fn(async () => []) }));
 jest.mock('./whatsapp-settings', () => ({ getWhatsAppSettings: jest.fn() }));

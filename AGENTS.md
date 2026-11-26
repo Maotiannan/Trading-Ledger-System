@@ -1,3 +1,5 @@
+Maintain one long-lived branch, `main`. Open short-lived PR branches from the current main, require CI, and delete them after merge. A PR is not permission to deploy. Never commit site-specific overrides, credentials, customer data, media, or incident recovery material.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

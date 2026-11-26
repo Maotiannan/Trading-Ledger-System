@@ -28,37 +28,37 @@ describe('system-settings', () => {
 
   it('merges missing keys into a warm cache instead of falling back to defaults', async () => {
     mockFindMany
-      .mockResolvedValueOnce([{ key: 'SWIFT_WARNING_TOLERANCE', value: '2' }])
-      .mockResolvedValueOnce([{ key: 'SWIFT_REJECT_TOLERANCE', value: '4' }]);
+      .mockResolvedValueOnce([{ key: 'DETAIL_RECEIPT_MATCH_TOLERANCE', value: '2' }])
+      .mockResolvedValueOnce([{ key: 'SWIFT_MAX_FEE_PER_COPY', value: '4' }]);
 
-    await expect(getNumericSystemSetting('SWIFT_WARNING_TOLERANCE', 5)).resolves.toBe(2);
-    await expect(getNumericSystemSetting('SWIFT_REJECT_TOLERANCE', 50)).resolves.toBe(4);
+    await expect(getNumericSystemSetting('DETAIL_RECEIPT_MATCH_TOLERANCE', 5)).resolves.toBe(2);
+    await expect(getNumericSystemSetting('SWIFT_MAX_FEE_PER_COPY', 50)).resolves.toBe(4);
 
     expect(mockFindMany).toHaveBeenNthCalledWith(1, {
-      where: { key: { in: ['SWIFT_WARNING_TOLERANCE'] } },
+      where: { key: { in: ['DETAIL_RECEIPT_MATCH_TOLERANCE'] } },
       select: { key: true, value: true },
     });
     expect(mockFindMany).toHaveBeenNthCalledWith(2, {
-      where: { key: { in: ['SWIFT_REJECT_TOLERANCE'] } },
+      where: { key: { in: ['SWIFT_MAX_FEE_PER_COPY'] } },
       select: { key: true, value: true },
     });
   });
 
   it('reuses cached values when requested keys are already present', async () => {
     mockFindMany.mockResolvedValueOnce([
-      { key: 'SWIFT_WARNING_TOLERANCE', value: '3' },
-      { key: 'SWIFT_REJECT_TOLERANCE', value: '7' },
+      { key: 'DETAIL_RECEIPT_MATCH_TOLERANCE', value: '3' },
+      { key: 'SWIFT_MAX_FEE_PER_COPY', value: '7' },
     ]);
 
-    const first = await getSystemSettings(['SWIFT_WARNING_TOLERANCE', 'SWIFT_REJECT_TOLERANCE']);
-    const second = await getSystemSettings(['SWIFT_REJECT_TOLERANCE']);
+    const first = await getSystemSettings(['DETAIL_RECEIPT_MATCH_TOLERANCE', 'SWIFT_MAX_FEE_PER_COPY']);
+    const second = await getSystemSettings(['SWIFT_MAX_FEE_PER_COPY']);
 
     expect(first).toEqual({
-      SWIFT_WARNING_TOLERANCE: '3',
-      SWIFT_REJECT_TOLERANCE: '7',
+      DETAIL_RECEIPT_MATCH_TOLERANCE: '3',
+      SWIFT_MAX_FEE_PER_COPY: '7',
     });
     expect(second).toEqual({
-      SWIFT_REJECT_TOLERANCE: '7',
+      SWIFT_MAX_FEE_PER_COPY: '7',
     });
     expect(mockFindMany).toHaveBeenCalledTimes(1);
   });

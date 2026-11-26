@@ -21,6 +21,8 @@ import {
   listManagedUsers,
 } from '@/lib/auth-read-service';
 import { logger } from '@/lib/logger';
+import { getInitialUserPreferences } from '@/lib/user-preference-service';
+import { previewAccountHandover, confirmAccountHandover, reactivateManagedUser } from '@/lib/account-handover-service';
 
 function badRequest(request: NextRequest, message: string, code: ApiErrorCode = apiErrorCodes.BAD_REQUEST, detail?: unknown) {
   return createApiErrorResponse({ code, status: 400, message, detail }, request);
@@ -62,8 +64,8 @@ export async function POST(request: NextRequest) {
         return unauthorized(request, '邮箱或密码错误', apiErrorCodes.INVALID_CREDENTIALS);
       }
 
-      const response = createApiSuccessResponse({ data: user, message: '登录成功' }, request);
-      const token = createSessionToken(user.id);
+      const response = createApiSuccessResponse({ data: { ...user, preferences: await getInitialUserPreferences(user) }, message: '登录成功' }, request);
+      const token = createSessionToken(user.id, user.sessionVersion);
       setSessionCookie(response, token);
       return response;
     }
@@ -82,6 +84,18 @@ export async function POST(request: NextRequest) {
       }
       const result = await getCurrentAccount(user);
       return createApiSuccessResponse(result, request);
+    }
+
+    if (['handover-preview', 'handover-confirm', 'reactivate'].includes(action)) {
+      const currentUser = await getCurrentUser(request);
+      if (!currentUser || ![UserRole.ADMIN, UserRole.SALES].includes(currentUser.role as 'ADMIN' | 'SALES')) return forbidden(request, '无权限');
+      if (action === 'reactivate') return createApiSuccessResponse(await reactivateManagedUser(currentUser, userId), request);
+      const recipientId = typeof body.recipientId === 'string' ? body.recipientId : '';
+      const data = action === 'handover-preview'
+        ? await previewAccountHandover(currentUser, userId, recipientId)
+        : await confirmAccountHandover(currentUser, { sourceId: userId, recipientId,
+          requestId: typeof body.requestId === 'string' ? body.requestId : '', fingerprint: typeof body.fingerprint === 'string' ? body.fingerprint : '' });
+      return createApiSuccessResponse({ data }, request);
     }
 
     // 创建用户 (管理员/销售)
@@ -184,7 +198,9 @@ export async function POST(request: NextRequest) {
         oldPassword: typeof body.oldPassword === 'string' ? body.oldPassword : '',
         newPassword: typeof body.newPassword === 'string' ? body.newPassword : '',
       });
-      return createApiSuccessResponse(result, request);
+      const response = createApiSuccessResponse(result, request);
+      clearSessionCookie(response);
+      return response;
     }
 
     throw createApiError({

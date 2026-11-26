@@ -207,6 +207,8 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   password     String
+  disabledAt   DateTime?
+  sessionVersion Int @default(0)
   name         String?
   role         UserRole @default(USER)
   level        Int      @default(4)
@@ -298,6 +300,8 @@ model ExcelApiToken {
 }
 
 model UploadedAsset {
+  managedById String?
+  @@index([managedById])
   id           String                       @id @default(cuid())
   path         String                       @db.LongText
   name         String                       @db.Text
@@ -324,11 +328,15 @@ model UploadedAsset {
 
 // ==================== 账单表 (Invoice) ====================
 model Invoice {
+  canceledAt DateTime?
+  managedById String?
+  @@index([managedById])
   id        String   @id @default(cuid())
   invNo     String   @unique // INV NO 账单号
   createdBy String
   shipDate  DateTime?
   releaseDate DateTime?
+  estimatedArrivalDate DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -336,12 +344,16 @@ model Invoice {
   orders  Order[]
   creator User @relation(fields: [createdBy], references: [id])
   emailNotifications EmailNotification[]
+  mucontSource MucontInvoiceSource?
 
   @@index([invNo])
 }
 
 // ==================== 订单表 (Order) ====================
 model Order {
+  canceledAt DateTime?
+  managedById String?
+  @@index([managedById])
   id            String   @id @default(cuid())
   invoiceId     String
   orderNo       String   // ORDER 客户单号
@@ -368,11 +380,69 @@ model Order {
   orderTrackers   OrderTracker[]     @relation("OrderTrackerFinanceOrder")
   balanceTransfersFrom BalanceTransfer[] @relation("TransferFrom")
   balanceTransfersTo   BalanceTransfer[] @relation("TransferTo")
+  mucontGroup MucontInvoiceGroup?
+  paymentAllocations PrepaymentAllocation[]
+  paymentAllocationMode Boolean @default(false)
 
   @@index([invoiceId])
   @@index([createdBy])
   @@index([orderNo])
   @@unique([invoiceId, orderNo])
+}
+
+// Generation receipts and mappings are retained: financial identities cannot be
+// deleted/merged by legacy import or rematch paths.
+model MucontInvoiceSource {
+  invoiceBatchId String @id @db.VarChar(128)
+  invoiceId String? @unique
+  publicationSequence Int @default(0)
+  generationId String? @db.VarChar(128)
+  documentVersion Int @default(0)
+  appliedAt DateTime?
+  metadata Json?
+  metadataVersion Int @default(0)
+  metadataReadAt DateTime?
+  metadataAvailability String @default("unavailable")
+  createdAt DateTime @default(now())
+  invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  groups MucontInvoiceGroup[]
+  generations MucontInvoiceGeneration[]
+  resyncs MucontInvoiceResync[]
+}
+
+model MucontInvoiceGroup {
+  id String @id @default(cuid())
+  invoiceBatchId String @db.VarChar(128)
+  billingGroupId String @db.VarChar(128)
+  orderId String @unique
+  customerId String
+  orderRefs Json
+  source MucontInvoiceSource @relation(fields: [invoiceBatchId], references: [invoiceBatchId], onDelete: Restrict)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@unique([invoiceBatchId, billingGroupId])
+}
+
+model MucontInvoiceGeneration {
+  generationId String @id @db.VarChar(128)
+  invoiceBatchId String @db.VarChar(128)
+  publicationSequence Int
+  payloadHash String @db.Char(64)
+  snapshot Json
+  result String
+  createdAt DateTime @default(now())
+  source MucontInvoiceSource @relation(fields: [invoiceBatchId], references: [invoiceBatchId], onDelete: Restrict)
+  @@unique([invoiceBatchId, publicationSequence])
+}
+
+model MucontInvoiceResync {
+  requestId String @id @db.VarChar(128)
+  invoiceBatchId String @db.VarChar(128)
+  actorId String
+  expectedRevision String @db.Char(64)
+  generationId String @db.VarChar(128)
+  result Json
+  createdAt DateTime @default(now())
+  source MucontInvoiceSource @relation(fields: [invoiceBatchId], references: [invoiceBatchId], onDelete: Restrict)
 }
 
 model OrderAlias {
@@ -389,6 +459,8 @@ model OrderAlias {
 
 // ==================== 业务订单跟踪表 (Orders 页面独立使用，不参与财务订单匹配) ====================
 model OrderTracker {
+  managedById String?
+  @@index([managedById])
   id                String   @id @default(cuid())
   orderNo           String
   normalizedOrderNo String   @unique
@@ -559,6 +631,8 @@ model IntegrationReconcilePreview {
 
 // ==================== 收据表 (Receipt) ====================
 model Receipt {
+  managedById String?
+  @@index([managedById])
   id           String         @id @default(cuid())
   receiptNo    String?        @unique // 收据号 NO.
   date         DateTime?      // 时间
@@ -596,11 +670,130 @@ model Receipt {
   generatedByBalanceTransfer BalanceTransfer? @relation("BalanceTransferGeneratedReceipt")
   emailNotifications EmailNotification[]
   orderId          String?
+  funding          ReceiptFunding?
 
   @@index([orderNo])
   @@index([invNo])
   @@index([status])
   @@index([createdBy])
+}
+
+// One root per real receipt. Credit lots change entitlement, never income.
+model ReceiptFunding {
+  id String @id @default(cuid())
+  receiptId String? @unique
+  originalReceiptId String @unique
+  originalOrderId String
+  originalCustomerId String
+  receivedAmount Decimal @db.Decimal(18, 2)
+  receiptSnapshot Json
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  receipt Receipt? @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  credits PrepaymentCredit[]
+  allocations PrepaymentAllocation[]
+  @@index([originalOrderId])
+}
+
+model PrepaymentCredit {
+  id String @id @default(cuid())
+  fundingId String
+  sourceId String?
+  customerId String
+  orderTrackerId String?
+  invoiceBatchId String? @db.VarChar(128)
+  billingGroupId String? @db.VarChar(128)
+  amount Decimal @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  funding ReceiptFunding @relation(fields: [fundingId], references: [id], onDelete: Restrict)
+  allocations PrepaymentAllocation[]
+  transfersOut PrepaymentTransfer[] @relation("PrepaymentTransferFrom")
+  transfersIn PrepaymentTransfer[] @relation("PrepaymentTransferTo")
+  @@index([customerId, orderTrackerId])
+  @@index([sourceId])
+  @@index([invoiceBatchId, billingGroupId])
+}
+
+model PrepaymentPlan {
+  id String @id @default(cuid())
+  invoiceBatchId String @db.VarChar(128)
+  version Int
+  requestId String @unique @db.VarChar(128)
+  requestHash String @db.Char(64)
+  financialHash String @db.Char(64)
+  planHash String @db.Char(64)
+  snapshot Json
+  groups Json
+  previousPlanId String?
+  state String @default("RESERVED")
+  ledgerInvoiceId String?
+  createdBy String
+  createdAt DateTime @default(now())
+  appliedAt DateTime?
+  releasedAt DateTime?
+  allocations PrepaymentAllocation[]
+  @@unique([invoiceBatchId, version])
+  @@index([invoiceBatchId, state])
+}
+
+model PrepaymentAllocation {
+  id String @id @default(cuid())
+  planId String?
+  fundingId String
+  creditId String
+  invoiceBatchId String? @db.VarChar(128)
+  billingGroupId String? @db.VarChar(128)
+  orderId String?
+  amount Decimal @db.Decimal(18, 2)
+  state String
+  createdAt DateTime @default(now())
+  appliedAt DateTime?
+  releasedAt DateTime?
+  plan PrepaymentPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+  funding ReceiptFunding @relation(fields: [fundingId], references: [id], onDelete: Restrict)
+  credit PrepaymentCredit @relation(fields: [creditId], references: [id], onDelete: Restrict)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@index([orderId, state])
+  @@index([creditId, state])
+  @@index([invoiceBatchId, state])
+}
+
+model PrepaymentTransfer {
+  id String @id @default(cuid())
+  requestId String @unique @db.VarChar(128)
+  requestHash String @db.Char(64)
+  fromCreditId String
+  toCreditId String @unique
+  amount Decimal @db.Decimal(18, 2)
+  actorId String
+  reason String @db.Text
+  createdAt DateTime @default(now())
+  reversedAt DateTime?
+  reversedBy String?
+  reverseReason String? @db.Text
+  fromCredit PrepaymentCredit @relation("PrepaymentTransferFrom", fields: [fromCreditId], references: [id], onDelete: Restrict)
+  toCredit PrepaymentCredit @relation("PrepaymentTransferTo", fields: [toCreditId], references: [id], onDelete: Restrict)
+}
+
+// A short financial write lock is sufficient for this small single-ledger service.
+model PrepaymentMutex {
+  id String @id
+}
+
+// Original ORDER identity is independent of invoices and optional PI lineage.
+model PrepaymentSource {
+  id String @id @default(cuid())
+  customerId String
+  originalOrderNo String
+  normalizedOrderNo String
+  sourcePiId String? @unique @db.VarChar(128)
+  orderTrackerId String? @unique
+  orderId String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([customerId, normalizedOrderNo])
 }
 
 // ==================== 收据历史版本表 ====================
@@ -654,6 +847,8 @@ model ReceiptEditRequest {
 
 // ==================== 付款明细表 (Detail) ====================
 model Detail {
+  managedById String?
+  @@index([managedById])
   id           String        @id @default(cuid())
   date         DateTime?     // 明细创建时间
   status       DetailStatus  @default(Waiting_SWIFT)
@@ -721,6 +916,8 @@ model DetailHistory {
 
 // ==================== SWIFT水单表 ====================
 model Swift {
+  managedById String?
+  @@index([managedById])
   id             String   @id @default(cuid())
   detailId       String   // 多张SWIFT可对应同一张DETAIL
   status         SwiftStatus @default(Bank_Transfer)
@@ -796,6 +993,8 @@ model SwiftEditRequest {
 }
 
 model PaymentAgent {
+  managedById String?
+  @@index([managedById])
   id             String             @id @default(cuid())
   companyName    String             @db.Text
   companyAddress String?            @db.Text
@@ -844,6 +1043,9 @@ model Customer {
   companyName    String?  @db.Text
   credit         Decimal? @db.Decimal(18, 2)
   companyAddress String?  @db.Text
+  companyContact String?  @db.Text
+  customerCode   String?  @db.VarChar(191)
+  creditCode     String?  @db.VarChar(191)
   notificationLanguage CustomerEmailLanguage @default(ENGLISH)
   createdBy      String
   ownerId        String
@@ -1236,6 +1438,18 @@ model SystemCounter {
   updatedAt DateTime @updatedAt
 }
 
+model MutationIntent {
+  id          String   @id @db.VarChar(64)
+  actorId     String
+  kind        String
+  fingerprint String   @db.VarChar(64)
+  result      Json
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([actorId, kind, createdAt])
+}
+
 model ReceiptGeneratorSession {
   id                    String                        @id @default(cuid())
   receiptId             String?                       @unique
@@ -1268,4 +1482,21 @@ model ReceiptGeneratorSession {
 
   @@index([createdBy, createdAt])
   @@index([status, createdAt])
+}
+
+model RecoveryEntry {
+  id String @id @default(cuid())
+  ownerId String
+  kind String
+  resourceId String
+  status String @default("RECOVERABLE")
+  snapshot Json
+  files Json
+  deletedAt DateTime @default(now())
+  recoverableUntil DateTime
+  restoredAt DateTime?
+  purgedAt DateTime?
+  lastError String? @db.Text
+  @@index([status, recoverableUntil])
+  @@index([ownerId, status])
 }

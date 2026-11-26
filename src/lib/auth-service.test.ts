@@ -1,7 +1,7 @@
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { hashPassword, verifyPassword } from '@/lib/auth';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import {
   changeCurrentUserPassword,
@@ -17,6 +17,7 @@ jest.mock('@/lib/db', () => ({
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
     },
     invoice: { updateMany: jest.fn() },
@@ -42,6 +43,7 @@ jest.mock('@/lib/auth', () => ({
 
 jest.mock('@/lib/audit', () => ({
   recordAuditEvent: jest.fn(),
+  recordAuditEventInTransaction: jest.fn(),
 }));
 
 jest.mock('@/lib/user-hierarchy', () => ({
@@ -72,6 +74,7 @@ const mockDb = db as unknown as {
     findUnique: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
     delete: jest.Mock;
   };
   invoice: { updateMany: jest.Mock };
@@ -104,6 +107,7 @@ describe('auth-service', () => {
     });
     mockHashPassword.mockResolvedValue('hashed-password');
     mockVerifyPassword.mockResolvedValue(true);
+    mockDb.user.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it('creates managed user in transaction and records audit', async () => {
@@ -170,7 +174,7 @@ describe('auth-service', () => {
     }));
   });
 
-  it('deletes subordinate user in transaction and reassigns ownership', async () => {
+  it('disables subordinate user without changing business ownership or history', async () => {
     mockDb.user.findUnique.mockResolvedValueOnce({
       id: 'user-child',
       email: 'user@example.com',
@@ -182,13 +186,15 @@ describe('auth-service', () => {
 
     await deleteManagedUser(makeUser(), 'user-child');
 
-    expect(mockDb.invoice.updateMany).toHaveBeenCalledWith({ where: { createdBy: 'user-child' }, data: { createdBy: 'admin-1' } });
-    expect(mockDb.orderTracker.updateMany).toHaveBeenCalledWith({ where: { createdBy: 'user-child' }, data: { createdBy: 'admin-1' } });
-    expect(mockDb.orderTracker.updateMany).toHaveBeenCalledWith({ where: { updatedBy: 'user-child' }, data: { updatedBy: 'admin-1' } });
-    expect(mockDb.integrationSyncState.updateMany).toHaveBeenCalledWith({ where: { serviceActorId: 'user-child' }, data: { serviceActorId: 'admin-1' } });
-    expect(mockDb.user.delete).toHaveBeenCalledWith({ where: { id: 'user-child' } });
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'USER_DELETE',
+    expect(mockDb.user.update).toHaveBeenCalledWith({ where: { id: 'user-child' },
+      data: { disabledAt: expect.any(Date), sessionVersion: { increment: 1 } } });
+    for (const model of ['invoice', 'order', 'receipt', 'receiptHistory', 'detail', 'detailHistory',
+      'swift', 'customer', 'deletionRequest', 'auditLog', 'orderTracker', 'integrationSyncState'] as const) {
+      expect(mockDb[model].updateMany).not.toHaveBeenCalled();
+    }
+    expect(mockDb.user.delete).not.toHaveBeenCalled();
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({
+      action: 'user.disabled',
       targetId: 'user-child',
     }));
   });
@@ -205,7 +211,7 @@ describe('auth-service', () => {
       password: 'Reset@2026!',
     });
 
-    expect(mockDb.user.update).toHaveBeenCalledWith({ where: { id: 'user-child' }, data: { password: 'hashed-password' } });
+    expect(mockDb.user.update).toHaveBeenCalledWith({ where: { id: 'user-child' }, data: { password: 'hashed-password', sessionVersion: { increment: 1 } } });
     expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'USER_PASSWORD_RESET' }));
   });
 
@@ -218,7 +224,8 @@ describe('auth-service', () => {
     });
 
     expect(mockVerifyPassword).toHaveBeenCalledWith('Old@2026!', 'legacy-hash');
-    expect(mockDb.user.update).toHaveBeenCalledWith({ where: { id: 'admin-1' }, data: { password: 'hashed-password' } });
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({ action: 'USER_PASSWORD_CHANGE' }));
+    expect(mockDb.user.updateMany).toHaveBeenCalledWith({ where: { id: 'admin-1', password: 'legacy-hash', disabledAt: null },
+      data: { password: 'hashed-password', sessionVersion: { increment: 1 } } });
+    expect(recordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({ action: 'USER_PASSWORD_CHANGE' }));
   });
 });

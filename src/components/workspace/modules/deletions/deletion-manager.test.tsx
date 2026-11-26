@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { DeletionManager } from './deletion-manager';
 import { apiCall, useUiText } from '@/components/workspace/shared';
 import { useStore } from '@/lib/store';
 
 jest.mock('@/components/workspace/shared', () => ({
   apiCall: jest.fn(),
+  getApiErrorMessage: (cause: { error?: string }, fallback: string) => cause?.error ?? fallback,
   useUiText: jest.fn(),
 }));
 
@@ -127,6 +128,23 @@ describe('DeletionManager approval pagination', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('offers only rejection for a locked request and reports an unsuccessful decision', async () => {
+    mockApiCall.mockImplementation(async (endpoint, options) => {
+      const action = options?.body ? JSON.parse(options.body).action : '';
+      if (action === 'review-edit') return { success: false, error: 'Decision did not complete' };
+      return { success: true, data: endpoint === 'detail' ? [{ ...buildDetailEditRequests(1)[0], approvalBlocked: true }] : [] };
+    });
+    render(<DeletionManager />);
+    await act(async () => { jest.runOnlyPendingTimers(); });
+    const row = screen.getByText('原单已锁定，仅可拒绝').closest('tr')!;
+    expect(within(row).queryByRole('button', { name: '批准' })).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(within(row).getByRole('button', { name: '拒绝' })); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Decision did not complete');
+    expect(mockApiCall).toHaveBeenCalledWith('detail', expect.objectContaining({
+      body: JSON.stringify({ action: 'review-edit', requestId: 'detail-edit-1', decision: 'reject' }),
+    }));
   });
 
   it('shows only pending approval rows by default at 5 rows per page', async () => {

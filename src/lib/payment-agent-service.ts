@@ -3,7 +3,7 @@ import { rm } from 'fs/promises';
 import { db } from '@/lib/db';
 import { createApiError } from '@/lib/api-error';
 import type { CurrentUser } from '@/lib/request-auth';
-import { getOwnerVisibleIds } from '@/lib/resource-visibility';
+import { getOwnerVisibleIds, managedOwnershipWhere } from '@/lib/resource-visibility';
 import { canAccessOwnedResourceAsync } from '@/lib/ownership';
 import { attachUploadedAssetByPath, resolveUploadedAssetAbsolutePath } from '@/lib/uploaded-asset-service';
 
@@ -57,7 +57,7 @@ export async function listPaymentAgents(currentUser: CurrentUser, options: { sea
   const existingDefault = await db.paymentAgent.findFirst({
     where: {
       companyName: DEFAULT_PAYMENT_AGENT_NAME,
-      createdBy: { in: ownerIds },
+      ...managedOwnershipWhere(ownerIds),
     },
     select: { id: true },
   });
@@ -75,17 +75,16 @@ export async function listPaymentAgents(currentUser: CurrentUser, options: { sea
 
   const search = (options.search || '').trim();
   const where = {
-    createdBy: { in: ownerIds },
-    ...(search
-      ? {
+    AND: [managedOwnershipWhere(ownerIds), ...(search
+      ? [{
           OR: [
             { companyName: { contains: search } },
             { companyAddress: { contains: search } },
             { contactName: { contains: search } },
             { contactPhone: { contains: search } },
           ],
-        }
-      : {}),
+        }]
+      : [])],
   };
 
   const agents = await db.paymentAgent.findMany({
@@ -154,7 +153,7 @@ async function getMutableAgent(agentId: string, currentUser: CurrentUser) {
       detail: { agentId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(agent.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(agent.managedById || agent.createdBy, currentUser))) {
     throw createApiError({
       code: 'FORBIDDEN',
       status: 403,
@@ -175,7 +174,7 @@ export async function resolveAccessiblePaymentAgentId(
     where: { id: trimmed },
     select: {
       id: true,
-      createdBy: true,
+      createdBy: true, managedById: true,
     },
   });
   if (!agent) {
@@ -186,7 +185,7 @@ export async function resolveAccessiblePaymentAgentId(
       detail: { agentId: trimmed },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(agent.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(agent.managedById || agent.createdBy, currentUser))) {
     throw createApiError({
       code: 'FORBIDDEN',
       status: 403,
@@ -263,7 +262,7 @@ export async function deletePaymentAgentFile(currentUser: CurrentUser, fileId: s
       agent: {
         select: {
           id: true,
-          createdBy: true,
+          createdBy: true, managedById: true,
         },
       },
     },
@@ -276,7 +275,7 @@ export async function deletePaymentAgentFile(currentUser: CurrentUser, fileId: s
       detail: { fileId },
     });
   }
-  if (!(await canAccessOwnedResourceAsync(file.agent.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(file.agent.managedById || file.agent.createdBy, currentUser))) {
     throw createApiError({
       code: 'FORBIDDEN',
       status: 403,

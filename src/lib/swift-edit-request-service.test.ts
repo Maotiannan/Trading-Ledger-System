@@ -161,6 +161,22 @@ describe('swift-edit-request-service', () => {
     })).rejects.toMatchObject({ code: 'SWIFT_EDIT_REQUEST_EXISTS' });
   });
 
+  it('can dismiss but not approve a stale request after receipt, without changing the original', async () => {
+    mockDb.swift.findFirst.mockResolvedValue({ id: 'target', status: 'RECEIVED' });
+    mockDb.swiftEditRequest.findUnique.mockResolvedValue({
+      id: 'old-request', swiftId: 'target', status: 'PENDING', requestedBy: 'sales-1', afterSnapshot: {},
+    });
+    mockDb.swiftEditRequest.updateMany.mockResolvedValue({ count: 1 });
+    const args = { currentUser: adminUser, requestId: 'old-request' };
+    await expect(reviewSwiftEdit({ ...args, decision: 'approve' })).rejects.toMatchObject({ status: 400 });
+    expect(mockDb.swiftEditRequest.updateMany).not.toHaveBeenCalled();
+    await reviewSwiftEdit({ ...args, decision: 'reject' });
+    expect(mockDb.swiftEditRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'REJECTED', pendingSwiftId: null }),
+    }));
+    expect(mockUpdateSwiftRecord).not.toHaveBeenCalled();
+  });
+
   it('rejects swift edit requests when swift status is RECEIVED', async () => {
     mockDb.swift.findFirst.mockResolvedValue({
       id: 'swift-2',

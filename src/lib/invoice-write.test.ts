@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { db } from '@/lib/db';
 import { resolveCustomer } from '@/lib/customer-matching';
 import { migrateSystemPoolOrderForInvoiceRow } from '@/lib/invoice-system-pool-reconciliation';
@@ -15,6 +21,8 @@ import {
 
 jest.mock('@/lib/db', () => ({
   db: {
+    mucontInvoiceSource: { findUnique: jest.fn().mockResolvedValue(null) },
+    mucontInvoiceGroup: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
     invoice: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
@@ -29,6 +37,7 @@ jest.mock('@/lib/db', () => ({
     },
     receipt: {
       findMany: jest.fn(),
+      findUnique: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
     },
@@ -74,6 +83,7 @@ const mockDb = db as unknown as {
   };
   receipt: {
     findMany: jest.Mock;
+    findUnique: jest.Mock;
     update: jest.Mock;
     updateMany: jest.Mock;
   };
@@ -138,12 +148,12 @@ describe('invoice-write', () => {
     mockFindOrderIdByNoOrAliasWithExecutor
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
-    mockDb.order.create.mockResolvedValueOnce({ id: 'order-1', orderNo: 'IB-01' });
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-1', orderNo: 'IB-01' });
+    mockDb.order.create.mockResolvedValueOnce({ id: 'order-1', orderNo: 'QZ-01' });
+    mockDb.order.findUnique.mockResolvedValue({ id: 'order-1', orderNo: 'QZ-01' });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
     mockDb.invoice.findUnique.mockResolvedValueOnce({
       id: 'inv-1',
-      orders: [{ id: 'order-1', orderNo: 'IB-01' }],
+      orders: [{ id: 'order-1', orderNo: 'QZ-01' }],
     });
 
     const result = await saveInvoiceWithOrders({
@@ -151,7 +161,7 @@ describe('invoice-write', () => {
       createdBy: 'sales-1',
       operationSource: 'INVOICE_WRITE',
       orders: [
-        { orderNo: 'IB-01', amount: 100, customerMark: 'IB' },
+        { orderNo: 'QZ-01', amount: 100, customerMark: 'IB' },
       ],
     });
 
@@ -163,14 +173,14 @@ describe('invoice-write', () => {
       customerMark: 'IB',
       customerName: null,
       customerId: null,
-      customerOrderNo: 'IB-01',
+      customerOrderNo: 'QZ-01',
       ownerIds: undefined,
     });
-    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(2);
     expect(mockDb.order.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         invoiceId: 'inv-1',
-        orderNo: 'IB-01',
+        orderNo: 'QZ-01',
         createdBy: 'sales-1',
       }),
     }));
@@ -186,7 +196,7 @@ describe('invoice-write', () => {
       actorId: 'sales-1',
     });
     expect(mockConsolidateGroupedOrders).toHaveBeenCalledWith({ invoiceIds: ['inv-1'] });
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1', mockDb);
   });
 
   it('updates an existing target-invoice order and appends customer-fix notice', async () => {
@@ -201,14 +211,12 @@ describe('invoice-write', () => {
     mockDb.invoice.findFirst.mockResolvedValueOnce({ id: 'inv-1', invNo: 'INV-001' });
     mockDb.invoice.update.mockResolvedValueOnce(undefined);
     mockFindOrderIdByNoOrAliasWithExecutor.mockResolvedValueOnce('order-1');
-    mockDb.order.findUnique
-      .mockResolvedValueOnce({ id: 'order-1', orderNo: 'IB-01' })
-      .mockResolvedValueOnce({ id: 'order-1', orderNo: 'IB-01' });
+    mockDb.order.findUnique.mockResolvedValue({ id: 'order-1', orderNo: 'QZ-01' });
     mockDb.order.update.mockResolvedValueOnce(undefined);
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
     mockDb.invoice.findUnique.mockResolvedValueOnce({
       id: 'inv-1',
-      orders: [{ id: 'order-1', orderNo: 'IB-01' }],
+      orders: [{ id: 'order-1', orderNo: 'QZ-01' }],
     });
 
     const result = await saveInvoiceWithOrders({
@@ -217,7 +225,7 @@ describe('invoice-write', () => {
       operationSource: 'INVOICE_WRITE',
       shipDate: new Date('2026-03-11T00:00:00.000Z'),
       orders: [
-        { orderNo: 'IB-01', amount: 80, customerMark: 'IB' },
+        { orderNo: 'QZ-01', amount: 80, customerMark: 'IB' },
       ],
     });
 
@@ -241,14 +249,14 @@ describe('invoice-write', () => {
       }),
     }));
     expect(mockDb.order.create).not.toHaveBeenCalled();
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-1', mockDb);
   });
 
   it('passes owner visibility into customer resolution so wrong MARK can fall back by ORDER', async () => {
     mockResolveCustomer.mockResolvedValueOnce({
       customerId: 'customer-2',
       customerMark: 'KIGNA TEXTILE',
-      customerName: 'GANDO',
+      customerName: 'ORBIT',
       customerPhone: '+224626944105',
       customerCity: 'Conakry',
       needsCustomerFix: false,
@@ -258,12 +266,12 @@ describe('invoice-write', () => {
     mockFindOrderIdByNoOrAliasWithExecutor
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
-    mockDb.order.create.mockResolvedValueOnce({ id: 'order-2', orderNo: 'GANDO-07' });
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-2', orderNo: 'GANDO-07' });
+    mockDb.order.create.mockResolvedValueOnce({ id: 'order-2', orderNo: 'ORBIT-07' });
+    mockDb.order.findUnique.mockResolvedValue({ id: 'order-2', orderNo: 'ORBIT-07' });
     mockDb.receipt.findMany.mockResolvedValueOnce([]);
     mockDb.invoice.findUnique.mockResolvedValueOnce({
       id: 'inv-2',
-      orders: [{ id: 'order-2', orderNo: 'GANDO-07' }],
+      orders: [{ id: 'order-2', orderNo: 'ORBIT-07' }],
     });
 
     const result = await saveInvoiceWithOrders({
@@ -272,7 +280,7 @@ describe('invoice-write', () => {
       operationSource: 'INVOICE_WRITE',
       ownerIds: ['sales-1', 'admin-1'],
       orders: [
-        { orderNo: 'GANDO-07', amount: 200, customerMark: 'KIGNATEX' },
+        { orderNo: 'ORBIT-07', amount: 200, customerMark: 'KIGNATEX' },
       ],
     });
 
@@ -281,7 +289,7 @@ describe('invoice-write', () => {
       customerMark: 'KIGNATEX',
       customerName: null,
       customerId: null,
-      customerOrderNo: 'GANDO-07',
+      customerOrderNo: 'ORBIT-07',
       ownerIds: ['sales-1', 'admin-1'],
     });
   });
@@ -314,10 +322,11 @@ describe('invoice-write', () => {
         operationSource: 'BULK_IMPORT',
       },
     });
-    mockDb.order.findUnique.mockResolvedValueOnce({ id: 'order-old', orderNo: 'UA-01' });
+    mockDb.order.findUnique.mockResolvedValue({ id: 'order-old', orderNo: 'UA-01' });
     mockDb.receipt.findMany.mockResolvedValueOnce([
       { id: 'deposit-1', orderNo: 'UA-01-EXTRA' },
     ]);
+    mockDb.receipt.findUnique.mockResolvedValueOnce({ id: 'deposit-1', orderNo: 'UA-01-EXTRA', isDeposit: true, isMerged: false });
     mockDb.invoice.findUnique.mockResolvedValueOnce({
       id: 'inv-2',
       orders: [{ id: 'order-new', orderNo: 'UA-01' }],
@@ -354,7 +363,7 @@ describe('invoice-write', () => {
         isMerged: true,
       },
     });
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-old', mockDb);
   });
 
   it('applies the existing target amount rule before merging a system-pool duplicate', async () => {
@@ -368,9 +377,7 @@ describe('invoice-write', () => {
     });
     mockDb.invoice.findFirst.mockResolvedValueOnce({ id: 'inv-1', invNo: 'INV-001' });
     mockFindOrderIdByNoOrAliasWithExecutor.mockResolvedValueOnce('formal-order');
-    mockDb.order.findUnique
-      .mockResolvedValueOnce({ id: 'formal-order', orderNo: 'AB-13B' })
-      .mockResolvedValueOnce({ id: 'formal-order', orderNo: 'AB-13B' });
+    mockDb.order.findUnique.mockResolvedValue({ id: 'formal-order', orderNo: 'AB-13B' });
     mockDb.order.update.mockResolvedValueOnce(undefined);
     mockMigrateSystemPoolOrder.mockResolvedValueOnce({
       targetOrderId: 'formal-order',

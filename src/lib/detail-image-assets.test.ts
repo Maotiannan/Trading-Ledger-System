@@ -83,7 +83,7 @@ describe('detail-image-assets', () => {
       imageName: 'payment-detail_500_2026-05-23_Mitty_Group.jpg',
       agent: { companyName: 'Mitty Group' },
       creator: { id: 'admin-1', name: 'Admin', email: 'admin@example.com' },
-      items: [],
+      items: [{ mark: 'OLD', orderNo: 'ORDER-1', amount: 500, receipt: { customer: { mark: 'LATEST' } } }],
       swift: null,
     });
     mockBuildDetailExportViewModel.mockResolvedValueOnce({
@@ -96,6 +96,10 @@ describe('detail-image-assets', () => {
     mockRenderDetailExportJpeg.mockResolvedValueOnce(jpeg);
 
     const result = await regenerateDetailPreviewImage('detail-1', { includeBuffer: true });
+
+    expect(mockBuildDetailExportViewModel).toHaveBeenCalledWith(expect.objectContaining({
+      items: [expect.objectContaining({ mark: 'LATEST' })],
+    }));
 
     expect(mockWriteFile).toHaveBeenCalledWith(
       '/tmp/upload/details/ocr/payment-detail_500_2026-05-23_Mitty_Group.jpg',

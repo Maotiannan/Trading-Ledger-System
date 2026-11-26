@@ -1,6 +1,6 @@
 import { UserRole } from '@prisma/client';
 import { hashPassword, verifyPassword } from '@/lib/auth';
-import { recordAuditEvent } from '@/lib/audit';
+import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
 import { createApiError } from '@/lib/api-error';
 import { db } from '@/lib/db';
@@ -232,7 +232,7 @@ export async function deleteManagedUser(currentUser: CurrentUser, userIdInput: s
     throw createApiError({ code: 'VALIDATION_ERROR', status: 400, message: '用户ID不能为空' });
   }
   if (userId === currentUser.id) {
-    throw createApiError({ code: 'SELF_ACTION_FORBIDDEN', status: 400, message: '不能删除自己' });
+    throw createApiError({ code: 'SELF_ACTION_FORBIDDEN', status: 400, message: '不能停用自己' });
   }
 
   const target = await db.user.findUnique({
@@ -243,46 +243,22 @@ export async function deleteManagedUser(currentUser: CurrentUser, userIdInput: s
     throw createApiError({ code: 'RESOURCE_NOT_FOUND', status: 404, message: '用户不存在' });
   }
   if (isProtectedPrimaryAdmin(target)) {
-    throw createApiError({ code: 'PRIMARY_ADMIN_PROTECTED', status: 400, message: '唯一管理员Admin不可删除' });
+    throw createApiError({ code: 'PRIMARY_ADMIN_PROTECTED', status: 400, message: '唯一管理员Admin不可停用' });
   }
 
   const scope = await getHierarchyScope(currentUser);
   if (!scope.descendantIds.has(target.id) || target.level <= currentUser.level) {
-    throw createApiError({ code: 'ROLE_NOT_ALLOWED', status: 403, message: '仅可删除下级用户' });
+    throw createApiError({ code: 'ROLE_NOT_ALLOWED', status: 403, message: '仅可停用下级用户' });
   }
 
   await runInTransaction(async (tx) => {
-    await tx.invoice.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.order.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.receipt.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.receiptHistory.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.detail.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.detailHistory.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.swift.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.customer.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.customer.updateMany({ where: { ownerId: userId }, data: { ownerId: currentUser.id } });
-    await tx.deletionRequest.updateMany({ where: { requestedBy: userId }, data: { requestedBy: currentUser.id } });
-    await tx.auditLog.updateMany({ where: { actorId: userId }, data: { actorId: currentUser.id } });
-    await tx.orderTracker.updateMany({ where: { createdBy: userId }, data: { createdBy: currentUser.id } });
-    await tx.orderTracker.updateMany({ where: { updatedBy: userId }, data: { updatedBy: currentUser.id } });
-    await tx.integrationSyncState.updateMany({ where: { serviceActorId: userId }, data: { serviceActorId: currentUser.id } });
-    await tx.user.delete({ where: { id: userId } });
+    await tx.user.update({ where: { id: userId }, data: { disabledAt: new Date(), sessionVersion: { increment: 1 } } });
+    await recordAuditEventInTransaction(tx, {
+      action: 'user.disabled', actorId: currentUser.id, targetType: auditTargetTypes.USER, targetId: userId,
+      metadata: { email: target.email, hierarchyAndOwnershipUnchanged: true },
+    });
   });
-
-  await recordAuditEvent({
-    action: auditActions.USER_DELETE,
-    actorId: currentUser.id,
-    targetType: auditTargetTypes.USER,
-    targetId: userId,
-    metadata: {
-      email: target.email,
-      role: target.role,
-      level: target.level,
-      reassignedTo: currentUser.id,
-    },
-  });
-
-  return { message: '用户已删除' };
+  return { message: '账号已停用，原有归属、层级和历史记录保持不变' };
 }
 
 export async function resetManagedUserPassword(
@@ -311,7 +287,7 @@ export async function resetManagedUserPassword(
   }
 
   const hashedPassword = await hashPassword(password);
-  await runInTransaction((tx) => tx.user.update({ where: { id: userId }, data: { password: hashedPassword } }));
+  await runInTransaction((tx) => tx.user.update({ where: { id: userId }, data: { password: hashedPassword, sessionVersion: { increment: 1 } } }));
 
   await recordAuditEvent({
     action: auditActions.USER_PASSWORD_RESET,
@@ -351,14 +327,17 @@ export async function changeCurrentUserPassword(
   }
 
   const hashedPassword = await hashPassword(newPassword);
-  await runInTransaction((tx) => tx.user.update({ where: { id: currentUser.id }, data: { password: hashedPassword } }));
-
-  await recordAuditEvent({
+  await runInTransaction(async (tx) => {
+    const changed = await tx.user.updateMany({ where: { id: currentUser.id, password: userWithPassword.password, disabledAt: null },
+      data: { password: hashedPassword, sessionVersion: { increment: 1 } } });
+    if (changed.count !== 1) throw createApiError({ code: 'CONFLICT', status: 409, message: '账号或密码已变化，请重新登录' });
+    await recordAuditEventInTransaction(tx, {
     action: auditActions.USER_PASSWORD_CHANGE,
     actorId: currentUser.id,
     targetType: auditTargetTypes.USER,
     targetId: currentUser.id,
     metadata: { changedBySelf: true },
+    });
   });
 
   return { message: '密码修改成功' };

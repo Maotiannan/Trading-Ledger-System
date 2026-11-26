@@ -292,6 +292,8 @@ async function loadDetailForPreview(detailId: string): Promise<DetailImageSource
               orderId: true,
               isDeposit: true,
               createdAt: true,
+              customer: { select: { mark: true } },
+              order: { select: { customer: { select: { mark: true } } } },
             },
           },
         },
@@ -308,7 +310,9 @@ async function loadDetailForPreview(detailId: string): Promise<DetailImageSource
     });
   }
 
-  return detail;
+  return { ...detail, items: detail.items.map(item => ({ ...item,
+    mark: item.receipt?.customer?.mark ?? item.receipt?.order?.customer?.mark ?? item.mark,
+  })) };
 }
 
 export async function ensureDetailPreviewImage(

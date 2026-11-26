@@ -21,6 +21,7 @@ import { useExcelTokenSettings, useMuContractSync, useSettingsActions, useSettin
 import { UserManager } from '@/components/workspace/modules/users/user-manager';
 import { buildSettingsPageViewModel } from './page-view-model';
 import { emailSystemSettingKeys } from '@/lib/system-settings';
+import { RecoverySettingsCard } from './components/recovery-settings-card';
 
 export function SettingsManager() {
   const tx = useUiText();
@@ -91,6 +92,7 @@ export function SettingsManager() {
     pwd,
     setPwd,
     updateConfigField,
+    ocrConfigDirty,
     updateUserPreferenceField,
     updateDashboardLayoutPreference,
     togglePurgeModule,
@@ -293,6 +295,10 @@ export function SettingsManager() {
         </CollapsibleSettingsSection>
       )}
 
+      {user?.role === 'ADMIN' && <CollapsibleSettingsSection title={tx('恢复区', 'Recovery Area')}>
+        <RecoverySettingsCard tx={tx} config={config} saving={savingConfig} onFieldChange={updateConfigField} onSave={handleSaveConfig} />
+      </CollapsibleSettingsSection>}
+
       <CollapsibleSettingsSection title={tx('分支清理', 'Branch Purge')}>
         <BranchPurgeCard
           canPurgeBranch={canPurgeBranch}
@@ -359,6 +365,7 @@ export function SettingsManager() {
           loading={loading}
           savingConfig={savingConfig}
           testingConfig={testingConfig}
+          ocrConfigDirty={ocrConfigDirty}
           canEditConfig={canEditConfig}
           config={config}
           tx={tx}

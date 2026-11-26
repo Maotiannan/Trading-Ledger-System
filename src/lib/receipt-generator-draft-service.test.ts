@@ -26,16 +26,41 @@ const pendingDraft = {
   receiptNo: '0010010',
   date: new Date('2026-08-26T00:00:00.000Z'),
   orderId: 'order-2',
-  orderNo: 'PIKIN-20',
+  orderNo: 'KITEM-20',
   invNo: 'INV-2',
   customerId: 'customer-2',
-  customerMark: 'PIKIN',
-  customerName: 'Mamadou Dian Diallo',
-  payer: 'Mamadou Dian Diallo "PIKIN"',
-  tel: '+224 620 00 00 00',
+  customerMark: 'KITEM',
+  customerName: 'Example Customer',
+  payer: 'Example Customer "KITEM"',
+  tel: '+224 600 00 00 00',
 };
 
 describe('receipt-generator-draft-service', () => {
+  it('does not copy a business alias into an empty payer or reuse another customer name', async () => {
+    const tx = makeTx();
+    tx.receiptGeneratorSession.findFirst.mockResolvedValue({ id: 'session', customerId: 'old-customer', usd: 100,
+      customerName: 'Old Person', createdAt: new Date(), layoutSnapshot: {}, status: 'PENDING' });
+    tx.customer.findUnique.mockResolvedValue({ name: '', companyName: null });
+    tx.receiptGeneratorSession.updateMany.mockResolvedValue({ count: 1 });
+    mockCalculateLiveOrderBalance.mockResolvedValue(200);
+    await syncPendingReceiptGeneratorDraft(tx as never, { ...pendingDraft, customerName: 'BUSINESS ALIAS', customerMark: 'CURRENT MARK', payer: '' });
+    expect(tx.receiptGeneratorSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      customerName: null, layoutSnapshot: expect.objectContaining({ clientName: 'CURRENT MARK' }),
+    }) }));
+  });
+  it.each([null, 'Explicit payer'])('never treats an ORDER_NAME as payer when editing a pending receipt (%s)', async (payer) => {
+    const tx = makeTx();
+    tx.receiptGeneratorSession.findFirst.mockResolvedValue({ id: 'session', customerId: 'customer-2', usd: 100,
+      customerName: 'Previous Person', createdAt: new Date(), layoutSnapshot: {}, status: 'PENDING' });
+    tx.customer.findUnique.mockResolvedValue({ name: 'Actual Person', companyName: null });
+    tx.receiptGeneratorSession.updateMany.mockResolvedValue({ count: 1 });
+    mockCalculateLiveOrderBalance.mockResolvedValue(200);
+    await syncPendingReceiptGeneratorDraft(tx as never, { ...pendingDraft, customerName: 'KITEM', payer });
+    expect(tx.receiptGeneratorSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      customerName: 'Actual Person', layoutSnapshot: expect.objectContaining({ clientName: payer || 'Actual Person "KITEM"' }),
+    }) }));
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -53,7 +78,7 @@ describe('receipt-generator-draft-service', () => {
     expect(mockCalculateLiveOrderBalance).not.toHaveBeenCalled();
   });
 
-  it('rebuilds the pending generator session while preserving generator-only selections', async () => {
+  it.each(['Transferred via bank account', 'Espèces'])('rebuilds the pending generator session while preserving receiver %s', async (receivedBy) => {
     const tx = makeTx();
     tx.receiptGeneratorSession.findFirst.mockResolvedValueOnce({
       id: 'session-1',
@@ -75,13 +100,13 @@ describe('receipt-generator-draft-service', () => {
         paymentMode: 'Virement',
         fraisStatus: 'Non payé',
         paymentType: 'Final',
-        receivedBy: 'Transferred via bank account',
+        receivedBy,
       },
       status: ReceiptGeneratorSessionStatus.PENDING,
       createdAt: new Date('2026-08-20T00:00:00.000Z'),
     });
     tx.customer.findUnique.mockResolvedValueOnce({
-      name: 'Mamadou Dian Diallo',
+      name: 'Example Customer',
       companyName: null,
     });
     mockCalculateLiveOrderBalance.mockResolvedValueOnce(500);
@@ -108,32 +133,32 @@ describe('receipt-generator-draft-service', () => {
       },
       data: expect.objectContaining({
         receiptNo: '0010010',
-        orderNo: 'PIKIN-20',
+        orderNo: 'KITEM-20',
         invNo: 'INV-2',
         customerId: 'customer-2',
-        customerMark: 'PIKIN',
-        customerName: 'Mamadou Dian Diallo',
-        clientTel: '+224 620 00 00 00',
+        customerMark: 'KITEM',
+        customerName: 'Example Customer',
+        clientTel: '+224 600 00 00 00',
         balanceBefore: 500,
         balanceAfter: 0,
-        motif: 'Final payment for INV-2 PIKIN-20',
+        motif: 'Final payment for INV-2 KITEM-20',
         layoutSnapshot: expect.objectContaining({
           receiptNo: '0010010',
           dateText: '26/08/2026',
-          orderNo: 'PIKIN-20',
+          orderNo: 'KITEM-20',
           invNo: 'INV-2',
           customerCompanyName: null,
-          customerName: 'Mamadou Dian Diallo',
-          customerMark: 'PIKIN',
-          clientName: 'Mamadou Dian Diallo "PIKIN"',
-          clientTel: '+224 620 00 00 00',
+          customerName: 'Example Customer',
+          customerMark: 'KITEM',
+          clientName: 'Example Customer "KITEM"',
+          clientTel: '+224 600 00 00 00',
           usdAmount: 500,
           balanceBefore: 500,
           balanceAfter: 0,
           paymentMode: 'Virement',
           fraisStatus: 'Non payé',
           paymentType: 'Final',
-          receivedBy: 'Transferred via bank account',
+          receivedBy,
         }),
       }),
     });
@@ -171,7 +196,7 @@ describe('receipt-generator-draft-service', () => {
       status: ReceiptGeneratorSessionStatus.PENDING,
       createdAt: new Date('2026-08-20T00:00:00.000Z'),
     });
-    tx.customer.findUnique.mockResolvedValueOnce({ name: 'Mamadou Dian Diallo', companyName: null });
+    tx.customer.findUnique.mockResolvedValueOnce({ name: 'Example Customer', companyName: null });
     mockCalculateLiveOrderBalance.mockResolvedValueOnce(500);
     tx.receiptGeneratorSession.updateMany.mockResolvedValueOnce({ count: 0 });
 

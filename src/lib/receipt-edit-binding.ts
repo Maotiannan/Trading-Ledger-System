@@ -4,6 +4,7 @@ import { buildInvoiceVisibilityWhere, buildOrderVisibilityWhere } from '@/lib/re
 import { findOrderIdByNoOrAliasWithExecutor, syncOrderAliases } from '@/lib/order-alias-db';
 import { buildOrderNoWithAliases } from '@/lib/order-alias';
 import { serializeOrderTokens } from '@/lib/tokenizer';
+import { promoteUnassociatedDepositOrder } from '@/lib/deposit-order-routing';
 
 type ReceiptEditBindingClient = Prisma.TransactionClient;
 
@@ -144,10 +145,13 @@ export async function resolveReceiptEditBinding(
         matchedCustomer,
       };
     }
+    const promoted = input.isDeposit && (!requestedInvNo || isSystemPoolInvoiceNo(requestedInvNo))
+      ? await promoteUnassociatedDepositOrder(client, existingOrderId, input.currentUserId)
+      : false;
     return {
       orderId: existingOrderId,
       orderNo: order?.orderNo || requestedOrderNo,
-      invNo: order?.invoice?.invNo || null,
+      invNo: promoted ? 'DEPOSIT_POOL' : order?.invoice?.invNo || null,
       matchedCustomer,
     };
   }

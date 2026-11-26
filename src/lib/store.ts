@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { DepositPool } from '@/lib/prepayments/pool-types';
 
 export type UserRole = 'ADMIN' | 'SALES' | 'USER';
 export type WorkspaceView =
@@ -29,6 +30,7 @@ export interface User {
   parentId?: string | null;
   createdAt?: string;
   createdById?: string | null;
+  disabledAt?: string | null;
 }
 
 export interface Order {
@@ -45,18 +47,26 @@ export interface Order {
 }
 
 export interface Invoice {
+  depositPool?: DepositPool;
   id: string;
   invNo: string;
   invAmount: number;
   invBalance: number;
   shipDate?: string | null;
   releaseDate?: string | null;
+  estimatedArrivalDate?: string | null;
+  source?: {
+    provider: 'MUCONT'; generationId: string | null; publicationSequence: number; appliedAt: string | null;
+    revision: string | null; canResync: boolean; canDownloadBillOfLading: boolean;
+    metadataStale: boolean; metadataAvailability: string; metadataReadAt: string | null; creditInsurance?: string;
+  };
   orders: Order[];
   createdAt: string;
 }
 
 export interface Receipt {
   id: string;
+  managedById?: string | null;
   receiptNo: string | null;
   date: string | null;
   tel: string | null;
@@ -120,6 +130,7 @@ export interface Detail {
 }
 
 export interface Swift {
+  detail?: { status: DetailStatus };
   id: string;
   detailId: string;
   amount: number;

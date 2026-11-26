@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback } from 'react';
+import { clearClientUserPreferences, rememberClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
+import { useStore } from '@/lib/store';
 import { apiCall, getApiErrorMessage, getApiResponseErrorMessage, peekPrefetchedApiResult, rememberPrefetchedApiResult } from '@/components/workspace/shared';
 import {
   normalizeDashboardLayoutPreference,
@@ -489,6 +491,7 @@ export function useSettingsActions({
       });
       if (result.success) {
         setUserPreferences(result.data ? normalizeUserPreferences(result.data) : normalizeUserPreferences(validatedPreferences.value));
+        rememberClientUserPreferences(result.data || validatedPreferences.value);
         setMessage(result.message || tx('个人偏好已保存', 'Personal preferences saved'));
       } else {
         setError(getApiErrorMessage(result, tx('保存个人偏好失败', 'Failed to save personal preferences')));
@@ -547,6 +550,8 @@ export function useSettingsActions({
       if (result.success) {
         setPwd({ oldPassword: '', newPassword: '', confirmPassword: '' });
         setMessage(result.message || tx('密码修改成功', 'Password updated successfully'));
+        clearClientUserPreferences();
+        useStore.getState().setUser(null);
       } else {
         setError(getApiErrorMessage(result, tx('密码修改失败', 'Password update failed')));
       }

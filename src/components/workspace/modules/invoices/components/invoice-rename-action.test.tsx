@@ -1,0 +1,43 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { InvoiceRenameAction } from './invoice-rename-action';
+import { apiCall } from '@/components/workspace/api/client';
+import type { Invoice } from '@/lib/store';
+jest.mock('@/components/workspace/api/client', () => ({ apiCall: jest.fn() }));
+jest.mock('@/hooks/use-toast', () => ({ toast: jest.fn() }));
+const invoice = { id: 'invoice', invNo: 'OLD' } as Invoice;
+const tx = (_zh: string, en: string) => en;
+beforeEach(() => jest.clearAllMocks());
+test('only admins see the compact rename action; pools never show it', () => {
+  const { rerender } = render(<InvoiceRenameAction invoice={invoice} isAdmin={false} tx={tx} />);
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  rerender(<InvoiceRenameAction invoice={{ ...invoice, invNo: 'DEPOSIT_POOL' }} isAdmin tx={tx} />);
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+test('cancel does not write; save sends the original number and refreshes only after success', async () => {
+  (apiCall as jest.Mock).mockResolvedValue({ success: true });
+  const changed = jest.fn(); const parent = jest.fn();
+  render(<div onClick={parent}><InvoiceRenameAction invoice={invoice} isAdmin tx={tx} onChanged={changed} /></div>);
+  fireEvent.click(screen.getByRole('button', { name: 'Change invoice number' }));
+  expect(parent).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('INV NO'), { target: { value: 'CANCEL' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(apiCall).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Change invoice number' }));
+  expect(screen.getByLabelText('INV NO')).toHaveValue('OLD');
+  fireEvent.change(screen.getByLabelText('INV NO'), { target: { value: 'NEW' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+  expect(apiCall).toHaveBeenCalledWith('invoice', { method: 'PUT', body: JSON.stringify({ action: 'renameInvoice', invoiceId: 'invoice', expectedInvNo: 'OLD', invNo: 'NEW' }) });
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+test('failed save keeps the draft open and does not refresh', async () => {
+  (apiCall as jest.Mock).mockRejectedValue(new Error('Occupied'));
+  const changed = jest.fn();
+  render(<InvoiceRenameAction invoice={invoice} isAdmin tx={tx} onChanged={changed} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Change invoice number' }));
+  fireEvent.change(screen.getByLabelText('INV NO'), { target: { value: 'NEW' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled());
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  expect(changed).not.toHaveBeenCalled();
+});

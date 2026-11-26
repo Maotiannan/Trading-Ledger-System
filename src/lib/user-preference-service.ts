@@ -158,6 +158,15 @@ function validateListPageSizes(
   }
 }
 
+export async function getInitialUserPreferences(currentUser: CurrentUser): Promise<UserPreferenceSettings | undefined> {
+  try {
+    return await getUserPreferences(currentUser);
+  } catch {
+    // Identity remains verified; the dashboard retries preferences without rendering defaults.
+    return undefined;
+  }
+}
+
 export async function getUserPreferences(currentUser: CurrentUser): Promise<UserPreferenceSettings> {
   const preference = await db.userPreference.findUnique({
     where: { userId: currentUser.id },

@@ -1,6 +1,21 @@
 import { normalizeReceiptOcrResult } from './receipt-normalization';
 
 describe('normalizeReceiptOcrResult', () => {
+  it.each([
+    [true, true],
+    ['true', true],
+    [' TRUE ', true],
+    [false, false],
+    ['false', false],
+    [undefined, false],
+    [null, false],
+    ['unknown', false],
+  ])('preserves an explicit OCR deposit flag %p as %p across both normalizations', (isDeposit, expected) => {
+    const result = normalizeReceiptOcrResult({ orderNo: 'DPT-02', usd: 500, isDeposit });
+    expect(result.isDeposit).toBe(expected);
+    expect(normalizeReceiptOcrResult({ ...result }).isDeposit).toBe(expected);
+  });
+
   it('extracts ORDER NO from motif payment text when OCR orderNo is missing', () => {
     expect(normalizeReceiptOcrResult({
       receiptNo: '0000992',
@@ -9,16 +24,16 @@ describe('normalizeReceiptOcrResult', () => {
     })).toEqual(expect.objectContaining({
       receiptNo: '0000992',
       orderNo: 'Rahim-11',
-      isDeposit: false,
+      isDeposit: true,
     }));
   });
 
   it('keeps explicit OCR orderNo before motif fallback', () => {
     expect(normalizeReceiptOcrResult({
-      orderNo: 'PIKIN-23',
-      motif: 'Payment for PIKIN-19C',
+      orderNo: 'KITEM-23',
+      motif: 'Payment for KITEM-19C',
     })).toEqual(expect.objectContaining({
-      orderNo: 'PIKIN-23',
+      orderNo: 'KITEM-23',
       isDeposit: false,
     }));
   });

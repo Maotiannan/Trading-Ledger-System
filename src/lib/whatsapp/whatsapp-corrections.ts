@@ -4,6 +4,7 @@ import { Prisma, type WhatsAppDelivery } from '@prisma/client';
 import type { DbTransactionClient } from '@/lib/transaction';
 import { db } from '@/lib/db';
 import { computeOrderBalanceFromReceipts } from '@/lib/order-balance';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
 import { formatCustomerPayerLabel } from '@/lib/customer-display';
 import { bufferDeadline } from './whatsapp-buffer';
 import { resolveWhatsAppSource } from './whatsapp-live-source';
@@ -39,7 +40,8 @@ export async function refreshCorrectionInTransaction(tx: DbTransactionClient, de
   const snapshot = delivery.businessSnapshot as Record<string, unknown>;
   const orderId = typeof snapshot.orderId === 'string' ? snapshot.orderId : '';
   const customerId = typeof snapshot.customerId === 'string' ? snapshot.customerId : '';
-  const order = await tx.order.findFirst({ where: { id: orderId, customerId }, include: { receipts: true, invoice: true, customer: true } });
+  const order = await tx.order.findFirst({ where: { id: orderId, customerId }, include: { receipts: { select: receiptBalanceSelect },
+    paymentAllocations: paymentAllocationsSelect, invoice: true, customer: true } });
   const contact = await tx.customerWhatsAppContact.findFirst({ where: { customerId, optedInAt: { not: null }, optedOutAt: null }, orderBy: { updatedAt: 'desc' } });
   const where = { id: delivery.id, status: delivery.status, updatedAt: delivery.updatedAt, claimToken: null };
   if (!order?.customer || !contact) {

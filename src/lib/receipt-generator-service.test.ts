@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import {
   ReceiptGeneratorSessionStatus,
   ReceiptStatus,
@@ -25,11 +31,13 @@ jest.mock('@/lib/db', () => ({
     receipt: {
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     receiptGeneratorSession: {
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     invoice: {
       findFirst: jest.fn(),
@@ -37,6 +45,7 @@ jest.mock('@/lib/db', () => ({
     },
     order: {
       create: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({ invoice: { invNo: 'L26-REAL' } }),
     },
     orderAlias: {
       deleteMany: jest.fn(),
@@ -96,7 +105,7 @@ function makeUser(role: UserRole = UserRole.ADMIN) {
 
 const mockDb = db as unknown as {
   receipt: { create: jest.Mock; update: jest.Mock };
-  receiptGeneratorSession: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+  receiptGeneratorSession: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
   invoice: { findFirst: jest.Mock; create: jest.Mock };
   order: { create: jest.Mock };
   orderAlias: { deleteMany: jest.Mock; createMany: jest.Mock };
@@ -114,8 +123,29 @@ const mockRm = rm as jest.MockedFunction<typeof rm>;
 const mockProjectPaymentReceipt = projectPaymentReceiptInTransaction as jest.Mock;
 
 describe('receipt-generator-service', () => {
+  it.each([null, 'Legal Company'])('does not use the order alias as a person name when the linked profile name is empty (%s)', async (companyName) => {
+    mockLookupInvoiceOrderContext.mockResolvedValueOnce({ data: { exactMatches: [{
+      id: 'order-1', orderNo: 'BIZ-01', orderBalance: 100, customerId: 'customer-1', customerMark: 'MARK',
+      customerName: 'BIZ', needsCustomerFix: false, customer: { name: '', companyName, orderName: 'BIZ', mark: 'MARK' },
+      invoice: { invNo: 'INV' },
+    }] } });
+    if (companyName) {
+      mockDb.receipt.create.mockResolvedValueOnce({ id: 'receipt' });
+      mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({ id: 'session' });
+    }
+    const create = createReceiptGeneratorSession(makeUser(), { orderNo: 'BIZ-01', usdAmount: 10 });
+    if (!companyName) {
+      await expect(create).rejects.toMatchObject({ status: 400 });
+      expect(mockDb.receipt.create).not.toHaveBeenCalled();
+    } else {
+      await create;
+      expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payer: 'Legal Company "MARK"' }) }));
+      expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ customerName: null }) }));
+    }
+  });
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb.receiptGeneratorSession.updateMany.mockResolvedValue({ count: 1 });
     mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
     mockCanAccessOwnedResourceAsync.mockResolvedValue(true);
     mockAllocateNextReceiptNo.mockResolvedValue('0010000');
@@ -125,7 +155,7 @@ describe('receipt-generator-service', () => {
     mockProjectPaymentReceipt.mockResolvedValue({ projected: true });
     mockDb.invoice.findFirst.mockResolvedValue({ id: 'deposit-pool-invoice', invNo: 'DEPOSIT_POOL' });
     mockDb.invoice.create.mockResolvedValue({ id: 'deposit-pool-invoice', invNo: 'DEPOSIT_POOL' });
-    mockDb.order.create.mockResolvedValue({ id: 'order-deposit-pool', orderNo: 'AKD-01' });
+    mockDb.order.create.mockResolvedValue({ id: 'order-deposit-pool', orderNo: 'QXX-01' });
     mockDb.orderAlias.deleteMany.mockResolvedValue({ count: 0 });
     mockDb.orderAlias.createMany.mockResolvedValue({ count: 1 });
     mockLookupInvoiceOrderContext.mockResolvedValue({
@@ -204,7 +234,7 @@ describe('receipt-generator-service', () => {
     expect(mockRecordAuditEvent).toHaveBeenCalled();
   });
 
-  it('persists deposit signed receipts as deposit records and stores the selected receiver in the layout snapshot', async () => {
+  it.each(['Transferred via bank account', 'Espèces'])('persists deposit signed receipts with receiver %s in the layout snapshot', async (receivedBy) => {
     mockDb.receipt.create.mockResolvedValueOnce({
       id: 'receipt-deposit',
       receiptNo: '0010000',
@@ -223,7 +253,7 @@ describe('receipt-generator-service', () => {
       paymentMode: 'Cash',
       fraisStatus: 'Non payé',
       paymentType: 'Deposit',
-      receivedBy: 'Transferred via bank account',
+      receivedBy,
     });
 
     expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -239,7 +269,7 @@ describe('receipt-generator-service', () => {
           paymentType: 'Deposit',
           paymentMode: 'Espèces',
           fraisStatus: 'Non payé',
-          receivedBy: 'Transferred via bank account',
+          receivedBy,
           resteAPayer: '',
           balanceAfter: null,
         }),
@@ -250,11 +280,11 @@ describe('receipt-generator-service', () => {
   it('creates a deposit-pool order when a deposit signed receipt has customer context but no invoice order yet', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {
-        derivedOrderName: 'AKD',
+        derivedOrderName: 'QXX',
         inferredCustomer: {
-          id: 'customer-akd',
+          id: 'customer-qxx',
           mark: 'A K D',
-          orderName: 'AKD',
+          orderName: 'QXX',
           companyName: null,
           name: 'Abdoulaye Diallo',
           phone: '+224 622 05 71 47',
@@ -264,19 +294,19 @@ describe('receipt-generator-service', () => {
       },
     });
     mockDb.receipt.create.mockResolvedValueOnce({
-      id: 'receipt-akd-deposit',
+      id: 'receipt-qxx-deposit',
       receiptNo: '0010000',
       status: ReceiptStatus.SIGNING_PENDING,
     });
     mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
-      id: 'session-akd-deposit',
-      receiptId: 'receipt-akd-deposit',
+      id: 'session-qxx-deposit',
+      receiptId: 'receipt-qxx-deposit',
       receiptNo: '0010000',
       status: ReceiptGeneratorSessionStatus.PENDING,
     });
 
     const result = await createReceiptGeneratorSession(makeUser(), {
-      orderNo: 'AKD-01',
+      orderNo: 'QXX-01',
       usdAmount: 1000,
       paymentType: 'Deposit',
     });
@@ -284,11 +314,11 @@ describe('receipt-generator-service', () => {
     expect(mockDb.order.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         invoiceId: 'deposit-pool-invoice',
-        orderNo: 'AKD-01',
+        orderNo: 'QXX-01',
         amount: 0,
-        customerId: 'customer-akd',
+        customerId: 'customer-qxx',
         customerMark: 'A K D',
-        customerName: 'Abdoulaye Diallo',
+        customerName: 'QXX',
         customerPhone: '+224 622 05 71 47',
         needsCustomerFix: false,
       }),
@@ -296,7 +326,7 @@ describe('receipt-generator-service', () => {
     expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         orderId: 'order-deposit-pool',
-        orderNo: 'AKD-01',
+        orderNo: 'QXX-01',
         invNo: null,
         isDeposit: true,
         payer: 'Abdoulaye Diallo "A K D"',
@@ -305,36 +335,36 @@ describe('receipt-generator-service', () => {
     }));
     expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        orderNo: 'AKD-01',
+        orderNo: 'QXX-01',
         invNo: null,
         balanceBefore: null,
         balanceAfter: null,
-        motif: 'Deposit for AKD-01',
+        motif: 'Deposit for QXX-01',
         layoutSnapshot: expect.objectContaining({
           receiptNo: '0010000',
-          orderNo: 'AKD-01',
+          orderNo: 'QXX-01',
           invNo: null,
           paymentType: 'Deposit',
           resteAPayer: '',
         }),
       }),
     }));
-    expect(result.data.signingPath).toBe('/receipt-generator/session-akd-deposit');
+    expect(result.data.signingPath).toBe('/receipt-generator/session-qxx-deposit');
   });
 
   it('uses the customer profile name when the order row customerName is a fallback alias', async () => {
     mockLookupInvoiceOrderContext.mockResolvedValueOnce({
       data: {
-        derivedOrderName: 'PIKIN',
+        derivedOrderName: 'KITEM',
         inferredCustomer: null,
         exactMatches: [
           {
-            id: 'order-pikin',
-            orderNo: 'PIKIN-20',
+            id: 'order-kitem',
+            orderNo: 'KITEM-20',
             orderBalance: 8458,
-            customerId: 'customer-pikin',
-            customerMark: 'PIKIN',
-            customerName: 'PIKIN',
+            customerId: 'customer-kitem',
+            customerMark: 'KITEM',
+            customerName: 'KITEM',
             customerPhone: '620000020',
             customerCity: 'Conakry',
             needsCustomerFix: false,
@@ -342,39 +372,39 @@ describe('receipt-generator-service', () => {
               companyName: null,
               name: 'Mamadou Dian Diallo',
             },
-            invoice: { id: 'inv-pikin', invNo: 'INV-PIKIN', createdAt: new Date('2026-05-07T00:00:00Z') },
+            invoice: { id: 'inv-kitem', invNo: 'INV-KITEM', createdAt: new Date('2026-05-07T00:00:00Z') },
           },
         ],
       },
     });
     mockDb.receipt.create.mockResolvedValueOnce({
-      id: 'receipt-pikin',
+      id: 'receipt-kitem',
       receiptNo: '0010000',
       status: ReceiptStatus.SIGNING_PENDING,
     });
     mockDb.receiptGeneratorSession.create.mockResolvedValueOnce({
-      id: 'session-pikin',
-      receiptId: 'receipt-pikin',
+      id: 'session-kitem',
+      receiptId: 'receipt-kitem',
       receiptNo: '0010000',
       status: ReceiptGeneratorSessionStatus.PENDING,
     });
 
     await createReceiptGeneratorSession(makeUser(), {
-      orderNo: 'PIKIN-20',
+      orderNo: 'KITEM-20',
       usdAmount: 1,
       paymentMode: 'Cash',
     });
 
     expect(mockDb.receipt.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        payer: 'Mamadou Dian Diallo "PIKIN"',
+        payer: 'Mamadou Dian Diallo "KITEM"',
       }),
     }));
     expect(mockDb.receiptGeneratorSession.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         customerName: 'Mamadou Dian Diallo',
         layoutSnapshot: expect.objectContaining({
-          clientName: 'Mamadou Dian Diallo "PIKIN"',
+          clientName: 'Mamadou Dian Diallo "KITEM"',
         }),
       }),
     }));

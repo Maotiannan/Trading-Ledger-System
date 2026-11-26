@@ -91,7 +91,7 @@ export function normalizeReceiptOcrResult(value: Record<string, unknown>): Recei
     invNo,
     orderNo,
     payer: pickFirstString(value, ['payer', 'clientName', 'client_name', 'customerName', 'customer_name', 'payor']),
-    // Upload Receipt defaults to non-deposit; users must explicitly check DEPOSIT.
-    isDeposit: false,
+    isDeposit: value.isDeposit === true
+      || (typeof value.isDeposit === 'string' && value.isDeposit.trim().toLowerCase() === 'true'),
   };
 }

@@ -4,13 +4,19 @@ import { formatUsdAmount } from '@/lib/display-format';
 
 export const RECEIPT_GENERATOR_RECEIVED_BY = 'Mamadou Dian Diallo';
 export const RECEIPT_GENERATOR_BANK_RECEIVED_BY = 'Transferred via bank account';
+export const RECEIPT_GENERATOR_CASH_RECEIVED_BY = 'Espèces';
+export const RECEIPT_GENERATOR_RECEIVED_BY_OPTIONS = [
+  RECEIPT_GENERATOR_RECEIVED_BY,
+  RECEIPT_GENERATOR_BANK_RECEIVED_BY,
+  RECEIPT_GENERATOR_CASH_RECEIVED_BY,
+] as const;
 export const RECEIPT_GENERATOR_PAYMENT_TYPES = ['Deposit', 'Full', 'Initial', 'Standard', 'Final'] as const;
 export const RECEIPT_GENERATOR_PAYMENT_MODES = ['Espèces', 'Virement'] as const;
 export const RECEIPT_GENERATOR_FRAIS_STATUSES = ['Payé', 'Non payé'] as const;
 export type ReceiptGeneratorPaymentType = typeof RECEIPT_GENERATOR_PAYMENT_TYPES[number];
 export type ReceiptGeneratorPaymentMode = typeof RECEIPT_GENERATOR_PAYMENT_MODES[number];
 export type ReceiptGeneratorFraisStatus = typeof RECEIPT_GENERATOR_FRAIS_STATUSES[number];
-export type ReceiptGeneratorReceivedBy = typeof RECEIPT_GENERATOR_RECEIVED_BY | typeof RECEIPT_GENERATOR_BANK_RECEIVED_BY;
+export type ReceiptGeneratorReceivedBy = typeof RECEIPT_GENERATOR_RECEIVED_BY_OPTIONS[number];
 
 type ReceiptGeneratorLayoutInput = {
   receiptNo: string;
@@ -125,8 +131,8 @@ export function normalizeReceiptGeneratorFraisStatus(value: unknown): ReceiptGen
 }
 
 export function normalizeReceiptGeneratorReceivedBy(value: unknown): ReceiptGeneratorReceivedBy {
-  return value === RECEIPT_GENERATOR_BANK_RECEIVED_BY
-    ? RECEIPT_GENERATOR_BANK_RECEIVED_BY
+  return RECEIPT_GENERATOR_RECEIVED_BY_OPTIONS.includes(value as ReceiptGeneratorReceivedBy)
+    ? value as ReceiptGeneratorReceivedBy
     : RECEIPT_GENERATOR_RECEIVED_BY;
 }
 

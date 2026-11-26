@@ -24,6 +24,8 @@ import type {
 import type { CurrentUser } from '@/lib/request-auth';
 import { runInTransaction, type DbTransactionClient } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
+import { prepareNotificationInvoiceDates } from '@/lib/integrations/mucont-invoice-metadata';
+import { buildInvoiceVisibilityWhere } from '@/lib/resource-visibility';
 
 const notificationInclude = Prisma.validator<Prisma.EmailNotificationInclude>()({
   customer: {
@@ -424,6 +426,7 @@ export async function previewEmailNotification(currentUser: CurrentUser, input: 
   const raw = inputRecord(input);
   const id = notificationId(raw.notificationId);
   const ownerIds = await visibleOwnerIds(currentUser);
+  await prepareNotificationInvoiceDates({ notificationIds: [id], invoiceWhere: buildInvoiceVisibilityWhere(ownerIds) });
   return runInTransaction(async (tx) => {
     let row = await findVisibleNotification(tx, ownerIds, id);
     if (!PREVIEWABLE_STATUSES.has(row.status)) {
@@ -491,6 +494,7 @@ export async function approveEmailNotifications(currentUser: CurrentUser, input:
   const raw = inputRecord(input);
   const ids = notificationIds(raw.notificationIds);
   const ownerIds = await visibleOwnerIds(currentUser);
+  await prepareNotificationInvoiceDates({ notificationIds: ids, invoiceWhere: buildInvoiceVisibilityWhere(ownerIds) });
   return runInTransaction(async (tx) => {
     await lockNotificationRows(tx, ids);
     const settings = await getEmailSettings(tx);

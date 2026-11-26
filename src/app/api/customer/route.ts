@@ -55,6 +55,9 @@ function toSalesView<T extends Record<string, unknown>>(row: T, showExtended: bo
     ...row,
     companyName: null,
     companyAddress: null,
+    companyContact: null,
+    customerCode: null,
+    creditCode: null,
     credit: null,
   };
 }
@@ -84,10 +87,13 @@ function parsePayload(body: Record<string, unknown>): CustomerPayload {
     name: trimStr(body.name),
     phone: trimStr(body.phone),
     city: trimStr(body.city),
-    consignee: trimStr(body.consignee) || null,
+    consignee: body.consignee === undefined ? undefined : trimStr(body.consignee) || null,
     companyName: trimStr(body.companyName) || null,
     companyAddress: trimStr(body.companyAddress) || null,
-    credit: body.credit === null || body.credit === undefined || body.credit === '' ? null : Number(body.credit),
+    companyContact: body.companyContact === undefined ? undefined : trimStr(body.companyContact) || null,
+    customerCode: body.customerCode === undefined ? undefined : trimStr(body.customerCode) || null,
+    creditCode: body.creditCode === undefined ? undefined : trimStr(body.creditCode) || null,
+    credit: body.credit === undefined ? undefined : body.credit === null || body.credit === '' ? null : Number(body.credit),
   };
 }
 
@@ -169,6 +175,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       { header: 'COMPANY_NAME', key: 'companyName', width: 24 },
       { header: 'CREDIT', key: 'credit', width: 12 },
       { header: 'COMPANY_ADDRESS', key: 'companyAddress', width: 30 },
+      { header: 'CUSTOMER_CODE', key: 'customerCode', width: 20 },
+      { header: 'CREDIT_CODE', key: 'creditCode', width: 20 },
       { header: 'SALES_EMAIL', key: 'salesEmail', width: 28 },
     ];
     sheet.addRow({
@@ -180,6 +188,8 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
       consignee: 'Ahmadou Diallo',
       companyName: 'MAB Co.,Ltd',
       credit: 30000,
+      customerCode: 'C-EXAMPLE',
+      creditCode: 'CR-EXAMPLE',
       companyAddress: 'Conakry, Guinea',
       salesEmail: '',
     });
@@ -270,6 +280,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
           consignee: trimStr(row.getCell(headerMap.get('CONSIGNEE')!).value) || null,
           companyName: headerMap.has('COMPANY_NAME') ? trimStr(row.getCell(headerMap.get('COMPANY_NAME')!).value) || null : null,
           companyAddress: headerMap.has('COMPANY_ADDRESS') ? trimStr(row.getCell(headerMap.get('COMPANY_ADDRESS')!).value) || null : null,
+          customerCode: headerMap.has('CUSTOMER_CODE') ? trimStr(row.getCell(headerMap.get('CUSTOMER_CODE')!).value) || null : null,
+          creditCode: headerMap.has('CREDIT_CODE') ? trimStr(row.getCell(headerMap.get('CREDIT_CODE')!).value) || null : null,
           credit: headerMap.has('CREDIT')
             ? (() => {
                 const raw = trimStr(row.getCell(headerMap.get('CREDIT')!).value);
@@ -317,6 +329,8 @@ export const POST = withAuth(async (request: NextRequest, currentUser) => {
             consignee: trimStr(row.consignee) || null,
             companyName: trimStr(row.companyName) || null,
             companyAddress: trimStr(row.companyAddress) || null,
+            customerCode: trimStr(row.customerCode) || null,
+            creditCode: trimStr(row.creditCode) || null,
             credit: creditRaw === '' ? null : (Number.isFinite(credit) ? credit : Number.NaN),
           },
         };

@@ -1,3 +1,4 @@
+import { clearClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { apiCall } from '@/components/workspace/shared';
 import { useListPageSizePreference } from './use-list-page-size-preference';
@@ -10,6 +11,7 @@ const mockApiCall = apiCall as jest.Mock;
 
 describe('useListPageSizePreference', () => {
   beforeEach(() => {
+    clearClientUserPreferences();
     jest.clearAllMocks();
   });
 

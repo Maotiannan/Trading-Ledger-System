@@ -8,6 +8,7 @@ const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 interface SessionPayload {
   userId: string;
   exp: number;
+  version?: number;
 }
 
 function toBase64Url(input: string): string {
@@ -33,9 +34,10 @@ function sign(payloadBase64: string): string {
   return createHmac('sha256', getSessionSecret()).update(payloadBase64).digest('base64url');
 }
 
-export function createSessionToken(userId: string): string {
+export function createSessionToken(userId: string, version = 0): string {
   const payload: SessionPayload = {
     userId,
+    version,
     exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
   };
   const payloadBase64 = toBase64Url(JSON.stringify(payload));

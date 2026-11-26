@@ -10,6 +10,7 @@ export type InvoiceDraftOrder = {
 };
 
 export type EditingInvoiceOrder = {
+  sourceLinked?: boolean;
   id: string;
   orderNo: string;
   invNo: string;

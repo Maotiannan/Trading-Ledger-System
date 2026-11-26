@@ -1,7 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { formatOrderNameDisplay } from '@/lib/display-format';
 import { addMoney, moneyToNumber, type MoneyInput } from '@/lib/money';
-import { computeOrderBalanceFromReceipts, type OrderBalanceReceiptInput } from '@/lib/order-balance';
+import { computeOrderBalanceFromReceipts, type OrderBalanceReceiptInput, type OrderPaymentAllocationInput } from '@/lib/order-balance';
+import { receiptBalanceSelect, paymentAllocationsSelect } from '@/lib/prepayments/balance-select';
+import { customerBusinessLabel, customerBusinessSelect, type CustomerBusinessProfile } from '@/lib/customer-business-label';
 
 export type DashboardOutstandingOrderInput = {
   id: string;
@@ -9,9 +11,11 @@ export type DashboardOutstandingOrderInput = {
   customerId: string | null;
   customerName: string | null;
   customerMark: string | null;
+  customer?: CustomerBusinessProfile | null;
   amount: MoneyInput;
   orderBalance: MoneyInput;
   receipts: OrderBalanceReceiptInput[];
+  paymentAllocations?: OrderPaymentAllocationInput[];
 };
 
 export type DashboardOutstandingInvoiceInput = {
@@ -70,6 +74,7 @@ export function dashboardOutstandingInvoiceSelect(orderWhere: Prisma.OrderWhereI
     id: true,
     invNo: true,
     releaseDate: true,
+    mucontSource: { select: { invoiceBatchId: true } },
     orders: {
       where: orderWhere,
       select: {
@@ -78,14 +83,11 @@ export function dashboardOutstandingInvoiceSelect(orderWhere: Prisma.OrderWhereI
         customerId: true,
         customerName: true,
         customerMark: true,
+        customer: { select: customerBusinessSelect },
         amount: true,
         orderBalance: true,
-        receipts: {
-          select: {
-            usd: true,
-            status: true,
-          },
-        },
+        receipts: { select: receiptBalanceSelect },
+        paymentAllocations: paymentAllocationsSelect,
       },
     },
   } as const;
@@ -101,6 +103,7 @@ export function buildDashboardOutstandingSnapshot(
       orderBalances.set(order.id, computeOrderBalanceFromReceipts({
         amount: order.amount,
         receipts: order.receipts,
+        paymentAllocations: order.paymentAllocations,
       }));
     }
   }
@@ -120,7 +123,7 @@ export function buildDashboardOutstandingSnapshot(
       invoiceOutstanding += outstanding;
       if (outstanding <= 0) continue;
 
-      const customerLabel = formatOrderNameDisplay(order.customerName || order.customerMark || order.orderNo);
+      const customerLabel = customerBusinessLabel(order.customer, order.customerMark || order.orderNo);
       const customerKey = order.customerId ? `customer:${order.customerId}` : `order:${order.id}`;
       const daysSinceRelease = invoice.releaseDate
         ? Math.max(0, Math.floor((nowMs - invoice.releaseDate.getTime()) / 86_400_000))
@@ -130,7 +133,7 @@ export function buildDashboardOutstandingSnapshot(
         customerId: order.customerId,
         customerKey,
         customerLabel,
-        customerMark: order.customerMark || order.customerName || order.orderNo,
+        customerMark: order.customer ? String(order.customer.mark || '').trim() : order.customerMark || order.orderNo,
         totalOutstanding: 0,
         statusSubtotals: { inTransit: 0, released: 0 },
         orders: [],

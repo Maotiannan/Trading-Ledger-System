@@ -100,10 +100,11 @@ describe('dashboard-summary-service', () => {
         orders: [
           {
             id: 'order-1',
-            orderNo: 'Super Dt2-09',
+            orderNo: 'Demo Fx2-09',
             customerId: 'customer-super-dt2',
-            customerName: 'super dt2',
-            customerMark: 'SDT2',
+            customerName: 'demo fx2',
+            customerMark: 'DFX2',
+            customer: { orderName: 'DEMO FX2', mark: 'DFX2', orderNames: [] },
             amount: 1000,
             orderBalance: 750,
             receipts: [{ usd: 250, status: 'SR_Received' }],
@@ -134,10 +135,11 @@ describe('dashboard-summary-service', () => {
         orders: [
           {
             id: 'order-3',
-            orderNo: 'Super Dt2-10',
+            orderNo: 'Demo Fx2-10',
             customerId: 'customer-super-dt2',
-            customerName: 'super dt2',
-            customerMark: 'SDT2',
+            customerName: 'demo fx2',
+            customerMark: 'DFX2',
+            customer: { orderName: 'DEMO FX2', mark: 'DFX2', orderNames: [] },
             amount: 250,
             orderBalance: 250,
             receipts: [],
@@ -180,7 +182,7 @@ describe('dashboard-summary-service', () => {
         orders: [
           {
             orderId: 'order-1',
-            orderNo: 'SUPER DT2-09',
+            orderNo: 'DEMO FX2-09',
             amount: 1000,
             outstanding: 750,
           },
@@ -191,8 +193,8 @@ describe('dashboard-summary-service', () => {
       {
         customerId: 'customer-super-dt2',
         customerKey: 'customer:customer-super-dt2',
-        customerLabel: 'SUPER DT2',
-        customerMark: 'SDT2',
+        customerLabel: 'DEMO FX2',
+        customerMark: 'DFX2',
         totalOutstanding: 1000,
         statusSubtotals: {
           inTransit: 250,
@@ -201,7 +203,7 @@ describe('dashboard-summary-service', () => {
         orders: [
           {
             orderId: 'order-3',
-            orderNo: 'SUPER DT2-10',
+            orderNo: 'DEMO FX2-10',
             invNo: 'L25MH090004',
             outstanding: 250,
             statusGroup: 'IN_TRANSIT',
@@ -210,7 +212,7 @@ describe('dashboard-summary-service', () => {
           },
           {
             orderId: 'order-1',
-            orderNo: 'SUPER DT2-09',
+            orderNo: 'DEMO FX2-09',
             invNo: 'L25MH090002',
             outstanding: 750,
             statusGroup: 'RELEASED',
@@ -222,7 +224,7 @@ describe('dashboard-summary-service', () => {
     ]);
   });
 
-  it('uses computed receipt balance when stored orderBalance is stale and schedules automatic repair', async () => {
+  it('uses computed receipt balance when stored orderBalance is stale without writing during GET', async () => {
     mockDb.invoice.findMany.mockResolvedValue([
       {
         id: 'invoice-super-dt2',
@@ -231,10 +233,10 @@ describe('dashboard-summary-service', () => {
         orders: [
           {
             id: 'order-super-dt2-07',
-            orderNo: 'SUPER DT2-07',
+            orderNo: 'DEMO FX2-07',
             customerId: 'customer-super-dt2',
-            customerName: 'super dt2',
-            customerMark: 'SDT2',
+            customerName: 'demo fx2',
+            customerMark: 'DFX2',
             amount: 28674,
             orderBalance: 38674,
             receipts: [
@@ -263,18 +265,7 @@ describe('dashboard-summary-service', () => {
         orders: [expect.objectContaining({ outstanding: 3674 })],
       }),
     ]);
-    expect(mockRepairOrderBalanceCacheIfNeeded).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'order-super-dt2-07',
-        orderNo: 'SUPER DT2-07',
-        orderBalance: 38674,
-      }),
-      expect.anything(),
-      expect.objectContaining({
-        actorId: 'admin-1',
-        source: 'dashboard-summary',
-      }),
-    );
+    expect(mockRepairOrderBalanceCacheIfNeeded).not.toHaveBeenCalled();
   });
 
 });

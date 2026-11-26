@@ -211,4 +211,45 @@ describe('useUserActions', () => {
 
     expect(window.alert).toHaveBeenCalledWith('Permission denied');
   });
+
+  it('disables an account only after confirmation and refreshes its retained record', async () => {
+    const disabled = { id: 'user-1', disabledAt: '2026-11-02T00:00:00.000Z' };
+    mockApiCall.mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: true, data: [disabled] });
+    const { result } = renderHook(() => useUserActions(createDeps()));
+    await act(async () => { await result.current.handleDelete('user-1'); });
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('历史记录将保留'));
+    expect(mockApiCall).toHaveBeenNthCalledWith(1, 'auth', expect.objectContaining({
+      body: JSON.stringify({ action: 'delete', userId: 'user-1' }),
+    }));
+    expect(setUsers).toHaveBeenCalledWith([disabled]);
+  });
+
+  it('reactivates an account independently and refreshes the list', async () => {
+    const enabled = { id: 'user-1', disabledAt: null };
+    mockApiCall.mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: true, data: [enabled] });
+    const { result } = renderHook(() => useUserActions(createDeps()));
+    await act(async () => { await result.current.handleReactivate('user-1'); });
+    expect(mockApiCall).toHaveBeenNthCalledWith(1, 'auth', expect.objectContaining({
+      body: JSON.stringify({ action: 'reactivate', userId: 'user-1' }),
+    }));
+    expect(setUsers).toHaveBeenCalledWith([enabled]);
+    expect(window.alert).not.toHaveBeenCalled();
+  });
+
+  it.each(['handleDelete', 'handleReactivate'] as const)('keeps the current list when %s is rejected', async (action) => {
+    mockApiCall.mockResolvedValueOnce({ success: false, error: 'Permission denied' });
+    const { result } = renderHook(() => useUserActions(createDeps()));
+    await act(async () => { await result.current[action]('user-1'); });
+    expect(window.alert).toHaveBeenCalledWith('Permission denied');
+    expect(setUsers).not.toHaveBeenCalled();
+    expect(mockApiCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a reactivation network failure without pretending the account is enabled', async () => {
+    mockApiCall.mockRejectedValueOnce(new Error('Network unavailable'));
+    const { result } = renderHook(() => useUserActions(createDeps()));
+    await act(async () => { await result.current.handleReactivate('user-1'); });
+    expect(window.alert).toHaveBeenCalledWith('Network unavailable');
+    expect(setUsers).not.toHaveBeenCalled();
+  });
 });

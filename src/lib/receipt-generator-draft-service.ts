@@ -75,7 +75,7 @@ export async function syncPendingReceiptGeneratorDraft(
         select: { companyName: true, name: true },
       })
     : null;
-  const customerName = input.customerName || customer?.name || session.customerName;
+  const customerName = customer?.name || (input.customerId === session.customerId ? session.customerName : null);
   let customerCompanyName: string | null = null;
   if (customer) {
     customerCompanyName = customer.companyName;

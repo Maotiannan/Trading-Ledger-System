@@ -26,8 +26,8 @@ function buildChildrenMap(nodes: UserNode[]): Map<string, string[]> {
   return childrenMap;
 }
 
-export async function getHierarchyScope(currentUser: CurrentUser): Promise<HierarchyScope> {
-  const nodes = await db.user.findMany({
+export async function getHierarchyScope(currentUser: CurrentUser, client: Pick<typeof db, 'user'> = db): Promise<HierarchyScope> {
+  const nodes = await client.user.findMany({
     select: { id: true, parentId: true, level: true, role: true },
   });
   const byId = new Map(nodes.map((node) => [node.id, node]));

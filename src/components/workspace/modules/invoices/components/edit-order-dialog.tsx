@@ -74,9 +74,10 @@ export function EditOrderDialog({
           </div>
           <div className="space-y-2">
             <Label>{tx('客户MARK', 'Customer MARK')}</Label>
-            <Input value={order?.customerMark || ''} onChange={(e) => onMarkChange(e.target.value)} />
+            {order?.sourceLinked && <p className="text-sm text-muted-foreground">{tx('来源订单的客户资料由客户管理维护；更换客户请走来源对账。', 'Customer details are managed in Customers. Reconcile the source to change the customer.')}</p>}
+            <Input readOnly={order?.sourceLinked} value={order?.customerMark || ''} onChange={(e) => onMarkChange(e.target.value)} />
           </div>
-          {candidates.length > 1 && (
+          {!order?.sourceLinked && candidates.length > 1 && (
             <div className="space-y-2">
               <Label>{tx('选择客户', 'Select Customer')}</Label>
               <select
@@ -93,15 +94,15 @@ export function EditOrderDialog({
           )}
           <div className="space-y-2">
             <Label>{tx('客户ORDER_NAME', 'Customer ORDER_NAME')}</Label>
-            <Input value={order?.customerName || ''} onChange={(e) => order && onOrderChange({ ...order, customerName: e.target.value.toUpperCase() })} />
+            <Input readOnly={order?.sourceLinked} value={order?.customerName || ''} onChange={(e) => order && onOrderChange({ ...order, customerName: e.target.value.toUpperCase() })} />
           </div>
           <div className="space-y-2">
             <Label>{tx('客户PHONE', 'Customer PHONE')}</Label>
-            <Input value={order?.customerPhone || ''} onChange={(e) => order && onOrderChange({ ...order, customerPhone: e.target.value })} />
+            <Input readOnly={order?.sourceLinked} value={order?.customerPhone || ''} onChange={(e) => order && onOrderChange({ ...order, customerPhone: e.target.value })} />
           </div>
           <div className="space-y-2">
             <Label>{tx('客户CITY', 'Customer CITY')}</Label>
-            <Input value={order?.customerCity || ''} onChange={(e) => order && onOrderChange({ ...order, customerCity: e.target.value })} />
+            <Input readOnly={order?.sourceLinked} value={order?.customerCity || ''} onChange={(e) => order && onOrderChange({ ...order, customerCity: e.target.value })} />
           </div>
         </div>
         <DialogFooter>

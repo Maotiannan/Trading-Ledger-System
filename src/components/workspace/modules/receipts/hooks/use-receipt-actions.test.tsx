@@ -437,7 +437,7 @@ describe('useReceiptActions', () => {
     }));
   });
 
-  it('normalizes OCR aliases so recognized ORDER NO is kept and deposit defaults unchecked', async () => {
+  it.each([true, false])('keeps OCR aliases and the recognized deposit flag %s', async (isDeposit) => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
     mockApiCall.mockResolvedValueOnce({
       success: true,
@@ -465,6 +465,7 @@ describe('useReceiptActions', () => {
             inv_no: 'L25MH060992C',
             order_no: 'AB-13B',
             client_name: 'AB',
+            isDeposit,
           },
           image: { path: '/uploads/receipt-990.png', name: 'receipt-990.png' },
         },
@@ -486,7 +487,7 @@ describe('useReceiptActions', () => {
       invNo: 'L25MH060992C',
       orderNo: 'AB-13B',
       payer: 'AB',
-      isDeposit: false,
+      isDeposit,
     });
   });
 
@@ -962,14 +963,14 @@ describe('useReceiptActions', () => {
     ]);
   });
 
-  it('confirms OCR receipt creation and reloads receipts', async () => {
+  it.each([true, false])('confirms OCR receipt with the user-selected deposit flag %s and reloads receipts', async (isDeposit) => {
     const file = new File(['receipt'], 'receipt.png', { type: 'image/png' });
     mockFetch.mockResolvedValue({
       json: async () => ({ success: true }),
     });
     const { result } = renderHook(() => useReceiptActions(createDeps({
       selectedFile: file,
-      ocrResult: { amount: 120 },
+      ocrResult: { amount: 120, isDeposit },
       ocrCustomerMark: ' MAB-1 ',
       ocrCustomerName: 'MAB',
       ocrCustomerId: 'cust-1',
@@ -982,6 +983,7 @@ describe('useReceiptActions', () => {
 
     const [, request] = mockFetch.mock.calls[0] as [string, { body: FormData }];
     expect(request.body.get('action')).toBe('confirm');
+    expect(JSON.parse(String(request.body.get('data'))).isDeposit).toBe(isDeposit);
     expect(request.body.get('imagePath')).toBe('/uploads/receipt.png');
     expect(handleShowUploadChange).toHaveBeenCalledWith(false);
     expect(setSelectedFile).toHaveBeenCalledWith(null);

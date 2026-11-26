@@ -1,3 +1,4 @@
+import { canEditPaymentDetailStatus } from '@/lib/ledger-action-policy';
 import { DetailEditRequestStatus, Prisma, UserRole } from '@prisma/client';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -57,7 +58,7 @@ function parseEditableDateValue(date: string | null | undefined): Date | null {
 }
 
 function assertEditableDetailStatus(status: string, detail?: unknown) {
-  if (status === 'RECEIVED') {
+  if (!canEditPaymentDetailStatus(status)) {
     throw badRequest('RECEIVED状态下禁止修改付款明细', detail);
   }
 }
@@ -124,6 +125,7 @@ function mapDetailEditRequestRow(row: {
   beforeSnapshot: Prisma.JsonValue;
   afterSnapshot: Prisma.JsonValue;
   reviewComment: string | null;
+  detail: { status: string };
   requester: { name: string | null; email: string | null };
   approver: { name: string | null; email: string | null } | null;
 }): DetailEditRequestRow {
@@ -132,6 +134,7 @@ function mapDetailEditRequestRow(row: {
     detailId: row.detailId,
     status: row.status,
     requestedBy: row.requestedBy,
+    ...(row.status === 'PENDING' && row.detail && !canEditPaymentDetailStatus(row.detail.status) ? { approvalBlocked: true } : {}),
     requestedByName: row.requester.name || row.requester.email || row.requestedBy,
     approvedBy: row.approvedBy,
     approvedByName: row.approver
@@ -364,9 +367,9 @@ export async function reviewDetailEdit(params: {
       });
     }
 
-    assertEditableDetailStatus(visibleDetail.status, { detailId: request.detailId, status: visibleDetail.status });
-
-    const nextSnapshot = validateDetailPatch(request.afterSnapshot as DetailSnapshotSource as DetailEditablePatch);
+    if (decision === 'approve') {
+      assertEditableDetailStatus(visibleDetail.status, { detailId: request.detailId, status: visibleDetail.status });
+    }
     const reviewedAt = new Date();
     const claimResult = await tx.detailEditRequest.updateMany({
       where: {
@@ -388,6 +391,7 @@ export async function reviewDetailEdit(params: {
     }
 
     if (decision === 'approve') {
+      const nextSnapshot = validateDetailPatch(request.afterSnapshot as DetailSnapshotSource as DetailEditablePatch);
       const result = await updateDetailRecord({
         currentUser,
         detailId: request.detailId,
@@ -422,6 +426,7 @@ export async function listDetailEditRequests(currentUser: CurrentUser): Promise<
   const rows = await db.detailEditRequest.findMany({
     where,
     include: {
+      detail: { select: { status: true } },
       requester: {
         select: {
           name: true,

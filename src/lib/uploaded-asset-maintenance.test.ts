@@ -16,6 +16,15 @@ import {
   runUploadedAssetMaintenance,
 } from '@/lib/uploaded-asset-maintenance';
 import { POST } from '@/app/api/internal/maintenance/uploaded-assets/route';
+import { archiveForRecovery, purgeExpiredRecoveryEntries } from '@/lib/recovery-service';
+
+// Lock interleavings and recovery persistence run against MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockReceiptBalances: jest.fn(), guardFinancialWrites: (tx: unknown) => tx,
+}));
+jest.mock('@/lib/recovery-service', () => ({
+  archiveForRecovery: jest.fn(), purgeExpiredRecoveryEntries: jest.fn(),
+}));
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -40,14 +49,21 @@ jest.mock('@/lib/db', () => ({
     uploadedAsset: {
       findMany: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
     },
     receiptGeneratorSession: {
       findMany: jest.fn(),
       update: jest.fn(),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+      delete: jest.fn(),
     },
     receipt: {
       delete: jest.fn(),
     },
+    receiptHistory: { findMany: jest.fn() },
+    receiptEditRequest: { findMany: jest.fn() },
     $transaction: jest.fn(),
   },
 }));
@@ -66,14 +82,21 @@ const mockDb = db as unknown as {
   uploadedAsset: {
     findMany: jest.Mock;
     update: jest.Mock;
+    findUnique: jest.Mock;
+    updateMany: jest.Mock;
   };
   receiptGeneratorSession: {
     findMany: jest.Mock;
     update: jest.Mock;
+    findUnique: jest.Mock;
+    updateMany: jest.Mock;
+    delete: jest.Mock;
   };
   receipt: {
     delete: jest.Mock;
   };
+  receiptHistory: { findMany: jest.Mock };
+  receiptEditRequest: { findMany: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -96,14 +119,15 @@ describe('uploaded-asset-maintenance', () => {
     mockUploadedAssetUpdate.mockResolvedValue(undefined);
     mockReceiptGeneratorSessionFindMany.mockResolvedValue([]);
     mockRm.mockResolvedValue(undefined);
-    mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback({
-      receiptGeneratorSession: {
-        update: mockDb.receiptGeneratorSession.update,
-      },
-      receipt: {
-        delete: mockDb.receipt.delete,
-      },
-    }));
+    mockDb.$transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(mockDb));
+    mockDb.uploadedAsset.findUnique.mockResolvedValue({ id: 'asset-1', path: '/upload/images/receipts/direct/orphan.png' });
+    mockDb.uploadedAsset.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.receiptGeneratorSession.findUnique.mockResolvedValue({ id: 'session-1', receiptId: 'receipt-1',
+      receipt: { id: 'receipt-1', status: 'SIGNING_PENDING', imageUrl: null } });
+    mockDb.receiptGeneratorSession.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.receiptHistory.findMany.mockResolvedValue([]);
+    mockDb.receiptEditRequest.findMany.mockResolvedValue([]);
+    (purgeExpiredRecoveryEntries as jest.Mock).mockResolvedValue({ purged: 0 });
   });
 
   afterAll(() => {
@@ -153,7 +177,7 @@ describe('uploaded-asset-maintenance', () => {
     expect(settings.signingPendingTtlHours).toBe(72);
   });
 
-  it('deletes expired staged uploaded assets and marks registry rows deleted', async () => {
+  it('archives expired staged assets without physically deleting their files', async () => {
     const now = new Date('2026-05-03T00:00:00.000Z');
     mockUploadedAssetFindMany.mockResolvedValueOnce([
       {
@@ -174,18 +198,19 @@ describe('uploaded-asset-maintenance', () => {
         path: true,
       },
     });
-    expect(mockRm).toHaveBeenCalledWith(
-      expect.stringContaining('/receipts/direct/orphan.png'),
-      { force: true },
-    );
-    expect(mockUploadedAssetUpdate).toHaveBeenCalledWith({
-      where: { id: 'asset-1' },
+    expect(mockRm).not.toHaveBeenCalled();
+    expect(mockDb.uploadedAsset.updateMany).toHaveBeenCalledWith({
+      where: { id: 'asset-1', status: 'STAGED', expiresAt: { lte: now } },
       data: {
         status: UploadedAssetStatus.DELETED,
         deletedAt: now,
         expiresAt: null,
       },
     });
+    expect(archiveForRecovery).toHaveBeenCalledWith(mockDb, expect.objectContaining({
+      kind: 'STAGED_ASSET', resourceId: 'asset-1', now,
+      files: ['/upload/images/receipts/direct/orphan.png'],
+    }));
     expect(result.deletedAssets).toBe(1);
   });
 
@@ -231,10 +256,15 @@ describe('uploaded-asset-maintenance', () => {
       }),
       include: { receipt: true },
     }));
-    expect(mockDb.receiptGeneratorSession.update).toHaveBeenCalledWith({
-      where: { id: 'session-1' },
+    expect(mockDb.receiptGeneratorSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 'session-1', status: 'PENDING', createdAt: { lte: new Date('2026-04-30T00:00:00.000Z') },
+        finalImageUrl: null, receipt: { is: { status: 'SIGNING_PENDING', imageUrl: null } } },
       data: { status: ReceiptGeneratorSessionStatus.CANCELLED },
     });
+    expect(archiveForRecovery).toHaveBeenCalledWith(mockDb, expect.objectContaining({
+      kind: 'SIGNING_RECEIPT', resourceId: 'receipt-1', now,
+    }));
+    expect(mockDb.receiptGeneratorSession.delete).toHaveBeenCalledWith({ where: { id: 'session-1' } });
     expect(mockDb.receipt.delete).toHaveBeenCalledWith({
       where: { id: 'receipt-1' },
     });

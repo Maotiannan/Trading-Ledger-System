@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
+import { initializeClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +37,7 @@ export function LoginPage() {
       });
 
       if (result.success && result.data) {
+        initializeClientUserPreferences(result.data.id, result.data.preferences);
         setUser(result.data);
       } else {
         setError(getApiErrorMessage(result, t('loginFailed')));

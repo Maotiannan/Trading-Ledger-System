@@ -1,6 +1,8 @@
 node_modules
 .next
+.next-*
 .git
+out
 .DS_Store
 *.log
 dev.log

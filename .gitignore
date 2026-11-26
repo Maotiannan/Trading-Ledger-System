@@ -17,6 +17,7 @@ node_modules
 /.next/
 /.next-api-isolated/
 /.next-e2e-isolated/
+/.next-reliability-isolated/
 /out/
 
 # production

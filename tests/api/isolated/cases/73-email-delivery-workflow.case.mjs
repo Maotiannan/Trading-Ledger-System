@@ -257,6 +257,7 @@ export default async function run(t) {
   await t.request('PUT', '/api/invoice', {
     json: {
       action: 'transferBalance',
+      requestId: t.unique('transfer-intent'),
       fromOrderId: sourceOrder.id,
       toOrderNo: orderB,
       transferAmount: 300,

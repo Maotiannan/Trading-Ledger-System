@@ -24,4 +24,5 @@ export type DetailEditRequestRow = {
   beforeSnapshot: DetailEditablePatch;
   afterSnapshot: DetailEditablePatch;
   reviewComment: string | null;
+  approvalBlocked?: boolean;
 };

@@ -1,3 +1,10 @@
+jest.mock('@/lib/mutation-intent', () => ({ executeMutationIntent: (_tx: unknown, _input: unknown, execute: () => Promise<unknown>) => execute() }));
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(), lockOrderSnapshots: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 import { UserRole } from '@prisma/client';
 import { db } from '@/lib/db';
 import { recordAuditEvent, recordAuditEventInTransaction } from '@/lib/audit';
@@ -37,6 +44,8 @@ import {
 
 jest.mock('@/lib/db', () => ({
   db: {
+    mucontInvoiceSource: { findUnique: jest.fn().mockResolvedValue(null) },
+    mucontInvoiceGroup: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
     customer: {
       findMany: jest.fn(),
     },
@@ -73,6 +82,7 @@ jest.mock('@/lib/db', () => ({
       create: jest.fn(),
     },
     $transaction: jest.fn(),
+    $queryRaw: jest.fn(),
   },
 }));
 
@@ -306,13 +316,13 @@ describe('invoice-service', () => {
     expect(result.message).toBe('账单归属已分配');
     expect(mockDb.invoice.update).toHaveBeenCalledWith({
       where: { id: 'inv-1' },
-      data: { createdBy: 'admin-branch' },
+      data: { managedById: 'admin-branch' },
     });
     expect(mockDb.order.updateMany).toHaveBeenCalledWith({
       where: { invoiceId: 'inv-1' },
-      data: { createdBy: 'admin-branch' },
+      data: { managedById: 'admin-branch' },
     });
-    expect(mockRecordAuditEvent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(mockRecordAuditEventInTransaction).toHaveBeenCalledWith(mockDb, expect.objectContaining({
       action: 'INVOICE_ASSIGN_BRANCH_ADMIN',
       targetId: 'inv-1',
       metadata: expect.objectContaining({
@@ -1227,6 +1237,7 @@ describe('invoice-service', () => {
 
     const result = await transferInvoiceBalance(makeUser(), {
       fromOrderId: 'order-from',
+      requestId: 'unit-transfer-intent',
       toOrderNo: 'IB-02',
       transferAmount: 30,
     });
@@ -1275,6 +1286,7 @@ describe('invoice-service', () => {
 
     await expect(transferInvoiceBalance(makeUser(), {
       fromOrderId: 'order-from',
+      requestId: 'unit-transfer-intent',
       toOrderNo: 'IB-02',
       transferAmount: 10,
     })).rejects.toMatchObject({
@@ -1301,6 +1313,7 @@ describe('invoice-service', () => {
 
     await expect(transferInvoiceBalance(makeUser(), {
       fromOrderId: 'order-from',
+      requestId: 'unit-transfer-intent',
       toOrderNo: 'IB-02',
       transferAmount: 30,
     })).rejects.toThrow('receipt unavailable');
@@ -1327,6 +1340,7 @@ describe('invoice-service', () => {
 
     await expect(transferInvoiceBalance(makeUser(), {
       fromOrderId: 'order-from',
+      requestId: 'unit-transfer-intent',
       toOrderNo: 'IB-02',
       transferAmount: 30,
     })).rejects.toThrow('balance unavailable');
@@ -1351,6 +1365,7 @@ describe('invoice-service', () => {
 
     await expect(transferInvoiceBalance(makeUser(), {
       fromOrderId: 'order-from',
+      requestId: 'unit-transfer-intent',
       toOrderNo: 'IB-02',
       transferAmount: 30,
     })).rejects.toThrow('audit unavailable');

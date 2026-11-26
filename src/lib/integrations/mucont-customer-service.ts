@@ -3,9 +3,23 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { dedupeOrderNameAliases, normalizeOrderIdentifier } from '@/lib/order-name-kernel';
 import { MucontCustomerError } from './mucont-customer-http';
+import { z } from 'zod';
 
 const SORT = 'customerId:asc';
 const candidateSelect = { id: true, mark: true, name: true, companyName: true } satisfies Prisma.CustomerSelect;
+
+export async function readMucontCustomerMarks(input: unknown) {
+  const parsed = z.strictObject({ customerIds: z.array(z.string().min(1).max(191).refine(id => id.trim() === id))
+    .transform(ids => [...new Set(ids)]).pipe(z.array(z.string()).max(200)) }).safeParse(input);
+  if (!parsed.success) throw new MucontCustomerError(400, 'INVALID_QUERY', 'Provide up to 200 stable customer IDs.');
+  const ids = [...new Set(parsed.data.customerIds)];
+  const rows = ids.length ? await db.customer.findMany({ where: { id: { in: ids } },
+    select: { id: true, mark: true, updatedAt: true } }) : [];
+  const byId = new Map(rows.map(row => [row.id, row]));
+  return { items: ids.flatMap(id => { const row = byId.get(id); return row ? [{ customerId: id,
+    mark: nullableText(row.mark), sourceVersion: row.updatedAt.toISOString() }] : []; }),
+    missingCustomerIds: ids.filter(id => !byId.has(id)) };
+}
 
 function nullableText(value: string | null | undefined): string | null {
   return value?.trim() || null;

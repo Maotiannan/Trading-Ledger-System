@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useEffect } from 'react';
-import { useStore } from '@/lib/store';
+import React, { useEffect, useState } from 'react';
+import { useStore, type User } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { useUiText } from '@/components/workspace/shared';
 import { UserPlus } from 'lucide-react';
 import { CreateUserDialog, UserList } from './components';
 import { useUserActions, useUserForms } from './hooks';
+import { HandoverDialog } from './components/handover-dialog';
 
 export function UserManager() {
   const tx = useUiText();
   const { users, setUsers, user } = useStore();
+  const [handoverSource, setHandoverSource] = useState<User | null>(null);
   const isAdmin = user?.role === 'ADMIN';
   const {
     showCreate,
@@ -32,6 +34,7 @@ export function UserManager() {
     handleCreate,
     handleResetPassword,
     handleDelete,
+    handleReactivate,
     handleChangeRole,
   } = useUserActions({
     tx,
@@ -89,7 +92,11 @@ export function UserManager() {
         onChangeRole={(userId, role) => { void handleChangeRole(userId, role); }}
         onResetPassword={(userId) => { void handleResetPassword(userId); }}
         onDelete={(userId) => { void handleDelete(userId); }}
+        onReactivate={(userId) => { void handleReactivate(userId); }}
+        onHandover={setHandoverSource}
       />
+
+      {handoverSource && <HandoverDialog key={handoverSource.id} source={handoverSource} users={users} tx={tx} onClose={() => setHandoverSource(null)} onSuccess={loadUsers} />}
 
       <CreateUserDialog
         open={showCreate}

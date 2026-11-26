@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ExternalLink, FileText, Loader2 } from 'lucide-react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { mountPdfPages } from './pdf-page-renderer';
 
 type PdfStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -43,6 +45,7 @@ export function isPdfPreviewSource(src: string | null | undefined, fileName?: st
 
 export function PdfPreview({ src, fileName, className = 'max-h-[70dvh]', tx = defaultTx }: PdfPreviewProps) {
   const pagesRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<PdfStatus>('idle');
   const [pageCount, setPageCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +53,8 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70dvh]', tx = de
   useEffect(() => {
     let cancelled = false;
     let loadingTask: { promise: Promise<unknown>; destroy?: () => Promise<void> } | null = null;
-    let pdfDocument: { numPages: number; getPage: (pageNumber: number) => Promise<unknown>; destroy?: () => Promise<void> } | null = null;
-    const renderTasks: Array<{ cancel: () => void; promise: Promise<unknown> }> = [];
+    let pdfDocument: PDFDocumentProxy | null = null;
+    let renderer: ReturnType<typeof mountPdfPages> | null = null;
 
     const renderPdf = async () => {
       const pagesContainer = pagesRef.current;
@@ -67,48 +70,22 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70dvh]', tx = de
 
         const documentSource = src.startsWith('data:application/pdf')
           ? { data: dataUrlToBytes(src) }
-          : { url: src, withCredentials: true };
+          : { url: src, withCredentials: true, disableAutoFetch: true, disableStream: true };
         loadingTask = pdfjs.getDocument(documentSource);
         pdfDocument = await loadingTask.promise as typeof pdfDocument;
         if (cancelled || !pdfDocument) return;
 
         setPageCount(pdfDocument.numPages);
 
-        for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber += 1) {
-          if (cancelled) return;
-          const page = await pdfDocument.getPage(pageNumber) as {
-            getViewport: (input: { scale: number }) => { width: number; height: number };
-            render: (input: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => {
-              cancel: () => void;
-              promise: Promise<unknown>;
-            };
-          };
-          const baseViewport = page.getViewport({ scale: 1 });
-          const availableWidth = Math.max(240, Math.min(pagesContainer.clientWidth || 760, 900));
-          const scale = Math.min(Math.max(availableWidth / baseViewport.width, 0.6), 2);
-          const viewport = page.getViewport({ scale });
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          if (!context) throw new Error('Canvas is not available');
-
-          canvas.width = Math.ceil(viewport.width);
-          canvas.height = Math.ceil(viewport.height);
-          canvas.style.width = '100%';
-          canvas.style.height = 'auto';
-          canvas.className = 'max-w-full rounded border bg-white shadow-sm';
-
-          const pageShell = document.createElement('div');
-          pageShell.className = 'min-w-0 space-y-2';
-          const pageLabel = document.createElement('div');
-          pageLabel.className = 'text-xs text-muted-foreground';
-          pageLabel.textContent = tx(`第 ${pageNumber} 页`, `Page ${pageNumber}`);
-          pageShell.append(pageLabel, canvas);
-          pagesContainer.append(pageShell);
-
-          const renderTask = page.render({ canvasContext: context, viewport });
-          renderTasks.push(renderTask);
-          await renderTask.promise;
-        }
+        renderer = mountPdfPages(pdfDocument, pagesContainer, scrollRef.current!, {
+          page: number => tx(`第 ${number} 页`, `Page ${number}`),
+          onError: renderError => {
+            if (cancelled) return;
+            setError(renderError instanceof Error ? renderError.message : String(renderError));
+            setStatus('error');
+          },
+        });
+        await renderer.ready;
 
         if (!cancelled) setStatus('ready');
       } catch (renderError) {
@@ -123,15 +100,16 @@ export function PdfPreview({ src, fileName, className = 'max-h-[70dvh]', tx = de
 
     return () => {
       cancelled = true;
-      renderTasks.forEach((task) => task.cancel());
+      renderer?.dispose();
       void loadingTask?.destroy?.();
-      void pdfDocument?.destroy?.();
+
       pagesRef.current?.replaceChildren();
     };
   }, [src, tx]);
 
   return (
     <div
+      ref={scrollRef}
       data-testid="pdf-preview"
       className={`min-h-0 min-w-0 max-w-full touch-pan-y overscroll-contain overflow-x-hidden overflow-y-auto rounded border bg-muted/20 ${className}`}
       style={{ WebkitOverflowScrolling: 'touch' }}

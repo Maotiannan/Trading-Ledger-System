@@ -43,6 +43,17 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof CustomerFormDi
 }
 
 describe('CustomerFormDialog', () => {
+  it('provides optional company contact maintenance in the existing administrator form', () => {
+    const onFormChange = jest.fn();
+    const props = baseProps({ onFormChange });
+    const { rerender } = render(<CustomerFormDialog {...props} />);
+    expect(screen.getByLabelText('公司联系方式')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('公司联系方式'), { target: { value: 'Company contact desk' } });
+    const updater = onFormChange.mock.calls.at(-1)![0];
+    expect(updater(props.form).companyContact).toBe('Company contact desk');
+    rerender(<CustomerFormDialog {...props} isAdmin={false} />);
+    expect(screen.queryByLabelText('公司联系方式')).not.toBeInTheDocument();
+  });
   it('highlights phone input when a phone conflict exists', () => {
     render(
       <CustomerFormDialog

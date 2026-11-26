@@ -1,3 +1,4 @@
+import { canEditReceiptStatus } from '@/lib/ledger-action-policy';
 import { Prisma, ReceiptEditRequestStatus, UserRole } from '@prisma/client';
 import { recordAuditEvent } from '@/lib/audit';
 import { auditActions, auditTargetTypes } from '@/lib/audit-catalog';
@@ -7,7 +8,7 @@ import { buildReceiptVisibilityWhere } from '@/lib/resource-visibility';
 import type { CurrentUser } from '@/lib/request-auth';
 import type { ReceiptEditablePatch, ReceiptEditRequestRow } from '@/lib/receipt-edit-types';
 import { applyReceiptEditInTransaction } from '@/lib/receipt-edit-apply-service';
-import { runInTransaction } from '@/lib/transaction';
+import { runFinancialTransaction as runInTransaction } from '@/lib/transaction';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 
 type EditableSnapshotSource = Partial<Record<keyof ReceiptEditablePatch, unknown>> | null | undefined;
@@ -98,6 +99,7 @@ function mapReceiptEditRequestRow(row: {
   beforeSnapshot: Prisma.JsonValue;
   afterSnapshot: Prisma.JsonValue;
   reviewComment: string | null;
+  receipt: { status: string };
   requester: { name: string | null; email: string | null };
   approver: { name: string | null; email: string | null } | null;
 }): ReceiptEditRequestRow {
@@ -106,6 +108,7 @@ function mapReceiptEditRequestRow(row: {
     receiptId: row.receiptId,
     status: row.status,
     requestedBy: row.requestedBy,
+    ...(row.status === 'PENDING' && row.receipt && !canEditReceiptStatus(row.receipt.status) ? { approvalBlocked: true } : {}),
     requestedByName: row.requester.name || row.requester.email || row.requestedBy,
     approvedBy: row.approvedBy,
     approvedByName: row.approver
@@ -208,6 +211,9 @@ export async function requestReceiptEdit(params: {
           ownerIds,
         });
       }
+
+      if (!canEditReceiptStatus(receipt.status)) throw badRequest('Bank_Transfer状态下禁止修改', { receiptId, status: receipt.status });
+      if (receipt.status === 'RECEIVED') throw forbidden('RECEIPT_EDIT_REQUEST_FORBIDDEN', '只有管理员可以直接修改收据', { receiptId });
 
       const existingPending = await tx.receiptEditRequest.findFirst({
         where: {
@@ -402,6 +408,7 @@ export async function listReceiptEditRequests(currentUser: CurrentUser): Promise
   const rows = await db.receiptEditRequest.findMany({
     where,
     include: {
+      receipt: { select: { status: true } },
       requester: {
         select: {
           name: true,

@@ -4,11 +4,21 @@ import { addMoney, moneyToNumber, subtractMoney, type MoneyInput } from '@/lib/m
 export type OrderBalanceReceiptInput = {
   usd: MoneyInput;
   status?: ReceiptStatus | string | null;
+  funding?: { id: string } | null;
+};
+
+export type OrderPaymentAllocationInput = {
+  amount: MoneyInput;
+  appliedAt?: Date | string | null;
+  funding: { active: boolean; originalReceiptId?: string; receipt: {
+    status?: ReceiptStatus | string | null; id?: string; createdAt?: Date | string;
+  } | null };
 };
 
 export type ComputeOrderBalanceInput = {
   amount: MoneyInput;
   receipts?: OrderBalanceReceiptInput[] | null;
+  paymentAllocations?: OrderPaymentAllocationInput[] | null;
 };
 
 export type OrderBalanceComparison = {
@@ -28,10 +38,12 @@ export function normalizeOrderBalanceNumber(value: MoneyInput): number {
 
 export function computeOrderBalanceFromReceipts(input: ComputeOrderBalanceInput): number {
   const receiptTotal = addMoney((input.receipts || [])
-    .filter((receipt) => isReceiptIncludedInOrderBalance(receipt.status))
+    .filter((receipt) => !receipt.funding && isReceiptIncludedInOrderBalance(receipt.status))
     .map((receipt) => receipt.usd || 0));
 
-  return moneyToNumber(subtractMoney(input.amount || 0, receiptTotal));
+  const allocated = addMoney((input.paymentAllocations || []).filter(row => row.funding.active
+    && row.funding.receipt && isReceiptIncludedInOrderBalance(row.funding.receipt.status)).map(row => row.amount));
+  return moneyToNumber(subtractMoney(input.amount || 0, addMoney([receiptTotal, allocated])));
 }
 
 export function compareStoredOrderBalance(input: { stored: MoneyInput; computed: MoneyInput }): OrderBalanceComparison {

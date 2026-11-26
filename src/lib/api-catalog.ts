@@ -13,6 +13,12 @@ export type ApiModule = {
 
 export const apiCatalog: ApiModule[] = [
   {
+    endpoint: '/api/integrations/mucont/v2/order-conflicts',
+    description: 'Service-authenticated, scoped, read-only batch lookup of formal financial orders',
+    actions: [{ action: 'lookup', method: 'POST', description: 'Exact display ORDER conflicts and separate original-order hints; excludes pools and the current source batch',
+      bodyExample: { invoiceBatchId: 'invoice-batch-id', items: [{ key: 'row-id', displayOrderNo: 'AB-12B', sourceOrderNo: 'AB-12' }] } }],
+  },
+  {
     endpoint: '/api/integrations/mucont/v1/customers/options',
     description: 'Server-only mucont credential; lightweight all-customer candidates with stable ID pagination',
     actions: [{ action: 'options', method: 'GET', description: 'Search all customer names, companies, MARK and ORDER NAME aliases; query-bound cursor, default 20 max 50' }],
@@ -41,6 +47,8 @@ export const apiCatalog: ApiModule[] = [
     description: 'Invoice and order management',
     actions: [
       { action: 'list', method: 'GET', description: 'List invoices' },
+      { action: 'renameInvoice', method: 'PUT', description: 'Admin: rename a whole visible invoice and current linked receipt labels without changing identities, amounts or historical snapshots',
+        bodyExample: { action: 'renameInvoice', invoiceId: 'invoice-id', expectedInvNo: 'L25MH900001', invNo: 'L26MH900001' } },
       { action: 'create', method: 'POST', description: 'Create invoice and orders', bodyExample: { invNo: 'L001MH', orders: [{ orderNo: 'ABC-1', tokens: 100, amount: 100 }] } },
       { action: 'import-excel', method: 'POST', description: 'Bulk import invoices from Excel (multipart form)' },
       { action: 'import-rows', method: 'POST', description: 'Retry import issue rows only', bodyExample: { action: 'import-rows', rows: [{ rowNo: 2, invNo: 'L001MH', orderNo: 'ABC-1', amount: '100', customerMark: 'MAB-1' }] } },

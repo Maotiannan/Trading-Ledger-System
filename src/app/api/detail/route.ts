@@ -27,6 +27,7 @@ import { lookupInvoiceOrderContext } from '@/lib/invoice-read-service';
 import { logger } from '@/lib/logger';
 import { calculateSwiftTransferSummary } from '@/lib/swift-transfer-summary';
 import { getSwiftFeePerCopy } from '@/lib/swift-transfer-service';
+import { privateFileResponse } from '@/lib/private-file-response';
 
 function parseDetailPayloadValue(value: unknown) {
   if (typeof value === 'string') {
@@ -187,15 +188,10 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         });
       }
 
-      const previewImage = await ensureDetailPreviewImage(visibleDetail.id, { includeBuffer: true });
-      const buffer = previewImage.buffer ?? await readFile(resolveUploadedAssetAbsolutePath(previewImage.path));
-      return new NextResponse(new Uint8Array(buffer), {
-        status: 200,
-        headers: {
-          'Content-Type': previewImage.mimeType,
-          'Content-Disposition': `inline; filename=\"${encodeURIComponent(previewImage.name)}\"`,
-          'Cache-Control': 'no-store',
-        },
+      const previewImage = await ensureDetailPreviewImage(visibleDetail.id);
+      return await privateFileResponse(request, resolveUploadedAssetAbsolutePath(previewImage.path), {
+        contentType: previewImage.mimeType,
+        disposition: `inline; filename="${encodeURIComponent(previewImage.name)}"`,
       });
     }
 
@@ -274,7 +270,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
         creator: { select: { id: true, name: true, email: true } },
         items: {
           include: {
-            receipt: true,
+            receipt: { include: { customer: { select: { mark: true } }, order: { select: { customer: { select: { mark: true } } } } } },
           },
         },
         swifts: { select: { amount: true, status: true, hasError: true } },
@@ -289,6 +285,7 @@ export const GET = withAuth(async (request: NextRequest, currentUser) => {
     const maxFeePerCopy = await getSwiftFeePerCopy();
     const rows = details.map(({ swifts, ...detail }) => ({
       ...detail,
+      items: detail.items.map(item => ({ ...item, mark: item.receipt?.customer?.mark ?? item.receipt?.order?.customer?.mark ?? item.mark })),
       transferSummary: calculateSwiftTransferSummary(detail.totalAmount, swifts, maxFeePerCopy),
     }));
     return NextResponse.json({ success: true, data: filterRowsBySearch(rows, search) });

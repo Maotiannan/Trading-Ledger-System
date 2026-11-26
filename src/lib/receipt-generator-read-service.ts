@@ -216,7 +216,7 @@ export async function getReceiptGeneratorSession(currentUser: CurrentUser, sessi
       receipt: {
         select: {
           id: true,
-          createdBy: true,
+          createdBy: true, managedById: true,
           status: true,
           imageUrl: true,
           imageName: true,
@@ -234,7 +234,7 @@ export async function getReceiptGeneratorSession(currentUser: CurrentUser, sessi
     });
   }
 
-  if (!(await canAccessOwnedResourceAsync(session.receipt.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(session.receipt.managedById || session.receipt.createdBy, currentUser))) {
     throw forbidden('无权访问该签名收据会话', {
       sessionId: normalizedSessionId,
       receiptId: session.receiptId,
@@ -266,7 +266,7 @@ export async function getOpenReceiptGeneratorSessionByReceipt(currentUser: Curre
     include: {
       receipt: {
         select: {
-          createdBy: true,
+          createdBy: true, managedById: true,
         },
       },
     },
@@ -281,7 +281,7 @@ export async function getOpenReceiptGeneratorSessionByReceipt(currentUser: Curre
     });
   }
 
-  if (!(await canAccessOwnedResourceAsync(session.receipt.createdBy, currentUser))) {
+  if (!(await canAccessOwnedResourceAsync(session.receipt.managedById || session.receipt.createdBy, currentUser))) {
     throw forbidden('无权访问该签名收据会话', {
       receiptId: normalizedReceiptId,
     });

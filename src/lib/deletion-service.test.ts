@@ -1,3 +1,9 @@
+// Resource-lock concurrency is verified against real MySQL in tests/reliability.
+jest.mock('@/lib/order-balance-lock', () => ({
+  lockOrderBalances: jest.fn(), lockReceiptBalances: jest.fn(),
+  guardFinancialWrites: (tx: unknown) => tx,
+}));
+
 jest.mock('@/lib/whatsapp/whatsapp-deletion', () => ({ pauseWhatsAppForDeletion: jest.fn() }));
 import {
   DeletionStatus,
@@ -41,6 +47,7 @@ function makeUser(overrides: Partial<{
 
 jest.mock('@/lib/db', () => ({
   db: {
+    balanceTransfer: { count: jest.fn().mockResolvedValue(0) },
     deletionRequest: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
@@ -430,6 +437,7 @@ describe('deletion-service', () => {
     });
 
     const tx = {
+      balanceTransfer: { count: jest.fn().mockResolvedValue(0) },
       $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({
@@ -499,6 +507,7 @@ describe('deletion-service', () => {
     });
 
     const tx = {
+      balanceTransfer: { count: jest.fn().mockResolvedValue(0) },
       $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({
@@ -563,7 +572,7 @@ describe('deletion-service', () => {
       where: { id: 'detail-7' },
       data: { totalAmount: 12 },
     });
-    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-7');
+    expect(mockUpdateOrderBalance).toHaveBeenCalledWith('order-7', tx);
   });
 
   it('records the approving admin when detail deletion removes an auto-created receipt', async () => {
@@ -574,6 +583,7 @@ describe('deletion-service', () => {
       targetId: 'detail-1',
     });
     const tx = {
+      balanceTransfer: { count: jest.fn().mockResolvedValue(0) },
       $queryRaw: jest.fn(),
       deletionRequest: {
         findUnique: jest.fn().mockResolvedValue({

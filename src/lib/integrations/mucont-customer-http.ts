@@ -32,13 +32,14 @@ function readCredential(request: NextRequest): string {
   return expected;
 }
 
-// This credential grants only these two GETs, independent of staff accounts and ownership.
+// This credential grants read-only customer lookups, independent of staff ownership.
 export async function withMucontCustomerRead(
   request: NextRequest,
   read: (cursorSecret: string) => Promise<unknown>,
 ): Promise<NextResponse> {
   const startedAt = Date.now();
-  const endpoint = new URL(request.url).pathname.endsWith('/options') ? 'options' : 'profile';
+  const path = new URL(request.url).pathname;
+  const endpoint = path.endsWith('/options') ? 'options' : path.endsWith('/marks') ? 'marks' : 'profile';
   try {
     const secret = readCredential(request);
     await enforceRateLimit('excelLookup', request, { identityHint: 'mucont-customer-read-v1' });

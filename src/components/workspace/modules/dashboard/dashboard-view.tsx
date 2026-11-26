@@ -29,7 +29,7 @@ import {
 } from '@/components/workspace/modules/customers/components/customer-order-history-dialog';
 import type { DashboardCustomerOutstanding } from '@/lib/dashboard-customer-outstanding';
 import { useListPageSizePreference } from '@/components/workspace/modules/shared/use-list-page-size-preference';
-import { loadClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
+import { loadClientUserPreferences, readClientUserPreferences } from '@/components/workspace/modules/shared/user-preferences-cache';
 import { CustomerAnalyticsCard } from './components/customer-analytics-card';
 import { DashboardCardPagination } from './components/dashboard-card-pagination';
 import { DashboardCustomerDetailDialog } from './components/dashboard-customer-detail-dialog';
@@ -159,7 +159,12 @@ export function Dashboard() {
     savePageSize: saveCustomerHistoryReceiptPageSize,
   } = useListPageSizePreference('customerHistoryReceipts');
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [dashboardLayout, setDashboardLayout] = useState<DashboardLayoutPreference>(() => normalizeDashboardLayoutPreference(null));
+  const [layoutState, setLayoutState] = useState<{ userId: string; layout: DashboardLayoutPreference } | null>(() => {
+    const cached = user?.id ? readClientUserPreferences(user.id) : null;
+    return user && cached ? { userId: user.id, layout: cached.dashboardLayout } : null;
+  });
+  const dashboardLayout = layoutState?.userId === user?.id ? layoutState?.layout : null;
+  const [layoutError, setLayoutError] = useState(false);
   const [releasedInvoicePage, setReleasedInvoicePage] = useState(1);
   const [customerOutstandingPage, setCustomerOutstandingPage] = useState(1);
   const [selectedReleasedInvoice, setSelectedReleasedInvoice] = useState<DashboardReleasedInvoice | null>(null);
@@ -198,13 +203,18 @@ export function Dashboard() {
   }, [loadSummary]);
 
   const loadDashboardPreferences = useCallback(async () => {
+    const userId = user?.id;
+    if (!userId) return;
+    setLayoutError(false);
     try {
       const preferences = await loadClientUserPreferences();
-      setDashboardLayout(normalizeDashboardLayoutPreference(preferences.dashboardLayout));
+      if (useStore.getState().user?.id !== userId) return;
+      setLayoutState({ userId, layout: normalizeDashboardLayoutPreference(preferences.dashboardLayout) });
     } catch {
-      setDashboardLayout(normalizeDashboardLayoutPreference(null));
+      if (useStore.getState().user?.id !== userId) return;
+      setLayoutError(true);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     void loadDashboardPreferences();
@@ -436,8 +446,8 @@ export function Dashboard() {
   const openCustomerHistory = useCallback((customer: DashboardCustomerSearchItem) => {
     openCustomerDetail({
       customerId: customer.customerId,
-      title: customer.orderNames.join(' / ') || customer.mark || customer.name,
-      customerMark: customer.mark || customer.name,
+      title: customer.orderNames.join(' / ') || customer.mark || '-',
+      customerMark: customer.mark || '-',
       previewOutstanding: null,
     });
   }, [openCustomerDetail]);
@@ -790,7 +800,7 @@ export function Dashboard() {
     return null;
   };
 
-  const visibleDashboardSections = dashboardLayout.sections
+  const visibleDashboardSections = (dashboardLayout?.sections || [])
     .map((section) => ({ ...section, cards: section.cards.filter((card) => card.visible) }))
     .filter((section) => section.visible && section.cards.length > 0);
 
@@ -845,6 +855,9 @@ export function Dashboard() {
         </div>
       </div>
       {visibleDashboardSections.map(renderDashboardSection)}
+      {!dashboardLayout && <div className="min-h-64 rounded-lg border p-6" data-testid="dashboard-layout-placeholder" aria-busy={!layoutError}>
+        {layoutError ? <Button variant="outline" onClick={() => void loadDashboardPreferences()}>{tx('重试加载布局', 'Retry loading layout')}</Button> : <Loader2 className="h-5 w-5 animate-spin" />}
+      </div>}
 
       <Dialog open={!!selectedReleasedInvoice} onOpenChange={(open) => {
         if (!open) setSelectedReleasedInvoice(null);

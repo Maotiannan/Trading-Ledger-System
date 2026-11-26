@@ -1,0 +1,185 @@
+[
+  {
+    "case": "first_generation",
+    "request": {
+      "schemaVersion": 1,
+      "source": "MUCONT",
+      "generationId": "invoice-generation-fixture-001",
+      "publicationSequence": 1,
+      "invoiceBatchId": "invoice-batch-fixture-001",
+      "invoiceNo": "INV-FIXTURE-001",
+      "generatedAt": "2026-11-11T04:00:00Z",
+      "documentVersion": 1,
+      "currency": "USD",
+      "invoiceTotal": "11300.00",
+      "customers": [
+        {
+          "billingGroupId": "customer-group-a",
+          "muledgerCustomerId": "ledger-customer-a",
+          "customerSnapshot": {
+            "mark": "MARK-A",
+            "name": "CUSTOMER A",
+            "phone": null,
+            "city": null
+          },
+          "orderRefs": [
+            {
+              "sourceOrderNo": "AB-12",
+              "displayOrderNo": "AB-12B"
+            },
+            {
+              "sourceOrderNo": "AB-13",
+              "displayOrderNo": "AB-13B"
+            }
+          ],
+          "goodsAmount": "10000.00",
+          "adjustmentAmount": "-200.00",
+          "freightAmount": "500.00",
+          "totalAmount": "10300.00"
+        },
+        {
+          "billingGroupId": "customer-group-b",
+          "muledgerCustomerId": "ledger-customer-b",
+          "customerSnapshot": {
+            "mark": "MARK-B",
+            "name": "CUSTOMER B",
+            "phone": null,
+            "city": null
+          },
+          "orderRefs": [
+            {
+              "sourceOrderNo": "CD-1",
+              "displayOrderNo": "CD-1"
+            }
+          ],
+          "goodsAmount": "900.00",
+          "adjustmentAmount": "0.00",
+          "freightAmount": "100.00",
+          "totalAmount": "1000.00"
+        }
+      ]
+    }
+  },
+  {
+    "case": "same_document_version_new_generation",
+    "request": {
+      "schemaVersion": 1,
+      "source": "MUCONT",
+      "generationId": "invoice-generation-fixture-002",
+      "publicationSequence": 2,
+      "invoiceBatchId": "invoice-batch-fixture-001",
+      "invoiceNo": "INV-FIXTURE-001",
+      "generatedAt": "2026-11-11T04:00:00Z",
+      "documentVersion": 1,
+      "currency": "USD",
+      "invoiceTotal": "11300.00",
+      "customers": [
+        {
+          "billingGroupId": "customer-group-a",
+          "muledgerCustomerId": "ledger-customer-a",
+          "customerSnapshot": {
+            "mark": "MARK-A",
+            "name": "CUSTOMER A",
+            "phone": null,
+            "city": null
+          },
+          "orderRefs": [
+            {
+              "sourceOrderNo": "AB-12",
+              "displayOrderNo": "AB-12B"
+            },
+            {
+              "sourceOrderNo": "AB-13",
+              "displayOrderNo": "AB-13B"
+            }
+          ],
+          "goodsAmount": "10000.00",
+          "adjustmentAmount": "-200.00",
+          "freightAmount": "500.00",
+          "totalAmount": "10300.00"
+        },
+        {
+          "billingGroupId": "customer-group-b",
+          "muledgerCustomerId": "ledger-customer-b",
+          "customerSnapshot": {
+            "mark": "MARK-B",
+            "name": "CUSTOMER B",
+            "phone": null,
+            "city": null
+          },
+          "orderRefs": [
+            {
+              "sourceOrderNo": "CD-1",
+              "displayOrderNo": "CD-1"
+            }
+          ],
+          "goodsAmount": "900.00",
+          "adjustmentAmount": "0.00",
+          "freightAmount": "100.00",
+          "totalAmount": "1000.00"
+        }
+      ]
+    }
+  },
+  {
+    "case": "new_document_version_amount_changed",
+    "request": {
+      "schemaVersion": 1,
+      "source": "MUCONT",
+      "generationId": "invoice-generation-fixture-003",
+      "publicationSequence": 3,
+      "invoiceBatchId": "invoice-batch-fixture-001",
+      "invoiceNo": "INV-FIXTURE-001",
+      "generatedAt": "2026-11-11T04:00:00Z",
+      "documentVersion": 2,
+      "currency": "USD",
+      "invoiceTotal": "11000.00",
+      "customers": [
+        {
+          "billingGroupId": "customer-group-a",
+          "muledgerCustomerId": "ledger-customer-a",
+          "customerSnapshot": {
+            "mark": "MARK-A",
+            "name": "CUSTOMER A",
+            "phone": null,
+            "city": null
+          },
+          "orderRefs": [
+            {
+              "sourceOrderNo": "AB-12",
+              "displayOrderNo": "AB-12B"
+            },
+            {
+              "sourceOrderNo": "AB-13",
+              "displayOrderNo": "AB-13B"
+            }
+          ],
+          "goodsAmount": "9700.00",
+          "adjustmentAmount": "-200.00",
+          "freightAmount": "500.00",
+          "totalAmount": "10000.00"
+        },
+        {
+          "billingGroupId": "customer-group-b",
+          "muledgerCustomerId": "ledger-customer-b",
+          "customerSnapshot": {
+            "mark": "MARK-B",
+            "name": "CUSTOMER B",
+            "phone": null,
+            "city": null
+          },
+          "orderRefs": [
+            {
+              "sourceOrderNo": "CD-1",
+              "displayOrderNo": "CD-1"
+            }
+          ],
+          "goodsAmount": "900.00",
+          "adjustmentAmount": "0.00",
+          "freightAmount": "100.00",
+          "totalAmount": "1000.00"
+        }
+      ]
+    }
+  }
+]

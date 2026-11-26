@@ -1,3 +1,4 @@
+/** @jest-environment node */
 jest.mock('next/server', () => {
   const NextResponse: any = class MockNextResponse {
     status: number;
@@ -96,6 +97,9 @@ jest.mock('@/lib/invoice-read-service', () => ({
   lookupInvoiceOrderContext: jest.fn(),
 }));
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { db } from '@/lib/db';
 import { getHierarchyScope } from '@/lib/user-hierarchy';
 import { buildDetailExportViewModel, renderDetailExportJpeg } from '@/lib/detail-export-image';
@@ -142,7 +146,7 @@ function buildJsonRequest(payload: Record<string, unknown>) {
 }
 
 function buildGetRequest(url: string) {
-  return { url } as never;
+  return new Request(url) as never;
 }
 
 describe('detail route edit-approval actions', () => {
@@ -438,18 +442,27 @@ describe('detail route edit-approval actions', () => {
   it('serves and persists a generated preview image for details without uploaded images', async () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff]);
     mockDb.detail.findFirst.mockResolvedValueOnce({ id: 'detail-1' });
-    mockEnsureDetailPreviewImage.mockResolvedValueOnce({
-      path: '/upload/images/details/ocr/payment-detail_250_2026-05-23_Mitty_Group.jpg',
-      name: 'payment-detail_250_2026-05-23_Mitty_Group.jpg',
-      buffer: jpeg,
-      mimeType: 'image/jpeg',
-    });
-
-    const response = await GET(buildGetRequest('https://example.com/api/detail?action=preview-image&detailId=detail-1'));
-
-    expect(response.status).toBe(200);
-    expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-1', { includeBuffer: true });
-    expect(response.headers.get('content-type')).toBe('image/jpeg');
-    expect(response.headers.get('content-disposition')).toContain('inline');
+    const dir = await mkdtemp(join(tmpdir(), 'muledger-preview-'));
+    const previous = process.env.UPLOAD_DIR;
+    try {
+      process.env.UPLOAD_DIR = dir;
+      const name = 'Payment-Detail_250_Mitty_Group.jpg';
+      await writeFile(join(dir, name), jpeg);
+      mockEnsureDetailPreviewImage.mockResolvedValueOnce({
+        path: (process.env.UPLOAD_PUBLIC_PATH || '/upload/images') + '/' + name,
+        name, mimeType: 'image/jpeg',
+      });
+      const response = await GET(buildGetRequest('https://example.com/api/detail?action=preview-image&detailId=detail-1'));
+      expect(response.status).toBe(200);
+      expect(mockEnsureDetailPreviewImage).toHaveBeenCalledWith('detail-1');
+      expect(response.headers.get('content-type')).toBe('image/jpeg');
+      expect(response.headers.get('content-disposition')).toContain('inline');
+      expect(response.headers.get('cache-control')).toBe('private, no-cache');
+      expect(Buffer.from(await new Response(response.body).arrayBuffer())).toEqual(jpeg);
+    } finally {
+      if (previous === undefined) delete process.env.UPLOAD_DIR;
+      else process.env.UPLOAD_DIR = previous;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

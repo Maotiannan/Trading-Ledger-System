@@ -17,11 +17,31 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: 22
           package-manager-cache: false
       - name: Cold build on bounded native ARM64
         run: bash scripts/profile/build-arm64.sh
+      - name: Identify comparable application baseline
+        id: inputs
+        run: |
+          base=$(git merge-base origin/main HEAD)
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          if git diff --quiet "$base" HEAD -- src public prisma package.json package-lock.json next.config.ts Dockerfile; then
+            echo 'baseline=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save isolated baseline image for paired measurements
+        if: steps.inputs.outputs.baseline == 'true'
+        run: |
+          docker tag ledger-profile:run ledger-profile:baseline
+          docker save ledger-profile:baseline | zstd -T2 -3 -o "$RUNNER_TEMP/ledger-baseline.tar.zst"
+          test "$(stat -c %s "$RUNNER_TEMP/ledger-baseline.tar.zst")" -lt 900000000
+      - uses: actions/cache/save@v4
+        if: steps.inputs.outputs.baseline == 'true'
+        with:
+          path: ${{ runner.temp }}/ledger-baseline.tar.zst
+          key: ledger-profile-v1-arm64-${{ steps.inputs.outputs.base }}
       - name: Exercise production server against disposable MySQL
         run: bash scripts/profile/runtime.sh

@@ -31,13 +31,15 @@ while kill -0 "$proof" 2>/dev/null; do
   seen=$(docker exec "$builder" sh -c 'for f in /proc/[0-9]*/comm; do
     [ "$(cat "$f" 2>/dev/null)" = node ] || continue
     p=${f%/comm}; tr "\000" "\n" < "$p/cmdline" | grep -qx ledger-cgroup-witness || continue
-    cat "$p/cgroup"; break
-  done' | awk -F: '$1=="0"{print $3}')
+    rel=$(cut -d: -f3 "$p/cgroup")
+    case "$rel" in /*..*|"") continue;; esac
+    if grep -qx "${p##*/}" "/sys/fs/cgroup$rel/cgroup.procs"; then echo "$rel"; break; fi
+  done')
   [[ -z $seen ]] || break
   sleep .3
 done
 wait "$proof" || { cat "$tmp/witness.log"; exit 1; }
-[[ $seen != *..* && ( $seen == "$group" || $seen == "${group%/}/"* ) ]] || { echo "RUN escaped/unproven: builder=$group child=$seen" >&2; exit 1; }
+[[ $seen == /* && $seen != *..* ]] || { echo "RUN outside/unproven under capped cgroup root: daemon=$group child=$seen" >&2; exit 1; }
 echo "BUILD_CAP bytes=$limit cpus=2 parallelism=1 buildkit=$group child=$seen"
 # Only tracked sources; a private site environment must never enter the context.
 mkdir "$tmp/source"; git archive "$GITHUB_SHA" | tar -xf - -C "$tmp/source"

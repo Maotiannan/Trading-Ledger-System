@@ -8,6 +8,7 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import { chromium } from '@playwright/test';
 import { ApiTestContext } from '../../tests/api/isolated/helpers/context.mjs';
 import signedReceipt from '../../tests/api/isolated/cases/65-receipt-generator-flow.case.mjs';
+import receiptApproval from '../../tests/api/isolated/cases/66-receipt-edit-approval.case.mjs';
 const t=new ApiTestContext();
 assert.equal(new URL(t.baseUrl).hostname,'127.0.0.1');
 const meta=process.env.METRICS_DIR;
@@ -75,6 +76,19 @@ try{
       assert.deepEqual(failures,[]);await context.close();
     });
   }finally{await browser.close();}
+  await measure('approval-finance-with-readers-and-maintenance',async()=>{
+    const reviewer=new ApiTestContext();
+    try {
+      await Promise.all([
+        receiptApproval(reviewer),
+        ...Array.from({length:4},async()=>{
+          for(let i=0;i<4;i++) await t.request('GET','/api/dashboard?action=summary',{expectedStatus:200});
+        }),
+        t.request('POST','/api/internal/maintenance/uploaded-assets',{headers:{'x-maintenance-token':process.env.MAINTENANCE_JOB_TOKEN},expectedStatus:200})
+          .then(r=>assert.ok(r.data?.data?.staleSigningCleanup)),
+      ]);
+    } finally { reviewer.destroy(); }
+  });
   await delay(30000);
   console.log('BUSINESS_RESULT '+JSON.stringify({jpegBytes:jpeg.length,jpegPixels:[4096,3072],xlsxBytes:fs.statSync(xlsx).size,orders:1000,invoices:100,exportBytes,pdfBytes:pdfBytes.length,cooldownSeconds:30,cooled:probe(),phases:phases.length}));
 }finally{t.destroy();}

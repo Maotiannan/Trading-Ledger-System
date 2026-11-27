@@ -1,6 +1,11 @@
 name: ARM64 image profile
 on:
   workflow_dispatch:
+    inputs:
+      baseline:
+        description: Previous application commit/tag for comparison (on main, defaults to HEAD^)
+        required: false
+        type: string
   push:
     branches: ['perf/arm64-*']
 permissions:
@@ -23,10 +28,18 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - id: inputs
+        env:
+          COMPARISON: ${{ inputs.baseline }}
         run: |
-          base=$(git merge-base origin/main HEAD)
+          if [[ -n $COMPARISON ]]; then
+            base=$(git rev-parse --verify --end-of-options "$COMPARISON^{commit}")
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            base=$(git rev-parse HEAD^)
+          else
+            base=$(git merge-base origin/main HEAD)
+          fi
           echo "base=$base" >> "$GITHUB_OUTPUT"
-          if ! git diff --quiet "$base" HEAD -- src public prisma package.json package-lock.json next.config.ts Dockerfile; then
+          if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]] || ! git diff --quiet "$base" HEAD -- src public prisma package.json package-lock.json next.config.ts Dockerfile; then
             echo 'candidate=true' >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/cache/restore@v4
@@ -57,9 +70,12 @@ jobs:
       - name: Build and measure candidate
         if: steps.inputs.outputs.candidate == 'true'
         run: |
-          bash scripts/profile/build-arm64.sh
+          BUILD_MEMORY_BYTES=3221225472 bash scripts/profile/build-arm64.sh
           docker tag ledger-profile:run ledger-profile:candidate
           PROFILE_IMAGE=ledger-profile:candidate bash scripts/profile/runtime.sh
+      - name: Measure cold reference build with the same sampler
+        if: steps.inputs.outputs.candidate == 'true' && steps.baseline.outputs.cache-hit == 'true'
+        run: PROFILE_REVISION=${{ steps.inputs.outputs.base }} bash scripts/profile/build-arm64.sh
       - name: Package tested candidate
         if: steps.inputs.outputs.candidate == 'true'
         run: |

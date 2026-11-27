@@ -43,12 +43,20 @@ wait "$proof" || { cat "$tmp/witness.log"; exit 1; }
 echo "BUILD_CAP bytes=$limit cpus=2 parallelism=1 buildkit=$group child=$seen"
 # Only tracked sources; a private site environment must never enter the context.
 mkdir "$tmp/source"; git archive "${PROFILE_REVISION:-$GITHUB_SHA}" | tar -xf - -C "$tmp/source"
+version=$(node -p "require('$tmp/source/package.json').version")
 sed "s|^FROM node:22-alpine |FROM $base |" "$tmp/source/Dockerfile" > "$tmp/Pinned.Dockerfile"
 if grep -Eq '^FROM node:22-alpine( |$)' "$tmp/Pinned.Dockerfile"; then exit 2; fi
 t0=$(date +%s); rc=0
+# Anonymous memory is reported separately: the kernel's peak also charges reclaimable page cache.
+docker exec "$builder" sh -c 'while :; do
+  awk "/^anon / {a=\$2} /^file / {f=\$2} END {print a, f}" /sys/fs/cgroup/memory.stat
+  sleep 1
+done' > "$tmp/usage" & sampler=$!
 docker buildx build --builder "$name" --platform linux/arm64 --progress plain --load \
-  --build-arg CIRCLE_NODE_TOTAL=2 --label "org.opencontainers.image.revision=${PROFILE_REVISION:-$GITHUB_SHA}" \
+  --build-arg CIRCLE_NODE_TOTAL=2 --label "org.opencontainers.image.revision=${PROFILE_REVISION:-$GITHUB_SHA}" --label "org.opencontainers.image.version=$version" \
   -f "$tmp/Pinned.Dockerfile" -t ledger-profile:run "$tmp/source" || rc=$?
+kill "$sampler" 2>/dev/null || :
+awk 'NF==2 {if($1>a)a=$1;if($2>f)f=$2;n++} END {printf "BUILD_MEMORY samples=%d peakAnonBytes=%.0f peakFileBytes=%.0f\n",n,a,f}' "$tmp/usage"
 echo "BUILD_RESULT exit=$rc seconds=$(($(date +%s)-t0)) peakBytes=$(cgread memory.peak)"
 cgread memory.events
 [[ $rc == 0 ]] || exit "$rc"

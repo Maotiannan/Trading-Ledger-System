@@ -5,6 +5,7 @@ image=${PROFILE_IMAGE:-ledger-profile:run}
 [[ $image == ledger-profile:run || $image == ledger-profile:baseline || $image == ledger-profile:candidate ]]
 id="ledgerprofile-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; db="$id-db"; app="$id-app"; net="$id-net"; stub="$id-stub"; generic="$id-generic"; migration_db="$id-migration"
 echo "PROFILE_IMAGE tag=$image id=$(docker inspect -f '{{.Id}}' "$image")"
+docker run --rm --network none --read-only "$image" node -p '"PROFILE_VERSION "+require("./package.json").version+" node="+process.version+" arch="+process.arch'
 export METRICS_DIR; METRICS_DIR=$(mktemp -d "$RUNNER_TEMP/metrics-XXXX"); chmod 777 "$METRICS_DIR"
 docker network create --internal "$net" >/dev/null
 cleanup(){ if [[ -n ${relay:-} ]]; then kill "$relay" 2>/dev/null || :; fi; docker rm -fv "$app" "$generic" "$stub" "$db" "$migration_db" >/dev/null 2>&1 || :; docker network rm "$net" >/dev/null; }
@@ -18,6 +19,7 @@ for _ in $(seq 1 90); do if echo 'SELECT 1'|sql >/dev/null 2>&1;then break;fi;sl
 echo 'SELECT 1'|sql >/dev/null
 export INIT_ADMIN_EMAIL=profile@example.invalid INIT_ADMIN_PASSWORD=ProfileIsolated123! INIT_ADMIN_TOKEN=profile-init-only
 export MUCONT_CUSTOMERS_READ_TOKEN=isolated-profile-read-token-1234567890
+export MAINTENANCE_JOB_TOKEN=isolated-profile-maintenance-test-token
 url="mysql://ledger_probe:profile-only@db:3306/trading_ledger_test${PROFILE_POOL_QUERY:-}"
 docker run --rm --network "$net" -e "DATABASE_URL=$url" "$image" npx --no-install prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script |
   node scripts/profile/mysql-test-schema.mjs | docker exec -i -e MYSQL_PWD=profile-root "$db" mysql -uroot trading_ledger_test
@@ -45,7 +47,7 @@ docker run -d --name "$stub" --network "$net" --network-alias ocr --memory 96m \
 docker run -d --name "$app" --network "$net" --memory 1600m --cpus 2 \
   -e HOSTNAME=0.0.0.0 -e NODE_ENV=production -e NODE_OPTIONS=--require=/probe/prisma-observer.cjs \
   -e "DATABASE_URL=$url" -e ENABLE_INIT_ROUTE=true -e INIT_ADMIN_EMAIL -e INIT_ADMIN_PASSWORD -e INIT_ADMIN_TOKEN \
-  -e SESSION_SECRET=isolated-profile-session-secret-0123456789 -e MUCONT_CUSTOMERS_READ_TOKEN -e UPLOAD_DIR=/tmp/isolated-uploads \
+  -e SESSION_SECRET=isolated-profile-session-secret-0123456789 -e MUCONT_CUSTOMERS_READ_TOKEN -e MAINTENANCE_JOB_TOKEN -e UPLOAD_DIR=/tmp/isolated-uploads \
   -e RESEND_API_KEY= -e WHATSAPP_OUTBOUND_ENABLED=false -e OCR_DISABLED=false \
   -e OCR_API_KEY=fixture-only -e OCR_API_BASE_URL=http://ocr:8080/v1 -e OCR_MAX_RETRIES=1 \
   --mount "type=bind,src=$PWD/scripts/profile,dst=/probe,readonly" --mount "type=bind,src=$METRICS_DIR,dst=/metrics" \
@@ -74,6 +76,9 @@ if [[ $rc != 0 ]];then docker logs "$app" --tail 45;exit "$rc";fi
 sleep 20; printf 'PROFILE_COOLED ';cat "$METRICS_DIR/current";echo
 if [[ ${PROFILE_BUSINESS:-1} == 1 ]]; then
   node scripts/profile/business.mjs || { docker logs "$app" --tail 25; docker logs "$stub" --tail 5; exit 1; }
+fi
+if [[ "$image" == ledger-profile:candidate ]];then
+  node -e 'const s=JSON.parse(require("fs").readFileSync(process.env.METRICS_DIR+"/current","utf8")); if(s.created!==1)throw Error("Expected one PrismaClient, observed "+s.created)'
 fi
 printf 'PROFILE_KERNEL_PEAK '; docker exec "$app" cat /sys/fs/cgroup/memory.peak
 awk 'NF==3{if($2>m)m=$2;if($3>a)a=$3;n++;last=$2}END{printf "PROFILE_MYSQL samples=%d maxConnections=%d maxActive=%d final=%d\n",n,m,a,last; if(n<2 || m<1)exit 1}' "$METRICS_DIR/connections.tsv"

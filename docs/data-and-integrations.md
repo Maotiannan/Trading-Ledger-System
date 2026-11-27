@@ -148,7 +148,7 @@ Orders 的 `resolve-source-customer` 动作仅允许 ADMIN 处理 `UNMATCHED / C
 
 ADMIN 可在设置页持久化启用状态、轮询间隔 `10..3600` 秒和批量大小 `1..500`。Docker `mucontract-sync-trigger` 每 5 秒唤醒一次内部接口；后端根据持久化的下一次可运行时间决定是否真正拉取，避免把业务调度逻辑放进容器脚本。
 
-生产环境已于 2026-07-19 完成首次 Full Reconcile 并启用 30 秒增量同步。上线时 53 条来源 PI 全部匹配，0 未匹配、0 冲突，提交游标为 106；完整备份、隔离恢复、迁移、对账和业务表不变证据见 `docs/backup/restore-drills/2026-07-19-muledger-nas-local-backup-rollout.md`。
+生产环境已于 2026-07-19 完成首次 Full Reconcile 并启用 30 秒增量同步。上线时 53 条来源 PI 全部匹配，0 未匹配、0 冲突，提交游标为 106；完整备份、隔离恢复、迁移、对账和业务表不变证据见 [备份历史索引](backup/archive/README.md)。
 
 ### 持久化与冲突
 
@@ -336,7 +336,7 @@ docker volume rm ...
 
 Docker `email-delivery-trigger` 只持有内部维护令牌，按固定间隔调用应用内部发送器；Resend 密钥只存在于 app 环境。对外 webhook 为 `POST /api/webhooks/resend`。外发默认关闭，测试模式默认开启；测试模式会把已批准邮件重定向到一个内部测试地址。
 
-配置、域名验证、配额、密钥轮换、状态追踪和回滚顺序见 [客户邮件通知运维手册](email-notification-operations.md)。数据库和媒体恢复证据见 [2026-09-02 邮件通知迁移与恢复演练](backup/restore-drills/2026-09-02-email-notifications-migration-drill.md)。该功能不新增 NAS 文件目录。
+配置、域名验证、配额、密钥轮换、状态追踪和回滚顺序见 [客户邮件通知运维手册](email-notification-operations.md)。数据库和媒体恢复证据见 [historical drill index](backup/archive/README.md)。该功能不新增 NAS 文件目录。
 
 ## 项目内置模板资源
 

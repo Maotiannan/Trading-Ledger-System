@@ -110,6 +110,21 @@ function runRunner(
 }
 
 describe('MULEDGER Docker backup runner', () => {
+  it('keeps one local publication and its successful status when the separate cloud handoff fails', () => {
+    const f = fixture();
+    try {
+      const cloud = path.join(f.root, 'cloud');
+      writeFileSync(cloud, '#!/bin/sh\n[ -z "${DATABASE_URL:-}" ] || exit 1\nprintf "%s" "$4" > "$3.seen"\nexit 75\n');
+      chmodSync(cloud, 0o700);
+      const config = path.join(f.root, 'offsite.json');
+      const result = runRunner(f, { FAKE_PUBLISH_EXIT: '0', MULEDGER_OFFSITE_PYTHON: cloud, MULEDGER_OFFSITE_CONFIG: config });
+      expect(result.status).toBe(0);
+      expect(result.stderr).toContain('retry offsite only');
+      expect(readFileSync(config + '.seen', 'utf8')).toBe('submit');
+      expect(readFileSync(f.dockerCount, 'utf8')).toBe('1');
+      expect(JSON.parse(readFileSync(f.statusFile, 'utf8'))).toMatchObject({ status: 'SUCCESS', cleanupStatus: 'SUCCESS' });
+    } finally { f.cleanup(); }
+  });
   it.each([
     ['75', 'DEFERRED', 0, 'HEALTHY'],
     ['1', 'FAILED', 1, 'CLEANUP_FAILED'],

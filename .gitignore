@@ -1,6 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
+__pycache__/
+*.pyc
 node_modules
 /.pnp
 .pnp.*
@@ -11,6 +13,7 @@ node_modules
 !.yarn/versions
 
 # testing
+.muledger-offsite-task
 /coverage
 
 # next.js

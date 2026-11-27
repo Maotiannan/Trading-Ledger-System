@@ -318,6 +318,14 @@ if [ "$MODE" = "BACKUP" ]; then
   if [ -n "$PUBLISHED_SNAPSHOT" ]; then publication_status="SUCCESS"; fi
   write_status "$publication_status" "$last_exit" "$ATTEMPTS_USED" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   STATUS_FINALIZED=1
+  # Optional host-side handoff. Never turn a cloud failure into another database dump.
+  if [ -n "$PUBLISHED_SNAPSHOT" ] && [ -n "${MULEDGER_OFFSITE_CONFIG:-}" ]; then
+    if ! env -i "PATH=$PATH" "HOME=$HOME" "TMPDIR=${TMPDIR:-/tmp}" \
+        "${MULEDGER_OFFSITE_PYTHON:-python3}" "$ROOT_DIR/scripts/backup/muledger_offsite.py" \
+        --config "$MULEDGER_OFFSITE_CONFIG" submit "$PUBLISHED_SNAPSHOT"; then
+      log "WARN: Local snapshot published; offsite handoff incomplete. Check cloud status and retry offsite only."
+    fi
+  fi
 fi
 if [ "$last_exit" -eq 0 ]; then log "$MODE completed (cleanup: $CLEANUP_STATUS)"; fi
 exit "$last_exit"

@@ -84,9 +84,7 @@ NAS 本地备份与恢复手册见：[muledger-local-backup.md](docs/backup/mule
 
 每日后台备份通过专用 Docker 任务访问 NAS，不给系统 Bash 开放全盘权限；失败会重试并写入可供巡检读取的本地状态。
 
-最近一次迁移及恢复演练见：[2026-09-16 WhatsApp 数据恢复验证](docs/backup/restore-drills/2026-09-16-whatsapp-notifications.md)。
 
-MU Contract 同步迁移演练见：[2026-07-18 MU Contract Orders 迁移演练](docs/backup/restore-drills/2026-07-18-mu-contract-order-sync-migration-drill.md)。
 
 ## 启动与更新
 
@@ -112,10 +110,9 @@ docker compose up -d --build
 
 ## 更多文档
 
-- [todolist.md](todolist.md)：用户能看懂的版本里程碑和后续计划。
-- [ENGINEERING_LOG.md](ENGINEERING_LOG.md)：工程内部流水、测试门禁、技术变更记录。
+- [维护与待办](docs/maintenance.md) · [备份与恢复](docs/backup/muledger-local-backup.md)
+
 - [CHANGE_CHECKLIST.md](CHANGE_CHECKLIST.md)：每类改动必须同步检查的事项。
 - [API_TESTING.md](docs/API_TESTING.md)：API 自动化测试说明。
 - [data-and-integrations.md](docs/data-and-integrations.md)：数据文件、外部接口、上传目录和清理规则。
 - [email-notification-operations.md](docs/email-notification-operations.md)：Resend 域名、密钥、测试模式、发送和回滚运维说明。
-- [Implementation Plan Status Index](docs/superpowers/plans/README.md)：历史实施计划的唯一状态索引。

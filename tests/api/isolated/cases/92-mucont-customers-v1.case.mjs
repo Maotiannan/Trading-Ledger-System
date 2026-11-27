@@ -91,6 +91,21 @@ export default async function run(t) {
     assert.equal((await get(`/${ids.at(-1)}`, 404)).error.code, 'CUSTOMER_NOT_FOUND');
     t.step('deleted identity returns explicit 404 without name fallback');
 
+    const marks = JSON.parse(readFileSync('docs/integrations/mucont-customer-marks-v1.fixtures.json', 'utf8'));
+    await db.customer.createMany({ data: marks.seed.map(({ id, mark, updatedAt }) => ({
+      id, mark, normalizedMark: mark.trim().toLowerCase(), updatedAt: new Date(updatedAt),
+      name: id, orderName: id, city: '', phone: '', createdBy: adminId, ownerId: owner.id,
+    })) });
+    for (const sample of marks.cases) {
+      const result = await t.request(marks.method, marks.path, {
+        headers: { Authorization: `Bearer ${credential}` }, json: sample.request, expectedStatus: sample.status,
+      });
+      assert.equal(result.headers.get('cache-control'), 'no-store');
+      assert.equal(validate(result.data), true, JSON.stringify(validate.errors));
+      assert.deepEqual(result.data, sample.response, sample.name);
+    }
+    t.step('all pinned marks-v1 examples match the actual HTTP route and isolated database');
+
     const excel = await t.request('POST', '/api/excel/token', { json: { action: 'generate', name: 'V2 legacy compatibility' }, expectedStatus: 200 });
     const legacyToken = excel.data.data.token;
     assert.equal((await get('/options', 401, legacyToken)).error.code, 'AUTH_INVALID');

@@ -1,7 +1,5 @@
-# Backup history
+# Backup evidence index
 
-Use the [current runbook](../muledger-local-backup.md) for operations. Historical reports below describe only the date and dataset tested, not the health of today's snapshot.
+Use the [current backup/restore runbook](../muledger-local-backup.md). Dated receipts are historical evidence for their own dataset, not proof of today's health. Read them offline with `git ls-tree -r --name-only 58fe4de docs/backup/restore-drills` and `git show 58fe4de:<path>`. Earlier pre-reconciliation rules are in `git show 23ba6ff:docs/backup/muledger-local-backup.md`. Never rerun a historical repair against production.
 
-- [Original runbook at the reconciled baseline](https://github.com/Maotiannan/Trading-Ledger-System/blob/23ba6fff8c4d6cb25e78eeae75082904f0b4be70/docs/backup/muledger-local-backup.md): earlier retention, cloud retirement, receipt repair, notification recovery and migration-specific gates. Offline: `git show 23ba6ff:docs/backup/muledger-local-backup.md`. Historical paths and one-off repair actions are **not** current deployment instructions.
-- [Restore drill records](../restore-drills/): NAS and historical COS restores, transfer reversals, email/WhatsApp, SWIFT, accounts/recovery, invoice sync, cancellations and prepayments.
-- Keep new site-specific evidence (snapshot paths, hashes, selected image IDs and service logs) in private operations records, not a public changelog.
+Retained recovery obligations: restore all tables and all uploaded/generated media together. Check payment and transfer/reversal links, quantities and exact amounts, more than one SWIFT per detail and partial statuses; stable invoice-source/prepayment bindings and cancellation history; authentication, recovery and approval decision audits; email/WhatsApp consent, templates, jobs and frozen evidence. Keep sending disabled and never approve restored items. A NAS permission/runner change needs a check from the scheduled mount view; a cloud restore needs an independent repository and recovery credentials, not the source NAS. Keep site-specific evidence private.

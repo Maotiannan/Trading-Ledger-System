@@ -1,0 +1,27 @@
+name: ARM64 image profile
+on:
+  workflow_dispatch:
+  push:
+    branches: ['perf/arm64-*']
+permissions:
+  contents: read
+concurrency:
+  group: arm64-profile-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  profile:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Cold build on bounded native ARM64
+        run: bash scripts/profile/build-arm64.sh
+      - name: Exercise production server against disposable MySQL
+        run: bash scripts/profile/runtime.sh

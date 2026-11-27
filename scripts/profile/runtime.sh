@@ -7,13 +7,13 @@ id="ledgerprofile-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; db="$id-db"; app="$id
 echo "PROFILE_IMAGE tag=$image id=$(docker inspect -f '{{.Id}}' "$image")"
 export METRICS_DIR; METRICS_DIR=$(mktemp -d "$RUNNER_TEMP/metrics-XXXX"); chmod 777 "$METRICS_DIR"
 docker network create --internal "$net" >/dev/null
-cleanup(){ docker rm -fv "$app" "$generic" "$stub" "$db" "$migration_db" >/dev/null 2>&1 || :; docker network rm "$net" >/dev/null; }
+cleanup(){ if [[ -n ${relay:-} ]]; then kill "$relay" 2>/dev/null || :; fi; docker rm -fv "$app" "$generic" "$stub" "$db" "$migration_db" >/dev/null 2>&1 || :; docker network rm "$net" >/dev/null; }
 trap cleanup EXIT
 docker pull mysql:8.4 >/dev/null
 docker run -d --name "$db" --network "$net" --network-alias db --memory 1200m --cpus 2 \
   -e MYSQL_ROOT_PASSWORD=profile-root -e MYSQL_USER=ledger_probe -e MYSQL_PASSWORD=profile-only -e MYSQL_DATABASE=trading_ledger_test \
   mysql:8.4 --innodb-buffer-pool-size=134217728 >/dev/null
-sql(){ docker exec -e MYSQL_PWD=profile-root -i "$db" mysql -uroot -N -B --unbuffered; }
+sql(){ docker exec -e MYSQL_PWD=profile-root -i "$db" mysql --protocol=TCP -h127.0.0.1 -uroot trading_ledger_test -N -B --unbuffered; }
 for _ in $(seq 1 90); do if echo 'SELECT 1'|sql >/dev/null 2>&1;then break;fi;sleep 1;done
 echo 'SELECT 1'|sql >/dev/null
 export INIT_ADMIN_EMAIL=profile@example.invalid INIT_ADMIN_PASSWORD=ProfileIsolated123! INIT_ADMIN_TOKEN=profile-init-only
@@ -24,7 +24,7 @@ docker run --rm --network "$net" -e "DATABASE_URL=$url" "$image" npx --no-instal
 echo 'PROFILE_SCHEMA engine=MySQL-8.4 method=schema-diff not-a-migration-test'
 docker run -d --name "$migration_db" --network "$net" --network-alias migration --memory 800m \
   -e MARIADB_ROOT_PASSWORD=profile-root -e MARIADB_DATABASE=trading_ledger_test mariadb:11 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci >/dev/null
-maria(){ docker exec -i -e MYSQL_PWD=profile-root "$migration_db" mariadb -uroot -N -B; }
+maria(){ docker exec -i -e MYSQL_PWD=profile-root "$migration_db" mariadb --protocol=TCP -h127.0.0.1 -uroot trading_ledger_test -N -B; }
 for _ in $(seq 1 90); do if echo 'SELECT 1'|maria >/dev/null 2>&1;then break;fi;sleep 1;done
 echo 'SELECT 1'|maria >/dev/null
 docker run -d --name "$generic" --network "$net" --memory 1g -e HOSTNAME=0.0.0.0 -e DATABASE_URL=mysql://root:profile-root@migration:3306/trading_ledger_test "$image" >/dev/null
@@ -42,7 +42,7 @@ echo "PROFILE_MIGRATION engine=MariaDB-11 applied=$migrated defaultCommandReady=
 docker rm -fv "$generic" "$migration_db" >/dev/null
 docker run -d --name "$stub" --network "$net" --network-alias ocr --memory 96m \
   --mount "type=bind,src=$PWD/scripts/profile/ocr-stub.mjs,dst=/stub.mjs,readonly" --mount "type=bind,src=$METRICS_DIR,dst=/metrics" "$image" node /stub.mjs >/dev/null
-docker run -d --name "$app" --network "$net" -p 127.0.0.1::3000 --memory 1600m --cpus 2 \
+docker run -d --name "$app" --network "$net" --memory 1600m --cpus 2 \
   -e HOSTNAME=0.0.0.0 -e NODE_ENV=production -e NODE_OPTIONS=--require=/probe/prisma-observer.cjs \
   -e "DATABASE_URL=$url" -e ENABLE_INIT_ROUTE=true -e INIT_ADMIN_EMAIL -e INIT_ADMIN_PASSWORD -e INIT_ADMIN_TOKEN \
   -e SESSION_SECRET=isolated-profile-session-secret-0123456789 -e MUCONT_CUSTOMERS_READ_TOKEN -e UPLOAD_DIR=/tmp/isolated-uploads \
@@ -50,7 +50,20 @@ docker run -d --name "$app" --network "$net" -p 127.0.0.1::3000 --memory 1600m -
   -e OCR_API_KEY=fixture-only -e OCR_API_BASE_URL=http://ocr:8080/v1 -e OCR_MAX_RETRIES=1 \
   --mount "type=bind,src=$PWD/scripts/profile,dst=/probe,readonly" --mount "type=bind,src=$METRICS_DIR,dst=/metrics" \
   "$image" node server.js >/dev/null
-export BASE_URL; BASE_URL="http://$(docker port "$app" 3000/tcp|head -1)"
+# Docker does not publish ports on an internal bridge. Only the runner host needs an HTTP origin.
+address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$app")
+node --input-type=module - "$address" > "$METRICS_DIR/port" <<'JS' &
+import net from 'node:net';
+const server=net.createServer(client=>{
+  const target=net.connect(3000,process.argv[2]);
+  client.on('error',()=>target.destroy()); target.on('error',()=>client.destroy());
+  client.pipe(target).pipe(client);
+});
+server.listen(0,'127.0.0.1',()=>console.log(server.address().port));
+JS
+relay=$!
+for _ in {1..30}; do [[ ! -s "$METRICS_DIR/port" ]] || break; sleep .1; done
+export BASE_URL="http://127.0.0.1:$(cat "$METRICS_DIR/port")"
 ready=0; for _ in $(seq 1 60); do if curl -fsS -o /dev/null "$BASE_URL"; then ready=1; break; fi;sleep 1;done
 if [[ $ready != 1 ]]; then docker logs "$app" --tail 35; exit 1; fi
 # One separate observer connection. Count only the authenticated application user.

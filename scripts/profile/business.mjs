@@ -68,7 +68,10 @@ try{
   try{
     await measure('pdf-preview-in-chromium',async()=>{
       const context=await browser.newContext();await context.addCookies(Array.from(t.cookies,([name,value])=>({name,value,url:t.baseUrl})));
-      const page=await context.newPage();const failures=[], diagnostics=[];
+      const page=await context.newPage();const failures=[], diagnostics=[], pending=new Set();
+      page.on('request',r=>pending.add(new URL(r.url()).pathname));
+      page.on('requestfinished',r=>pending.delete(new URL(r.url()).pathname));
+      page.on('requestfailed',r=>diagnostics.push([new URL(r.url()).pathname,r.failure()?.errorText]));
       page.on('pageerror',e=>failures.push(e.message));
       page.on('console',m=>{if(['warning','error'].includes(m.type()))diagnostics.push(m.text().slice(0,300));});
       page.on('response',r=>{if(r.status()>=400 || /pdf\.worker/.test(r.url()))diagnostics.push([r.status(),new URL(r.url()).pathname,r.headers()['content-type']]);});
@@ -79,7 +82,7 @@ try{
           const px=c.getContext('2d').getImageData(c.width>>1,c.height>>1,1,1).data;return px[3]===255 && px[0]<50 && px[2]>40;},null,{timeout:15000});
       } catch(error) {
         const view=await dialog.evaluate(d=>({text:d.innerText.slice(0,700),canvases:[...d.querySelectorAll('canvas')].map(c=>[c.width,c.height,[...c.getContext('2d').getImageData(c.width>>1,c.height>>1,1,1).data]])}));
-        console.error('PROFILE_PDF_DIAGNOSTIC '+JSON.stringify({view,failures,diagnostics:diagnostics.slice(-12)}));throw error;
+        console.error('PROFILE_PDF_DIAGNOSTIC '+JSON.stringify({view,failures,pending:[...pending],diagnostics:diagnostics.slice(-14)}));throw error;
       }
       assert.deepEqual(failures,[]);await context.close();
     });

@@ -8,7 +8,7 @@ echo "PROFILE_IMAGE tag=$image id=$(docker inspect -f '{{.Id}}' "$image")"
 docker run --rm --network none --read-only "$image" node -p '"PROFILE_VERSION "+require("./package.json").version+" node="+process.version+" arch="+process.arch'
 export METRICS_DIR; METRICS_DIR=$(mktemp -d "$RUNNER_TEMP/metrics-XXXX"); chmod 777 "$METRICS_DIR"
 docker network create --internal "$net" >/dev/null
-cleanup(){ if [[ -n ${relay:-} ]]; then kill "$relay" 2>/dev/null || :; fi; docker rm -fv "$app" "$generic" "$stub" "$db" "$migration_db" >/dev/null 2>&1 || :; docker network rm "$net" >/dev/null; }
+cleanup(){ docker rm -fv "$app" "$generic" "$stub" "$db" "$migration_db" >/dev/null 2>&1 || :; docker network rm "$net" >/dev/null; }
 trap cleanup EXIT
 docker pull mysql:8.4 >/dev/null
 docker run -d --name "$db" --network "$net" --network-alias db --memory 1200m --cpus 2 \
@@ -52,30 +52,25 @@ docker run -d --name "$app" --network "$net" --memory 1600m --cpus 2 \
   -e OCR_API_KEY=fixture-only -e OCR_API_BASE_URL=http://ocr:8080/v1 -e OCR_MAX_RETRIES=1 \
   --mount "type=bind,src=$PWD/scripts/profile,dst=/probe,readonly" --mount "type=bind,src=$METRICS_DIR,dst=/metrics" \
   "$image" node server.js >/dev/null
-# Docker does not publish ports on an internal bridge. Only the runner host needs an HTTP origin.
-address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$app")
-node --input-type=module - "$address" > "$METRICS_DIR/port" <<'JS' &
-import net from 'node:net';
-const server=net.createServer(client=>{
-  const target=net.connect(3000,process.argv[2]);
-  client.on('error',()=>target.destroy()); target.on('error',()=>client.destroy());
-  client.pipe(target).pipe(client);
-});
-server.listen(0,'127.0.0.1',()=>console.log(server.address().port));
-JS
-relay=$!
-for _ in {1..30}; do [[ ! -s "$METRICS_DIR/port" ]] || break; sleep .1; done
-export BASE_URL="http://127.0.0.1:$(cat "$METRICS_DIR/port")"
-ready=0; for _ in $(seq 1 60); do if curl -fsS -o /dev/null "$BASE_URL"; then ready=1; break; fi;sleep 1;done
+# Put the test clients on the server's own loopback; no exposed ports, NAT proxy or outside services.
+export BASE_URL=http://127.0.0.1:3000
+app_pid=$(docker inspect -f '{{.State.Pid}}' "$app")
+in_app_net(){
+  sudo nsenter -t "$app_pid" -n -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups env -i \
+    HOME="$HOME" PATH="$PATH" USER="$USER" BASE_URL="$BASE_URL" METRICS_DIR="$METRICS_DIR" \
+    INIT_ADMIN_EMAIL="$INIT_ADMIN_EMAIL" INIT_ADMIN_PASSWORD="$INIT_ADMIN_PASSWORD" INIT_ADMIN_TOKEN="$INIT_ADMIN_TOKEN" \
+    MAINTENANCE_JOB_TOKEN="$MAINTENANCE_JOB_TOKEN" MUCONT_CUSTOMERS_READ_TOKEN="$MUCONT_CUSTOMERS_READ_TOKEN" "$@"
+}
+ready=0; for _ in $(seq 1 60); do if in_app_net curl -fsS -o /dev/null "$BASE_URL"; then ready=1; break; fi;sleep 1;done
 if [[ $ready != 1 ]]; then docker logs "$app" --tail 35; exit 1; fi
 # One separate observer connection. Count only the authenticated application user.
 awk 'BEGIN{for(i=0;i<3600;i++)print "SELECT UNIX_TIMESTAMP(NOW(3)),COUNT(*),COALESCE(SUM(PROCESSLIST_COMMAND!=\047Sleep\047),0) FROM performance_schema.threads WHERE PROCESSLIST_USER=\047ledger_probe\047; DO SLEEP(0.2);"}' > "$METRICS_DIR/sample.sql"
 sql < "$METRICS_DIR/sample.sql" > "$METRICS_DIR/connections.tsv" 2>/dev/null & sampler=$!
-rc=0; node scripts/profile/queries.mjs || rc=$?
+rc=0; in_app_net node scripts/profile/queries.mjs || rc=$?
 if [[ $rc != 0 ]];then docker logs "$app" --tail 45;exit "$rc";fi
 sleep 20; printf 'PROFILE_COOLED ';cat "$METRICS_DIR/current";echo
 if [[ ${PROFILE_BUSINESS:-1} == 1 ]]; then
-  node scripts/profile/business.mjs || { docker logs "$app" --tail 25; docker logs "$stub" --tail 5; exit 1; }
+  in_app_net node scripts/profile/business.mjs || { docker logs "$app" --tail 25; docker logs "$stub" --tail 5; exit 1; }
 fi
 if [[ "$image" == ledger-profile:candidate ]];then
   node -e 'const s=JSON.parse(require("fs").readFileSync(process.env.METRICS_DIR+"/current","utf8")); if(s.created!==1)throw Error("Expected one PrismaClient, observed "+s.created)'

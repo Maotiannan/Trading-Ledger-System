@@ -15,7 +15,12 @@ http.createServer(async (req,res)=>{
   try {
     assert.equal(req.method,'POST');
     const chunks=[]; for await (const c of req) chunks.push(c);
-    const json=JSON.parse(Buffer.concat(chunks)), blocks=json.messages.flatMap(m=>Array.isArray(m.content)?m.content:[]);
+    const body=Buffer.concat(chunks);
+    if(req.url==='/v1/files/parser/sync') {
+      assert(body.includes(Buffer.from('%PDF-')));
+      res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({status:'succeeded',content:'Fixture transfer: USD 10.'}));return;
+    }
+    const json=JSON.parse(body), blocks=json.messages.flatMap(m=>Array.isArray(m.content)?m.content:[]);
     const img=blocks.find(v=>v.type==='image_url')?.image_url?.url;
     if (img?.startsWith('data:image/jpeg;base64,')) {
       const bytes=Buffer.from(img.split(',')[1],'base64'), size=jpegSize(bytes);

@@ -9,14 +9,13 @@ describe('production Docker image dependency contract', () => {
     expect(dockerfile).not.toMatch(/RUN\s+npm install(?:\s|$)/);
   });
 
-  it('prunes development dependencies before copying node_modules into the runner', () => {
-    expect(dockerfile).toMatch(/FROM\s+builder\s+AS\s+prod-deps/);
-    expect(dockerfile).toMatch(/RUN\s+npm prune --omit=dev(?:\s|$)/);
-    expect(dockerfile).toContain(
-      'COPY --from=prod-deps /app/node_modules ./node_modules',
-    );
-    expect(dockerfile).not.toContain(
-      'COPY --from=builder /app/node_modules ./node_modules',
-    );
+  it('ships standalone with a separate locked migration CLI, not another full dependency tree', () => {
+    const runner = dockerfile.split(/FROM[^\n]+ AS runner\n/)[1];
+    expect(runner).toContain('COPY --from=builder /app/.next/standalone ./');
+    expect(runner).not.toMatch(/COPY[^\n]+\/app\/node_modules\s+\.\/node_modules/);
+    expect(dockerfile).toContain('dependencies:{prisma:p.dependencies.prisma}');
+    expect(dockerfile).toMatch(/npm prune[^\n]+--omit=dev/);
+    expect(runner).toContain('COPY --from=migration-cli /app/node_modules /opt/prisma-cli/node_modules');
+    expect(runner).toMatch(/prisma migrate deploy && exec node server\.js/);
   });
 });

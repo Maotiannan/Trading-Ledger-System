@@ -65,14 +65,18 @@ jobs:
       - name: Install test drivers on the disposable host
         if: steps.inputs.outputs.candidate == 'true'
         run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
-      - name: Measure baseline
-        run: PROFILE_BUSINESS=${{ steps.inputs.outputs.candidate == 'true' && '1' || '0' }} PROFILE_IMAGE=ledger-profile:baseline bash scripts/profile/runtime.sh
-      - name: Build and measure candidate
+      - name: Cold build candidate
+        id: build
         if: steps.inputs.outputs.candidate == 'true'
         run: |
           BUILD_MEMORY_BYTES=3221225472 bash scripts/profile/build-arm64.sh
           docker tag ledger-profile:run ledger-profile:candidate
-          PROFILE_IMAGE=ledger-profile:candidate bash scripts/profile/runtime.sh
+      - name: Measure baseline
+        if: ${{ !cancelled() && (steps.build.outcome == 'success' || steps.build.outcome == 'skipped' || steps.build.outcome == 'failure') }}
+        run: PROFILE_BUSINESS=${{ steps.inputs.outputs.candidate == 'true' && '1' || '0' }} PROFILE_IMAGE=ledger-profile:baseline bash scripts/profile/runtime.sh
+      - name: Measure candidate
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: PROFILE_IMAGE=ledger-profile:candidate bash scripts/profile/runtime.sh
       - name: Measure cold reference build with the same sampler
         if: steps.inputs.outputs.candidate == 'true' && steps.baseline.outputs.cache-hit == 'true'
         run: PROFILE_REVISION=${{ steps.inputs.outputs.base }} bash scripts/profile/build-arm64.sh

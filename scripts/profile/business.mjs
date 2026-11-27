@@ -68,25 +68,36 @@ try{
   try{
     await measure('pdf-preview-in-chromium',async()=>{
       const context=await browser.newContext();await context.addCookies(Array.from(t.cookies,([name,value])=>({name,value,url:t.baseUrl})));
-      const page=await context.newPage();const failures=[];page.on('pageerror',e=>failures.push(e.message));
+      const page=await context.newPage();const failures=[], diagnostics=[];
+      page.on('pageerror',e=>failures.push(e.message));
+      page.on('console',m=>{if(['warning','error'].includes(m.type()))diagnostics.push(m.text().slice(0,300));});
+      page.on('response',r=>{if(r.status()>=400 || /pdf\.worker/.test(r.url()))diagnostics.push([r.status(),new URL(r.url()).pathname,r.headers()['content-type']]);});
       await page.goto(t.baseUrl+'/swifts');await page.getByRole('button',{name:/Upload SWIFT|上传SWIFT/i}).first().click({timeout:20000});
       const dialog=page.getByRole('dialog');await dialog.locator('input[type=file]').setInputFiles({name:'synthetic.pdf',mimeType:'application/pdf',buffer:pdfBytes});
-      await page.waitForFunction(()=>{const c=document.querySelector('[role=dialog] [data-page="1"] canvas');if(!c?.width)return false;
-        const px=c.getContext('2d').getImageData(c.width>>1,c.height>>1,1,1).data;return px[3]===255 && px[0]<50 && px[2]>40;},{},{timeout:30000});
+      try {
+        await page.waitForFunction(()=>{const c=document.querySelector('[role=dialog] [data-page="1"] canvas');if(!c?.width)return false;
+          const px=c.getContext('2d').getImageData(c.width>>1,c.height>>1,1,1).data;return px[3]===255 && px[0]<50 && px[2]>40;},null,{timeout:15000});
+      } catch(error) {
+        const view=await dialog.evaluate(d=>({text:d.innerText.slice(0,700),canvases:[...d.querySelectorAll('canvas')].map(c=>[c.width,c.height,[...c.getContext('2d').getImageData(c.width>>1,c.height>>1,1,1).data]])}));
+        console.error('PROFILE_PDF_DIAGNOSTIC '+JSON.stringify({view,failures,diagnostics:diagnostics.slice(-12)}));throw error;
+      }
       assert.deepEqual(failures,[]);await context.close();
     });
   }finally{await browser.close();}
   await measure('approval-finance-with-readers-and-maintenance',async()=>{
     const reviewer=new ApiTestContext();
-    try {
-      await Promise.all([
-        receiptApproval(reviewer),
-        ...Array.from({length:4},async()=>{
-          for(let i=0;i<4;i++) await t.request('GET','/api/dashboard?action=summary',{expectedStatus:200});
-        }),
+    const request=reviewer.request.bind(reviewer);let overlaps=0;
+    reviewer.request=async(method,route,options={})=>{
+      if(options.json?.action!=='review-edit' || options.json.decision!=='approve') return request(method,route,options);
+      overlaps++;
+      const [approval]=await Promise.all([request(method,route,options),
+        ...Array.from({length:4},()=>t.request('GET','/api/dashboard?action=summary',{expectedStatus:200})),
         t.request('POST','/api/internal/maintenance/uploaded-assets',{headers:{'x-maintenance-token':process.env.MAINTENANCE_JOB_TOKEN},expectedStatus:200})
-          .then(r=>assert.ok(r.data?.data?.staleSigningCleanup)),
-      ]);
+          .then(r=>assert.ok(r.data?.data?.staleSigningCleanup))]);
+      return approval;
+    };
+    try {
+      await receiptApproval(reviewer);assert(overlaps>=1);
     } finally { reviewer.destroy(); }
   });
   await delay(30000);

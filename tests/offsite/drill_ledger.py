@@ -2,14 +2,13 @@
 
 import hashlib
 import os
-import secrets
 import subprocess
 import time
 from pathlib import Path
 
 
 class Database:
-    def __init__(self):
+    def __init__(self, task):
         if (
             os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
@@ -17,14 +16,12 @@ class Database:
             raise RuntimeError(
                 "Database drill is restricted to a disposable GitHub-hosted runner"
             )
-        self.tag = "muledger-offsite-" + secrets.token_hex(12)
+        self.tag = task
         self.cid = subprocess.check_output(
             [
                 "docker",
                 "run",
                 "-d",
-                "--name",
-                self.tag,
                 "--label",
                 "muledger.offsite.task=" + self.tag,
                 "--network",

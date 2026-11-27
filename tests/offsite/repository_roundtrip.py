@@ -57,6 +57,9 @@ class Store:
 
 def check(restic, root, full):
     os.umask(0o077)
+    task = "muledger-offsite-" + secrets.token_hex(12)
+    (root / ".muledger-offsite-task").write_text(task + "\n")
+    print(f"Drill inventory: --task {task} --directory {root}", file=sys.stderr)
     src = root / "capture"
     src.mkdir()
     rescue = root / "recovery"
@@ -70,7 +73,7 @@ def check(restic, root, full):
     cloud, copy = Store(), Store()
     databases = []
     try:
-        orig = Database() if full else None
+        orig = Database(task) if full else None
         if orig:
             databases.append(orig)
             orig.prepare()
@@ -188,6 +191,8 @@ def check(restic, root, full):
                     "docker",
                     "run",
                     "--rm",
+                    "--label",
+                    "muledger.offsite.task=" + task,
                     "--network",
                     "none",
                     "--read-only",
@@ -319,7 +324,7 @@ def check(restic, root, full):
                 }
             assert actual == hashes[i]
             if full:
-                restored = Database()
+                restored = Database(task)
                 databases.append(restored)
                 restored.sql((target / "database.sql").read_text())
                 w = restored.witness()

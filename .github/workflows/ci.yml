@@ -57,3 +57,5 @@ jobs:
         run: |
           python tests/offsite/test_capacity.py
           python tests/offsite/repository_roundtrip.py --restic "$RUNNER_TEMP/restic" --database
+      - name: Verify read-only task inventory and container-only cleanup
+        run: python tests/offsite/test_task_resources.py

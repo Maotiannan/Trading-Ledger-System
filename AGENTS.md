@@ -9,6 +9,12 @@ Maintain one long-lived branch, `main`. Open short-lived PR branches from the cu
 
 - Follow the [maintenance register](docs/maintenance.md); update affected live guides rather than a dated plan. Pin cross-project wire fixtures and run them offline and in isolated API CI. List task-owned resources before cleanup; keep shared resources, the active .next, release images and backup schedules unless individually authorized.
 
+## Task resource inventory
+
+From the task checkout: `python3 scripts/backup/task-resources.py --directory out/lab`. This read-only command lists registered Git worktrees, temp/build directories, offsite-labelled containers and volumes, and named volumes those containers reference. For a recovery drill, append its printed `--task TOKEN --directory PATH`. Without a token or checkout marker, Docker discovery is limited to the offsite label family.
+
+At creation, reuse the exact task token in the private linked checkout and new scratch directories (`.muledger-offsite-task` file) and on Docker resources (`muledger.offsite.task` label). A filename, branch name or mount is not proof of ownership. Do not mark existing shared resources. Worktrees, directories and volumes are **always list-only**. Only an explicitly authorized `--clean --task TOKEN` can remove exactly labelled, exited containers with no non-tmpfs mounts.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

@@ -60,6 +60,8 @@ def locked(directory):
         raise CapacityUnknown("usage_directory_permissions")
     fd = os.open(directory / "capacity.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "r+") as stream:
+        if stat.S_IMODE(os.fstat(fd).st_mode) != 0o600:
+            raise CapacityUnknown("capacity_lock_permissions")
         try:
             fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:

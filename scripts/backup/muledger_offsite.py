@@ -238,7 +238,11 @@ def main(argv=None):
     queue.mkdir(mode=0o700, exist_ok=True)
     status = state / "cloud-status.json"
     if a.action == "status":
-        result = read_private(status) if status.exists() else {"result": "NOT_RUN", "last_success": None}
+        result = (
+            read_private(status)
+            if status.exists()
+            else {"result": "NOT_RUN", "last_success": None}
+        )
         print(json.dumps({**result, "pending_points": len(list(queue.glob("*.json")))}))
         return 0
     if a.action == "submit":
@@ -295,7 +299,10 @@ def main(argv=None):
                 ):
                     report["latest_recovery_point"] = ack
             if outcome.get("capacity", {}).get("decision") == "warning":
-                print("WARN: projected shared storage reached the warning threshold", file=sys.stderr)
+                print(
+                    "WARN: projected shared storage reached the warning threshold",
+                    file=sys.stderr,
+                )
             if ok:
                 receipts = state / "receipts"
                 receipts.mkdir(mode=0o700, exist_ok=True)
@@ -305,7 +312,14 @@ def main(argv=None):
                 write_private(status, report)
                 marker.unlink(missing_ok=True)
             else:
-                write_private(marker, {"point": point, "result": outcome["result"], "reason": outcome.get("reason")})
+                write_private(
+                    marker,
+                    {
+                        "point": point,
+                        "result": outcome["result"],
+                        "reason": outcome.get("reason"),
+                    },
+                )
                 write_private(status, report)
                 failed = True
             print(json.dumps(report))

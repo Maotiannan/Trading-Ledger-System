@@ -46,6 +46,10 @@ def read_source(config, point, work):
         # Use the same Docker/NAS view as the publisher, without DB variables or network access.
         src = work / "packed"
         src.mkdir()
+        # On Linux a cap-dropped root cannot traverse another UID's private 0700 publication.
+        user = config.get("reader_user")
+        if user is not None and not re.fullmatch(r"[0-9]+:[0-9]+", user):
+            raise ValueError("invalid_reader_identity")
         proc = subprocess.Popen(
             [
                 "docker",
@@ -57,6 +61,7 @@ def read_source(config, point, work):
                 "--network",
                 "none",
                 "--cap-drop=ALL",
+                *(["--user", user] if user else []),
                 "--security-opt=no-new-privileges",
                 "--mount",
                 f"type=bind,src={root},dst=/snap,readonly",

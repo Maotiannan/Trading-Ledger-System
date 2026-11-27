@@ -99,6 +99,7 @@ def check(restic, root, full):
             "secret_access_key": "fixture",
             "reader": "docker" if full else "directory",
             "reader_image": "mariadb:11",
+            "reader_user": f"{os.getuid()}:{os.getgid()}",
             "snapshot_root": str(nas),
             "state_dir": str(src / "state"),
             "capacity_dir": str(src / "capacity"),
@@ -181,6 +182,41 @@ def check(restic, root, full):
                 if orig:
                     orig.second()
             point = publication()
+            if full and day == 1:
+                manifest = "/snap/" + point + "/manifest.json"
+                args = [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--network",
+                    "none",
+                    "--read-only",
+                    "--cap-drop=ALL",
+                    "--mount",
+                    f"type=bind,src={nas},dst=/snap,readonly",
+                    "--entrypoint",
+                    "/bin/sh",
+                ]
+
+                def may_read(user):
+                    return (
+                        subprocess.run(
+                            args
+                            + [
+                                "--user",
+                                user,
+                                "mariadb:11",
+                                "-c",
+                                'test -r "$1"',
+                                "probe",
+                                manifest,
+                            ]
+                        ).returncode
+                        == 0
+                    )
+
+                assert not may_read("65534:65534") and may_read(cfg["reader_user"])
+
             points.append(point)
             witnesses.append(orig.witness() if orig else None)
             hashes.append(

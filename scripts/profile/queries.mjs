@@ -11,7 +11,7 @@ const admin = await t.initAdmin();
 assert.equal(admin.status, 200);
 const login = await t.loginAdmin();
 const cust = await t.request('POST', '/api/customer', { json: { action: 'create', mark, orderName: mark,
-  name: 'Synthetic fixture', city: 'Fixture City', ownerId: login.data.data.id }, expectedStatus: 200 });
+  name: 'Synthetic fixture', phone: '2025550147', city: 'Fixture City', ownerId: login.data.data.id }, expectedStatus: 200 });
 const orderNo = mark + '-01', now = new Date().toISOString().slice(0,10);
 await t.request('POST','/api/invoice',{ json:{invNo:'PROFILE-INV',shipDate:now,releaseDate:now,
   orders:[{orderNo,amount:1200,customerMark:mark,customerName:mark}]},expectedStatus:200 });

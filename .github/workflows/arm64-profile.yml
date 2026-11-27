@@ -50,9 +50,10 @@ jobs:
           path: ${{ runner.temp }}/ledger-baseline.tar.zst
           key: ledger-profile-v1-arm64-${{ steps.inputs.outputs.base }}
       - name: Install test drivers on the disposable host
+        if: steps.inputs.outputs.candidate == 'true'
         run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
       - name: Measure baseline
-        run: PROFILE_IMAGE=ledger-profile:baseline bash scripts/profile/runtime.sh
+        run: PROFILE_BUSINESS=${{ steps.inputs.outputs.candidate == 'true' && '1' || '0' }} PROFILE_IMAGE=ledger-profile:baseline bash scripts/profile/runtime.sh
       - name: Build and measure candidate
         if: steps.inputs.outputs.candidate == 'true'
         run: |

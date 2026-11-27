@@ -1,0 +1,99 @@
+name: ARM64 image profile
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Previous application commit/tag for comparison (on main, defaults to HEAD^)
+        required: false
+        type: string
+  push:
+    branches: ['perf/arm64-*']
+permissions:
+  contents: read
+concurrency:
+  group: arm64-profile-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  profile:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - id: inputs
+        env:
+          COMPARISON: ${{ inputs.baseline }}
+        run: |
+          if [[ -n $COMPARISON ]]; then
+            base=$(git rev-parse --verify --end-of-options "$COMPARISON^{commit}")
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            base=$(git rev-parse HEAD^)
+          else
+            base=$(git merge-base origin/main HEAD)
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          if [[ $GITHUB_EVENT_NAME == workflow_dispatch ]] || ! git diff --quiet "$base" HEAD -- src public prisma package.json package-lock.json next.config.ts Dockerfile; then
+            echo 'candidate=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/cache/restore@v4
+        id: baseline
+        with:
+          path: ${{ runner.temp }}/ledger-baseline.tar.zst
+          key: ledger-profile-v1-arm64-${{ steps.inputs.outputs.base }}
+      - name: Prepare comparable baseline
+        run: |
+          if [[ -f "$RUNNER_TEMP/ledger-baseline.tar.zst" ]]; then
+            zstd -dc "$RUNNER_TEMP/ledger-baseline.tar.zst" | docker load
+          else
+            PROFILE_REVISION=${{ steps.inputs.outputs.base }} bash scripts/profile/build-arm64.sh
+            docker tag ledger-profile:run ledger-profile:baseline
+            docker save ledger-profile:baseline | zstd -T2 -3 -o "$RUNNER_TEMP/ledger-baseline.tar.zst"
+          fi
+          echo "BASELINE_ARCHIVE bytes=$(stat -c %s "$RUNNER_TEMP/ledger-baseline.tar.zst")"
+      - uses: actions/cache/save@v4
+        if: steps.baseline.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/ledger-baseline.tar.zst
+          key: ledger-profile-v1-arm64-${{ steps.inputs.outputs.base }}
+      - name: Install test drivers on the disposable host
+        if: steps.inputs.outputs.candidate == 'true'
+        run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
+      - name: Cold build candidate
+        id: build
+        if: steps.inputs.outputs.candidate == 'true'
+        run: |
+          BUILD_MEMORY_BYTES=3221225472 bash scripts/profile/build-arm64.sh
+          docker tag ledger-profile:run ledger-profile:candidate
+      - name: Measure baseline
+        if: ${{ !cancelled() && (steps.build.outcome == 'success' || steps.build.outcome == 'skipped' || steps.build.outcome == 'failure') }}
+        run: PROFILE_BUSINESS=${{ steps.inputs.outputs.candidate == 'true' && '1' || '0' }} PROFILE_IMAGE=ledger-profile:baseline bash scripts/profile/runtime.sh
+      - name: Measure candidate
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: PROFILE_IMAGE=ledger-profile:candidate bash scripts/profile/runtime.sh
+      - name: Measure cold reference build with the same sampler
+        if: steps.inputs.outputs.candidate == 'true' && steps.baseline.outputs.cache-hit == 'true'
+        run: PROFILE_REVISION=${{ steps.inputs.outputs.base }} bash scripts/profile/build-arm64.sh
+      - name: Package tested candidate
+        if: steps.inputs.outputs.candidate == 'true'
+        run: |
+          mkdir "$RUNNER_TEMP/delivery"
+          cd "$RUNNER_TEMP/delivery"
+          docker save ledger-profile:candidate | zstd -T2 -3 -o candidate.tar.zst
+          sha256sum candidate.tar.zst > SHA256SUMS
+          test "$(stat -c %s candidate.tar.zst)" -lt 350000000
+          docker inspect -f '{{.Id}} {{.Architecture}} {{index .Config.Labels "org.opencontainers.image.revision"}}' ledger-profile:candidate > image.txt
+          cat SHA256SUMS image.txt
+      - uses: actions/upload-artifact@v4
+        if: steps.inputs.outputs.candidate == 'true'
+        with:
+          name: tested-arm64-${{ github.sha }}
+          path: ${{ runner.temp }}/delivery/
+          retention-days: 1
+          compression-level: 0

@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   allowedDevOrigins: ['127.0.0.1'],
   serverExternalPackages: ['@resvg/resvg-js'],
+  experimental: { webpackMemoryOptimizations: true },
 };
 
 export default withNextIntl(nextConfig);

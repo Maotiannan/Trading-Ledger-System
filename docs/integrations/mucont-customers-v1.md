@@ -90,3 +90,4 @@ npm run test:api:isolated -- --case 92-mucont-customers-v1
 隔离 API 测试使用临时 MariaDB、专用数据库和本机合成凭证，覆盖跨 owner 同名客户、53 条分页、别名去重、非法游标、最新资料、归属转移、删除、凭证隔离及旧订单完整匹配。429/503 和日志脱敏由单测验证；CI 继续执行完整既有 API/E2E 流程。
 
 本轮无数据库迁移、持久化表或媒体文件新增。Customer/CustomerOrderName/CustomerConsignee 仍由完整 MySQL 快照覆盖，见[备份与恢复手册](../backup/muledger-local-backup.md)。服务凭证为独立受保护部署配置，恢复时从安全来源配置或重新签发；不写进业务备份文档。
+The provider and consumer pin the same offline [marks-v1.0.0 wire examples](mucont-customer-marks-v1.fixtures.json). The provider CI sends the literal requests through the route with an isolated database. Validate each ID, then deduplicate in first-seen order, then apply the 200-distinct-ID limit. Missing field is HTTP 400; a missing customer is HTTP 200 in `missingCustomerIds`, not an error. Coordinate any fixture change with the consumer; never fetch the other repository's floating main in tests.

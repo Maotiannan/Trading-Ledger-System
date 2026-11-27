@@ -169,7 +169,7 @@ The failed-delivery retry release adds only the nullable `WhatsAppDelivery.retry
 self-reference and index; it does not rewrite existing deliveries or financial data.
 All are covered by the full trading_ledger dump. Settings/audits use existing tables.
 No new media directory. See [backup runbook](backup/muledger-local-backup.md) and
-[isolated migration/restore evidence](backup/restore-drills/2026-09-16-whatsapp-notifications.md).
+[historical drill index](backup/archive/README.md).
 
 Deploy only after required tests/CI, then use scripts/rebuild-local-app.sh.
 Its application startup applies the additive migration. Reverting the app does
@@ -321,3 +321,7 @@ Saving creates a draft only. Submit, refresh platform review status, and activat
 remain separate actions. Approval and Utility category are still required for
 activation. This UI change introduces no migrations, storage, outgoing messages,
 or changes to consent, five-minute buffering, retry rules or sending switches.
+
+### Historical plan reconciliation
+
+The four French outstanding reminder templates and the shared statement image were implemented; the earlier draft's pending platform review was superseded by the recorded approvals and controlled deliveries above. Recharge, failure reconciliation, current subscription/contact, template status and outbound gates are operational checks, not permission to enable sending or repeat a previous message. Only explicitly failed deliveries can be retried individually after current-data checks. No delivery or provider change is required to archive the old plan.

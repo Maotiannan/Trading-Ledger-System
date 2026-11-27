@@ -33,3 +33,27 @@ jobs:
 
       - name: Run CI validation
         run: npm run test:ci
+
+  offsite-drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated drill tools
+        run: |
+          python -m pip install 'boto3==1.44.12' 'moto[server]==5.2.6'
+          curl --fail --silent --show-error --location --retry 2 https://github.com/restic/restic/releases/download/v0.20.0/restic_0.20.0_linux_amd64.bz2 -o "$RUNNER_TEMP/restic.bz2"
+          echo "0ccd9fa7885074a24603b051e01bf9bd8b5e45d6a1791e9d9887e9e9372107f7  $RUNNER_TEMP/restic.bz2" | sha256sum -c -
+          bzip2 -dc "$RUNNER_TEMP/restic.bz2" > "$RUNNER_TEMP/restic" && chmod 700 "$RUNNER_TEMP/restic"
+      - name: Recover two encrypted S3 points into independent ledger databases
+        run: |
+          python tests/offsite/test_capacity.py
+          python tests/offsite/repository_roundtrip.py --restic "$RUNNER_TEMP/restic" --database

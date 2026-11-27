@@ -15,7 +15,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:api:isolated": "bash scripts/test-api-isolated.sh",
     "test:reliability:isolated": "bash scripts/test-reliability-isolated.sh",
-    "test:ci": "npm run typecheck && npm run lint && npm test -- --runInBand --coverage && npm run test:api:isolated && npm run test:e2e:isolated && npm run test:reliability:isolated",
+    "test:ci": "node scripts/check-maintenance-docs.mjs && npm run typecheck && npm run lint && npm test -- --runInBand --coverage && npm run test:api:isolated && npm run test:e2e:isolated && npm run test:reliability:isolated",
     "i18n:audit": "bash scripts/i18n-audit.sh",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",

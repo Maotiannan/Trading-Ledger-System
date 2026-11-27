@@ -7,6 +7,8 @@ Maintain one long-lived branch, `main`. Open short-lived PR branches from the cu
 - Before any authorized local release, run `bash scripts/rebuild-local-app.sh --check-only` from the maintained main checkout. A refusal is a stop, not permission to use raw Compose or change the version. Follow the active private deployment record and the [fixed-image guide](docs/pinned-site-release.md). A backup job's checkout is not evidence of the deployed source. Report stage, exit code, sanitized output/logs, and database/volume/NAS impact on failure.
 - For persistence, retention or scheduler changes, follow the [backup and recovery runbook](docs/backup/muledger-local-backup.md). Keep frozen releases, historical checkouts and shared Git metadata intact. Keep credentials, site overrides, cutover/rollback evidence and real snapshots outside Git.
 
+- Follow the [maintenance register](docs/maintenance.md); update affected live guides rather than a dated plan. Pin cross-project wire fixtures and run them offline and in isolated API CI. List task-owned resources before cleanup; keep shared resources, the active .next, release images and backup schedules unless individually authorized.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

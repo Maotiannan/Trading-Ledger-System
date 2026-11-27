@@ -126,7 +126,7 @@ Six earlier samples were confirmed received, but that alone is not evidence of
 production webhook processing. Keep outbound disabled until explicitly activated.
 
 Rollout progress and remaining gates are tracked in
-[the contact and activation plan](superpowers/plans/2026-09-08-email-contact-rollout.md).
+[the outstanding contact-rollout checks](#outstanding-verification-from-the-contact-rollout).
 
 Customer notification addresses and language preference are maintained in Customer Management within the existing account visibility tree. They are optional. SALES may maintain visible customer contact data but cannot view Email Management, preview a task, approve sending, retry, cancel, or create a correction.
 
@@ -184,7 +184,7 @@ For webhook-secret rotation, create or rotate the Resend webhook, update `RESEND
 
 All customer addresses, language preferences, templates, tasks, frozen sent content, deliveries, attempts, and webhook events are in the complete `trading_ledger` database dump. No new NAS file family is created. Credentials are deliberately excluded from backups and must be restored from the operator's secret store.
 
-Recovery and migration evidence is recorded in [the 2026-09-02 email migration drill](backup/restore-drills/2026-09-02-email-notifications-migration-drill.md). The general database and media procedure remains [the MULEDGER backup runbook](backup/muledger-local-backup.md).
+Recovery and migration evidence is recorded in [historical drill index](backup/archive/README.md). The general database and media procedure remains [the MULEDGER backup runbook](backup/muledger-local-backup.md).
 
 ## Rollback
 
@@ -195,3 +195,7 @@ Recovery and migration evidence is recorded in [the 2026-09-02 email migration d
 5. Investigate and deploy a forward fix; do not delete records to hide a failed or incorrect send.
 
 An application rollback does not require dropping the additive email schema. Data removal, if ever needed, is a separate migration requiring an explicit backup and approval.
+
+### Outstanding verification from the contact rollout
+
+The shared six EN/FR templates, contact settings and narrow-screen preview shipped. Controlled mailbox receipt was recorded; provider delivery is not evidence that a production webhook updated the correct delivery. No additional sample send was requested. Before any new activation, verify domain/credentials through their protected source, webhook receipt and idempotency, admin-only review, no pending test deliveries, last backup and the current outbound/test switches. Do not auto-approve accumulated items. Do not infer the current switches or callback status from a historical plan.

@@ -128,4 +128,4 @@
 3. **第三批（P2 优化与清理）**：C3/C4、B2、B4、D2/D3/D4。
 4. **第四批（P3 收尾）**：D5（日志）、D6（中间件兜底）。
 
-> 注：以上每项落地时请遵循 `CHANGE_CHECKLIST.md`（测试、README/todolist、版本号、备份范围、CI、本地重建）。涉及金额计算（B1）、匹配逻辑（C1）、鉴权（A1/D6）的改动属业务/安全核心，必须补 service 级与 isolated API 回归测试。
+> 注：以上每项落地时请遵循 `CHANGE_CHECKLIST.md`（测试、README/对应维护手册、版本号、备份范围、CI、本地重建）。涉及金额计算（B1）、匹配逻辑（C1）、鉴权（A1/D6）的改动属业务/安全核心，必须补 service 级与 isolated API 回归测试。

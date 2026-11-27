@@ -15,7 +15,7 @@ Every non-trivial change should check these items:
 - decide whether the change adds durable business data that must be included in backup and restore coverage
 - update or add automated tests before relying on manual verification
 - update `README.md`
-- update `todolist.md`
+- update the affected guide or tests
 - commit and push to git
 - if the local service is already running and the change affects the running app, rebuild the local service
 
@@ -41,7 +41,7 @@ Must do:
 - add service/unit tests
 - add isolated API regression tests
 - update README behavior notes
-- update `todolist.md`
+- update the affected guide or tests
 
 Should also do:
 - check whether thresholds, switches, or strategy choices belong in `/api/settings`
@@ -65,7 +65,7 @@ Must do:
 - add i18n strings for Chinese and English
 - add module-level automated tests
 - if the module has critical workflow UI, add a stable Playwright case
-- update README and `todolist.md`
+- update the relevant maintained documentation
 
 ## 4. If A Page Or Interaction Changes
 
@@ -82,7 +82,7 @@ Must do:
 - add hook/component tests for state transitions when possible
 - add or update Playwright checks for critical paths
 - if the change affects navigation or first-load speed, verify both first click and second click behavior
-- update README and `todolist.md`
+- update the relevant maintained documentation
 
 ## 5. If API Contract Changes
 
@@ -97,7 +97,7 @@ Must do:
 - update frontend consumption to prefer stable `code/message/detail`
 - add contract-style tests or regression assertions
 - update docs that describe the API shape or UI expectations
-- update README and `todolist.md`
+- update the relevant maintained documentation
 
 ## 6. If Database / Prisma / Migration Changes
 
@@ -115,7 +115,7 @@ Must do:
 - confirm the new table, index, counter, audit table, approval table, or seed data is covered by the full MySQL `trading_ledger` snapshot in `docs/backup/muledger-local-backup.md`
 - update `docs/backup/muledger-local-backup.md` if restore assumptions, dump tooling, critical table families, or recovery checks change
 - document rollout risk and recovery notes in README if needed
-- update `todolist.md`
+- update the affected guide or tests
 
 Do not do casually:
 - destructive resets on the active data service
@@ -135,7 +135,7 @@ Must do:
 - add audit logging with actor and before/after values when the setting is mutable
 - add tests for valid, invalid, and boundary values
 - update settings UI if the value should be user-editable
-- update README and `todolist.md`
+- update the relevant maintained documentation
 
 ## 8. If Import / Export Logic Changes
 
@@ -152,7 +152,7 @@ Must do:
 - if import/export creates stored files, generated images, PDFs, or third-party persistent data, add the exact path/source to `docs/backup/muledger-local-backup.md`
 - add isolated API tests for success, failure, and edge rows
 - add browser test only for critical user-facing workflow confirmation
-- update README and `todolist.md`
+- update the relevant maintained documentation
 
 ## 8.1 If Upload / Generated File Storage Changes
 
@@ -210,7 +210,7 @@ Must do:
 If the documentation changes an operational rule that developers must follow, also update:
 - `README.md`
 - this checklist
-- `todolist.md`
+- the relevant maintained guide
 
 ## 9.2 If Customer Email Delivery Changes
 
@@ -284,7 +284,7 @@ When unsure, use this default bundle:
 - code change
 - automated test
 - README update
-- `todolist.md` update
+- affected documentation update
 - version bump
 - git commit + push
 - CI check

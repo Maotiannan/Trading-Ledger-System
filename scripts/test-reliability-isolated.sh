@@ -87,15 +87,8 @@ PORT="$(docker port "$MYSQL_CONTAINER" 3306/tcp | sed 's/^127\.0\.0\.1://')"
 export DATABASE_URL="mysql://root:$PASSWORD@127.0.0.1:$PORT/muledger_reliability_test"
 STAGE="create isolated MySQL test schema"
 npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > "$WORK/mysql-schema.sql" 2> "$WORK/mysql-schema.log"
-node - "$WORK/mysql-schema.sql" <<'JS'
-const fs = require('node:fs');
-const file = process.argv[2];
-const sql = fs.readFileSync(file, 'utf8');
-const legacy = /(`tokens` TEXT NOT NULL DEFAULT )'\[\]'/g;
-if ([...sql.matchAll(legacy)].length !== 2) throw new Error('Review isolated MySQL TEXT default adapter');
-fs.writeFileSync(file, sql.replace(legacy, "$1('[]')"));
-JS
-docker exec -i -e MYSQL_PWD="$PASSWORD" "$MYSQL_CONTAINER" mysql -uroot muledger_reliability_test < "$WORK/mysql-schema.sql" >> "$WORK/mysql-schema.log" 2>&1
+node scripts/profile/mysql-test-schema.mjs < "$WORK/mysql-schema.sql" |
+  docker exec -i -e MYSQL_PWD="$PASSWORD" "$MYSQL_CONTAINER" mysql -uroot muledger_reliability_test >> "$WORK/mysql-schema.log" 2>&1
 STAGE="real MySQL financial concurrency"
 npx jest --config jest.reliability.config.mjs --runInBand --runTestsByPath \
   tests/reliability/financial.integration.ts tests/reliability/approval.integration.ts > "$WORK/financial.log" 2>&1

@@ -42,12 +42,12 @@ wait "$proof" || { cat "$tmp/witness.log"; exit 1; }
 [[ $seen == /* && $seen != *..* ]] || { echo "RUN outside/unproven under capped cgroup root: daemon=$group child=$seen" >&2; exit 1; }
 echo "BUILD_CAP bytes=$limit cpus=2 parallelism=1 buildkit=$group child=$seen"
 # Only tracked sources; a private site environment must never enter the context.
-mkdir "$tmp/source"; git archive "$GITHUB_SHA" | tar -xf - -C "$tmp/source"
+mkdir "$tmp/source"; git archive "${PROFILE_REVISION:-$GITHUB_SHA}" | tar -xf - -C "$tmp/source"
 sed "s|^FROM node:22-alpine |FROM $base |" "$tmp/source/Dockerfile" > "$tmp/Pinned.Dockerfile"
 if grep -Eq '^FROM node:22-alpine( |$)' "$tmp/Pinned.Dockerfile"; then exit 2; fi
 t0=$(date +%s); rc=0
 docker buildx build --builder "$name" --platform linux/arm64 --progress plain --load \
-  --build-arg CIRCLE_NODE_TOTAL=2 --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+  --build-arg CIRCLE_NODE_TOTAL=2 --label "org.opencontainers.image.revision=${PROFILE_REVISION:-$GITHUB_SHA}" \
   -f "$tmp/Pinned.Dockerfile" -t ledger-profile:run "$tmp/source" || rc=$?
 echo "BUILD_RESULT exit=$rc seconds=$(($(date +%s)-t0)) peakBytes=$(cgread memory.peak)"
 cgread memory.events
